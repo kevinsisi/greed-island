@@ -5,38 +5,55 @@ import { useI18n, type TranslationKey } from '../../i18n'
 import { AtmosphereBar } from '../game/AtmosphereBar'
 import { EventTicker, EventTickerStrip } from '../game/EventTicker'
 import { WorldEventsBanner } from '../game/WorldEventsBanner'
+import { Avatar } from '../common/Avatar'
 import { APP_VERSION } from '../../version'
-import { api, type AccountRole } from '../../api/client'
+import { api, type ServerAccount } from '../../api/client'
 
 interface NavItem {
   to: string
   labelKey: TranslationKey
   glyph: string
-  visibleWhen?: (role: AccountRole | null) => boolean
+  visibleWhen?: (account: ServerAccount | null) => boolean
 }
 
+// Three nav buckets are split by audience:
+//   /profile  every signed-in player (nickname / avatar / password / language)
+//   /settings GM + admin only (manage Gemini API keys)
+//   /admin    admin only (role management + issue password resets)
+// /account is the gate for guests and the sign-in / sign-out hub.
 const NAV_ITEMS: NavItem[] = [
   { to: '/',         labelKey: 'nav.hub',      glyph: '◈' },
   { to: '/codex',    labelKey: 'nav.codex',    glyph: '☷' },
   { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
   { to: '/social',   labelKey: 'nav.social',   glyph: '☍' },
-  { to: '/account',  labelKey: 'nav.account',  glyph: '◐' },
+  {
+    to: '/profile',
+    labelKey: 'nav.profile',
+    glyph: '◑',
+    visibleWhen: (account) => account !== null,
+  },
+  {
+    to: '/account',
+    labelKey: 'nav.account',
+    glyph: '◐',
+    visibleWhen: (account) => account === null,
+  },
   {
     to: '/admin',
     labelKey: 'nav.admin',
     glyph: '✶',
-    visibleWhen: (role) => role === 'admin',
+    visibleWhen: (account) => account?.role === 'admin',
   },
   {
     to: '/settings',
     labelKey: 'nav.settings',
     glyph: '⚙',
-    visibleWhen: (role) => role === 'gm' || role === 'admin',
+    visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
   },
 ]
 
-function visibleNavItems(role: AccountRole | null): NavItem[] {
-  return NAV_ITEMS.filter((item) => !item.visibleWhen || item.visibleWhen(role))
+function visibleNavItems(account: ServerAccount | null): NavItem[] {
+  return NAV_ITEMS.filter((item) => !item.visibleWhen || item.visibleWhen(account))
 }
 
 export function GameShell({ children }: { children: ReactNode }) {
@@ -73,10 +90,10 @@ function Brandbar() {
         <div className="flex-1" />
         <LanguageToggle />
         <NavLink
-          to="/account"
+          to={account ? '/profile' : '/account'}
           className={({ isActive }) =>
             [
-              'gi-touch px-3 hidden sm:inline-flex items-center text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
+              'gi-touch px-3 hidden sm:inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
               isActive
                 ? 'border-ember-600 text-ember-400 bg-ember-500/5'
                 : account
@@ -85,7 +102,14 @@ function Brandbar() {
             ].join(' ')
           }
         >
-          {account ? account.email.split('@')[0] : t('account.signin')}
+          {account ? (
+            <>
+              <Avatar avatar={account.avatar} size="sm" />
+              <span className="truncate max-w-[8rem]">{account.displayName}</span>
+            </>
+          ) : (
+            t('account.signin')
+          )}
         </NavLink>
       </div>
     </header>
@@ -195,7 +219,7 @@ function VersionTag() {
 function DesktopRail() {
   const { t } = useI18n()
   const { account } = useAuth()
-  const items = visibleNavItems(account?.role ?? null)
+  const items = visibleNavItems(account ?? null)
   return (
     <nav className="hidden lg:flex flex-col w-48 shrink-0 border-r border-ground-800 bg-ground-900 px-3 py-6 gap-1">
       {items.map((item) => (
@@ -226,10 +250,10 @@ function DesktopRail() {
 function MobileTabBar() {
   const { t } = useI18n()
   const { account } = useAuth()
-  const items = visibleNavItems(account?.role ?? null)
+  const items = visibleNavItems(account ?? null)
   // Cap mobile nav at 5 columns to keep tap targets large enough; admin
-  // users see admin/settings via the more menu (collapsed onto the
-  // account page) when the list overflows.
+  // users see /admin and /settings via the profile/account page when the
+  // list overflows.
   const visible = items.slice(0, 5)
   const colsClass =
     visible.length === 4 ? 'grid-cols-4' : visible.length === 5 ? 'grid-cols-5' : 'grid-cols-6'

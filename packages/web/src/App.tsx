@@ -8,6 +8,9 @@ import { AreaPage } from './pages/AreaPage'
 import { CodexPage } from './pages/CodexPage'
 import { TimelinePage } from './pages/TimelinePage'
 import { AccountPage } from './pages/AccountPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SocialPage } from './pages/SocialPage'
 import { AdminPage } from './pages/AdminPage'
@@ -25,6 +28,9 @@ export function App() {
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/social" element={<SocialPage />} />
               <Route path="/account" element={<AccountPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />

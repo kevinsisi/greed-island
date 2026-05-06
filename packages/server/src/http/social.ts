@@ -459,11 +459,16 @@ function readTileId(body: unknown): string | null {
   return trimmed
 }
 
-function accountToSummary(account: { id: number; email: string }): PublicAccountSummary {
+function accountToSummary(account: {
+  id: number
+  email: string
+  nickname?: string | null
+}): PublicAccountSummary {
+  const fallback = account.email.split('@')[0] ?? account.email
   return {
     id: account.id,
     email: account.email,
-    displayName: account.email.split('@')[0] ?? account.email,
+    displayName: account.nickname ?? fallback,
   }
 }
 

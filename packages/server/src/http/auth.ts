@@ -1,15 +1,25 @@
 // Auth router + middleware. Issues JWTs signed with JWT_SECRET and
 // verifies bearer tokens for routes that opt into authentication.
+//
+// Public auth endpoints:
+//   POST /api/auth/register
+//   POST /api/auth/login
+//   GET  /api/auth/me
+//   POST /api/auth/forgot-password   issues single-use reset token
+//   POST /api/auth/reset-password    consumes token + rotates password
 
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import jwt, { type SignOptions } from 'jsonwebtoken'
 import {
   AccountError,
+  assertValidPassword,
   isAccountRole,
+  normalizeEmail,
   type AccountRecord,
   type AccountRole,
   type AccountStore,
 } from './accounts.js'
+import type { PasswordResetStore } from './passwordResets.js'
 
 export type AuthConfig = Readonly<{
   jwtSecret: string
@@ -30,7 +40,33 @@ declare module 'express-serve-static-core' {
   }
 }
 
-export function createAuthRouter(store: AccountStore, config: AuthConfig): Router {
+export type PublicAccount = Readonly<{
+  id: number
+  email: string
+  createdAt: number
+  role: AccountRole
+  nickname: string | null
+  avatar: string
+  displayName: string
+}>
+
+export function toPublicAccount(account: AccountRecord): PublicAccount {
+  return {
+    id: account.id,
+    email: account.email,
+    createdAt: account.createdAt,
+    role: account.role,
+    nickname: account.nickname,
+    avatar: account.avatar,
+    displayName: account.nickname ?? account.email.split('@')[0] ?? account.email,
+  }
+}
+
+export function createAuthRouter(
+  store: AccountStore,
+  resets: PasswordResetStore,
+  config: AuthConfig
+): Router {
   const router = Router()
 
   router.post('/register', asyncHandler(async (req, res) => {
@@ -87,6 +123,78 @@ export function createAuthRouter(store: AccountStore, config: AuthConfig): Route
     res.json({ account: toPublicAccount(account) })
   })
 
+  router.post('/forgot-password', (req, res) => {
+    const body = req.body as { email?: unknown }
+    if (typeof body?.email !== 'string') {
+      res.status(400).json({ error: 'INVALID_BODY', message: 'email is required.' })
+      return
+    }
+    let normalized: string
+    try {
+      normalized = normalizeEmail(body.email)
+    } catch (err) {
+      if (err instanceof AccountError) {
+        res.status(400).json({ error: err.code, message: err.message })
+        return
+      }
+      throw err
+    }
+    const account = store.findByEmail(normalized)
+    if (!account) {
+      // Do not leak whether the email exists, but we still need to
+      // tell the GM something. Return a stable message and no token.
+      res.status(200).json({
+        ok: true,
+        issued: false,
+        message: 'If the email is registered, a reset link has been generated.',
+      })
+      return
+    }
+    const reset = resets.create(account.id)
+    console.log(
+      `[auth] password reset issued for ${account.email} — expires ${new Date(reset.expiresAt).toISOString()}`
+    )
+    res.status(200).json({
+      ok: true,
+      issued: true,
+      token: reset.token,
+      expiresAt: new Date(reset.expiresAt).toISOString(),
+      message:
+        'Password reset link generated. Visit /reset-password?token=<token> to set a new password.',
+    })
+  })
+
+  router.post('/reset-password', asyncHandler(async (req, res) => {
+    const body = req.body as { token?: unknown; password?: unknown }
+    if (typeof body?.token !== 'string' || typeof body?.password !== 'string') {
+      res.status(400).json({ error: 'INVALID_BODY', message: 'token and password are required.' })
+      return
+    }
+    try {
+      assertValidPassword(body.password)
+    } catch (err) {
+      if (err instanceof AccountError) {
+        res.status(400).json({ error: err.code, message: err.message })
+        return
+      }
+      throw err
+    }
+    const consumed = resets.consume(body.token)
+    if (!consumed) {
+      res
+        .status(400)
+        .json({ error: 'INVALID_TOKEN', message: 'Reset token is invalid, expired, or already used.' })
+      return
+    }
+    const updated = await store.updatePassword(consumed.accountId, body.password)
+    if (!updated) {
+      res.status(404).json({ error: 'USER_NOT_FOUND' })
+      return
+    }
+    const token = signToken(updated, config)
+    res.status(200).json({ ok: true, token, account: toPublicAccount(updated) })
+  }))
+
   return router
 }
 
@@ -136,20 +244,6 @@ function signToken(account: AccountRecord, config: AuthConfig): string {
     config.jwtSecret,
     options
   )
-}
-
-function toPublicAccount(account: AccountRecord): {
-  id: number
-  email: string
-  createdAt: number
-  role: AccountRole
-} {
-  return {
-    id: account.id,
-    email: account.email,
-    createdAt: account.createdAt,
-    role: account.role,
-  }
 }
 
 export function requireRole(
