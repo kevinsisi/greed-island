@@ -57,8 +57,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 
-# The HTTP server entrypoint will be added in a follow-up change. For now
-# this image runs the kernel's index.js which exports kernel primitives;
-# replace with `node dist/server.js` (or the chosen entrypoint) when the
-# HTTP/SSE surface lands.
-CMD ["node", "dist/index.js"]
+# Boot the HTTP/SSE server; the kernel + simulation runtime are wired
+# inside `dist/server.js`. The legacy `dist/index.js` only re-exports
+# kernel primitives and is kept for library consumers.
+CMD ["node", "dist/server.js"]
