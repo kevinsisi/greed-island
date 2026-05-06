@@ -25,7 +25,12 @@ COPY packages/server ./packages/server
 RUN npm run build -w @greed-island/server
 
 # Prune dev deps from the server workspace for a leaner runtime.
-RUN npm prune --omit=dev -w @greed-island/server
+# npm workspaces hoist most deps to the root node_modules, so the
+# per-workspace node_modules may not exist after install. Ensure it
+# exists so the runtime-stage COPY below succeeds; NODE_PATH points at
+# both this dir and the hoisted root_node_modules.
+RUN npm prune --omit=dev -w @greed-island/server \
+    && mkdir -p packages/server/node_modules
 
 # ── runtime ───────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
