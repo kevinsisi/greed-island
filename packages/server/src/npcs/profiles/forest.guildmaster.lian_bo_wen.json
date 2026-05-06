@@ -1,0 +1,38 @@
+{
+  "id": "forest.guildmaster.lian_bo_wen",
+  "name": { "zh": "連博文", "en": "Lien Bo-wen" },
+  "role": { "zh": "潮獵會會長", "en": "Tide-Hunter Guild Master" },
+  "defaultLocation": "t_forest",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_forest",  "label": "pre-dawn briefing" },
+    { "fromTickOfDay": 4320,  "toTickOfDay": 9000,  "location": "t_forest",  "label": "field operations" },
+    { "fromTickOfDay": 9000,  "toTickOfDay": 12960, "location": "t_central", "label": "guild hall midday" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_ruin",    "label": "off-the-record evening meeting" }
+  ],
+  "triggers": [
+    {
+      "id": "lianbowen.assess-the-newcomer",
+      "when": "relationshipBelow:any:30",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "guild_evaluation" }
+    },
+    {
+      "id": "lianbowen.recruit-trusted",
+      "when": "relationshipAbove:any:65",
+      "emitCommand": "NPC_GREET",
+      "payload": { "tone": "courteous_invite" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_INTERACT", "CARD_DISCOVERED", "NPC_MOVE"],
+    "decayFn": "exponential",
+    "decayParam": 0.0004
+  },
+  "personality": {
+    "patience": 0.7,
+    "greed": 0.6,
+    "trustBase": 35,
+    "danger": 0.85,
+    "factionLean": "tide_hunters"
+  }
+}

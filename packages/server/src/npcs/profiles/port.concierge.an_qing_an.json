@@ -1,0 +1,38 @@
+{
+  "id": "port.concierge.an_qing_an",
+  "name": { "zh": "許晴安", "en": "Hsu Ching-an" },
+  "role": { "zh": "海風公寓管理員", "en": "Seabreeze Apartments Concierge" },
+  "defaultLocation": "t_dock",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_dock",    "label": "morning rounds at the lobby" },
+    { "fromTickOfDay": 4320,  "toTickOfDay": 9000,  "location": "t_dock",    "label": "tenant chatter and packages" },
+    { "fromTickOfDay": 9000,  "toTickOfDay": 11520, "location": "t_central", "label": "lunchtime errands at the market" },
+    { "fromTickOfDay": 11520, "toTickOfDay": 17280, "location": "t_dock",    "label": "evening lobby watch" }
+  ],
+  "triggers": [
+    {
+      "id": "anqingan.warm-greeting-frequent-visitor",
+      "when": "relationshipAbove:any:50",
+      "emitCommand": "NPC_GREET",
+      "payload": { "tone": "bright" }
+    },
+    {
+      "id": "anqingan.gossip-on-rare-window",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "festival_gossip" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT", "NPC_MOVE"],
+    "decayFn": "linear",
+    "decayParam": 0.0005
+  },
+  "personality": {
+    "patience": 0.8,
+    "greed": 0.2,
+    "trustBase": 55,
+    "talkativeness": 0.9,
+    "factionLean": "civilian"
+  }
+}

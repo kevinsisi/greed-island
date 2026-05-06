@@ -26,6 +26,7 @@ import type {
   WorldSnapshot
 } from './types'
 import { useI18n, type Locale } from '../i18n'
+import { useAuth } from './AuthContext'
 
 interface WorldStateValue {
   world: WorldSnapshot
@@ -55,6 +56,9 @@ const VALID_BIOMES: readonly MapTile['biome'][] = [
 
 export function WorldStateProvider({ children }: { children: ReactNode }) {
   const { locale } = useI18n()
+  const { token } = useAuth()
+  const tokenRef = useRef<string | null>(token)
+  tokenRef.current = token
 
   const [serverWorld, setServerWorld] = useState<ServerWorldSnapshot | null>(null)
   const [serverNpcs, setServerNpcs] = useState<ServerNpc[] | null>(null)
@@ -74,7 +78,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       try {
         const [world, npcs, events, cards, map] = await Promise.all([
           api.world(),
-          api.npcs(),
+          api.npcs(tokenRef.current),
           api.events(RECENT_EVENT_LIMIT),
           api.cards(),
           api.map()
@@ -150,6 +154,21 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       if (source) source.close()
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .npcs(token)
+      .then((npcs) => {
+        if (!cancelled) setServerNpcs(npcs)
+      })
+      .catch(() => {
+        // surfaced via the periodic poller
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   const value = useMemo<WorldStateValue>(() => {
     const usingServer = serverWorld !== null

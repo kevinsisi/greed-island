@@ -1,0 +1,38 @@
+{
+  "id": "central.exchange.shen_ruo_yun",
+  "name": { "zh": "沈若昀", "en": "Shen Ruo-yun" },
+  "role": { "zh": "紋卡交易所所長", "en": "Rune Card Exchange Director" },
+  "defaultLocation": "t_central",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 5040,  "location": "t_central", "label": "pre-market ledger review" },
+    { "fromTickOfDay": 5040,  "toTickOfDay": 12960, "location": "t_central", "label": "open trading floor" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 15120, "location": "t_temple",  "label": "evaluation rituals at the lake" },
+    { "fromTickOfDay": 15120, "toTickOfDay": 17280, "location": "t_central", "label": "private clearing" }
+  ],
+  "triggers": [
+    {
+      "id": "shenruoyun.appraise-rare-card",
+      "when": "cardOwned:42",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "appraisal" }
+    },
+    {
+      "id": "shenruoyun.cool-toward-untrusted",
+      "when": "relationshipBelow:any:20",
+      "emitCommand": "NPC_AVOID",
+      "payload": { "reason": "untrusted_trader" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["CARD_TRANSFERRED", "NPC_TRADE", "NPC_INTERACT"],
+    "decayFn": "exponential",
+    "decayParam": 0.0006
+  },
+  "personality": {
+    "patience": 0.6,
+    "greed": 0.5,
+    "trustBase": 40,
+    "calmness": 0.95,
+    "factionLean": "exchange"
+  }
+}

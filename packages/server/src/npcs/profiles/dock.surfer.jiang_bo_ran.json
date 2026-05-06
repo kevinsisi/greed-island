@@ -1,0 +1,38 @@
+{
+  "id": "dock.surfer.jiang_bo_ran",
+  "name": { "zh": "江泊然", "en": "Jiang Bo-ran" },
+  "role": { "zh": "衝浪店打工青年", "en": "Surf-Shop Hand" },
+  "defaultLocation": "t_dock",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 3600,  "location": "t_dock",    "label": "dawn paddle-out" },
+    { "fromTickOfDay": 3600,  "toTickOfDay": 11520, "location": "t_dock",    "label": "shop counter shift" },
+    { "fromTickOfDay": 11520, "toTickOfDay": 14400, "location": "t_dock",    "label": "afternoon swell" },
+    { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "evening hangout downtown" }
+  ],
+  "triggers": [
+    {
+      "id": "jiangboran.hype-on-rare-window",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "festival_hype" }
+    },
+    {
+      "id": "jiangboran.warm-toward-friend",
+      "when": "relationshipAbove:any:55",
+      "emitCommand": "NPC_GREET",
+      "payload": { "tone": "stoked" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT", "NPC_MOVE"],
+    "decayFn": "linear",
+    "decayParam": 0.0007
+  },
+  "personality": {
+    "patience": 0.35,
+    "greed": 0.2,
+    "trustBase": 50,
+    "impulsiveness": 0.85,
+    "factionLean": "civilian"
+  }
+}

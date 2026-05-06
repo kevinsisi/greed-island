@@ -1,9 +1,16 @@
 name: Deploy Dev
 
 # Builds the server and web Docker images, pushes to Docker Hub, then
-# deploys to the desktop host over Tailscale SSH. Mirrors the
+# deploys to the Windows desktop host over Tailscale SSH. Mirrors the
 # HomeProject deployment pattern documented in
 # skills/deployment/SKILL.md.
+#
+# Deploy target (canonical):
+#   - Host: Windows desktop, Tailscale IP 100.83.112.20
+#   - Public hostname: hunter.sisihome.org (TLS terminated by RPi Caddy
+#     which proxies to 100.83.112.20:7100)
+#   - NOT the Manjaro Pi/server. The Manjaro RPi only runs the front
+#     Caddy reverse proxy; greed-island services run on the desktop.
 #
 # Required GitHub secrets (org-level on `kevinsisi`, inherited by this
 # repo via Settings → Secrets and variables → Actions):
@@ -13,13 +20,15 @@ name: Deploy Dev
 #   TS_OAUTH_SECRET       Tailscale OAuth secret
 #   DEPLOY_SSH_KEY        Private SSH key authorized on the desktop
 #                         host's deploy user
-#   DEPLOY_SERVER_IP      Desktop's Tailscale DNS name or IP
-#                         (e.g. desktop.tail-XXXX.ts.net)
+#   DEPLOY_SERVER_IP      Desktop's Tailscale DNS name or IP. MUST be
+#                         the desktop (100.83.112.20 or its MagicDNS
+#                         name), NOT the Manjaro RPi.
 #   DEPLOY_USER           SSH user on the desktop (e.g. kevin)
 #
 # Required GitHub variables (repo-level on this repo):
 #   DEPLOY_PATH           Path to the deploy directory on the desktop
-#                         (e.g. /home/kevin/DockerCompose/greed-island)
+#                         (e.g. /d/GitClone/_HomeProject/greed-island/deploy
+#                         under Git-Bash on Windows)
 
 on:
   push:

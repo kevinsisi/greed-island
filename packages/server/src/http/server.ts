@@ -1,5 +1,5 @@
-// Express app factory. Wires auth, world, and SSE routers under /api
-// and exposes a health endpoint at /healthz.
+// Express app factory. Wires auth, world, NPC interaction, and SSE
+// routers under /api and exposes a health endpoint at /healthz.
 
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
@@ -7,6 +7,8 @@ import { AccountStore } from './accounts.js'
 import { createAuthRouter, type AuthConfig } from './auth.js'
 import { createWorldRouter } from './world.js'
 import { createSseRouter } from './sse.js'
+import { createNpcRouter } from './npc.js'
+import { PlayerStateStore } from './playerState.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -33,8 +35,25 @@ export function createHttpApp(options: HttpAppOptions): Express {
   })
 
   const accountStore = new AccountStore(options.db, options.bcryptCost)
+  const playerStore = new PlayerStateStore(options.db)
+
   app.use('/api/auth', createAuthRouter(accountStore, options.auth))
-  app.use('/api', createWorldRouter(options.runtime))
+  app.use(
+    '/api',
+    createWorldRouter({
+      runtime: options.runtime,
+      store: playerStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createNpcRouter({
+      runtime: options.runtime,
+      store: playerStore,
+      authConfig: options.auth,
+    })
+  )
   app.use('/api', createSseRouter(options.runtime))
 
   app.use((req: Request, res: Response) => {

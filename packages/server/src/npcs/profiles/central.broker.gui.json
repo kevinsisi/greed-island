@@ -1,0 +1,38 @@
+{
+  "id": "central.broker.gui",
+  "name": { "zh": "阿鬼", "en": "Old Gui" },
+  "role": { "zh": "夜市情報販子", "en": "Night-Market Info Broker" },
+  "defaultLocation": "t_central",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_central", "label": "late-night gossip swap" },
+    { "fromTickOfDay": 4320,  "toTickOfDay": 8640,  "location": "t_ruin",    "label": "morning hideout" },
+    { "fromTickOfDay": 8640,  "toTickOfDay": 12960, "location": "t_dock",    "label": "afternoon dockside whispers" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_central", "label": "night-market intel" }
+  ],
+  "triggers": [
+    {
+      "id": "gui.sell-rumor-on-rare-window",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "festival_rumor" }
+    },
+    {
+      "id": "gui.duck-the-stranger",
+      "when": "relationshipBelow:any:0",
+      "emitCommand": "NPC_AVOID",
+      "payload": { "reason": "marked_target" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_INTERACT", "NPC_TRADE", "NPC_MOVE"],
+    "decayFn": "exponential",
+    "decayParam": 0.0012
+  },
+  "personality": {
+    "patience": 0.4,
+    "greed": 0.85,
+    "trustBase": 15,
+    "slipperiness": 0.9,
+    "factionLean": "underground"
+  }
+}
