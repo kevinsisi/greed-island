@@ -42,6 +42,8 @@ export const en: Translations = {
   'area.events': 'Recent here',
   'area.eventsEmpty': 'Nothing logged for this area yet.',
   'area.tilePrefix': 'Settlement',
+  'area.map': 'Walk this place',
+  'area.controlsHint': 'Arrow keys / WASD to walk · tap or hold the map · press E or Space near an NPC · position is remembered',
 
   'npc.dialogTitle': 'Speak with {name}',
   'npc.dialogClose': 'Close',
