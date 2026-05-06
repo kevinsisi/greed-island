@@ -42,6 +42,8 @@ export const zh: Translations = {
   'area.events': '此地最近發生',
   'area.eventsEmpty': '尚無與此地直接相關的紀錄。',
   'area.tilePrefix': '駐點',
+  'area.map': '此地走動',
+  'area.controlsHint': '方向鍵 / WASD 移動 · 點擊或長按地圖也能走 · 靠近 NPC 按 E 或 Space 互動 · 位置會自動記住',
 
   'npc.dialogTitle': '與 {name} 對話',
   'npc.dialogClose': '關閉',

@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
+import { AreaPhaserGame } from '../game/AreaPhaserGame'
+import type { AreaMapNpc } from '../game/AreaScene'
+import type { DistrictId } from '../game/districts'
 import type { NpcSummary } from '../state/types'
 
 export function AreaPage() {
@@ -39,6 +42,29 @@ export function AreaPage() {
     }).slice(0, 12)
   }, [events, occupants, tile, tileId])
 
+  const mapNpcs = useMemo<AreaMapNpc[]>(
+    () =>
+      occupants.map((npc) => ({
+        id: npc.id,
+        name: npc.name,
+        shortName: npc.name.charAt(0)
+      })),
+    [occupants]
+  )
+
+  const hudStrings = useMemo(
+    () => ({ interact: t('hub.interactHint') }),
+    [t]
+  )
+
+  const handleNpcInteract = useCallback(
+    (npcId: string) => {
+      const npc = npcs.find((n) => n.id === npcId)
+      if (npc) setActiveNpc(npc)
+    },
+    [npcs]
+  )
+
   if (!tile) {
     return <Navigate to="/" replace />
   }
@@ -69,6 +95,22 @@ export function AreaPage() {
         </div>
         <p className="text-[15px] text-ground-100 leading-relaxed">{lore.scene[locale]}</p>
         <p className="text-[12px] text-ground-500 italic leading-relaxed">{lore.whisper[locale]}</p>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">
+          {t('area.map')}
+        </h2>
+        <AreaPhaserGame
+          tileId={tileId as DistrictId}
+          npcs={mapNpcs}
+          locale={locale}
+          hudStrings={hudStrings}
+          onNpcInteract={handleNpcInteract}
+        />
+        <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed max-w-[600px] mx-auto w-full">
+          {t('area.controlsHint')}
+        </div>
       </section>
 
       <section className="flex flex-col gap-3">

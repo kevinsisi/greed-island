@@ -57,6 +57,8 @@ export type TranslationKey =
   | 'area.events'
   | 'area.eventsEmpty'
   | 'area.tilePrefix'
+  | 'area.map'
+  | 'area.controlsHint'
   // npc dialog
   | 'npc.dialogTitle'
   | 'npc.dialogClose'
