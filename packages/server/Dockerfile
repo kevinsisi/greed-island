@@ -24,13 +24,10 @@ RUN npm ci --workspaces --include-workspace-root
 COPY packages/server ./packages/server
 RUN npm run build -w @greed-island/server
 
-# Prune dev deps from the server workspace for a leaner runtime.
-# npm workspaces hoist most deps to the root node_modules, so the
-# per-workspace node_modules may not exist after install. Ensure it
-# exists so the runtime-stage COPY below succeeds; NODE_PATH points at
-# both this dir and the hoisted root_node_modules.
-RUN npm prune --omit=dev -w @greed-island/server \
-    && mkdir -p packages/server/node_modules
+# Prune dev deps from the workspace install. npm workspaces hoist most
+# deps to the root node_modules, so per-workspace node_modules may be
+# empty or missing — the runtime stage relies on the hoisted tree.
+RUN npm prune --omit=dev --workspaces --include-workspace-root
 
 # ── runtime ───────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
@@ -39,13 +36,14 @@ WORKDIR /app
 # Non-root runtime user.
 RUN groupadd --system app && useradd --system --gid app --create-home app
 
-# Copy compiled server + only its production dependencies.
+# Copy compiled server + production dependencies. npm workspaces hoist
+# most deps to the workspace-root node_modules, so we copy that tree
+# directly to /app/node_modules where ESM resolution from /app/dist/*
+# will find it. NODE_PATH is a CommonJS-only knob and does not affect
+# ESM module resolution, so we deliberately do not set it.
 COPY --from=builder /workspace/packages/server/dist ./dist
 COPY --from=builder /workspace/packages/server/package.json ./package.json
-COPY --from=builder /workspace/packages/server/node_modules ./node_modules
-# Hoisted root-level node_modules (npm workspace dedup may park deps here).
-COPY --from=builder /workspace/node_modules ./root_node_modules
-ENV NODE_PATH=/app/node_modules:/app/root_node_modules
+COPY --from=builder /workspace/node_modules ./node_modules
 
 RUN mkdir -p /app/data && chown -R app:app /app
 USER app
