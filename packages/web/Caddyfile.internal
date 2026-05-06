@@ -29,6 +29,10 @@
 		}
 	}
 
+	handle /healthz {
+		reverse_proxy server:3000
+	}
+
 	handle {
 		try_files {path} /index.html
 		file_server
