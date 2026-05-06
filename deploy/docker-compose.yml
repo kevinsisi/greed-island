@@ -42,10 +42,12 @@ services:
       PORT: "3000"
       GREED_ISLAND_DATA_DIR: /app/data
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
       OPENAI_API_KEYS: ${OPENAI_API_KEYS:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for accounts}
       BCRYPT_COST: ${BCRYPT_COST:-12}
+      GREED_ISLAND_ADMIN_EMAILS: ${GREED_ISLAND_ADMIN_EMAILS:-}
     volumes:
       - ./data:/app/data
     expose:

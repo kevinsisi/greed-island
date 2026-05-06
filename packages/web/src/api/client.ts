@@ -84,10 +84,20 @@ export type ServerDashboard = {
   ticksSinceLastVisit: number
 }
 
+export type AccountRole = 'player' | 'gm' | 'admin'
+
 export type ServerAccount = {
   id: number
   email: string
   createdAt: number
+  role: AccountRole
+}
+
+export type ServerAdminUser = {
+  id: number
+  email: string
+  role: AccountRole
+  createdAt: string
 }
 
 export type NpcInteractIntent = 'greet' | 'ask' | 'trade' | 'leave'
@@ -99,6 +109,8 @@ export type ServerNpcInteraction = {
   intent: NpcInteractIntent
   tick: number
   line: LocalizedLine
+  replySource: 'ai' | 'fallback'
+  aiError: string | null
   relationship: {
     trust: number
     previousTrust: number
@@ -113,6 +125,23 @@ export type ServerNpcInteraction = {
     occurredAt: string
     intent: NpcInteractIntent
   }
+}
+
+export type ServerApiKeySummary = {
+  id: number
+  fingerprint: string
+  source: 'env' | 'admin'
+  status: 'active' | 'disabled'
+  lastError: string | null
+  lastUsedAt: number | null
+  failureCount: number
+  createdAt: number
+}
+
+export type ServerSettingsHealth = {
+  activeKeys: number
+  totalKeys: number
+  adminAllowList: boolean
 }
 
 export type ServerNpcHistoryEvent = {
@@ -137,6 +166,73 @@ export type ServerNpcHistory = {
   }
   events: ServerNpcHistoryEvent[]
 }
+
+export type ServerVersion = { version: string }
+
+export type ServerPublicAccount = {
+  id: number
+  email: string
+  displayName: string
+}
+
+export type ServerFriendDto = {
+  id: number
+  status: 'pending' | 'accepted' | 'rejected'
+  requester: ServerPublicAccount
+  addressee: ServerPublicAccount
+  createdAt: string
+  respondedAt: string | null
+  peer?: ServerPublicAccount
+}
+
+export type ServerFriendRequestList = {
+  incoming: ServerFriendDto[]
+  outgoing: ServerFriendDto[]
+}
+
+export type ServerMessageDto = {
+  id: number
+  senderId: number
+  receiverId: number
+  content: string
+  createdAt: string
+  readAt: string | null
+}
+
+export type ServerConversationItem = {
+  peer: ServerPublicAccount
+  lastMessage: ServerMessageDto
+  unread: number
+}
+
+export type ServerNearbyPlayer = ServerPublicAccount & {
+  tileId: string
+  lastSeenTick: number
+}
+
+export type ServerAllianceMember = ServerPublicAccount & {
+  joinedAt: string
+  isLeader: boolean
+}
+
+export type ServerAllianceDto = {
+  id: number
+  name: string
+  leaderId: number
+  createdAt: string
+  members: ServerAllianceMember[]
+  maxMembers: number
+}
+
+export type SocialStreamEvent =
+  | { type: 'friend.request'; from: number; requestId: number; occurredAt: string }
+  | { type: 'friend.accepted'; from: number; requestId: number; occurredAt: string }
+  | { type: 'friend.rejected'; from: number; requestId: number; occurredAt: string }
+  | { type: 'friend.removed'; from: number; occurredAt: string }
+  | { type: 'message.new'; from: number; messageId: number; preview: string; occurredAt: string }
+  | { type: 'presence.enter'; userId: number; tileId: string; occurredAt: string }
+  | { type: 'presence.leave'; userId: number; tileId: string; occurredAt: string }
+  | { type: 'alliance.invited'; from: number; allianceId: number; occurredAt: string }
 
 export class ApiError extends Error {
   constructor(
@@ -200,13 +296,17 @@ export const api = {
     jsonFetch<{ account: ServerAccount }>('/auth/me', {
       headers: authHeaders(token)
     }),
-  npcInteract: (token: string, npcId: string, intent: NpcInteractIntent) =>
+  npcInteract: (
+    token: string,
+    npcId: string,
+    payload: { message?: string; intent?: NpcInteractIntent }
+  ) =>
     jsonFetch<ServerNpcInteraction>(
       `/npc/${encodeURIComponent(npcId)}/interact`,
       {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ intent })
+        body: JSON.stringify(payload)
       }
     ),
   npcHistory: (token: string, npcId: string, limit = 20) =>
@@ -215,9 +315,145 @@ export const api = {
       {
         headers: authHeaders(token)
       }
-    )
+    ),
+  settingsHealth: (token: string) =>
+    jsonFetch<ServerSettingsHealth>('/settings/health', {
+      headers: authHeaders(token)
+    }),
+  settingsListKeys: (token: string) =>
+    jsonFetch<{ keys: ServerApiKeySummary[] }>('/settings/keys', {
+      headers: authHeaders(token)
+    }),
+  settingsAddKeys: (token: string, keys: string) =>
+    jsonFetch<{
+      inserted: number
+      submitted: number
+      duplicates: number
+      keys: ServerApiKeySummary[]
+    }>('/settings/keys', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ keys })
+    }),
+  settingsDeleteKey: (token: string, id: number) =>
+    jsonFetch<{ ok: true; keys: ServerApiKeySummary[] }>(
+      `/settings/keys/${id}`,
+      {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      }
+    ),
+  settingsReactivateKeys: (token: string) =>
+    jsonFetch<{ reactivated: number; keys: ServerApiKeySummary[] }>(
+      '/settings/keys/reactivate-all',
+      {
+        method: 'POST',
+        headers: authHeaders(token)
+      }
+    ),
+  // -- version --------------------------------------------------------
+  version: () => jsonFetch<ServerVersion>('/version'),
+  // -- social: friends -----------------------------------------------
+  socialFriends: (token: string) =>
+    jsonFetch<{ friends: ServerFriendDto[] }>('/social/friends', {
+      headers: authHeaders(token)
+    }),
+  socialFriendRequests: (token: string) =>
+    jsonFetch<ServerFriendRequestList>('/social/friend-requests', {
+      headers: authHeaders(token)
+    }),
+  socialFriendRequest: (token: string, targetUserId: number) =>
+    jsonFetch<{ request: ServerFriendDto }>(
+      `/social/friend-request/${targetUserId}`,
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  socialFriendAccept: (token: string, requestId: number) =>
+    jsonFetch<{ request: ServerFriendDto }>(
+      `/social/friend-accept/${requestId}`,
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  socialFriendReject: (token: string, requestId: number) =>
+    jsonFetch<{ request: ServerFriendDto }>(
+      `/social/friend-reject/${requestId}`,
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  socialFriendRemove: (token: string, friendId: number) =>
+    jsonFetch<{ removed: true }>(`/social/friends/${friendId}`, {
+      method: 'DELETE',
+      headers: authHeaders(token)
+    }),
+  // -- social: messages ----------------------------------------------
+  socialSendMessage: (token: string, targetUserId: number, content: string) =>
+    jsonFetch<{ message: ServerMessageDto }>(
+      `/social/message/${targetUserId}`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ content })
+      }
+    ),
+  socialMessages: (token: string, peerId: number, limit = 50) =>
+    jsonFetch<{ peer: ServerPublicAccount; messages: ServerMessageDto[] }>(
+      `/social/messages/${peerId}?limit=${limit}`,
+      { headers: authHeaders(token) }
+    ),
+  socialConversations: (token: string) =>
+    jsonFetch<{ conversations: ServerConversationItem[] }>(
+      '/social/conversations',
+      { headers: authHeaders(token) }
+    ),
+  // -- social: presence ----------------------------------------------
+  socialPresence: (token: string, tileId: string) =>
+    jsonFetch<{
+      location: { userId: number; tileId: string; lastSeenTick: number; updatedAt: string }
+    }>('/social/presence', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ tileId })
+    }),
+  socialNearby: (token: string, tileId?: string) =>
+    jsonFetch<{ tileId: string | null; players: ServerNearbyPlayer[] }>(
+      tileId ? `/social/nearby?tileId=${encodeURIComponent(tileId)}` : '/social/nearby',
+      { headers: authHeaders(token) }
+    ),
+  // -- social: alliance ----------------------------------------------
+  socialAlliance: (token: string) =>
+    jsonFetch<{ alliance: ServerAllianceDto | null }>('/social/alliance', {
+      headers: authHeaders(token)
+    }),
+  socialAllianceCreate: (token: string, name: string) =>
+    jsonFetch<{ alliance: ServerAllianceDto }>('/social/alliance/create', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ name })
+    }),
+  socialAllianceInvite: (token: string, userId: number) =>
+    jsonFetch<{ alliance: ServerAllianceDto }>(
+      `/social/alliance/invite/${userId}`,
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  socialAllianceLeave: (token: string) =>
+    jsonFetch<{ left: true; disbanded: boolean; nextLeaderId: number | null }>(
+      '/social/alliance/leave',
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  // -- admin ---------------------------------------------------------
+  adminUsers: (token: string) =>
+    jsonFetch<{ users: ServerAdminUser[] }>('/admin/users', {
+      headers: authHeaders(token)
+    }),
+  adminSetRole: (token: string, userId: number, role: AccountRole) =>
+    jsonFetch<{ user: ServerAdminUser }>(`/admin/users/${userId}/role`, {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify({ role })
+    })
 }
 
 export function streamUrl(): string {
   return `${API_BASE}/events/stream`
+}
+
+export function socialStreamUrl(): string {
+  return `${API_BASE}/social/stream`
 }

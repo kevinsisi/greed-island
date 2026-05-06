@@ -1,7 +1,7 @@
 // Greed Island server entrypoint. Boots:
 //   1. better-sqlite3 backed kernel event log + accounts table
 //   2. Simulation runtime (5-second tick loop)
-//   3. Express HTTP API (auth, world, SSE) listening on PORT
+//   3. Express HTTP API (auth, world, NPC, settings, SSE) on PORT
 //
 // Configuration is environment-driven so the same binary runs in
 // docker-compose and in local `node dist/server.js` invocations.
@@ -21,6 +21,8 @@ type ResolvedConfig = Readonly<{
   jwtSecret: string
   jwtExpiresIn: string
   bcryptCost: number
+  adminEmails: readonly string[]
+  geminiApiKeys: readonly string[]
 }>
 
 function resolveConfig(): ResolvedConfig {
@@ -39,7 +41,24 @@ function resolveConfig(): ResolvedConfig {
   const bcryptCostRaw = Number.parseInt(process.env.BCRYPT_COST ?? '12', 10)
   const bcryptCost = Number.isFinite(bcryptCostRaw) ? Math.min(15, Math.max(4, bcryptCostRaw)) : 12
   const jwtExpiresIn = process.env.JWT_EXPIRES_IN ?? '30d'
-  return { host, port, dataDir, jwtSecret, jwtExpiresIn, bcryptCost }
+  const adminEmails = parseList(process.env.GREED_ISLAND_ADMIN_EMAILS).map((e) =>
+    e.toLowerCase()
+  )
+  const geminiApiKeys = [
+    ...parseList(process.env.GEMINI_API_KEY),
+    ...parseList(process.env.GEMINI_API_KEYS),
+  ].filter((k) => !PLACEHOLDER_KEYS.has(k.toLowerCase()))
+  return { host, port, dataDir, jwtSecret, jwtExpiresIn, bcryptCost, adminEmails, geminiApiKeys }
+}
+
+const PLACEHOLDER_KEYS = new Set(['', 'xxx', 'your_key_here', 'changeme', 'todo'])
+
+function parseList(raw: string | undefined): string[] {
+  if (!raw) return []
+  return raw
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
 }
 
 function openDatabase(dataDir: string): Database.Database {
@@ -68,11 +87,19 @@ async function main(): Promise<void> {
   runtime.start()
   console.log(`[boot] simulation runtime started — tick=${runtime.getSnapshot().tick}`)
 
+  if (config.adminEmails.length > 0) {
+    console.log(`[boot] admin email allow-list: ${config.adminEmails.join(', ')}`)
+  } else {
+    console.log('[boot] admin email allow-list empty — first-registered account will be admin')
+  }
+
   const app = createHttpApp({
     db,
     runtime,
     auth: { jwtSecret: config.jwtSecret, jwtExpiresIn: config.jwtExpiresIn },
-    bcryptCost: config.bcryptCost
+    bcryptCost: config.bcryptCost,
+    adminEmails: config.adminEmails,
+    geminiApiKeys: config.geminiApiKeys,
   })
 
   const server = app.listen(config.port, config.host, () => {
