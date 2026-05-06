@@ -1,0 +1,82 @@
+[
+  {
+    "id": "desert.guide.sha_jiao",
+    "name": { "zh": "沙嬌", "en": "Sha-Chiao" },
+    "role": { "zh": "沙漠商隊嚮導", "en": "Caravan Guide" },
+    "defaultLocation": "t_desert",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_desert", "label": "checking caravan tack" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_desert", "label": "leading travellers across dunes" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert", "label": "tea by the lantern post" }
+    ],
+    "triggers": [
+      { "id": "shajiao.warn-storm", "when": "worldFactEquals:world.weather:\"驟雨\"", "emitCommand": "NPC_DECLARE", "payload": { "topic": "sandstorm_warn" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT", "NPC_MOVE"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "civic", "patience": 0.75, "greed": 0.3, "trustBase": 50, "talkativeness": 0.7, "factionLean": "civilian" }
+  },
+  {
+    "id": "desert.starreader.gu_lao",
+    "name": { "zh": "古佬", "en": "Old Ku" },
+    "role": { "zh": "占星師助理", "en": "Star-Reader's Assistant" },
+    "defaultLocation": "t_desert",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_desert", "label": "morning preparing charts" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_desert", "label": "writing star almanacs" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert", "label": "skywatch at the dune" }
+    ],
+    "triggers": [
+      { "id": "gulao.omen", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_DECLARE", "payload": { "topic": "star_omen" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "mystic", "patience": 0.9, "greed": 0.15, "trustBase": 51, "talkativeness": 0.55, "factionLean": "civilian" }
+  },
+  {
+    "id": "desert.water.a_lu",
+    "name": { "zh": "阿露", "en": "A-Lu" },
+    "role": { "zh": "沙漠水商", "en": "Water Merchant" },
+    "defaultLocation": "t_desert",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_desert", "label": "filling barrels at the well" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_desert", "label": "selling along the trade road" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert", "label": "evening rest at the camp" }
+    ],
+    "triggers": [
+      { "id": "alu.regular-discount", "when": "relationshipAbove:any:55", "emitCommand": "NPC_DECLARE", "payload": { "topic": "regular_price" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "shopkeeper", "patience": 0.8, "greed": 0.5, "trustBase": 50, "talkativeness": 0.75, "factionLean": "civilian" }
+  },
+  {
+    "id": "desert.cardreader.zhuang_ling",
+    "name": { "zh": "莊伶", "en": "Chuang Ling" },
+    "role": { "zh": "沙漠紋卡讀者", "en": "Desert Card Reader" },
+    "defaultLocation": "t_desert",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_desert", "label": "morning meditation" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_desert", "label": "reading at the bone shrine" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert", "label": "twilight readings" }
+    ],
+    "triggers": [
+      { "id": "zhuangling.deep-tip", "when": "relationshipAbove:any:60", "emitCommand": "NPC_DECLARE", "payload": { "topic": "card_omen" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "mystic", "patience": 0.95, "greed": 0.1, "trustBase": 52, "talkativeness": 0.5, "factionLean": "civilian" }
+  },
+  {
+    "id": "desert.camelkeeper.tuo_yin",
+    "name": { "zh": "駝音", "en": "Tuo-Yin" },
+    "role": { "zh": "駱駝飼育員", "en": "Camel Keeper" },
+    "defaultLocation": "t_desert",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_desert", "label": "feeding the herd at dawn" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_desert", "label": "training young camels" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert", "label": "evening grooming" }
+    ],
+    "triggers": [
+      { "id": "tuoyin.warn", "when": "relationshipBelow:any:30", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "spook_camels" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.85, "greed": 0.2, "trustBase": 50, "talkativeness": 0.45, "factionLean": "civilian" }
+  }
+]

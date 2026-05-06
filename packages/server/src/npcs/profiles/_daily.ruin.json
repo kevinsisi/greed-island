@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ruin.scavenger.lao_hei",
+    "name": { "zh": "老黑", "en": "Old Hei" },
+    "role": { "zh": "廢墟拾荒者", "en": "Ruin Scavenger" },
+    "defaultLocation": "t_ruin",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 7200,  "location": "t_ruin", "label": "sleeping in the broken arch" },
+      { "fromTickOfDay": 7200,  "toTickOfDay": 14400, "location": "t_ruin", "label": "sifting rubble" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "fencing scrap at the night-market" }
+    ],
+    "triggers": [
+      { "id": "laohei.share-find", "when": "relationshipAbove:any:60", "emitCommand": "NPC_DECLARE", "payload": { "topic": "salvage_tip" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "outsider", "patience": 0.6, "greed": 0.55, "trustBase": 42, "talkativeness": 0.6, "factionLean": "outsider" }
+  },
+  {
+    "id": "ruin.smuggler.a_kang",
+    "name": { "zh": "阿康", "en": "A-Kang" },
+    "role": { "zh": "走私販小弟", "en": "Smuggler Underling" },
+    "defaultLocation": "t_ruin",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 7200,  "location": "t_ruin", "label": "hiding cargo at dawn" },
+      { "fromTickOfDay": 7200,  "toTickOfDay": 14400, "location": "t_ruin", "label": "watching the column tunnel" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_dock", "label": "midnight runs at the docks" }
+    ],
+    "triggers": [
+      { "id": "akang.warning", "when": "relationshipBelow:any:30", "emitCommand": "NPC_DECLARE", "payload": { "topic": "stay_back" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0007 },
+    "personality": { "archetype": "outsider", "patience": 0.4, "greed": 0.6, "trustBase": 38, "talkativeness": 0.7, "factionLean": "outsider" }
+  },
+  {
+    "id": "ruin.archivist.zhuo_min",
+    "name": { "zh": "卓敏", "en": "Cho Min" },
+    "role": { "zh": "廢墟資料員", "en": "Ruin Archivist" },
+    "defaultLocation": "t_ruin",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_ruin", "label": "morning catalogue review" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_ruin", "label": "tracing inscriptions" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_ruin", "label": "lantern reading" }
+    ],
+    "triggers": [
+      { "id": "zhuomin.research", "when": "relationshipAbove:any:60", "emitCommand": "NPC_DECLARE", "payload": { "topic": "ruin_history" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "mystic", "patience": 0.95, "greed": 0.1, "trustBase": 50, "talkativeness": 0.5, "factionLean": "civilian" }
+  },
+  {
+    "id": "ruin.singer.zhou_you_you",
+    "name": { "zh": "周宥宥", "en": "Chou Yu-Yu" },
+    "role": { "zh": "流浪歌手", "en": "Wandering Singer" },
+    "defaultLocation": "t_ruin",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_ruin", "label": "dawn rehearsal among columns" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 12960, "location": "t_ruin", "label": "ruin acoustics practice" },
+      { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_central", "label": "night-market street set" }
+    ],
+    "triggers": [
+      { "id": "youyou.encore", "when": "relationshipAbove:any:55", "emitCommand": "NPC_GREET", "payload": { "tone": "musical" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "entertainer", "patience": 0.7, "greed": 0.25, "trustBase": 50, "talkativeness": 0.95, "factionLean": "outsider" }
+  },
+  {
+    "id": "ruin.broker.a_yu",
+    "name": { "zh": "阿魚", "en": "A-Yu" },
+    "role": { "zh": "黑市掮客學徒", "en": "Black-Market Apprentice" },
+    "defaultLocation": "t_ruin",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 7200,  "location": "t_ruin", "label": "reviewing handoffs" },
+      { "fromTickOfDay": 7200,  "toTickOfDay": 14400, "location": "t_ruin", "label": "hidden marketplace booth" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "courier runs to the city" }
+    ],
+    "triggers": [
+      { "id": "ayu.tip", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_DECLARE", "payload": { "topic": "festival_pricing" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "outsider", "patience": 0.55, "greed": 0.6, "trustBase": 42, "talkativeness": 0.7, "factionLean": "outsider" }
+  }
+]

@@ -29,6 +29,8 @@ import {
 } from '../config/world.js'
 import type { NpcProfile } from '../npcs/types.js'
 import type { CardCatalog } from '../cards/types.js'
+import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
+import type { ActiveWorldEvent } from '../events/types.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -36,6 +38,7 @@ const FACT_TICK = 'world.tick'
 const FACT_WEATHER = 'world.weather'
 const FACT_SEASON = 'world.season'
 const FACT_RARE_WINDOW = 'world.rareWindow.tide_festival'
+const FACT_ACTIVE_EVENTS = 'world.activeEvents'
 const NPC_LOCATION_PREFIX = 'npc.'
 const NPC_LOCATION_SUFFIX = '.location'
 
@@ -108,6 +111,7 @@ export class SimulationRuntime {
   private timer: NodeJS.Timeout | null = null
   private lastSequence = 0
   private eventCount = 0
+  private readonly eventEngine = new WorldEventEngine()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -148,10 +152,15 @@ export class SimulationRuntime {
         weather: this.weather,
         season: this.season,
         rareWindowOpen: this.rareWindowOpen,
-        rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null
+        rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
+        activeEvents: this.eventEngine.getActive()
       },
       generatedAt: new Date().toISOString()
     }
+  }
+
+  getActiveWorldEvents(): readonly ActiveWorldEvent[] {
+    return this.eventEngine.getActive()
   }
 
   getNpcs(): SimNpcState[] {
@@ -327,6 +336,41 @@ export class SimulationRuntime {
       )
     }
 
+    const eventDelta = this.eventEngine.tick(nextTick, {
+      weather: this.weather,
+      season: this.season
+    })
+    if (eventDelta.spawned.length > 0 || eventDelta.expired.length > 0) {
+      drafts.push(this.factSetDraft(FACT_ACTIVE_EVENTS, eventDelta.active, SIM_ACTOR_WORLD, nextTick))
+      for (const event of eventDelta.spawned) {
+        drafts.push(
+          this.narrativeDraft(`world.event.${event.id}`, nextTick, {
+            eventType: 'WORLD_EVENT_SPAWNED',
+            actorId: SIM_ACTOR_WORLD,
+            payload: {
+              templateId: event.templateId,
+              type: event.type,
+              scope: event.scope,
+              endsAtTick: event.endsAtTick,
+              text: event.text,
+              data: event.payload
+            },
+            narration: event.text.zh
+          })
+        )
+      }
+      for (const event of eventDelta.expired) {
+        drafts.push(
+          this.narrativeDraft(`world.event.${event.id}.end`, nextTick, {
+            eventType: 'WORLD_EVENT_ENDED',
+            actorId: SIM_ACTOR_WORLD,
+            payload: { templateId: event.templateId, type: event.type, scope: event.scope },
+            narration: null
+          })
+        )
+      }
+    }
+
     if (this.profiles.length > 0 && nextTick % NPC_HEARTBEAT_CADENCE_TICKS === 0) {
       const idx = (nextTick / NPC_HEARTBEAT_CADENCE_TICKS) % this.profiles.length
       const profile = this.profiles[Math.floor(idx)]!
@@ -467,6 +511,28 @@ export class SimulationRuntime {
       const k = `${NPC_LOCATION_PREFIX}${profile.id}${NPC_LOCATION_SUFFIX}`
       const loc = state.facts[k]
       this.npcLocations.set(profile.id, typeof loc === 'string' ? loc : profile.defaultLocation)
+    }
+    const activeEventsFact = state.facts[FACT_ACTIVE_EVENTS]
+    if (Array.isArray(activeEventsFact)) {
+      const restored: ActiveWorldEvent[] = []
+      for (const item of activeEventsFact) {
+        if (!item || typeof item !== 'object') continue
+        const candidate = item as Partial<ActiveWorldEvent> & {
+          templateId?: unknown
+          startedAtTick?: unknown
+        }
+        if (
+          typeof candidate.templateId === 'string' &&
+          typeof candidate.startedAtTick === 'number'
+        ) {
+          const rebuilt = rebuildActiveEvent(candidate.templateId, candidate.startedAtTick, {
+            weather: this.weather,
+            season: this.season
+          })
+          if (rebuilt) restored.push(rebuilt)
+        }
+      }
+      this.eventEngine.hydrate(restored, this.currentTick)
     }
     for (const event of events.slice(-RECENT_EVENTS_BUFFER * 4)) {
       const narrative = readNarrativePayload(event.payload)

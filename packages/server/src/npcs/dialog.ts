@@ -495,8 +495,21 @@ const PACKS: Readonly<Record<string, DialogPack>> = {
   },
 }
 
+const EXTRA_PACKS = new Map<string, DialogPack>()
+
+/**
+ * Extend the in-memory dialog registry. Used at boot by the NPC
+ * loader to register archetype-derived packs for the daily-life NPC
+ * set. Explicit packs in `PACKS` take precedence over registered
+ * extras so the hand-written named NPCs cannot be silently overwritten
+ * by an archetype generator.
+ */
+export function registerDialogPack(npcId: string, pack: DialogPack): void {
+  EXTRA_PACKS.set(npcId, pack)
+}
+
 export function getDialogPack(npcId: string): DialogPack {
-  return PACKS[npcId] ?? FALLBACK
+  return PACKS[npcId] ?? EXTRA_PACKS.get(npcId) ?? FALLBACK
 }
 
 export function tierForRelationship(relationshipScore: number): RelationshipTier {

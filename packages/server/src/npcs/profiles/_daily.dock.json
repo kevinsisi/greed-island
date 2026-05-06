@@ -1,0 +1,82 @@
+[
+  {
+    "id": "dock.fishmonger.adi",
+    "name": { "zh": "阿弟", "en": "A-Di" },
+    "role": { "zh": "鮮魚攤老闆", "en": "Fish Stall Owner" },
+    "defaultLocation": "t_dock",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_dock", "label": "harbour at dawn" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 12960, "location": "t_dock", "label": "running the fish stall" },
+      { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_central", "label": "evening at the night-market" }
+    ],
+    "triggers": [
+      { "id": "adi.morning-shout", "when": "idleTicksAbove:120", "emitCommand": "NPC_DECLARE", "payload": { "topic": "fresh_catch" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT", "NPC_MOVE"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "shopkeeper", "patience": 0.6, "greed": 0.55, "trustBase": 50, "talkativeness": 0.85, "factionLean": "civilian" }
+  },
+  {
+    "id": "dock.sailor.lin_dai",
+    "name": { "zh": "林岱", "en": "Lin Dai" },
+    "role": { "zh": "風行船船員", "en": "Wind-Runner Crew" },
+    "defaultLocation": "t_dock",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_dock", "label": "rigging check before sail" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_dock", "label": "loading cargo on the pier" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_dock", "label": "off-shift at the harbour tavern" }
+    ],
+    "triggers": [
+      { "id": "lindai.weather-watch", "when": "worldFactEquals:world.weather:\"驟雨\"", "emitCommand": "NPC_DECLARE", "payload": { "topic": "storm_warning" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.7, "greed": 0.3, "trustBase": 48, "talkativeness": 0.6, "factionLean": "civilian" }
+  },
+  {
+    "id": "dock.cafe.zheng_wan_ting",
+    "name": { "zh": "鄭婉婷", "en": "Cheng Wan-Ting" },
+    "role": { "zh": "港邊咖啡店長", "en": "Harbour Café Manager" },
+    "defaultLocation": "t_dock",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_dock", "label": "opening the café" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 14400, "location": "t_dock", "label": "serving customers" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_dock", "label": "closing and bookkeeping" }
+    ],
+    "triggers": [
+      { "id": "wanting.warm-table", "when": "relationshipAbove:any:55", "emitCommand": "NPC_GREET", "payload": { "tone": "warm" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "shopkeeper", "patience": 0.85, "greed": 0.35, "trustBase": 55, "talkativeness": 0.9, "factionLean": "civilian" }
+  },
+  {
+    "id": "dock.tavern.bai_yu_rui",
+    "name": { "zh": "白俞瑞", "en": "Bai Yu-Rui" },
+    "role": { "zh": "水手酒館服務生", "en": "Sailors' Tavern Server" },
+    "defaultLocation": "t_dock",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 7200,  "location": "t_dock", "label": "back room sleep" },
+      { "fromTickOfDay": 7200,  "toTickOfDay": 15840, "location": "t_dock", "label": "tavern shift" },
+      { "fromTickOfDay": 15840, "toTickOfDay": 17280, "location": "t_central", "label": "late dash to the night-market" }
+    ],
+    "triggers": [
+      { "id": "yurui.late-rumour", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_DECLARE", "payload": { "topic": "harbour_gossip" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "entertainer", "patience": 0.7, "greed": 0.4, "trustBase": 50, "talkativeness": 0.95, "factionLean": "civilian" }
+  },
+  {
+    "id": "dock.netmender.jiang_de_peng",
+    "name": { "zh": "江德鵬", "en": "Jiang De-Peng" },
+    "role": { "zh": "漁網修補匠", "en": "Net Mender" },
+    "defaultLocation": "t_dock",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_dock", "label": "early mending under the lamp" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_dock", "label": "harbour-side workshop" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_dock", "label": "tea by the pier" }
+    ],
+    "triggers": [
+      { "id": "depeng.idle-mutter", "when": "idleTicksAbove:240", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "mending" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT", "NPC_MOVE"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.95, "greed": 0.2, "trustBase": 52, "talkativeness": 0.4, "factionLean": "civilian" }
+  }
+]

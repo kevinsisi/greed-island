@@ -1,0 +1,83 @@
+[
+  {
+    "id": "mountain.foreman.tie_shu",
+    "name": { "zh": "鐵叔", "en": "Uncle Tieh" },
+    "role": { "zh": "礦工頭", "en": "Mine Foreman" },
+    "defaultLocation": "t_mountain",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_mountain", "label": "shift roster review" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_mountain", "label": "supervising the seam" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "evening tally at the camp" }
+    ],
+    "triggers": [
+      { "id": "tieshu.safety-call", "when": "worldFactEquals:world.weather:\"驟雨\"", "emitCommand": "NPC_DECLARE", "payload": { "topic": "shift_halt" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "craftsman", "patience": 0.85, "greed": 0.25, "trustBase": 52, "talkativeness": 0.6, "factionLean": "civilian" }
+  },
+  {
+    "id": "mountain.miner.lei_zi",
+    "name": { "zh": "雷子", "en": "Lei-Zih" },
+    "role": { "zh": "年輕礦工", "en": "Junior Miner" },
+    "defaultLocation": "t_mountain",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_mountain", "label": "geared up for the shaft" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_mountain", "label": "swinging the pick" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "barracks stew" }
+    ],
+    "triggers": [
+      { "id": "leizi.idle-rumour", "when": "idleTicksAbove:120", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "shaft_chatter" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "craftsman", "patience": 0.55, "greed": 0.4, "trustBase": 48, "talkativeness": 0.85, "factionLean": "civilian" }
+  },
+  {
+    "id": "mountain.herbalist.miao_wan",
+    "name": { "zh": "苗婉", "en": "Miao Wan" },
+    "role": { "zh": "山中藥草師", "en": "Mountain Herbalist" },
+    "defaultLocation": "t_mountain",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_mountain", "label": "morning herb gathering" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_mountain", "label": "drying and grinding" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "consultations at the cabin" }
+    ],
+    "triggers": [
+      { "id": "miaowan.healing", "when": "relationshipAbove:any:55", "emitCommand": "NPC_DECLARE", "payload": { "topic": "herb_remedy" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "mystic", "patience": 0.9, "greed": 0.2, "trustBase": 53, "talkativeness": 0.65, "factionLean": "civilian" }
+  },
+  {
+    "id": "mountain.bellsmith.zhu_he",
+    "name": { "zh": "朱鶴", "en": "Chu Ho" },
+    "role": { "zh": "山頂風鈴匠", "en": "Mountain Bell-Smith" },
+    "defaultLocation": "t_mountain",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_mountain", "label": "fanning the forge" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_mountain", "label": "bell tuning" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "wind-listening at the peak" }
+    ],
+    "triggers": [
+      { "id": "zhuhe.bell-ring", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_DECLARE", "payload": { "topic": "bell_tone" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "craftsman", "patience": 0.95, "greed": 0.1, "trustBase": 52, "talkativeness": 0.4, "factionLean": "civilian" }
+  },
+  {
+    "id": "mountain.porter.su_han_sen",
+    "name": { "zh": "蘇瀚森", "en": "Su Han-Sen" },
+    "role": { "zh": "山徑挑夫", "en": "Trail Porter" },
+    "defaultLocation": "t_mountain",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_mountain", "label": "loading at the trailhead" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 9000,  "location": "t_central", "label": "delivering crates to the city" },
+      { "fromTickOfDay": 9000,  "toTickOfDay": 14400, "location": "t_mountain", "label": "return haul up the mountain" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "rest at the cabin" }
+    ],
+    "triggers": [
+      { "id": "hansen.tired-mutter", "when": "idleTicksAbove:240", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "weight" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "civic", "patience": 0.7, "greed": 0.3, "trustBase": 48, "talkativeness": 0.6, "factionLean": "civilian" }
+  }
+]

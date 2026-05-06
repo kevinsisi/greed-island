@@ -4,6 +4,17 @@
 
 const API_BASE = '/api'
 
+export type ServerActiveWorldEvent = {
+  id: string
+  templateId: string
+  type: 'weather' | 'npc' | 'card' | 'city'
+  scope: { kind: 'world' } | { kind: 'region'; tileIds: readonly string[] }
+  startedAtTick: number
+  endsAtTick: number
+  text: { zh: string; en: string }
+  payload: Record<string, unknown>
+}
+
 export type ServerWorldSnapshot = {
   tick: number
   lastSequence: number
@@ -174,6 +185,7 @@ export const api = {
   cards: () => jsonFetch<ServerCardCatalog>('/cards'),
   map: () => jsonFetch<ServerMap>('/map'),
   dashboard: () => jsonFetch<ServerDashboard>('/dashboard'),
+  worldEvents: () => jsonFetch<{ active: ServerActiveWorldEvent[] }>('/world-events'),
   register: (email: string, password: string) =>
     jsonFetch<{ token: string; account: ServerAccount }>('/auth/register', {
       method: 'POST',

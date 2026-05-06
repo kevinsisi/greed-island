@@ -4,6 +4,7 @@ import { useAuth } from '../../state/AuthContext'
 import { useI18n, type TranslationKey } from '../../i18n'
 import { AtmosphereBar } from '../game/AtmosphereBar'
 import { EventTicker, EventTickerStrip } from '../game/EventTicker'
+import { WorldEventsBanner } from '../game/WorldEventsBanner'
 import { APP_VERSION } from '../../version'
 
 interface NavItem {
@@ -24,6 +25,7 @@ export function GameShell({ children }: { children: ReactNode }) {
     <div className="min-h-full flex flex-col bg-ground-900 text-ground-100">
       <Brandbar />
       <AtmosphereBar />
+      <WorldEventsBanner />
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         <DesktopRail />
