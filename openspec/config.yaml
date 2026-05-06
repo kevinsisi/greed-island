@@ -1,13 +1,14 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: greed-island
+  Domain: deterministic Greed Island-like multiplayer simulation world
+  Current implementation scope: simulation kernel only; no frontend, deployment, tick runtime, or Gemini narration runtime yet
+  Stack: npm workspaces, Node.js + TypeScript backend in packages/server
+  Database: SQLite via better-sqlite3
+  Test runner: Vitest
+  Core laws: Command is intent, Event is fact, EventLog is the only truth source, WorldState is projection, Rule Engine is compiler, AI is read-only renderer
+  Next planned change after kernel: add-living-world-runtime
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
