@@ -7,7 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @greed-island/server",
+    "build": "npm run build -w @greed-island/server && npm run build -w @greed-island/web",
+    "build:server": "npm run build -w @greed-island/server",
+    "build:web": "npm run build -w @greed-island/web",
+    "dev:web": "npm run dev -w @greed-island/web",
     "test": "npm run test -w @greed-island/server",
     "check": "npm run build && npm run test"
   },

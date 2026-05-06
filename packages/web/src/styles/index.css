@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: rgba(245, 158, 11, 0.35);
+    color: #f5f5f4;
+  }
+}
+
+@layer components {
+  .gi-panel {
+    @apply bg-ground-800 border border-ground-700 rounded-sharp;
+  }
+
+  .gi-tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-display tracking-tightest uppercase text-ground-300 border border-ground-600 rounded-sharp;
+  }
+
+  .gi-tag-ember {
+    @apply text-ember-400 border-ember-600/60 bg-ember-500/5;
+  }
+
+  .gi-tag-moss {
+    @apply text-moss-400 border-moss-600/60 bg-moss-500/5;
+  }
+
+  .gi-tag-rust {
+    @apply text-rust-500 border-rust-600/60 bg-rust-500/5;
+  }
+
+  .gi-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-ground-700 to-transparent;
+  }
+
+  .gi-link {
+    @apply text-ground-300 hover:text-ember-400 transition-colors;
+  }
+
+  .gi-touch {
+    /* Mobile touch target floor: 44px per frontend-design. */
+    @apply min-h-[44px] min-w-[44px];
+  }
+}
