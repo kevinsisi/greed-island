@@ -6,9 +6,15 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
+    name: Build, typecheck, test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +26,48 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --workspaces --include-workspace-root
 
-      - name: Build and test
-        run: npm run check
+      - name: Typecheck (server)
+        run: npm run build:server
+
+      - name: Typecheck + bundle (web)
+        run: npm run build:web
+
+      - name: Test (server)
+        run: npm test
+
+  openspec:
+    name: OpenSpec validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install OpenSpec CLI
+        run: npm install -g openspec
+
+      - name: Validate all active changes
+        # Validates every change directory under openspec/changes/
+        # except the archive/. Strict mode enforces full schema
+        # compliance (required artifacts, scenario formatting, etc.).
+        run: |
+          set -e
+          shopt -s nullglob
+          fail=0
+          for dir in openspec/changes/*/; do
+            name=$(basename "$dir")
+            [ "$name" = "archive" ] && continue
+            echo "::group::validate $name"
+            if ! openspec validate "$name" --strict; then
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
