@@ -59,9 +59,9 @@
 - [ ] 7.2 Implement a `users` SQLite table with `id`, `username`, `password_hash`, `permissions` (bitmask integer), `created_at`, `updated_at`.
 - [ ] 7.3 Implement registration, login, logout, and change-password endpoints.
 - [ ] 7.4 Implement JWT signing and verification middleware that reads/writes the JWT from an `httpOnly`, `Secure`, `SameSite=Lax`/`Strict` cookie.
-- [ ] 7.5 Define capability bits (`READ_WORLD`, `WRITE_PLAYER_COMMAND`, `MANAGE_NPCS`, `MANAGE_USERS`, `MANAGE_ECONOMY`, `OPERATE_GM_TOOLS`, `MANAGE_AI_KEYS`) as named constants.
-- [ ] 7.6 Implement role-bundle helpers that compose Player, GM, and Admin from capability bits.
-- [ ] 7.7 Implement a permission-check middleware factory used by protected routes.
+- [ ] 7.5 Define capability bits (`VIEW_WORLD`, `VIEW_MAP`, `VIEW_NPCS`, `VIEW_EVENTS`, `VIEW_CARDS`, `TRADE`, `COLLECT_CARDS`, `WRITE_PLAYER_COMMAND`, `MANAGE_NPCS`, `MANAGE_ECONOMY`, `MANAGE_WORLD_EVENTS`, `OPERATE_GM_TOOLS`, `MANAGE_USERS`, `MANAGE_AI_KEYS`) as named constants in a single module.
+- [ ] 7.6 Implement role-bundle templates (Player, GM, Admin) as named OR-combinations of bits used only at account creation and admin-tooling presets — NOT at runtime authorization.
+- [ ] 7.7 Implement a permission-check middleware factory whose only authorization primitive is `(user.permission_bits & REQUIRED_BIT) !== 0`. Forbid role-name comparisons in any gate.
 - [ ] 7.8 Implement Admin-only user management endpoints (list users, set permission bitmask, assign role bundle).
 - [ ] 7.9 Implement Admin-only AI key management endpoints (import, list, block, delete) backed by the existing KeyPool storage.
 - [ ] 7.10 Implement GM-only world tooling endpoints (submit a typed SystemCommand, list/inspect NPC internal state, freeze/resume tick advancement). All world mutations MUST go through the Rule Engine.

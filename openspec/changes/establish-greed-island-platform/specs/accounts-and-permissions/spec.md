@@ -34,38 +34,55 @@ Authenticated sessions SHALL be carried by a JWT delivered as an `httpOnly`, `Se
 - **THEN** the server MUST instruct the browser to clear the JWT cookie and subsequent protected-route requests MUST be rejected as unauthenticated
 
 ### Requirement: Permissions are a bitmask integer
-Permissions SHALL be represented as a single bitmask integer column on the user record. Each capability MUST be a distinct bit.
+Permissions SHALL be represented as a single bitmask integer column (`permission_bits`) on the user record. Each capability MUST be a distinct bit. Capabilities SHALL be granular enough that an operator can grant exactly the verbs a user needs without granting a whole role.
 
 The capability bits SHALL include at minimum:
-- `READ_WORLD`
+- `VIEW_WORLD`
+- `VIEW_MAP`
+- `VIEW_NPCS`
+- `VIEW_EVENTS`
+- `VIEW_CARDS`
+- `TRADE`
+- `COLLECT_CARDS`
 - `WRITE_PLAYER_COMMAND` (reserved for future player-command intake; not used by v1 gameplay)
 - `MANAGE_NPCS`
-- `MANAGE_USERS`
 - `MANAGE_ECONOMY`
+- `MANAGE_WORLD_EVENTS`
 - `OPERATE_GM_TOOLS`
+- `MANAGE_USERS`
 - `MANAGE_AI_KEYS`
 
 Additional bits MAY be added without renumbering existing bits.
 
 #### Scenario: Permission check is a bitwise operation
-- **WHEN** a protected API route checks whether a user is allowed to perform an action
-- **THEN** the check MUST be a bitwise AND between the user's permission bitmask and the required capability bit
+- **WHEN** a protected API route or UI element checks whether a user is allowed to perform an action
+- **THEN** the check MUST be `(user.permission_bits & REQUIRED_BIT) !== 0`, NOT a comparison against a role name
 
-### Requirement: Role bundles are computed from the bitmask
-The platform SHALL define three named role bundles that compose capability bits. A role bundle MUST be a *view* on the bitmask, not a separate enum that can drift out of sync.
+#### Scenario: Role-name-based authorization is forbidden
+- **WHEN** the codebase is inspected for authorization decisions
+- **THEN** there MUST NOT be any conditional that branches on a role name (e.g. `if (user.role === 'GM')`); authorization MUST always read individual capability bits
 
-The bundles SHALL be:
-- **Player** — `READ_WORLD` plus eventual `WRITE_PLAYER_COMMAND` and own-profile management bits.
-- **GM** — Player bits plus `MANAGE_NPCS`, `MANAGE_ECONOMY`, `OPERATE_GM_TOOLS`.
+### Requirement: Role bundles are creation-time templates, not runtime authority
+The platform SHALL provide named role bundles — Player, GM, Admin — that are **only templates** used at account creation, role-promotion, and admin-tooling presets. A role bundle MUST NOT participate in any runtime authorization decision; runtime checks MUST consult `permission_bits` directly.
+
+The default bundles SHALL be:
+- **Player** — `VIEW_WORLD`, `VIEW_MAP`, `VIEW_NPCS`, `VIEW_EVENTS`, `VIEW_CARDS`, `TRADE`, `COLLECT_CARDS`, plus eventual `WRITE_PLAYER_COMMAND` and own-profile management bits.
+- **GM** — Player bits plus `MANAGE_NPCS`, `MANAGE_ECONOMY`, `MANAGE_WORLD_EVENTS`, `OPERATE_GM_TOOLS`.
 - **Admin** — GM bits plus `MANAGE_USERS` and `MANAGE_AI_KEYS`.
 
-#### Scenario: Role bundle assignment sets the right bits
-- **WHEN** an Admin assigns the GM bundle to a user
-- **THEN** the user's permission bitmask MUST contain exactly the union of bits defined by the GM bundle, with no other bits set unless they were already present
+Bundle definitions SHALL live in a single named-constants module so adding a capability bit updates every bundle at one site.
 
-#### Scenario: Role bundle is not stored as a separate enum that can drift
-- **WHEN** the user record is inspected
-- **THEN** the user's effective role MUST be derivable from the permission bitmask alone, with no separate authoritative role column required
+#### Scenario: Bundle template is applied at user creation
+- **WHEN** a user is created with the Player bundle
+- **THEN** the user's `permission_bits` MUST be set to exactly the OR of the Player bundle's bits at that moment, and the user record MUST NOT carry any separate role-name field that authorization code reads
+
+#### Scenario: Admins can adjust individual bits independent of bundle
+- **WHEN** an Admin grants or revokes a single capability bit on a specific user (e.g. enabling `MANAGE_AI_KEYS` on an otherwise-Player account)
+- **THEN** the change MUST update only that bit on `permission_bits`, MUST NOT require switching the user's "role," and MUST NOT cascade-modify any other bit
+
+#### Scenario: Promoting a user to GM applies the GM template once
+- **WHEN** an Admin applies the GM bundle to an existing user
+- **THEN** the operation MUST OR the GM bundle's bits onto the user's existing `permission_bits` (additive promotion), and a "demote to Player" operation MUST be the explicit complementary action that AND-NOTs the GM-only bits
 
 ### Requirement: GM and Admin actions flow through the kernel like any other Command
 GM and Admin actions that mutate world state SHALL be expressed as Commands that pass through the Rule Engine. There MUST NOT be a privileged code path that appends Events directly to the EventLog without Rule Engine evaluation.

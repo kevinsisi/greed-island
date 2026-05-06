@@ -1,0 +1,91 @@
+# Greed Island — single-host docker compose.
+#
+# v1 deployment: Tailscale-internal access only. `hunter.sisihome.org`
+# resolves to this host's Tailscale IP. Public exposure is a separate
+# follow-up change subject to the deployment hardening gate (see
+# openspec/changes/establish-greed-island-platform/specs/deployment-platform/spec.md
+# and skills/deployment/SKILL.md).
+#
+# Targeted host: AMD Ryzen 7 3700X / 48 GB / RTX 2070 desktop.
+# The RTX 2070 is intentionally NOT used in v1 — AI inference is
+# routed to remote providers via @kevinsisi/ai-core MultiProviderClient.
+#
+# Bring up:   docker compose -f deploy/docker-compose.yml up -d --build
+# Tail logs:  docker compose -f deploy/docker-compose.yml logs -f --tail=200
+# Tear down:  docker compose -f deploy/docker-compose.yml down
+
+name: greed-island
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: packages/server/Dockerfile
+    image: greed-island/server:dev
+    container_name: greed-island-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      GREED_ISLAND_DATA_DIR: /app/data
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      # Multi-key AI: comma-separated lists of provider keys, mirrored
+      # into the SQLite-backed key store on boot. Placeholder strings
+      # (e.g. YOUR_KEY_HERE) are filtered by the import path.
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+      OPENAI_API_KEYS: ${OPENAI_API_KEYS:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for accounts}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "3000"
+    networks:
+      - greed-island
+
+  web:
+    build:
+      context: ..
+      dockerfile: packages/web/Dockerfile
+    image: greed-island/web:dev
+    container_name: greed-island-web
+    restart: unless-stopped
+    volumes:
+      - web-assets:/usr/share/greed-island-web
+    networks:
+      - greed-island
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: greed-island-caddy
+    restart: unless-stopped
+    depends_on:
+      - server
+      - web
+    ports:
+      # Bind to the desktop host's Tailscale interface address only.
+      # Set TAILSCALE_BIND_ADDR in .env (e.g. 100.x.y.z) to keep the
+      # service off the public internet. If the var is empty, Docker
+      # binds to all interfaces — DO NOT use that in production.
+      - "${TAILSCALE_BIND_ADDR:-0.0.0.0}:80:80"
+      - "${TAILSCALE_BIND_ADDR:-0.0.0.0}:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - web-assets:/srv/greed-island-web:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      # Caddy reads these for the site block.
+      DOMAIN: ${DOMAIN:-hunter.sisihome.org}
+    networks:
+      - greed-island
+
+networks:
+  greed-island:
+    driver: bridge
+
+volumes:
+  web-assets:
+  caddy-data:
+  caddy-config:

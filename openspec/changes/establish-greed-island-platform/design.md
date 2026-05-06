@@ -82,13 +82,11 @@ The platform SHALL have user accounts from v1. Identity ties the persistent worl
 - Session authentication via JWT carried in an `httpOnly`, `Secure`, `SameSite=Lax` (or `Strict` where compatible) cookie. JWT MUST NOT be stored in `localStorage`.
 - Server-side JWT verification middleware on all protected API routes.
 
-**Permission model (mirrors `sheet-to-car`):**
-- Permissions are represented as a **bitmask integer** column on the user record. Each capability (e.g. `READ_WORLD`, `WRITE_PLAYER_COMMAND`, `MANAGE_NPCS`, `MANAGE_USERS`, `MANAGE_ECONOMY`, `OPERATE_GM_TOOLS`) is a single bit.
-- Three named role bundles compose those bits:
-  - **Player** — read world, submit player commands, manage own profile, claim daily rewards.
-  - **GM (Game Master)** — Player + manage NPCs, trigger world events, adjust economy parameters, run GM tooling. Cannot manage users.
-  - **Admin** — All Player and GM bits + manage users (create/delete/role-assign), import AI keys, see operational dashboards.
-- Bundles are computed by OR-ing the appropriate bits; no separate "role" enum that can drift out of sync with the bitmask. The role bundle is a *view* on the bitmask.
+**Permission model (mirrors `sheet-to-car`'s current pattern):**
+- Permissions are a single **bitmask integer** column (`permission_bits`) on the user record. Each capability is one bit. Bits are granular (e.g. `VIEW_MAP`, `VIEW_EVENTS`, `TRADE`, `COLLECT_CARDS`, `MANAGE_NPCS`, `MANAGE_ECONOMY`, `MANAGE_WORLD_EVENTS`, `OPERATE_GM_TOOLS`, `MANAGE_USERS`, `MANAGE_AI_KEYS`, …) so an operator can grant exactly the verbs a user needs.
+- **Authorization is bitmask-only.** Every check is `(user.permission_bits & REQUIRED_BIT) !== 0`. There is no `if (user.role === 'GM')` anywhere in the codebase — role names exist only at account-creation time as templates and in admin-tooling presets, never in runtime gates.
+- **Player / GM / Admin are templates, not authority.** They are pre-defined bit sets that an Admin applies when creating or promoting an account. Promotion ORs the bundle's bits onto the user; demotion AND-NOTs the bundle's bits off the user. After application, runtime authorization reads `permission_bits` directly. Admins can flip any individual bit on any user without touching the templates.
+- Bundle definitions live in one named-constants module so adding a new capability bit updates every bundle at one site.
 
 **Public exposure is gated:** v1 deploys to Tailscale-internal access only at `hunter.sisihome.org`. Public exposure is a separate later change that MUST satisfy the deployment hardening gate (admin/GM login restricted to Tailscale or LAN ranges, real-client-IP plumbing, backups for DB and `.env`). Building the auth layer now means we are *ready* for that change, not blocked by it.
 
@@ -183,9 +181,11 @@ Alternative considered: route through the existing RPi Caddy reverse proxy. Acce
 
 User identity is mandatory in v1 to support the stickiness pillars. The auth pattern intentionally mirrors `sheet-to-car`'s deployed shape so we are not inventing a new pattern: `bcrypt` for password hashing with a per-deployment cost factor, JWT for sessions stored in an `httpOnly`, `Secure`, `SameSite=Lax`/`Strict` cookie, and a JWT verification middleware on protected API routes. Tokens are never stored in `localStorage`.
 
-Permissions are a **bitmask integer** on the user record. Capabilities such as `READ_WORLD`, `WRITE_PLAYER_COMMAND`, `MANAGE_NPCS`, `MANAGE_USERS`, `MANAGE_ECONOMY`, and `OPERATE_GM_TOOLS` are individual bits. The named role bundles (Player, GM, Admin) are computed as ORs of those bits — a role is a *view* on the bitmask, not a separate enum that can drift out of sync. New bits can be added without renumbering the role enum.
+Permissions are a **bitmask integer** (`permission_bits`) on the user record. Capabilities such as `VIEW_MAP`, `VIEW_EVENTS`, `TRADE`, `COLLECT_CARDS`, `MANAGE_NPCS`, `MANAGE_ECONOMY`, `MANAGE_WORLD_EVENTS`, `OPERATE_GM_TOOLS`, `MANAGE_USERS`, and `MANAGE_AI_KEYS` are individual bits. **All runtime authorization is bitmask-only:** every gate is `(user.permission_bits & REQUIRED_BIT) !== 0`. The named bundles (Player, GM, Admin) are not runtime authority — they are creation-time and admin-tooling templates that decide which bits get OR-ed onto a user. After application, the runtime never reads a role name; it always reads bits.
 
-Alternative considered: a `role` enum column with admin / gm / player as the only states. Rejected because adding a new capability would require touching every role definition and every permission check; bitmasks let us add a single bit per capability.
+This is the same pattern `sheet-to-car` uses today. It lets an Admin grant a single capability (e.g. `MANAGE_AI_KEYS` to a trusted Player) without dragging the rest of the GM bundle along, and it makes adding a new capability a single-bit change instead of an enum-versus-checks reconciliation.
+
+Alternative considered: a `role` enum column with admin / gm / player as the only states, with role-name `if/else` checks at API gates. Rejected because adding a new capability would require touching every role definition and every permission check, and because role-name gates conflate "what bits do you hold" with "what label was applied to you" — the two drift the moment an Admin adjusts an individual bit.
 
 Alternative considered: store JWT in `localStorage` for SPA simplicity. Rejected because `frontend-design` explicitly forbids it (XSS exfiltration risk); `httpOnly` cookies are the project standard.
 
