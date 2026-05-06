@@ -5,19 +5,19 @@ name: Deploy Dev
 # HomeProject deployment pattern documented in
 # skills/deployment/SKILL.md.
 #
-# Required GitHub secrets (Settings → Secrets and variables → Actions):
+# Required GitHub secrets (org-level on `kevinsisi`, inherited by this
+# repo via Settings → Secrets and variables → Actions):
 #   DOCKERHUB_USERNAME    Docker Hub user (e.g. kevin950805)
 #   DOCKERHUB_TOKEN       Docker Hub access token
-#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client id (org-level)
-#   TS_OAUTH_SECRET       Tailscale OAuth secret (org-level)
+#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client id
+#   TS_OAUTH_SECRET       Tailscale OAuth secret
 #   DEPLOY_SSH_KEY        Private SSH key authorized on the desktop
 #                         host's deploy user
-#
-# Required GitHub variables (Settings → Secrets and variables →
-# Actions → Variables):
-#   DEPLOY_HOST           Desktop's Tailscale DNS name
+#   DEPLOY_SERVER_IP      Desktop's Tailscale DNS name or IP
 #                         (e.g. desktop.tail-XXXX.ts.net)
 #   DEPLOY_USER           SSH user on the desktop (e.g. kevin)
+#
+# Required GitHub variables (repo-level on this repo):
 #   DEPLOY_PATH           Path to the deploy directory on the desktop
 #                         (e.g. /home/kevin/DockerCompose/greed-island)
 
@@ -108,8 +108,8 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           cat >> ~/.ssh/config <<EOF
           Host desktop
-              HostName ${{ vars.DEPLOY_HOST }}
-              User ${{ vars.DEPLOY_USER }}
+              HostName ${{ secrets.DEPLOY_SERVER_IP }}
+              User ${{ secrets.DEPLOY_USER }}
               IdentityFile ~/.ssh/id_ed25519
               StrictHostKeyChecking accept-new
               UserKnownHostsFile ~/.ssh/known_hosts
