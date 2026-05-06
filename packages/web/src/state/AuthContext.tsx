@@ -12,6 +12,8 @@ interface AuthValue extends AuthState {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
+  refresh: () => Promise<void>
+  applyAccount: (account: ServerAccount, token?: string) => void
   loading: boolean
   error: string | null
 }
@@ -100,9 +102,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
   }, [])
 
+  const refresh = useCallback(async () => {
+    const token = state.token
+    if (!token) return
+    try {
+      const res = await api.me(token)
+      setState({ token, account: res.account })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        writeStoredToken(null)
+        setState({ token: null, account: null })
+      }
+    }
+  }, [state.token])
+
+  const applyAccount = useCallback((account: ServerAccount, token?: string) => {
+    if (token) {
+      writeStoredToken(token)
+      setState({ token, account })
+      return
+    }
+    setState((prev) => ({ token: prev.token, account }))
+  }, [])
+
   const value = useMemo<AuthValue>(
-    () => ({ ...state, login, register, logout, loading, error }),
-    [state, login, register, logout, loading, error]
+    () => ({ ...state, login, register, logout, refresh, applyAccount, loading, error }),
+    [state, login, register, logout, refresh, applyAccount, loading, error]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

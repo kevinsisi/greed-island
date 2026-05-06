@@ -91,6 +91,9 @@ export type ServerAccount = {
   email: string
   createdAt: number
   role: AccountRole
+  nickname: string | null
+  avatar: string
+  displayName: string
 }
 
 export type ServerAdminUser = {
@@ -98,6 +101,30 @@ export type ServerAdminUser = {
   email: string
   role: AccountRole
   createdAt: string
+  nickname: string | null
+  avatar: string
+  displayName: string
+}
+
+export type ServerAdminResetIssue = {
+  ok: true
+  target: { id: number; email: string }
+  token: string
+  expiresAt: string
+  resetPath: string
+}
+
+export type ServerForgotPasswordResponse = {
+  ok: true
+  issued: boolean
+  token?: string
+  expiresAt?: string
+  message?: string
+}
+
+export type ServerProfile = {
+  account: ServerAccount
+  avatarPresets: string[]
 }
 
 export type NpcInteractIntent = 'greet' | 'ask' | 'trade' | 'leave'
@@ -447,6 +474,40 @@ export const api = {
       method: 'PUT',
       headers: authHeaders(token),
       body: JSON.stringify({ role })
+    }),
+  adminResetUserPassword: (token: string, userId: number) =>
+    jsonFetch<ServerAdminResetIssue>(`/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: authHeaders(token)
+    }),
+  // -- profile -------------------------------------------------------
+  profile: (token: string) =>
+    jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),
+  updateProfile: (
+    token: string,
+    patch: { nickname?: string | null; avatar?: string }
+  ) =>
+    jsonFetch<{ account: ServerAccount }>('/profile', {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify(patch)
+    }),
+  changePassword: (token: string, currentPassword: string, newPassword: string) =>
+    jsonFetch<{ ok: true; account: ServerAccount }>('/profile/password', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ currentPassword, newPassword })
+    }),
+  // -- password reset ------------------------------------------------
+  forgotPassword: (email: string) =>
+    jsonFetch<ServerForgotPasswordResponse>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    }),
+  resetPassword: (resetToken: string, password: string) =>
+    jsonFetch<{ ok: true; token: string; account: ServerAccount }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: resetToken, password })
     })
 }
 
