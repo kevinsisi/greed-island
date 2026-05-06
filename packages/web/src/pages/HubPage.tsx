@@ -87,18 +87,6 @@ export function HubPage() {
         <p className="text-sm text-ground-400 max-w-2xl leading-relaxed">{t('hub.description')}</p>
       </header>
 
-      <PhaserGame
-        npcs={mapNpcs}
-        locale={locale}
-        hudStrings={hudStrings}
-        onAreaEnter={handleAreaEnter}
-        onNpcInteract={handleNpcInteract}
-      />
-
-      <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed max-w-[800px] mx-auto w-full">
-        {t('hub.controlsHint')}
-      </div>
-
       {currentName && currentDistrict && (
         <div className="max-w-[800px] mx-auto w-full flex items-center justify-between gap-3 gi-panel p-4">
           <div className="flex flex-col">
@@ -118,6 +106,18 @@ export function HubPage() {
           </button>
         </div>
       )}
+
+      <PhaserGame
+        npcs={mapNpcs}
+        locale={locale}
+        hudStrings={hudStrings}
+        onAreaEnter={handleAreaEnter}
+        onNpcInteract={handleNpcInteract}
+      />
+
+      <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed max-w-[800px] mx-auto w-full">
+        {t('hub.controlsHint')}
+      </div>
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
     </div>
