@@ -1,0 +1,82 @@
+[
+  {
+    "id": "temple.pilgrim.yun_qing",
+    "name": { "zh": "雲晴", "en": "Yun-Ching" },
+    "role": { "zh": "神殿香客", "en": "Shrine Pilgrim" },
+    "defaultLocation": "t_temple",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_temple", "label": "dawn prayers by the lake" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_temple", "label": "circling the inner hall" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_temple", "label": "lantern release at dusk" }
+    ],
+    "triggers": [
+      { "id": "yunqing.bell-listen", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "festival_omen" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "mystic", "patience": 0.95, "greed": 0.05, "trustBase": 52, "talkativeness": 0.5, "factionLean": "temple" }
+  },
+  {
+    "id": "temple.warden.yuan_ruo_yan",
+    "name": { "zh": "元若言", "en": "Yuan Jo-Yen" },
+    "role": { "zh": "神殿守護者", "en": "Shrine Warden" },
+    "defaultLocation": "t_temple",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_temple", "label": "morning patrol" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_temple", "label": "guarding the threshold" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_temple", "label": "evening rounds" }
+    ],
+    "triggers": [
+      { "id": "ruoyan.warn", "when": "relationshipBelow:any:25", "emitCommand": "NPC_DECLARE", "payload": { "topic": "shrine_protocol" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "mystic", "patience": 0.85, "greed": 0.1, "trustBase": 50, "talkativeness": 0.4, "factionLean": "temple" }
+  },
+  {
+    "id": "temple.fisher.yu_yan_bin",
+    "name": { "zh": "余彥彬", "en": "Yu Yen-Pin" },
+    "role": { "zh": "湖心漁夫", "en": "Lake-Heart Fisher" },
+    "defaultLocation": "t_temple",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_temple", "label": "casting nets at dawn" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 12960, "location": "t_temple", "label": "drying catch on the dock" },
+      { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_temple", "label": "selling lake-fish at the gate" }
+    ],
+    "triggers": [
+      { "id": "yanbin.lake-mood", "when": "worldFactEquals:world.weather:\"霧雨\"", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "fog_lake" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.8, "greed": 0.3, "trustBase": 48, "talkativeness": 0.5, "factionLean": "temple" }
+  },
+  {
+    "id": "temple.novice.sang_rong",
+    "name": { "zh": "桑容", "en": "Sang-Jung" },
+    "role": { "zh": "神殿打雜小僧", "en": "Shrine Novice" },
+    "defaultLocation": "t_temple",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_temple", "label": "sweeping the courtyard" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 14400, "location": "t_temple", "label": "errands for the cleric" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_temple", "label": "washing the bowls" }
+    ],
+    "triggers": [
+      { "id": "sangrong.gossip", "when": "relationshipAbove:any:55", "emitCommand": "NPC_DECLARE", "payload": { "topic": "shrine_gossip" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "civic", "patience": 0.7, "greed": 0.2, "trustBase": 50, "talkativeness": 0.85, "factionLean": "temple" }
+  },
+  {
+    "id": "temple.diviner.jiang_yue",
+    "name": { "zh": "江月", "en": "Chiang Yueh" },
+    "role": { "zh": "湖畔占卜師", "en": "Lake Diviner" },
+    "defaultLocation": "t_temple",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_temple", "label": "morning star-charting" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_temple", "label": "reading at the shoreline" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_temple", "label": "moonside divination" }
+    ],
+    "triggers": [
+      { "id": "yue.omen", "when": "rareWindowOpen:tide_festival", "emitCommand": "NPC_DECLARE", "payload": { "topic": "festival_reading" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "mystic", "patience": 0.9, "greed": 0.15, "trustBase": 53, "talkativeness": 0.6, "factionLean": "temple" }
+  }
+]

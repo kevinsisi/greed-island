@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import {
   api,
   streamUrl,
+  type ServerActiveWorldEvent,
   type ServerCardCatalog,
   type ServerMap,
   type ServerNarrativeEvent,
@@ -35,6 +36,7 @@ interface WorldStateValue {
   cards: CardCatalogEntry[]
   map: WorldMap
   dashboard: DashboardSummary
+  worldEvents: ServerActiveWorldEvent[]
   liveConnected: boolean
   source: 'fixture' | 'server'
   loadError: string | null
@@ -204,6 +206,10 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     const cardsOwned = cards.filter((c) => c.owned).length
     const recentEvents = events.slice(0, 5)
     const rareWindowOpen = Boolean(world.facts['rareWindowOpen']) || fixtureDashboard.rareWindowOpen
+    const worldEvents: ServerActiveWorldEvent[] = (() => {
+      const raw = world.facts['activeEvents']
+      return Array.isArray(raw) ? (raw as ServerActiveWorldEvent[]) : []
+    })()
 
     const dashboard: DashboardSummary = usingServer
       ? {
@@ -223,6 +229,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       cards,
       map,
       dashboard,
+      worldEvents,
       liveConnected,
       source: usingServer ? 'server' : 'fixture',
       loadError

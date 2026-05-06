@@ -110,6 +110,16 @@ export const en: Translations = {
   'ticker.collapse': 'Hide',
   'ticker.expand': 'Show',
 
+  'worldEvent.heading': 'Tideway happenings',
+  'worldEvent.empty': 'No live world events right now.',
+  'worldEvent.scopeWorld': 'City-wide',
+  'worldEvent.scopeRegion': 'Region · {regions}',
+  'worldEvent.endsInTicks': '{ticks} ticks left',
+  'worldEvent.type.weather': 'Weather',
+  'worldEvent.type.npc': 'NPC',
+  'worldEvent.type.card': 'Cards',
+  'worldEvent.type.city': 'City',
+
   'account.eyebrow': 'Account · identity',
   'account.title': 'Account',
   'account.description': 'Register or sign in so the world remembers what you do in Tideway.',

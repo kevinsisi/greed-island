@@ -71,8 +71,13 @@ export function createWorldRouter(input: {
       cardsTotal: cards.entries.length,
       recentEvents: input.runtime.getRecentEvents(DASHBOARD_RECENT_EVENTS),
       rareWindowOpen: input.runtime.isRareWindowOpen(),
+      activeEvents: input.runtime.getActiveWorldEvents(),
       ticksSinceLastVisit: 0,
     })
+  })
+
+  router.get('/world-events', (_req: Request, res: Response) => {
+    res.json({ active: input.runtime.getActiveWorldEvents() })
   })
 
   return router

@@ -110,6 +110,16 @@ export const zh: Translations = {
   'ticker.collapse': '收起',
   'ticker.expand': '展開',
 
+  'worldEvent.heading': '潮鳴市現場',
+  'worldEvent.empty': '此刻沒有正在發生的世界事件。',
+  'worldEvent.scopeWorld': '全城',
+  'worldEvent.scopeRegion': '區域 · {regions}',
+  'worldEvent.endsInTicks': '剩 {ticks} 刻度',
+  'worldEvent.type.weather': '天象',
+  'worldEvent.type.npc': '人事',
+  'worldEvent.type.card': '紋卡',
+  'worldEvent.type.city': '城市',
+
   'account.eyebrow': '帳號 · 身份',
   'account.title': '帳號',
   'account.description': '註冊或登入潮鳴市，世界才會記得你的選擇。',

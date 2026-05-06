@@ -124,6 +124,16 @@ export type TranslationKey =
   | 'ticker.empty'
   | 'ticker.collapse'
   | 'ticker.expand'
+  // world events banner
+  | 'worldEvent.heading'
+  | 'worldEvent.empty'
+  | 'worldEvent.scopeWorld'
+  | 'worldEvent.scopeRegion'
+  | 'worldEvent.endsInTicks'
+  | 'worldEvent.type.weather'
+  | 'worldEvent.type.npc'
+  | 'worldEvent.type.card'
+  | 'worldEvent.type.city'
   // account
   | 'account.eyebrow'
   | 'account.title'

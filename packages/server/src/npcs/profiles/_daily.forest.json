@@ -1,0 +1,82 @@
+[
+  {
+    "id": "forest.ranger.yang_hua",
+    "name": { "zh": "楊樺", "en": "Yang Hua" },
+    "role": { "zh": "森林守林員", "en": "Forest Ranger" },
+    "defaultLocation": "t_forest",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_forest", "label": "dawn patrol" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_forest", "label": "trail markers" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_forest", "label": "watch hut at dusk" }
+    ],
+    "triggers": [
+      { "id": "yanghua.warn-bad-trail", "when": "relationshipBelow:any:30", "emitCommand": "NPC_DECLARE", "payload": { "topic": "forbidden_trail" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT", "NPC_MOVE"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "craftsman", "patience": 0.85, "greed": 0.15, "trustBase": 50, "talkativeness": 0.55, "factionLean": "civilian" }
+  },
+  {
+    "id": "forest.forager.a_qi",
+    "name": { "zh": "阿七", "en": "A-Chi" },
+    "role": { "zh": "蘑菇採集人", "en": "Mushroom Forager" },
+    "defaultLocation": "t_forest",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_forest", "label": "dawn collection" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 12960, "location": "t_forest", "label": "deeper foraging" },
+      { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_central", "label": "selling at the night-market" }
+    ],
+    "triggers": [
+      { "id": "aqi.share-find", "when": "relationshipAbove:any:55", "emitCommand": "NPC_DECLARE", "payload": { "topic": "rare_mushroom" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.7, "greed": 0.4, "trustBase": 48, "talkativeness": 0.6, "factionLean": "civilian" }
+  },
+  {
+    "id": "forest.falconer.ye_jing",
+    "name": { "zh": "葉鏡", "en": "Yeh Ching" },
+    "role": { "zh": "訓鳥師", "en": "Falconer" },
+    "defaultLocation": "t_forest",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_forest", "label": "morning flights" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_forest", "label": "training at the canopy" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_forest", "label": "feeding at the mews" }
+    ],
+    "triggers": [
+      { "id": "yejing.bird-omen", "when": "worldFactEquals:world.weather:\"霧雨\"", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "bird_omen" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "craftsman", "patience": 0.9, "greed": 0.2, "trustBase": 52, "talkativeness": 0.45, "factionLean": "civilian" }
+  },
+  {
+    "id": "forest.woodworker.mo_fan",
+    "name": { "zh": "莫凡", "en": "Mo Fan" },
+    "role": { "zh": "森林木工", "en": "Forest Woodworker" },
+    "defaultLocation": "t_forest",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_forest", "label": "selecting timber" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_forest", "label": "workshop carvings" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_forest", "label": "varnish drying" }
+    ],
+    "triggers": [
+      { "id": "mofan.idle-carve", "when": "idleTicksAbove:240", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "carving" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.95, "greed": 0.2, "trustBase": 50, "talkativeness": 0.4, "factionLean": "civilian" }
+  },
+  {
+    "id": "forest.child.tong_yi",
+    "name": { "zh": "童依", "en": "Tung Yi" },
+    "role": { "zh": "樹屋少年", "en": "Treehouse Child" },
+    "defaultLocation": "t_forest",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_forest", "label": "treehouse breakfast" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_forest", "label": "exploring the canopy" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_forest", "label": "fireflies and bedtime" }
+    ],
+    "triggers": [
+      { "id": "tongyi.curious", "when": "relationshipAbove:any:50", "emitCommand": "NPC_GREET", "payload": { "tone": "playful" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET"], "decayFn": "linear", "decayParam": 0.0008 },
+    "personality": { "archetype": "entertainer", "patience": 0.5, "greed": 0.1, "trustBase": 55, "talkativeness": 0.95, "factionLean": "civilian" }
+  }
+]

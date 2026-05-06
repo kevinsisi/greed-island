@@ -1,0 +1,166 @@
+[
+  {
+    "id": "central.grocer.lin_fei_yan",
+    "name": { "zh": "林菲煙", "en": "Lin Fei-Yan" },
+    "role": { "zh": "雜貨店老闆娘", "en": "General Store Owner" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_central", "label": "morning stock check" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 14400, "location": "t_central", "label": "shop counter" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "ledger and tea" }
+    ],
+    "triggers": [
+      { "id": "feiyan.regular-warmth", "when": "relationshipAbove:any:55", "emitCommand": "NPC_GREET", "payload": { "tone": "warm" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "shopkeeper", "patience": 0.85, "greed": 0.5, "trustBase": 55, "talkativeness": 0.9, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.paperboy.a_jun",
+    "name": { "zh": "阿駿", "en": "A-Jun" },
+    "role": { "zh": "報童", "en": "Paperboy" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_central", "label": "delivering morning papers" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 9000,  "location": "t_dock",    "label": "running edition to the docks" },
+      { "fromTickOfDay": 9000,  "toTickOfDay": 14400, "location": "t_central", "label": "calling headlines on the square" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "alley supper and sleep" }
+    ],
+    "triggers": [
+      { "id": "ajun.headline-shout", "when": "idleTicksAbove:60", "emitCommand": "NPC_DECLARE", "payload": { "topic": "headline" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0007 },
+    "personality": { "archetype": "entertainer", "patience": 0.4, "greed": 0.3, "trustBase": 50, "talkativeness": 0.95, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.guildclerk.su_fang",
+    "name": { "zh": "蘇芳", "en": "Su Fang" },
+    "role": { "zh": "公會行政員", "en": "Guild Clerk" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning commute" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "guild front desk" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "after-work errands" }
+    ],
+    "triggers": [
+      { "id": "sufang.protocol", "when": "relationshipBelow:any:30", "emitCommand": "NPC_DECLARE", "payload": { "topic": "guild_rules" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "civic", "patience": 0.9, "greed": 0.15, "trustBase": 52, "talkativeness": 0.55, "factionLean": "guild" }
+  },
+  {
+    "id": "central.commuter.zheng_wei_xiang",
+    "name": { "zh": "鄭瑋翔", "en": "Cheng Wei-Hsiang" },
+    "role": { "zh": "通勤上班族", "en": "Office Commuter" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning rush at the station" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "office tower" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 16560, "location": "t_central", "label": "evening commute home" },
+      { "fromTickOfDay": 16560, "toTickOfDay": 17280, "location": "t_dock",    "label": "late-night noodle stop" }
+    ],
+    "triggers": [
+      { "id": "weixiang.late-grumble", "when": "idleTicksAbove:300", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "overtime" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0004 },
+    "personality": { "archetype": "civic", "patience": 0.6, "greed": 0.4, "trustBase": 48, "talkativeness": 0.5, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.busker.huang_yu_cheng",
+    "name": { "zh": "黃宇澄", "en": "Huang Yu-Cheng" },
+    "role": { "zh": "街頭吉他手", "en": "Street Guitarist" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 7200,  "location": "t_central", "label": "morning rehearsal in the alley" },
+      { "fromTickOfDay": 7200,  "toTickOfDay": 14400, "location": "t_central", "label": "busking at the main square" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "night-market gigs" }
+    ],
+    "triggers": [
+      { "id": "yucheng.encore", "when": "relationshipAbove:any:60", "emitCommand": "NPC_GREET", "payload": { "tone": "musical" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET"], "decayFn": "linear", "decayParam": 0.0006 },
+    "personality": { "archetype": "entertainer", "patience": 0.7, "greed": 0.3, "trustBase": 55, "talkativeness": 0.95, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.tailor.zhuang_wan_rong",
+    "name": { "zh": "莊婉容", "en": "Chuang Wan-Jung" },
+    "role": { "zh": "學徒裁縫", "en": "Apprentice Tailor" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "shop opening" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "stitching at the bench" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "evening fittings" }
+    ],
+    "triggers": [
+      { "id": "wanrong.pattern-tip", "when": "relationshipAbove:any:50", "emitCommand": "NPC_DECLARE", "payload": { "topic": "patterns" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "craftsman", "patience": 0.9, "greed": 0.25, "trustBase": 52, "talkativeness": 0.65, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.noodle.a_cheng",
+    "name": { "zh": "阿成", "en": "A-Cheng" },
+    "role": { "zh": "麵攤老闆", "en": "Noodle Stall Owner" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "soup base prep" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "lunch rush" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "night-market shift" }
+    ],
+    "triggers": [
+      { "id": "acheng.steam", "when": "idleTicksAbove:120", "emitCommand": "NPC_DECLARE", "payload": { "topic": "broth" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "shopkeeper", "patience": 0.7, "greed": 0.45, "trustBase": 50, "talkativeness": 0.85, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.librarian.lin_pei_rou",
+    "name": { "zh": "林沛柔", "en": "Lin Pei-Jou" },
+    "role": { "zh": "圖書館員", "en": "Librarian" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning shelving" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "reading-room desk" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "closing rounds" }
+    ],
+    "triggers": [
+      { "id": "peirou.silence", "when": "relationshipBelow:any:25", "emitCommand": "NPC_DECLARE", "payload": { "topic": "library_rules" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0003 },
+    "personality": { "archetype": "civic", "patience": 0.95, "greed": 0.1, "trustBase": 50, "talkativeness": 0.4, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.cabbie.gao_si_qi",
+    "name": { "zh": "高斯齊", "en": "Kao Ssu-Chi" },
+    "role": { "zh": "計程車司機", "en": "Cabbie" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_central", "label": "morning station rank" },
+      { "fromTickOfDay": 4320,  "toTickOfDay": 9000,  "location": "t_dock",    "label": "harbour airport runs" },
+      { "fromTickOfDay": 9000,  "toTickOfDay": 14400, "location": "t_central", "label": "city loops" },
+      { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "night-market dispatch" }
+    ],
+    "triggers": [
+      { "id": "siqi.shortcut", "when": "relationshipAbove:any:55", "emitCommand": "NPC_DECLARE", "payload": { "topic": "shortcut" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "civic", "patience": 0.5, "greed": 0.45, "trustBase": 48, "talkativeness": 0.85, "factionLean": "civilian" }
+  },
+  {
+    "id": "central.student.su_yu_tang",
+    "name": { "zh": "蘇雨棠", "en": "Su Yu-Tang" },
+    "role": { "zh": "學院學生", "en": "Academy Student" },
+    "defaultLocation": "t_central",
+    "routine": [
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning class commute" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 12960, "location": "t_central", "label": "academy lectures" },
+      { "fromTickOfDay": 12960, "toTickOfDay": 15840, "location": "t_central", "label": "library study" },
+      { "fromTickOfDay": 15840, "toTickOfDay": 17280, "location": "t_central", "label": "supper at the noodle stall" }
+    ],
+    "triggers": [
+      { "id": "yutang.exam-stress", "when": "idleTicksAbove:120", "emitCommand": "NPC_OBSERVE", "payload": { "topic": "exam" } }
+    ],
+    "memory": { "consultsEventTypes": ["NPC_INTERACT"], "decayFn": "linear", "decayParam": 0.0005 },
+    "personality": { "archetype": "civic", "patience": 0.7, "greed": 0.2, "trustBase": 52, "talkativeness": 0.7, "factionLean": "civilian" }
+  }
+]
