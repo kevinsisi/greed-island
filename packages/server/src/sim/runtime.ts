@@ -311,7 +311,7 @@ export class SimulationRuntime {
           eventType: 'WORLD_RARE_WINDOW_OPENED',
           actorId: SIM_ACTOR_WORLD,
           payload: { windowId: 'tide_festival', closesAtTick: this.rareWindowClosesAtTick },
-          narration: '潮汐節的窗口開啟了，碼頭區會在二十分鐘內進入慶典。'
+          narration: '潮汐節的窗口開啟了，浪花區會在二十分鐘內進入慶典。'
         })
       )
     } else if (this.rareWindowOpen && nextTick >= this.rareWindowClosesAtTick) {
@@ -322,7 +322,7 @@ export class SimulationRuntime {
           eventType: 'WORLD_RARE_WINDOW_CLOSED',
           actorId: SIM_ACTOR_WORLD,
           payload: { windowId: 'tide_festival' },
-          narration: '潮汐節的窗口悄然閉合，碼頭區回歸日常喧囂。'
+          narration: '潮汐節的窗口悄然閉合，浪花區回歸日常喧囂。'
         })
       )
     }
@@ -515,6 +515,10 @@ function readNarrativePayload(payload: unknown): NarrativeEventPayload | null {
   }
 }
 
+// 潮鳴市八方街區。Tile IDs are kept stable so existing NPC profiles
+// (defaultLocation/routine using the historical t_dock/t_central/...
+// IDs) continue to resolve correctly after the Tideway rebrand.
+// `t_dimai` (地脈層) is the only new tile.
 const MAP_TILES: ReadonlyArray<{
   id: string
   name: string
@@ -522,13 +526,14 @@ const MAP_TILES: ReadonlyArray<{
   y: number
   biome: string
 }> = [
-  { id: 't_dock', name: '碼頭區', x: 0, y: 4, biome: 'water' },
-  { id: 't_central', name: '中央城', x: 3, y: 3, biome: 'grass' },
-  { id: 't_temple', name: '湖心神殿', x: 4, y: 1, biome: 'water' },
-  { id: 't_forest', name: '北方森林', x: 2, y: 0, biome: 'forest' },
-  { id: 't_ruin', name: '南方廢墟', x: 5, y: 5, biome: 'ruin' },
-  { id: 't_mountain', name: '東方山脈', x: 7, y: 2, biome: 'mountain' },
-  { id: 't_desert', name: '西緣荒地', x: 0, y: 1, biome: 'desert' }
+  { id: 't_desert',   name: '潮聲區',  x: 0, y: 4, biome: 'desert'   },
+  { id: 't_forest',   name: '潮見丘',  x: 1, y: 1, biome: 'forest'   },
+  { id: 't_mountain', name: '煙嵐山',  x: 4, y: 0, biome: 'mountain' },
+  { id: 't_temple',   name: '霓港區',  x: 7, y: 1, biome: 'water'    },
+  { id: 't_central',  name: '夜潮區',  x: 4, y: 3, biome: 'grass'    },
+  { id: 't_ruin',     name: '鏽灣區',  x: 7, y: 4, biome: 'ruin'     },
+  { id: 't_dock',     name: '浪花區',  x: 3, y: 5, biome: 'water'    },
+  { id: 't_dimai',    name: '地脈層',  x: 4, y: 2, biome: 'ruin'     }
 ]
 
 const TILE_NAME_BY_ID: Record<string, string> = MAP_TILES.reduce(

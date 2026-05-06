@@ -1,7 +1,7 @@
 {
   "id": "port.merchant.anton",
   "name": { "zh": "安東·風行者", "en": "Anton Windrunner" },
-  "role": { "zh": "碼頭區商人", "en": "Dockside Merchant" },
+  "role": { "zh": "霓港區商人", "en": "Niport Merchant" },
   "defaultLocation": "t_dock",
   "routine": [
     { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_dock",    "label": "early stall set-up" },

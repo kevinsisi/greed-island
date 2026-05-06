@@ -39,6 +39,11 @@ export type TranslationKey =
   | 'hub.enter'
   | 'hub.npcCount'
   | 'hub.empty'
+  | 'hub.controlsHint'
+  | 'hub.currentArea'
+  | 'hub.openArea'
+  | 'hub.interactHint'
+  | 'hub.enterArea'
   // area
   | 'area.eyebrow'
   | 'area.back'

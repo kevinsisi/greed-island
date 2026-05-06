@@ -20,10 +20,15 @@ export const zh: Translations = {
 
   'hub.eyebrow': '潮鳴市 · 八方街區',
   'hub.title': '今日潮鳴市',
-  'hub.description': '世界從不為你停下。挑一個區域走進去看看誰在那裡，發生了什麼。',
+  'hub.description': '世界從不為你停下。在地圖上走動，靠近 NPC 互動，跨進街區看看那邊發生了什麼。',
   'hub.enter': '走進去 →',
   'hub.npcCount': '在場 {count} 人',
   'hub.empty': '此處空無一人。',
+  'hub.controlsHint': '方向鍵 / WASD 移動 · 點擊或長按螢幕也能走 · 靠近 NPC 按 E 或 Space 互動',
+  'hub.currentArea': '目前位置',
+  'hub.openArea': '進入 {name} →',
+  'hub.interactHint': '互動',
+  'hub.enterArea': '踏入',
 
   'area.eyebrow': '區域 · {biome}',
   'area.back': '← 回潮鳴市',
