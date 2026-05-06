@@ -249,11 +249,48 @@ No production state exists yet, so no migration is needed. Implementation order:
 6. Author the canonical 100-card catalog with discovery and restriction rule slots.
 7. Write `docker-compose.yml` and the Caddy site config; deploy to the desktop host once verified locally.
 
+## Resolved Decisions (2026-05-06)
+
+The following six platform questions were resolved by the project owner and are now binding for v1 implementation.
+
+### Decision: Card catalog faithfully tracks the canon
+
+The 100-card catalog SHALL faithfully reflect the canonical Greed Island card list from the source IP (HUNTER × HUNTER). The catalog file holds the authoritative copy used by the server; canonical card names, ranks, and descriptive content are sourced from the project owner's reference material and dropped into the catalog as data, not generated.
+
+Implementation note: the repository ships the deterministic catalog schema and the full 100-entry structure (id, rank slot, name and description fields, restriction reference, lore reference). A handful of widely-referenced iconic entries are seeded as format examples; the remaining entries are placeholder slots labeled `待填入正典 / fill from canon` so the project owner can paste in canon content without touching code. The schema is the contract; the data is editable.
+
+### Decision: Tick duration is 5 seconds
+
+The runtime SHALL use a default tick duration of 5 seconds wall-clock per simulation tick. This is a runtime scheduling parameter, not a simulation-semantics input — replay determinism still depends only on tick number and EventLog. Derived constants:
+
+- `TICKS_PER_MINUTE = 12`
+- `TICKS_PER_HOUR = 720`
+- `TICKS_PER_DAY = 17_280`
+
+Daily-cadence mechanics (Pillar 5) use `TICKS_PER_DAY` as the in-world day boundary.
+
+### Decision: NPC behavior is JSON-data-driven from day one
+
+NPC personality, routines, dialogue triggers, and decision parameters SHALL be expressed as JSON profile files loaded at server boot. Hard-coded NPC behaviors are forbidden in v1.
+
+This costs slightly more upfront than code-only policies but pays back immediately: the project owner can author and tune NPCs without touching TypeScript, and the canon-faithful card system needs JSON-driven NPCs anyway because each card's discovery context is tied to specific NPCs. JSON profiles are evaluated by deterministic policy code so kernel determinism is preserved.
+
+### Decision: Event history is retained for 30 days
+
+The EventLog SHALL retain committed events for 30 days of in-world time (`30 × TICKS_PER_DAY = 518_400` ticks). A scheduled prune task removes events older than the retention window from the EventLog, and the WorldState reducer rebuilds from a checkpoint plus the retained tail (the checkpoint mechanic is a follow-up change; v1 may simply prune and accept that pre-retention history is no longer queryable).
+
+Narration view rows follow the same 30-day retention by default.
+
+### Decision: UI is bilingual (Traditional Chinese + English) with a toggle
+
+The frontend SHALL ship with both Traditional Chinese (繁體中文) and English copy and a visible toggle in the app shell. Translations live in a single `i18n/` module per locale. The default locale on first load is Traditional Chinese; the user's choice persists in `localStorage` and survives reload.
+
+### Decision: Public hostname is fronted by the RPi Caddy reverse proxy
+
+`hunter.sisihome.org` is fronted by the existing RPi Caddy that already serves the rest of the HomeProject sites (per `skills/deployment/SKILL.md` § 4). The desktop host runs the Greed Island stack and exposes the server's HTTP port on its Tailscale interface; the RPi Caddy reverse-proxies to `desktop-tailscale-host:port`. This keeps Greed Island consistent with the rest of the HomeProject deployment topology and removes the need for a colocated Caddy container in v1. SSE pass-through requires `flush_interval -1` on the RPi Caddy upstream block.
+
+The stack therefore drops the per-app Caddy container; the desktop compose stack is just `server` + `web` (web served as static files by a tiny Caddy or nginx, or by the server itself behind `/`).
+
 ## Open Questions
 
-- What is the canonical card list? The IP describes ~100 specified cards; we need a confirmed source-of-truth list (Chinese name + rank + brief description) before authoring `catalog.ts`.
-- What is the project's preferred default tick rate for the runtime container (e.g. 1 tick / 5s, 1 tick / 30s)?
-- Should NPC personality and decision profiles be code-only deterministic policies in v1, or data-driven from a YAML/JSON file?
-- How should `narration_view` rows be retained — keep all, time-window prune, or per-card-discovery only?
-- Should the desktop host expose `hunter.sisihome.org` directly via its own Caddy + DNS A record, or front it through the existing RPi Caddy with a Tailscale upstream? Both are viable; user preference needed before final deploy.
-- Does the user want UI text in Traditional Chinese only, or bilingual (TC + EN) with a language toggle?
+All v1 platform questions have been resolved. Future questions belong to follow-up changes (e.g. checkpoint mechanic for the retention cut, exact prune scheduler, public-exposure hardening completion).

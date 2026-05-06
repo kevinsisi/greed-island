@@ -34,15 +34,30 @@
 
 ## 5. Card Collection
 
-- [ ] 5.1 Define the `CardCatalogEntry` type (id, rank, name, description, discovery rule reference, restriction rule reference).
-- [ ] 5.2 Author `packages/server/src/cards/catalog.ts` with the canonical 100 cards (subject to confirmed source-of-truth list from open questions).
-- [ ] 5.3 Define `CARD_DISCOVERED` and `CARD_TRANSFERRED` event types with payload contracts.
-- [ ] 5.4 Extend the Rule Engine to validate card-discovery and card-transfer commands.
-- [ ] 5.5 Implement a card-progress projection from the EventLog usable by the `/api/cards` endpoint.
+- [ ] 5.1 Define the `CardCatalogEntry` type (id, rank, nameZh, nameEn, description, story, discovery rule reference, restriction rule reference) in TypeScript.
+- [ ] 5.2 Ship `packages/server/src/cards/catalog.json` with the full 100-entry structure (id + rank slot for every entry); seed a handful of iconic format examples and leave the rest as `待填入正典 / fill from canon` placeholders for the project owner.
+- [ ] 5.3 Implement a catalog loader that reads `catalog.json` at boot, validates against the schema, and rejects malformed entries.
+- [ ] 5.4 Define `CARD_DISCOVERED` and `CARD_TRANSFERRED` event types with payload contracts.
+- [ ] 5.5 Extend the Rule Engine to validate card-discovery and card-transfer commands.
+- [ ] 5.6 Implement a card-progress projection from the EventLog usable by the `/api/cards` endpoint.
+
+## 5a. World Config And Retention
+
+- [ ] 5a.1 Add `packages/server/src/config/world.ts` exposing `TICK_DURATION_MS = 5000`, `TICKS_PER_MINUTE`, `TICKS_PER_HOUR`, `TICKS_PER_DAY = 17280`, and `EVENT_RETENTION_DAYS = 30`.
+- [ ] 5a.2 Implement an EventLog prune task that removes events older than `EVENT_RETENTION_DAYS × TICKS_PER_DAY` ticks behind the current tick.
+- [ ] 5a.3 Implement the equivalent prune on `narration_view` rows.
+- [ ] 5a.4 Verify the reducer rebuilds WorldState correctly from the retained event tail (checkpoint mechanic for pre-retention WorldState is a follow-up change).
+
+## 5b. NPC Data-Driven Profiles
+
+- [ ] 5b.1 Define the `NpcProfile` JSON schema (id, name fields, role, location, personality knobs, daily routine slots, dialogue trigger conditions, decision parameters).
+- [ ] 5b.2 Ship `packages/server/src/npcs/profiles/` with at least three sample JSON profiles demonstrating the schema shape.
+- [ ] 5b.3 Implement a profile loader that reads every JSON file in `profiles/`, validates against the schema, and rejects malformed profiles.
+- [ ] 5b.4 Implement the deterministic NPC policy interpreter that consumes a loaded profile + frozen `WorldState(t-1)` and emits `NPCCommand`s — no profile content authored in code.
 
 ## 6. Web Observation Frontend (v1)
 
-- [ ] 6.1 Implement an app shell with intent-aware device-tier routing (mobile quick-check surface and desktop deep-immersion surface) and Traditional Chinese UI text.
+- [ ] 6.1 Implement an app shell with intent-aware device-tier routing (mobile quick-check surface and desktop deep-immersion surface), bilingual i18n (繁體中文 default + English toggle), and locale persistence in `localStorage`.
 - [ ] 6.2 Implement device-tier detection on first load with an explicit user override that persists for the session.
 - [ ] 6.3 Implement a world dashboard view (tick number, NPC count, event throughput, card discovery progress).
 - [ ] 6.4 Implement a world map view that renders the current WorldState's spatial facts (full pan-and-zoom on desktop, summary view on mobile).
@@ -72,11 +87,11 @@
 ## 8. Deployment Platform
 
 - [ ] 8.1 Write a multi-stage `Dockerfile` for `packages/server` producing a slim Node.js runtime image.
-- [ ] 8.2 Write a multi-stage `Dockerfile` for `packages/web` producing a static-asset image (or use the Caddy container to serve the build directly).
-- [ ] 8.3 Write `docker-compose.yml` defining `server`, `web`, and `caddy` services with bind-mounted volumes for SQLite persistence and `.env` mounting.
-- [ ] 8.4 Write a `Caddyfile` mapping `hunter.sisihome.org` to the `web` and `server` upstreams (SSE upstream uses `flush_interval -1`).
+- [ ] 8.2 Write a multi-stage `Dockerfile` for `packages/web` producing a static-asset image consumed by the server (or by a tiny static proxy) so the desktop stack does not need its own Caddy container.
+- [ ] 8.3 Write `docker-compose.yml` defining only the desktop-side services (`server`, optional `web` static container) with bind-mounted volumes for SQLite persistence and `.env` mounting; bind the server's host port to the desktop's Tailscale interface only.
+- [ ] 8.4 Provide a Caddyfile snippet documenting the upstream block to add to the existing RPi `/home/kevin/DockerCompose/caddy/Caddyfile` (with `flush_interval -1` for SSE under `/api/events/stream`).
 - [ ] 8.5 Document local `docker compose up` verification commands and ports.
-- [ ] 8.6 Document the deploy procedure for the desktop host (3700X / 48 GB / RTX 2070), including the Tailscale DNS / address mapping for `hunter.sisihome.org` and the TLS certificate strategy that fits Tailscale-internal access.
+- [ ] 8.6 Document the deploy procedure for the desktop host (3700X / 48 GB / RTX 2070) and the RPi-side Caddyfile edit + restart that lights up `hunter.sisihome.org`.
 - [ ] 8.7 Verify `hunter.sisihome.org` is reachable only from the Tailscale network in v1, and document the explicit follow-up change required to satisfy the deployment hardening gate before any public exposure.
 
 ## 9. Verification And Handoff

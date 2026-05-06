@@ -1,0 +1,37 @@
+{
+  "id": "forest.hunter.lyra",
+  "name": { "zh": "萊拉·夜歌", "en": "Lyra Nightsong" },
+  "role": { "zh": "尋寶獵人", "en": "Treasure Hunter" },
+  "defaultLocation": "t_forest",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 720,   "location": "t_forest",   "label": "pre-dawn scouting" },
+    { "fromTickOfDay": 720,   "toTickOfDay": 9000,  "location": "t_forest",   "label": "deep-forest tracking" },
+    { "fromTickOfDay": 9000,  "toTickOfDay": 13000, "location": "t_central",  "label": "guild check-in and leads" },
+    { "fromTickOfDay": 13000, "toTickOfDay": 17280, "location": "t_dock",     "label": "fence finds at the docks" }
+  ],
+  "triggers": [
+    {
+      "id": "lyra.search-when-window-open",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_SEARCH",
+      "payload": { "intensity": "high", "biome": "forest" }
+    },
+    {
+      "id": "lyra.stash-recent-find",
+      "when": "cardOwned:42",
+      "emitCommand": "NPC_STASH",
+      "payload": { "destination": "t_ruin" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["CARD_DISCOVERED", "NPC_TRADE", "NPC_MOVE"],
+    "decayFn": "exponential",
+    "decayParam": 0.0008
+  },
+  "personality": {
+    "patience": 0.3,
+    "greed": 0.8,
+    "trustBase": 20,
+    "stealthBias": 0.6
+  }
+}

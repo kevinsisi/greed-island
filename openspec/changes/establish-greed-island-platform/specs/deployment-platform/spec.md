@@ -14,12 +14,16 @@ SQLite databases used by the kernel and the AI key pool SHALL be stored in a hos
 - **WHEN** the `server` container is stopped and started again
 - **THEN** the EventLog and AI key store contents present before the stop MUST be present after the start
 
-### Requirement: Caddy reverse proxy serves `hunter.sisihome.org` over Tailscale-internal access in v1
-A Caddy service SHALL terminate TLS for the host `hunter.sisihome.org` and reverse-proxy HTTP requests to the `web` service for static assets and to the `server` service for API and SSE routes. In v1, access MUST be limited to the Tailscale internal network — `hunter.sisihome.org` MUST resolve to the desktop host's Tailscale address (matching the existing HomeProject service pattern) and MUST NOT be reachable from the public internet.
+### Requirement: `hunter.sisihome.org` is fronted by the existing RPi Caddy reverse proxy
+The site `hunter.sisihome.org` SHALL be reverse-proxied by the existing RPi Caddy that already serves the rest of the HomeProject sites. The desktop host SHALL run the Greed Island stack and expose the server's HTTP port on its Tailscale interface; the RPi Caddy MUST proxy to that Tailscale upstream. The desktop compose stack MUST NOT include its own colocated Caddy container in v1.
 
-#### Scenario: Hostname routes correctly to upstreams
-- **WHEN** an HTTPS request reaches the host for `hunter.sisihome.org`
-- **THEN** static asset requests MUST be served by the `web` upstream and `/api/*` requests MUST be proxied to the `server` upstream
+#### Scenario: RPi Caddy is the public-facing entry point
+- **WHEN** an HTTPS request for `hunter.sisihome.org` is received
+- **THEN** the request MUST land on the RPi Caddy and MUST be reverse-proxied to the desktop host's Tailscale address on the configured Greed Island server port
+
+#### Scenario: SSE pass-through is configured at the proxy hop
+- **WHEN** a client subscribes to `/api/events/stream` through the RPi Caddy
+- **THEN** the corresponding RPi Caddy upstream block MUST set `flush_interval -1` (or an equivalent unbuffered streaming directive) so that committed events reach the client without proxy buffering
 
 #### Scenario: Public internet access is not exposed in v1
 - **WHEN** the v1 deployment is online

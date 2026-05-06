@@ -1,7 +1,9 @@
 ## ADDED Requirements
 
 ### Requirement: Canonical card catalog is deterministic data
-The card catalog SHALL contain the canonical 100 specified cards as deterministic, versioned data. Each catalog entry MUST include a stable card id, rank, name, description, discovery rule reference, and restriction rule reference. AI MUST NOT author or mutate catalog entries at runtime.
+The card catalog SHALL contain the canonical 100 specified cards as deterministic, versioned data faithful to the source IP. Each catalog entry MUST include a stable card id, rank, Traditional-Chinese name, English name, description, discovery rule reference, and restriction rule reference. AI MUST NOT author or mutate catalog entries at runtime.
+
+The catalog SHALL ship as a JSON file at `packages/server/src/cards/catalog.json` with a corresponding TypeScript schema. The repository SHALL ship the full 100-entry structure with id and rank slots populated; canonical name and description fields MAY be populated as data by the project owner without code changes.
 
 #### Scenario: Catalog is replayable across servers
 - **WHEN** two servers load the same catalog version

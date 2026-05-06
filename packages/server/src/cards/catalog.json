@@ -1,0 +1,1005 @@
+{
+  "version": "greed-island-card-catalog@0.1.0",
+  "entries": [
+    {
+      "id": 1,
+      "rank": "SS",
+      "nameZh": "待填入正典 #001",
+      "nameEn": "Card #001 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 2,
+      "rank": "S",
+      "nameZh": "待填入正典 #002",
+      "nameEn": "Card #002 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 3,
+      "rank": "S",
+      "nameZh": "待填入正典 #003",
+      "nameEn": "Card #003 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 4,
+      "rank": "S",
+      "nameZh": "待填入正典 #004",
+      "nameEn": "Card #004 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 5,
+      "rank": "S",
+      "nameZh": "待填入正典 #005",
+      "nameEn": "Card #005 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 6,
+      "rank": "A",
+      "nameZh": "待填入正典 #006",
+      "nameEn": "Card #006 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 7,
+      "rank": "A",
+      "nameZh": "待填入正典 #007",
+      "nameEn": "Card #007 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 8,
+      "rank": "A",
+      "nameZh": "待填入正典 #008",
+      "nameEn": "Card #008 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 9,
+      "rank": "A",
+      "nameZh": "待填入正典 #009",
+      "nameEn": "Card #009 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 10,
+      "rank": "A",
+      "nameZh": "待填入正典 #010",
+      "nameEn": "Card #010 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 11,
+      "rank": "A",
+      "nameZh": "待填入正典 #011",
+      "nameEn": "Card #011 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 12,
+      "rank": "A",
+      "nameZh": "待填入正典 #012",
+      "nameEn": "Card #012 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 13,
+      "rank": "A",
+      "nameZh": "待填入正典 #013",
+      "nameEn": "Card #013 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 14,
+      "rank": "A",
+      "nameZh": "待填入正典 #014",
+      "nameEn": "Card #014 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 15,
+      "rank": "A",
+      "nameZh": "待填入正典 #015",
+      "nameEn": "Card #015 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 16,
+      "rank": "B",
+      "nameZh": "待填入正典 #016",
+      "nameEn": "Card #016 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 17,
+      "rank": "B",
+      "nameZh": "待填入正典 #017",
+      "nameEn": "Card #017 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 18,
+      "rank": "B",
+      "nameZh": "待填入正典 #018",
+      "nameEn": "Card #018 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 19,
+      "rank": "B",
+      "nameZh": "待填入正典 #019",
+      "nameEn": "Card #019 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 20,
+      "rank": "B",
+      "nameZh": "待填入正典 #020",
+      "nameEn": "Card #020 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 21,
+      "rank": "B",
+      "nameZh": "待填入正典 #021",
+      "nameEn": "Card #021 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 22,
+      "rank": "B",
+      "nameZh": "待填入正典 #022",
+      "nameEn": "Card #022 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 23,
+      "rank": "B",
+      "nameZh": "待填入正典 #023",
+      "nameEn": "Card #023 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 24,
+      "rank": "B",
+      "nameZh": "待填入正典 #024",
+      "nameEn": "Card #024 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 25,
+      "rank": "B",
+      "nameZh": "待填入正典 #025",
+      "nameEn": "Card #025 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 26,
+      "rank": "B",
+      "nameZh": "待填入正典 #026",
+      "nameEn": "Card #026 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 27,
+      "rank": "B",
+      "nameZh": "待填入正典 #027",
+      "nameEn": "Card #027 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 28,
+      "rank": "B",
+      "nameZh": "待填入正典 #028",
+      "nameEn": "Card #028 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 29,
+      "rank": "B",
+      "nameZh": "待填入正典 #029",
+      "nameEn": "Card #029 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 30,
+      "rank": "B",
+      "nameZh": "待填入正典 #030",
+      "nameEn": "Card #030 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 31,
+      "rank": "C",
+      "nameZh": "待填入正典 #031",
+      "nameEn": "Card #031 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 32,
+      "rank": "C",
+      "nameZh": "待填入正典 #032",
+      "nameEn": "Card #032 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 33,
+      "rank": "C",
+      "nameZh": "待填入正典 #033",
+      "nameEn": "Card #033 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 34,
+      "rank": "C",
+      "nameZh": "待填入正典 #034",
+      "nameEn": "Card #034 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 35,
+      "rank": "C",
+      "nameZh": "待填入正典 #035",
+      "nameEn": "Card #035 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 36,
+      "rank": "C",
+      "nameZh": "待填入正典 #036",
+      "nameEn": "Card #036 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 37,
+      "rank": "C",
+      "nameZh": "待填入正典 #037",
+      "nameEn": "Card #037 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 38,
+      "rank": "C",
+      "nameZh": "待填入正典 #038",
+      "nameEn": "Card #038 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 39,
+      "rank": "C",
+      "nameZh": "待填入正典 #039",
+      "nameEn": "Card #039 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 40,
+      "rank": "C",
+      "nameZh": "待填入正典 #040",
+      "nameEn": "Card #040 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 41,
+      "rank": "C",
+      "nameZh": "待填入正典 #041",
+      "nameEn": "Card #041 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 42,
+      "rank": "C",
+      "nameZh": "待填入正典 #042",
+      "nameEn": "Card #042 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 43,
+      "rank": "C",
+      "nameZh": "待填入正典 #043",
+      "nameEn": "Card #043 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 44,
+      "rank": "C",
+      "nameZh": "待填入正典 #044",
+      "nameEn": "Card #044 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 45,
+      "rank": "C",
+      "nameZh": "待填入正典 #045",
+      "nameEn": "Card #045 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 46,
+      "rank": "C",
+      "nameZh": "待填入正典 #046",
+      "nameEn": "Card #046 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 47,
+      "rank": "C",
+      "nameZh": "待填入正典 #047",
+      "nameEn": "Card #047 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 48,
+      "rank": "C",
+      "nameZh": "待填入正典 #048",
+      "nameEn": "Card #048 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 49,
+      "rank": "C",
+      "nameZh": "待填入正典 #049",
+      "nameEn": "Card #049 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 50,
+      "rank": "C",
+      "nameZh": "待填入正典 #050",
+      "nameEn": "Card #050 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 51,
+      "rank": "D",
+      "nameZh": "待填入正典 #051",
+      "nameEn": "Card #051 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 52,
+      "rank": "D",
+      "nameZh": "待填入正典 #052",
+      "nameEn": "Card #052 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 53,
+      "rank": "D",
+      "nameZh": "待填入正典 #053",
+      "nameEn": "Card #053 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 54,
+      "rank": "D",
+      "nameZh": "待填入正典 #054",
+      "nameEn": "Card #054 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 55,
+      "rank": "D",
+      "nameZh": "待填入正典 #055",
+      "nameEn": "Card #055 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 56,
+      "rank": "D",
+      "nameZh": "待填入正典 #056",
+      "nameEn": "Card #056 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 57,
+      "rank": "D",
+      "nameZh": "待填入正典 #057",
+      "nameEn": "Card #057 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 58,
+      "rank": "D",
+      "nameZh": "待填入正典 #058",
+      "nameEn": "Card #058 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 59,
+      "rank": "D",
+      "nameZh": "待填入正典 #059",
+      "nameEn": "Card #059 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 60,
+      "rank": "D",
+      "nameZh": "待填入正典 #060",
+      "nameEn": "Card #060 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 61,
+      "rank": "D",
+      "nameZh": "待填入正典 #061",
+      "nameEn": "Card #061 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 62,
+      "rank": "D",
+      "nameZh": "待填入正典 #062",
+      "nameEn": "Card #062 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 63,
+      "rank": "D",
+      "nameZh": "待填入正典 #063",
+      "nameEn": "Card #063 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 64,
+      "rank": "D",
+      "nameZh": "待填入正典 #064",
+      "nameEn": "Card #064 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 65,
+      "rank": "D",
+      "nameZh": "待填入正典 #065",
+      "nameEn": "Card #065 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 66,
+      "rank": "D",
+      "nameZh": "待填入正典 #066",
+      "nameEn": "Card #066 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 67,
+      "rank": "D",
+      "nameZh": "待填入正典 #067",
+      "nameEn": "Card #067 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 68,
+      "rank": "D",
+      "nameZh": "待填入正典 #068",
+      "nameEn": "Card #068 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 69,
+      "rank": "D",
+      "nameZh": "待填入正典 #069",
+      "nameEn": "Card #069 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 70,
+      "rank": "D",
+      "nameZh": "待填入正典 #070",
+      "nameEn": "Card #070 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 71,
+      "rank": "E",
+      "nameZh": "待填入正典 #071",
+      "nameEn": "Card #071 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 72,
+      "rank": "E",
+      "nameZh": "待填入正典 #072",
+      "nameEn": "Card #072 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 73,
+      "rank": "E",
+      "nameZh": "待填入正典 #073",
+      "nameEn": "Card #073 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 74,
+      "rank": "E",
+      "nameZh": "待填入正典 #074",
+      "nameEn": "Card #074 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 75,
+      "rank": "E",
+      "nameZh": "待填入正典 #075",
+      "nameEn": "Card #075 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 76,
+      "rank": "E",
+      "nameZh": "待填入正典 #076",
+      "nameEn": "Card #076 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 77,
+      "rank": "E",
+      "nameZh": "待填入正典 #077",
+      "nameEn": "Card #077 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 78,
+      "rank": "E",
+      "nameZh": "待填入正典 #078",
+      "nameEn": "Card #078 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 79,
+      "rank": "E",
+      "nameZh": "待填入正典 #079",
+      "nameEn": "Card #079 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 80,
+      "rank": "E",
+      "nameZh": "待填入正典 #080",
+      "nameEn": "Card #080 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 81,
+      "rank": "E",
+      "nameZh": "待填入正典 #081",
+      "nameEn": "Card #081 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 82,
+      "rank": "E",
+      "nameZh": "待填入正典 #082",
+      "nameEn": "Card #082 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 83,
+      "rank": "E",
+      "nameZh": "待填入正典 #083",
+      "nameEn": "Card #083 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 84,
+      "rank": "E",
+      "nameZh": "待填入正典 #084",
+      "nameEn": "Card #084 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 85,
+      "rank": "E",
+      "nameZh": "待填入正典 #085",
+      "nameEn": "Card #085 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 86,
+      "rank": "F",
+      "nameZh": "待填入正典 #086",
+      "nameEn": "Card #086 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 87,
+      "rank": "F",
+      "nameZh": "待填入正典 #087",
+      "nameEn": "Card #087 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 88,
+      "rank": "F",
+      "nameZh": "待填入正典 #088",
+      "nameEn": "Card #088 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 89,
+      "rank": "F",
+      "nameZh": "待填入正典 #089",
+      "nameEn": "Card #089 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 90,
+      "rank": "F",
+      "nameZh": "待填入正典 #090",
+      "nameEn": "Card #090 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 91,
+      "rank": "F",
+      "nameZh": "待填入正典 #091",
+      "nameEn": "Card #091 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 92,
+      "rank": "F",
+      "nameZh": "待填入正典 #092",
+      "nameEn": "Card #092 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 93,
+      "rank": "F",
+      "nameZh": "待填入正典 #093",
+      "nameEn": "Card #093 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 94,
+      "rank": "F",
+      "nameZh": "待填入正典 #094",
+      "nameEn": "Card #094 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 95,
+      "rank": "F",
+      "nameZh": "待填入正典 #095",
+      "nameEn": "Card #095 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 96,
+      "rank": "G",
+      "nameZh": "待填入正典 #096",
+      "nameEn": "Card #096 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 97,
+      "rank": "G",
+      "nameZh": "待填入正典 #097",
+      "nameEn": "Card #097 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 98,
+      "rank": "G",
+      "nameZh": "待填入正典 #098",
+      "nameEn": "Card #098 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 99,
+      "rank": "G",
+      "nameZh": "待填入正典 #099",
+      "nameEn": "Card #099 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    },
+    {
+      "id": 100,
+      "rank": "H",
+      "nameZh": "待填入正典 #100",
+      "nameEn": "Card #100 (TBD)",
+      "description": "描述待填入正典 / Description pending canon source.",
+      "story": "故事待填入正典 / Lore pending canon source.",
+      "discoveryRuleId": "discovery.default",
+      "restrictionRuleId": "restriction.default"
+    }
+  ]
+}

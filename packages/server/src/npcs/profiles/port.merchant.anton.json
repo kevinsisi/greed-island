@@ -1,0 +1,36 @@
+{
+  "id": "port.merchant.anton",
+  "name": { "zh": "安東·風行者", "en": "Anton Windrunner" },
+  "role": { "zh": "碼頭區商人", "en": "Dockside Merchant" },
+  "defaultLocation": "t_dock",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 4320,  "location": "t_dock",    "label": "early stall set-up" },
+    { "fromTickOfDay": 4320,  "toTickOfDay": 12960, "location": "t_dock",    "label": "open for trade" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 17280, "location": "t_central", "label": "evening ledger at the central guild" }
+  ],
+  "triggers": [
+    {
+      "id": "anton.greet-returning-player",
+      "when": "idleTicksAbove:288",
+      "emitCommand": "NPC_GREET",
+      "payload": { "tone": "warm" }
+    },
+    {
+      "id": "anton.cool-toward-orin",
+      "when": "relationshipBelow:npc_orin:0",
+      "emitCommand": "NPC_AVOID",
+      "payload": { "target": "npc_orin" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_TRADE", "CARD_TRANSFERRED", "NPC_GREET"],
+    "decayFn": "linear",
+    "decayParam": 0.001
+  },
+  "personality": {
+    "patience": 0.7,
+    "greed": 0.4,
+    "trustBase": 50,
+    "preferredTradeBiome": "water"
+  }
+}

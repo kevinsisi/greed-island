@@ -36,6 +36,24 @@ The world SHALL support rare events whose availability is gated by simulation ti
 - **WHEN** a rare-event window opens and closes without an eligible interaction
 - **THEN** the window MUST close without granting reward, and the next opening MUST be governed by the deterministic schedule, not by the missed attempt
 
+### Requirement: Tick duration is 5 seconds wall-clock by default
+The runtime SHALL default to a 5-second wall-clock tick duration. The default tick-to-day mapping is therefore `TICKS_PER_DAY = 17_280`. Both values MUST live in a single world-config module so they can be tuned in one place.
+
+#### Scenario: World config exposes tick rate and ticks-per-day
+- **WHEN** the server boots
+- **THEN** it MUST read `TICK_DURATION_MS` and `TICKS_PER_DAY` from a single world-config module, with defaults `5000` and `17280` respectively
+
+### Requirement: EventLog and narration are retained for 30 in-world days
+The EventLog and the narration view SHALL retain entries for 30 in-world days (`30 × TICKS_PER_DAY` ticks). A scheduled prune task MUST remove entries older than the retention window. The retention window is a config value with the same single-source rule as tick duration.
+
+#### Scenario: Pruned events are no longer queryable
+- **WHEN** the prune task runs and removes entries older than 30 in-world days
+- **THEN** the corresponding events MUST be absent from `/api/events` results, and the `narration_view` rows for those events MUST be removed
+
+#### Scenario: Reducer tolerates retained-tail rebuild
+- **WHEN** WorldState is rebuilt after a prune
+- **THEN** the reducer MUST produce a WorldState consistent with the retained event tail (the checkpoint mechanic that preserves pre-retention WorldState is a follow-up change)
+
 ### Requirement: Daily cadence is tick-counted, not wall-clock-counted
 Daily quests, login rewards, and similar daily-cadence mechanics SHALL be expressed in tick-counted in-world days using an explicit tick-to-day mapping in world config. The cadence MUST NOT depend on the host's wall-clock day boundary.
 

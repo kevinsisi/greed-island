@@ -1,0 +1,43 @@
+{
+  "id": "temple.cleric.sela",
+  "name": { "zh": "瑟拉·靜湖", "en": "Sela of the Still Lake" },
+  "role": { "zh": "湖心神殿神職", "en": "Lake-Heart Cleric" },
+  "defaultLocation": "t_temple",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 1440,  "location": "t_temple",  "label": "midnight vigil" },
+    { "fromTickOfDay": 1440,  "toTickOfDay": 12960, "location": "t_temple",  "label": "ritual hours" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 15840, "location": "t_central", "label": "council attendance" },
+    { "fromTickOfDay": 15840, "toTickOfDay": 17280, "location": "t_temple",  "label": "evening close" }
+  ],
+  "triggers": [
+    {
+      "id": "sela.bless-recurring-visitor",
+      "when": "relationshipAbove:any:60",
+      "emitCommand": "NPC_BLESS",
+      "payload": { "boon": "minor" }
+    },
+    {
+      "id": "sela.warn-on-rare-window",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "tide_festival" }
+    },
+    {
+      "id": "sela.respond-to-bell",
+      "when": "worldFactEquals:templeBellRung:true",
+      "emitCommand": "NPC_LISTEN",
+      "payload": { "duration": 60 }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_GREET", "NPC_BLESS", "CARD_DISCOVERED"],
+    "decayFn": "none",
+    "decayParam": 0
+  },
+  "personality": {
+    "patience": 0.95,
+    "greed": 0.05,
+    "trustBase": 60,
+    "ritualBias": 0.9
+  }
+}

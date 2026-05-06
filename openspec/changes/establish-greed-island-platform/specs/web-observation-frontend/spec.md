@@ -28,8 +28,23 @@ The frontend SHALL subscribe to `/api/events/stream` via Server-Sent Events and 
 - **WHEN** the kernel commits new events while the frontend is open
 - **THEN** the event feed MUST render those events without requiring a manual page refresh
 
-### Requirement: UI is mobile-friendly with Traditional Chinese copy
-The frontend SHALL be usable on mobile viewports and SHALL use Traditional Chinese (繁體中文) for all UI text by default. Touch targets MUST be at least 44 px in the smallest dimension on mobile layouts.
+### Requirement: UI is bilingual (Traditional Chinese + English) with a toggle
+The frontend SHALL ship with both Traditional Chinese (繁體中文) and English copy and a visible language toggle in the app shell. The default locale on first load MUST be Traditional Chinese; the user's choice MUST persist in `localStorage` and survive reload. All user-visible strings MUST go through a single i18n layer; hard-coded copy in components is forbidden.
+
+#### Scenario: Default locale is Traditional Chinese
+- **WHEN** a user opens the site for the first time with no stored language preference
+- **THEN** the UI MUST render in Traditional Chinese
+
+#### Scenario: Language toggle persists across reloads
+- **WHEN** a user switches the language to English and reloads the page
+- **THEN** the UI MUST render in English without requiring the toggle to be touched again
+
+#### Scenario: No hard-coded UI copy in components
+- **WHEN** the frontend codebase is inspected for UI strings
+- **THEN** every user-visible string MUST be resolved through the i18n layer; component files MUST NOT contain literal Traditional Chinese or English UI copy outside that layer
+
+### Requirement: UI is mobile-friendly with usable touch targets
+The frontend SHALL be usable on mobile viewports. Touch targets MUST be at least 44 px in the smallest dimension on mobile layouts.
 
 #### Scenario: Mobile layout is functional
 - **WHEN** the frontend is loaded on a viewport of 375 × 667 pixels
