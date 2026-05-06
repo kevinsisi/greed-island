@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/common/PageHeader'
 import { useWorldState } from '../state/WorldStateContext'
+import { useI18n } from '../i18n'
+import type { TranslationKey } from '../i18n'
 import type { CardCatalogEntry } from '../state/types'
 
 const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -17,16 +19,28 @@ const RANK_TONE: Record<CardCatalogEntry['rank'], string> = {
   H: 'border-ground-800 text-ground-600',
 }
 
+interface CardFilter {
+  id: 'all' | 'owned' | 'missing'
+  labelKey: TranslationKey
+}
+
+const FILTERS: CardFilter[] = [
+  { id: 'all',     labelKey: 'cards.filter.all' },
+  { id: 'owned',   labelKey: 'cards.filter.owned' },
+  { id: 'missing', labelKey: 'cards.filter.missing' },
+]
+
 export function CardsPage() {
   const { cards } = useWorldState()
+  const { t } = useI18n()
   const [selectedId, setSelectedId] = useState<number | null>(cards.find((c) => c.owned)?.id ?? null)
-  const [filter, setFilter] = useState<'all' | 'owned' | 'missing'>('all')
+  const [filterId, setFilterId] = useState<CardFilter['id']>('all')
 
   const visible = useMemo(() => {
-    if (filter === 'owned') return cards.filter((c) => c.owned)
-    if (filter === 'missing') return cards.filter((c) => !c.owned)
+    if (filterId === 'owned') return cards.filter((c) => c.owned)
+    if (filterId === 'missing') return cards.filter((c) => !c.owned)
     return cards
-  }, [cards, filter])
+  }, [cards, filterId])
 
   const owned = cards.filter((c) => c.owned).length
   const completion = Math.round((owned / cards.length) * 100)
@@ -35,9 +49,9 @@ export function CardsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="GREED ISLAND CARDS"
-        title="收藏"
-        description={`${owned} / ${cards.length} 張 · 進度 ${completion}%。每張卡片都有自己的故事。`}
+        eyebrow={t('cards.eyebrow')}
+        title={t('cards.title')}
+        description={t('cards.description', { owned, total: cards.length, percent: completion })}
       />
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -52,19 +66,19 @@ export function CardsPage() {
           )
         })}
         <div className="ml-auto flex gap-2">
-          {(['all', 'owned', 'missing'] as const).map((k) => (
+          {FILTERS.map((f) => (
             <button
-              key={k}
+              key={f.id}
               type="button"
-              onClick={() => setFilter(k)}
+              onClick={() => setFilterId(f.id)}
               className={[
                 'gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
-                filter === k
+                filterId === f.id
                   ? 'border-ember-600 text-ember-400 bg-ember-500/5'
                   : 'border-ground-700 text-ground-300 hover:border-ground-500',
               ].join(' ')}
             >
-              {k === 'all' ? '全部' : k === 'owned' ? '已得' : '未得'}
+              {t(f.labelKey)}
             </button>
           ))}
         </div>
@@ -112,14 +126,14 @@ export function CardsPage() {
               <p className="text-sm text-ground-400 leading-relaxed">{selected.description}</p>
               <div className="gi-divider" />
               <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
-                Lore
+                {t('cards.detail.lore')}
               </div>
               <p className="text-sm text-ground-200 leading-relaxed">{selected.story}</p>
               {selected.owned && selected.discoveredAtTick !== undefined && (
                 <>
                   <div className="gi-divider" />
                   <div className="text-[11px] font-display uppercase tracking-tightest text-moss-400">
-                    已收集 · tick {selected.discoveredAtTick}
+                    {t('cards.detail.discoveredAt', { tick: selected.discoveredAtTick })}
                   </div>
                 </>
               )}
@@ -127,13 +141,13 @@ export function CardsPage() {
                 <>
                   <div className="gi-divider" />
                   <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500">
-                    尚未發現 · 等待世界給出機會
+                    {t('cards.detail.notDiscovered')}
                   </div>
                 </>
               )}
             </>
           ) : (
-            <div className="text-sm text-ground-500">點一張卡片看故事。</div>
+            <div className="text-sm text-ground-500">{t('cards.detail.empty')}</div>
           )}
         </aside>
       </div>

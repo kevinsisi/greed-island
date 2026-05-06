@@ -8,30 +8,52 @@ Single-host Docker compose stack for the desktop host. Tailscale-internal access
 - 48 GB RAM
 - RTX 2070 (intentionally unused in v1 — AI inference goes to remote providers via `@kevinsisi/ai-core`)
 - Docker + Docker Compose v2
-- Tailscale installed and running
+- Tailscale installed and connected to the HomeProject Tailnet
 
-## Network Model
+## Topology
 
-`hunter.sisihome.org` resolves (via Tailscale MagicDNS or split-horizon DNS) to the desktop host's Tailscale interface address. The Caddy container binds to that address only, so the service is reachable only from Tailnet members.
+```
+Tailnet client
+  │  https://hunter.sisihome.org
+  ▼
+RPi Caddy  ──────────────────────────────────────  (TLS termination,
+  │  reverse_proxy <desktop>:7100                   public hostname)
+  ▼
+desktop greed-island-web   (internal Caddy, no TLS,
+  │                         static SPA + /api/* proxy)
+  ▼
+desktop greed-island-server  (Node.js, kernel + runtime + AI narration,
+                              SQLite persistence under ./data/)
+```
 
-Public exposure is **out of scope for v1**. Promoting this stack to the public internet is a separate change that must satisfy the deployment hardening gate (see `skills/deployment/SKILL.md` § 4.1):
+The RPi Caddy is the public-facing TLS terminator and matches the existing pattern used by every other HomeProject service. The desktop compose stack only exposes a single Tailscale-bound HTTP port (`HOST_PORT`, default `7100`) and does not terminate TLS itself.
 
-- Super-admin / Admin login restricted to Tailscale or LAN ranges
-- SSH on the host restricted to Tailscale or LAN ranges
-- Correct real-client-IP plumbing through the reverse proxy
-- Backup coverage for SQLite databases, `.env`, and any service-account credentials
+Public exposure is **out of scope for v1**. Promoting this stack to the public internet is a separate change that must satisfy the deployment hardening gate (see `skills/deployment/SKILL.md` § 4.1).
 
 ## First-time Setup
+
+### Desktop side
 
 ```bash
 cd deploy
 cp .env.example .env
-# Fill in JWT_SECRET (openssl rand -hex 64), TAILSCALE_BIND_ADDR (tailscale ip -4),
-# and at least one provider key.
-
+# Fill in:
+#   JWT_SECRET=$(openssl rand -hex 64)
+#   TAILSCALE_BIND_ADDR=$(tailscale ip -4)
+#   HOST_PORT=7100        # or whatever is unused on the desktop
+#   GEMINI_API_KEYS=...   # at least one provider key
+#   OPENAI_API_KEYS=...   # optional
 docker compose up -d --build
 docker compose logs -f --tail=200
 ```
+
+### RPi side (one-time wiring)
+
+1. SSH into the RPi.
+2. Edit `/home/kevin/DockerCompose/caddy/Caddyfile`.
+3. Inside the existing `*.sisihome.org { ... }` block, paste the snippet from `deploy/rpi-caddy-snippet.Caddyfile` (replace `<DESKTOP_TAILSCALE_HOST>` with the desktop's Tailscale DNS name or IP, and `7100` with whatever `HOST_PORT` you picked).
+4. `cd /home/kevin/DockerCompose/caddy && docker compose restart`
+5. Add the URL routing entry to the project's CLAUDE.md URL Routing Table.
 
 ## Daily Operations
 
@@ -39,7 +61,7 @@ docker compose logs -f --tail=200
 # Inspect.
 docker compose ps
 docker compose logs -f server
-docker compose logs -f caddy
+docker compose logs -f web
 
 # Update after a code change.
 docker compose build
@@ -54,16 +76,14 @@ docker compose down -v
 
 Persistent state lives in:
 
-- `deploy/data/` — server SQLite databases (event log, AI key pool, user store).
-- `caddy-data` named volume — Caddy's internal CA + issued certs.
-- `caddy-config` named volume — Caddy runtime config.
-- `web-assets` named volume — built frontend assets, repopulated on each `web` rebuild.
+- `deploy/data/` — server SQLite databases (event log, AI key pool, user store, narration view).
 
 ## Verification Checklist
 
-After `docker compose up -d --build`:
+After `docker compose up -d --build` on the desktop and the RPi Caddy reload:
 
-1. `docker compose ps` shows `server`, `web`, `caddy` all in state `running`.
-2. From a Tailnet member machine: `curl -k https://hunter.sisihome.org/api/health` returns 200.
-3. Open `https://hunter.sisihome.org/` in a browser — the React dashboard loads.
-4. From outside the Tailnet: `curl https://hunter.sisihome.org/` MUST fail (DNS does not resolve, or connection times out). If it succeeds, the bind address is wrong; fix `TAILSCALE_BIND_ADDR`.
+1. `docker compose ps` shows `server` and `web` both `running` (and `web` healthy).
+2. From the desktop itself: `curl -s http://127.0.0.1:7100/ | head -3` returns the SPA HTML.
+3. From a Tailnet member machine: `curl -s https://hunter.sisihome.org/api/health` returns 200.
+4. Open `https://hunter.sisihome.org/` in a browser — the React dashboard loads, the language toggle switches between 繁體中文 and English, and SSE-backed event updates appear live (once the HTTP/SSE surface ships in a follow-up change).
+5. From outside the Tailnet: the URL must NOT resolve to the desktop. If it does, the RPi Caddy upstream is wrong or the desktop port is bound to `0.0.0.0` instead of the Tailscale interface.

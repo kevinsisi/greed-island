@@ -1,0 +1,41 @@
+# Internal-only Caddy for the desktop compose stack.
+# - Serves the built React SPA from /srv/greed-island-web.
+# - Reverse-proxies /api/* to the server container.
+# - No TLS termination here — TLS is the RPi Caddy's job.
+# - No public exposure — this container's port is bound to the
+#   desktop host's Tailscale interface by docker-compose.yml.
+
+{
+	auto_https off
+	servers {
+		# Trust X-Forwarded-* from the RPi Caddy upstream.
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	root * /srv/greed-island-web
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy server:3000 {
+			# Pass-through for SSE so events reach the client live.
+			flush_interval -1
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+				dial_timeout 5s
+			}
+		}
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

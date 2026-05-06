@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.7
-# Multi-stage web build that emits a static-asset image.
-# Caddy in the deployment compose mounts /usr/share/greed-island-web from
-# this image's exported `dist/` so the same artifact serves both local
-# preview and the deployed reverse proxy.
+# Web image: builds the Vite SPA and serves it (plus reverse-proxies
+# /api/* to the server container) behind a tiny Caddy on a single
+# Tailscale-internal port. The public-facing TLS hostname
+# (hunter.sisihome.org) is fronted by the existing RPi Caddy, NOT by
+# this container — this Caddy is internal routing only.
 
 ARG NODE_VERSION=22
 
@@ -20,10 +21,10 @@ COPY packages/web ./packages/web
 RUN npm run build -w @greed-island/web
 
 # ── runtime ───────────────────────────────────────────────────────────
-# A thin static container. The Caddy compose service consumes the built
-# files from a named volume; this image's CMD is a no-op `tail -f` so the
-# container stays up to keep the volume populated.
-FROM debian:bookworm-slim AS runtime
-WORKDIR /usr/share/greed-island-web
-COPY --from=builder /workspace/packages/web/dist ./
-CMD ["sh", "-c", "echo 'web assets ready in /usr/share/greed-island-web'; tail -f /dev/null"]
+FROM caddy:2.8-alpine AS runtime
+COPY --from=builder /workspace/packages/web/dist /srv/greed-island-web
+COPY packages/web/Caddyfile.internal /etc/caddy/Caddyfile
+
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -q -O - http://127.0.0.1/ >/dev/null || exit 1

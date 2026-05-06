@@ -3,9 +3,11 @@ import { PageHeader } from '../components/common/PageHeader'
 import { Stat } from '../components/common/Stat'
 import { EventRow } from '../components/common/EventRow'
 import { useWorldState } from '../state/WorldStateContext'
+import { useI18n } from '../i18n'
 
 export function DashboardPage() {
   const { dashboard, npcs } = useWorldState()
+  const { t } = useI18n()
   const { world, cardsOwned, cardsTotal, recentEvents, rareWindowOpen, ticksSinceLastVisit } =
     dashboard
   const completion = Math.round((cardsOwned / cardsTotal) * 100)
@@ -13,55 +15,72 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="WORLD PULSE"
-        title="貪婪之島 · 總覽"
-        description="世界從不為你停下。這裡是它正在發生的一切。"
+        eyebrow={t('dashboard.eyebrow')}
+        title={t('dashboard.title')}
+        description={t('dashboard.description')}
         actions={
           rareWindowOpen ? (
             <Link
               to="/events"
               className="gi-touch px-4 inline-flex items-center text-[11px] font-display uppercase tracking-tightest text-ember-400 border border-ember-600/60 hover:bg-ember-500/10 transition-colors rounded-sharp animate-flicker"
             >
-              ◆ 稀有窗口開啟中
+              {t('dashboard.rareWindowOpen')}
             </Link>
           ) : null
         }
       />
 
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="當前刻度" value={world.tick.toLocaleString()} tone="ember" hint="ticks since genesis" />
         <Stat
-          label="事件總數"
-          value={world.eventCount.toLocaleString()}
-          hint={`seq #${world.lastSequence}`}
+          label={t('dashboard.stats.tick')}
+          value={world.tick.toLocaleString()}
+          tone="ember"
+          hint={t('dashboard.stats.tick.hint')}
         />
-        <Stat label="活躍 NPC" value={npcs.length} hint="autonomous actors" />
         <Stat
-          label="收藏進度"
+          label={t('dashboard.stats.events')}
+          value={world.eventCount.toLocaleString()}
+          hint={t('dashboard.stats.events.hint', { seq: world.lastSequence })}
+        />
+        <Stat
+          label={t('dashboard.stats.npcs')}
+          value={npcs.length}
+          hint={t('dashboard.stats.npcs.hint')}
+        />
+        <Stat
+          label={t('dashboard.stats.cards')}
           value={`${cardsOwned} / ${cardsTotal}`}
           tone="ember"
-          hint={`${completion}% complete`}
+          hint={t('dashboard.stats.cards.hint', { percent: completion })}
         />
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Stat label="天氣" value={String(world.facts.weather ?? '—')} hint="world fact: weather" />
-        <Stat label="季節" value={String(world.facts.season ?? '—')} hint="world fact: season" />
         <Stat
-          label="不在期間經過"
-          value={`${ticksSinceLastVisit} 刻`}
+          label={t('dashboard.stats.weather')}
+          value={String(world.facts.weather ?? '—')}
+          hint={t('dashboard.stats.weather.hint')}
+        />
+        <Stat
+          label={t('dashboard.stats.season')}
+          value={String(world.facts.season ?? '—')}
+          hint={t('dashboard.stats.season.hint')}
+        />
+        <Stat
+          label={t('dashboard.stats.sinceLast')}
+          value={t('time.tickUnit', { n: ticksSinceLastVisit })}
           tone="moss"
-          hint="since you last visited"
+          hint={t('dashboard.stats.sinceLast.hint')}
         />
       </section>
 
       <section>
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
-            最近事件
+            {t('dashboard.recent.heading')}
           </h2>
           <Link to="/events" className="gi-link text-[11px] font-display uppercase tracking-tightest">
-            完整時間軸 →
+            {t('dashboard.recent.viewAll')}
           </Link>
         </div>
         <div className="flex flex-col gap-3">

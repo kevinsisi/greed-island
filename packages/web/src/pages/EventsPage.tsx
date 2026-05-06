@@ -2,17 +2,26 @@ import { useMemo, useState } from 'react'
 import { PageHeader } from '../components/common/PageHeader'
 import { EventRow } from '../components/common/EventRow'
 import { useWorldState } from '../state/WorldStateContext'
+import { useI18n } from '../i18n'
+import type { TranslationKey } from '../i18n'
 
-const FILTERS: Array<{ id: string; label: string; match: (eventType: string) => boolean }> = [
-  { id: 'all', label: '全部', match: () => true },
-  { id: 'cards', label: '卡片', match: (t) => t.startsWith('CARD_') },
-  { id: 'npc', label: 'NPC', match: (t) => t.startsWith('NPC_') },
-  { id: 'world', label: '世界', match: (t) => t.startsWith('WORLD_') },
+interface EventFilter {
+  id: 'all' | 'cards' | 'npc' | 'world'
+  labelKey: TranslationKey
+  match: (eventType: string) => boolean
+}
+
+const FILTERS: EventFilter[] = [
+  { id: 'all',   labelKey: 'events.filter.all',   match: () => true },
+  { id: 'cards', labelKey: 'events.filter.cards', match: (t) => t.startsWith('CARD_') },
+  { id: 'npc',   labelKey: 'events.filter.npc',   match: (t) => t.startsWith('NPC_') },
+  { id: 'world', labelKey: 'events.filter.world', match: (t) => t.startsWith('WORLD_') },
 ]
 
 export function EventsPage() {
   const { events, liveConnected } = useWorldState()
-  const [filterId, setFilterId] = useState<string>('all')
+  const { t } = useI18n()
+  const [filterId, setFilterId] = useState<EventFilter['id']>('all')
 
   const filter = FILTERS.find((f) => f.id === filterId) ?? FILTERS[0]!
   const visible = useMemo(() => events.filter((e) => filter.match(e.eventType)), [events, filter])
@@ -20,15 +29,15 @@ export function EventsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="WORLD TIMELINE"
-        title="事件時間軸"
-        description="EventLog 是這個世界唯一的真相來源。"
+        eyebrow={t('events.eyebrow')}
+        title={t('events.title')}
+        description={t('events.description')}
         actions={
           <span
             className={`gi-tag ${liveConnected ? 'gi-tag-moss' : ''}`}
             title="connection state of /api/events/stream"
           >
-            ● {liveConnected ? 'LIVE' : 'OFFLINE'}
+            ● {liveConnected ? t('events.live') : t('events.offline')}
           </span>
         }
       />
@@ -46,7 +55,7 @@ export function EventsPage() {
                 : 'border-ground-700 text-ground-300 hover:border-ground-500',
             ].join(' ')}
           >
-            {f.label}
+            {t(f.labelKey)}
           </button>
         ))}
       </div>
@@ -57,7 +66,7 @@ export function EventsPage() {
         ))}
         {visible.length === 0 && (
           <div className="gi-panel p-6 text-center text-ground-500 text-sm">
-            沒有符合的事件。
+            {t('events.empty')}
           </div>
         )}
       </div>

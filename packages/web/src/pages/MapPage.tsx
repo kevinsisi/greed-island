@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/common/PageHeader'
 import { useWorldState } from '../state/WorldStateContext'
+import { useI18n } from '../i18n'
 import type { MapTile } from '../state/types'
 
 const BIOME_FILL: Record<MapTile['biome'], string> = {
@@ -12,7 +13,7 @@ const BIOME_FILL: Record<MapTile['biome'], string> = {
   ruin: '#7c2d12',
 }
 
-const BIOME_LABEL: Record<MapTile['biome'], string> = {
+const BIOME_LABEL_ZH: Record<MapTile['biome'], string> = {
   grass: '草原',
   forest: '森林',
   mountain: '山脈',
@@ -21,10 +22,22 @@ const BIOME_LABEL: Record<MapTile['biome'], string> = {
   ruin: '廢墟',
 }
 
+const BIOME_LABEL_EN: Record<MapTile['biome'], string> = {
+  grass: 'grass',
+  forest: 'forest',
+  mountain: 'mountain',
+  desert: 'desert',
+  water: 'water',
+  ruin: 'ruin',
+}
+
 export function MapPage() {
   const { map, npcs } = useWorldState()
+  const { t, locale } = useI18n()
   const [selectedId, setSelectedId] = useState<string | null>(map.tiles[0]?.id ?? null)
   const selected = map.tiles.find((t) => t.id === selectedId) ?? null
+
+  const biomeLabel = locale === 'zh' ? BIOME_LABEL_ZH : BIOME_LABEL_EN
 
   const cellSize = 64
   const padding = 32
@@ -34,9 +47,9 @@ export function MapPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="ISLAND CARTOGRAPHY"
-        title="世界地圖"
-        description="這是世界目前的空間事實。點駐點看誰在那裡。"
+        eyebrow={t('map.eyebrow')}
+        title={t('map.title')}
+        description={t('map.description')}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
@@ -45,7 +58,7 @@ export function MapPage() {
             viewBox={`0 0 ${widthPx} ${heightPx}`}
             className="w-full h-auto select-none"
             role="img"
-            aria-label="World map"
+            aria-label={t('map.title')}
           >
             <defs>
               <pattern
@@ -112,22 +125,22 @@ export function MapPage() {
           {selected ? (
             <>
               <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
-                駐點 · {BIOME_LABEL[selected.biome]}
+                {t('map.tilePrefix')} · {biomeLabel[selected.biome]}
               </div>
               <h2 className="font-display font-extrabold text-2xl tracking-tightest">
                 {selected.name}
               </h2>
               <div className="gi-divider" />
-              <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500">
-                座標 ({selected.x}, {selected.y})
+              <div className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
+                {t('map.coordinates', { x: selected.x, y: selected.y })}
               </div>
               <div>
                 <div className="font-display text-[11px] uppercase tracking-tightest text-ground-500 mb-2">
-                  在場 NPC ({selected.npcIds.length})
+                  {t('map.tileNpcs', { count: selected.npcIds.length })}
                 </div>
                 <ul className="flex flex-col gap-1">
                   {selected.npcIds.length === 0 && (
-                    <li className="text-sm text-ground-500 italic">無人駐留。</li>
+                    <li className="text-sm text-ground-500 italic">{t('map.tileEmpty')}</li>
                   )}
                   {selected.npcIds.map((id) => {
                     const npc = npcs.find((n) => n.id === id)
@@ -146,7 +159,7 @@ export function MapPage() {
               </div>
             </>
           ) : (
-            <div className="text-sm text-ground-500">點選地圖上的駐點以查看細節。</div>
+            <div className="text-sm text-ground-500">{t('map.empty')}</div>
           )}
         </aside>
       </div>

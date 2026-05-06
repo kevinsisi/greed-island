@@ -1,27 +1,30 @@
 import { PageHeader } from '../components/common/PageHeader'
 import { useWorldState } from '../state/WorldStateContext'
+import { useI18n } from '../i18n'
+import type { Translator } from '../i18n'
 import type { NpcSummary } from '../state/types'
 
 export function NpcsPage() {
   const { npcs, world } = useWorldState()
+  const { t } = useI18n()
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="ISLAND DENIZENS"
-        title="NPC 名冊"
-        description="自主的島民。他們在你不在時也持續行動，並且記得你。"
+        eyebrow={t('npcs.eyebrow')}
+        title={t('npcs.title')}
+        description={t('npcs.description')}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {npcs.map((npc) => (
-          <NpcCard key={npc.id} npc={npc} currentTick={world.tick} />
+          <NpcCard key={npc.id} npc={npc} currentTick={world.tick} t={t} />
         ))}
       </div>
     </div>
   )
 }
 
-function NpcCard({ npc, currentTick }: { npc: NpcSummary; currentTick: number }) {
+function NpcCard({ npc, currentTick, t }: { npc: NpcSummary; currentTick: number; t: Translator }) {
   const idleTicks = Math.max(0, currentTick - npc.lastActedTick)
   const score = npc.relationshipScore
   const tone = score > 30 ? 'moss' : score < 0 ? 'rust' : 'neutral'
@@ -45,16 +48,16 @@ function NpcCard({ npc, currentTick }: { npc: NpcSummary; currentTick: number })
 
       <dl className="grid grid-cols-3 gap-3 text-[11px] font-display uppercase tracking-tightest">
         <div>
-          <dt className="text-ground-500">關係</dt>
+          <dt className="text-ground-500">{t('npcs.relationship')}</dt>
           <dd className={`mt-1 text-base font-extrabold ${toneClass}`}>{score}</dd>
         </div>
         <div>
-          <dt className="text-ground-500">最後行動</dt>
+          <dt className="text-ground-500">{t('npcs.lastActed')}</dt>
           <dd className="mt-1 text-base font-extrabold text-ground-200">tick {npc.lastActedTick}</dd>
         </div>
         <div>
-          <dt className="text-ground-500">沉默</dt>
-          <dd className="mt-1 text-base font-extrabold text-ground-200">{idleTicks} 刻</dd>
+          <dt className="text-ground-500">{t('npcs.silence')}</dt>
+          <dd className="mt-1 text-base font-extrabold text-ground-200">{t('time.tickUnit', { n: idleTicks })}</dd>
         </div>
       </dl>
 
@@ -62,15 +65,15 @@ function NpcCard({ npc, currentTick }: { npc: NpcSummary; currentTick: number })
 
       <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed">
         <div>
-          <span className="text-ground-400">心情</span>
+          <span className="text-ground-400">{t('npcs.mood')} </span>
           <span className="text-ground-200">{String(npc.internalState['mood'] ?? '—')}</span>
         </div>
         <div>
-          <span className="text-ground-400">意圖</span>
+          <span className="text-ground-400">{t('npcs.intent')} </span>
           <span className="text-ground-200">{String(npc.internalState['pendingDesire'] ?? '—')}</span>
         </div>
         <div>
-          <span className="text-ground-400">記得你的事</span>
+          <span className="text-ground-400">{t('npcs.knownActions')} </span>
           <span className="text-ember-400">{String(npc.internalState['knownPlayerActions'] ?? 0)}</span>
         </div>
       </div>

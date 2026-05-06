@@ -1,0 +1,40 @@
+# Snippet to add to the existing RPi Caddyfile at
+#   /home/kevin/DockerCompose/caddy/Caddyfile
+# inside the *.sisihome.org { } block, mirroring the pattern used
+# by the other HomeProject services (home-media, project-bridge,
+# etc.).
+#
+# Replace <DESKTOP_TAILSCALE_HOST> with the desktop host's Tailscale
+# DNS name (e.g. desktop.tail-scale-name.ts.net) or its Tailscale IP
+# address (e.g. 100.x.y.z). Replace 7100 with whatever HOST_PORT
+# value the desktop deploy/.env uses.
+#
+# After editing the Caddyfile:
+#   cd /home/kevin/DockerCompose/caddy && docker compose restart
+
+@hunter host hunter.sisihome.org
+handle @hunter {
+    reverse_proxy <DESKTOP_TAILSCALE_HOST>:7100 {
+        # SSE pass-through for /api/events/stream and any other
+        # streamed responses from the Greed Island server.
+        flush_interval -1
+
+        # Long-lived connections for SSE.
+        transport http {
+            read_timeout 24h
+            write_timeout 24h
+            dial_timeout 5s
+        }
+
+        # Carry real client IP forward so audit logs and rate
+        # limiting see the original requester.
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Optional bare-host alias used inside the LAN.
+http://hunter.sisihome {
+    reverse_proxy <DESKTOP_TAILSCALE_HOST>:7100
+}
