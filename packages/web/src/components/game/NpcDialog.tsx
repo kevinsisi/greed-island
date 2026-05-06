@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useAuth } from '../../state/AuthContext'
 import type { NpcSummary } from '../../state/types'
@@ -11,15 +11,6 @@ import {
   type ServerNpcInteraction
 } from '../../api/client'
 import type { Locale, TranslationKey } from '../../i18n/types'
-
-const INTENTS: readonly NpcInteractIntent[] = ['greet', 'ask', 'trade', 'leave']
-
-const INTENT_LABEL_KEY: Readonly<Record<NpcInteractIntent, TranslationKey>> = {
-  greet: 'npc.responseGreet',
-  ask: 'npc.responseAsk',
-  trade: 'npc.responseTrade',
-  leave: 'npc.responseLeave'
-}
 
 const INTENT_TAG_KEY: Readonly<Record<NpcInteractIntent, TranslationKey>> = {
   greet: 'npc.intentGreet',
@@ -37,10 +28,12 @@ const TIER_KEY: Readonly<Record<'low' | 'mid' | 'high', TranslationKey>> = {
 interface DialogTurn {
   id: string
   intent: NpcInteractIntent
+  playerMessage: string
   line: LocalizedLine
   trustAfter: number
   trustDelta: number
   tick: number
+  replySource: 'ai' | 'fallback'
 }
 
 interface NpcDialogProps {
@@ -52,26 +45,28 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const { t, locale } = useI18n()
   const { token, account } = useAuth()
   const [turns, setTurns] = useState<DialogTurn[]>([])
-  const [busy, setBusy] = useState<NpcInteractIntent | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasLeft, setHasLeft] = useState(false)
   const [trust, setTrust] = useState<number | null>(null)
   const [tier, setTier] = useState<'low' | 'mid' | 'high'>('mid')
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<ServerNpcHistory | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const conversationRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!npc) return
     setTurns([])
-    setBusy(null)
+    setBusy(false)
     setError(null)
-    setHasLeft(false)
     setTrust(npc.relationshipScore)
     setTier(deriveTier(npc.relationshipScore))
     setShowHistory(false)
     setHistory(null)
     setHistoryLoading(false)
+    setDraft('')
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -79,36 +74,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     return () => document.removeEventListener('keydown', onKey)
   }, [npc, onClose])
 
-  const handleIntent = useCallback(
-    async (intent: NpcInteractIntent) => {
-      if (!npc || !token || busy) return
-      setBusy(intent)
-      setError(null)
-      try {
-        const result = await api.npcInteract(token, npc.id, intent)
-        appendTurn(setTurns, result)
-        setTrust(result.relationship.trust)
-        setTier(result.relationship.tier)
-        if (intent === 'leave') {
-          setHasLeft(true)
-        }
-        if (showHistory) {
-          void refreshHistory()
-        }
-      } catch (err) {
-        const msg =
-          err instanceof ApiError && err.code
-            ? `${err.code} · ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : 'unknown error'
-        setError(msg)
-      } finally {
-        setBusy(null)
-      }
-    },
-    [npc, token, busy, showHistory]
-  )
+  useEffect(() => {
+    if (conversationRef.current) {
+      conversationRef.current.scrollTop = conversationRef.current.scrollHeight
+    }
+  }, [turns.length])
 
   const refreshHistory = useCallback(async () => {
     if (!npc || !token) return
@@ -135,6 +105,56 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     }
   }, [npc, token, trust, tier])
 
+  const sendMessage = useCallback(
+    async (payload: { message?: string; intent?: NpcInteractIntent }) => {
+      if (!npc || !token || busy) return
+      const trimmed = payload.message?.trim()
+      if (!trimmed && !payload.intent) return
+      setBusy(true)
+      setError(null)
+      try {
+        const requestPayload: { message?: string; intent?: NpcInteractIntent } = {}
+        if (trimmed) requestPayload.message = trimmed
+        if (payload.intent) requestPayload.intent = payload.intent
+        const result = await api.npcInteract(token, npc.id, requestPayload)
+        appendTurn(setTurns, trimmed ?? '', result)
+        setTrust(result.relationship.trust)
+        setTier(result.relationship.tier)
+        setDraft('')
+        if (showHistory) {
+          void refreshHistory()
+        }
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.code
+            ? `${err.code} · ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : 'unknown error'
+        setError(msg)
+      } finally {
+        setBusy(false)
+        if (inputRef.current) inputRef.current.focus()
+      }
+    },
+    [npc, token, busy, showHistory, refreshHistory]
+  )
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      void sendMessage({ message: draft })
+    },
+    [draft, sendMessage]
+  )
+
+  const handleQuickIntent = useCallback(
+    (intent: NpcInteractIntent) => {
+      void sendMessage({ intent })
+    },
+    [sendMessage]
+  )
+
   const handleToggleHistory = useCallback(() => {
     if (!showHistory) {
       setShowHistory(true)
@@ -145,10 +165,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   }, [showHistory, refreshHistory])
 
   const lastTurn = turns[turns.length - 1]
-  const visibleLine = useMemo(() => {
-    if (lastTurn) return pickLocale(lastTurn.line, locale)
-    return null
-  }, [lastTurn, locale])
+  const lastDelta = useMemo(() => (lastTurn ? lastTurn.trustDelta : null), [lastTurn])
 
   if (!npc) return null
 
@@ -162,7 +179,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-xl gi-panel border-ember-700/60 p-5 sm:p-6 flex flex-col gap-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-xl gi-panel border-ember-700/60 p-5 sm:p-6 flex flex-col gap-4 max-h-[90vh] overflow-hidden"
       >
         <header className="flex items-start justify-between gap-3">
           <div>
@@ -179,11 +196,17 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
               </span>
               <span className="mx-2 text-ground-700">·</span>
               <span>{t(TIER_KEY[tier])}</span>
-              <span className="mx-2 text-ground-700">·</span>
-              {npc.lastActedTick > 0 ? (
-                <span>{t('npc.lastActed', { tick: npc.lastActedTick })}</span>
-              ) : (
-                <span>{t('npc.lastActedNever')}</span>
+              {lastDelta !== null && lastDelta !== 0 && (
+                <>
+                  <span className="mx-2 text-ground-700">·</span>
+                  <span
+                    className={lastDelta > 0 ? 'text-moss-400' : 'text-ember-400'}
+                  >
+                    {lastDelta > 0
+                      ? t('npc.trustDeltaUp', { delta: lastDelta })
+                      : t('npc.trustDeltaDown', { delta: lastDelta })}
+                  </span>
+                </>
               )}
             </div>
           </div>
@@ -196,55 +219,80 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
           </button>
         </header>
 
-        {turns.length === 0 ? (
-          <div className="border-l-2 border-ground-700 pl-4 py-2 text-[14px] leading-relaxed text-ground-400 italic">
-            {t('npc.lineFallback', { name: npc.name })}
-          </div>
-        ) : (
-          <ConversationLog turns={turns} locale={locale} t={t} />
-        )}
-
-        {visibleLine && lastTurn && (
-          <TrustDeltaTag delta={lastTurn.trustDelta} t={t} />
-        )}
-
-        {error && (
-          <div className="border border-ember-700/60 rounded-sharp p-3 text-[12px] text-ember-300">
-            <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500 mb-1">
-              {t('npc.errorMessage')}
-            </div>
-            <div className="text-ground-300">{error}</div>
-          </div>
-        )}
-
-        {account ? (
-          hasLeft ? (
-            <div className="text-[12px] text-moss-400 font-display uppercase tracking-tightest">
-              {t('npc.dialogLeftHint')}
+        <div
+          ref={conversationRef}
+          className="flex-1 overflow-y-auto pr-1 -mr-1 flex flex-col gap-3"
+        >
+          {turns.length === 0 ? (
+            <div className="border-l-2 border-ground-700 pl-4 py-2 text-[14px] leading-relaxed text-ground-400 italic">
+              {t('npc.lineFallback', { name: npc.name })}
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500">
-                {turns.length === 0
-                  ? t('npc.responsePrompt')
-                  : t('npc.dialogContinueHint')}
+            <ConversationLog turns={turns} locale={locale} t={t} />
+          )}
+
+          {error && (
+            <div className="border border-ember-700/60 rounded-sharp p-3 text-[12px] text-ember-300">
+              <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500 mb-1">
+                {t('npc.errorMessage')}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {INTENTS.map((intent) => (
-                  <ResponseButton
-                    key={intent}
-                    label={t(INTENT_LABEL_KEY[intent])}
-                    busy={busy === intent}
-                    disabled={busy !== null}
-                    onClick={() => handleIntent(intent)}
-                  />
-                ))}
-              </div>
-              <div className="text-[10px] font-display uppercase tracking-tightest text-ground-600">
-                {t('npc.privateNotice')}
-              </div>
+              <div className="text-ground-300">{error}</div>
             </div>
-          )
+          )}
+        </div>
+
+        {account ? (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-2">
+              <QuickIntent
+                label={t('npc.quickGreet')}
+                disabled={busy}
+                onClick={() => handleQuickIntent('greet')}
+              />
+              <QuickIntent
+                label={t('npc.quickAsk')}
+                disabled={busy}
+                onClick={() => handleQuickIntent('ask')}
+              />
+              <QuickIntent
+                label={t('npc.quickTrade')}
+                disabled={busy}
+                onClick={() => handleQuickIntent('trade')}
+              />
+              <QuickIntent
+                label={t('npc.quickLeave')}
+                disabled={busy}
+                onClick={() => handleQuickIntent('leave')}
+              />
+            </div>
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={2}
+              placeholder={t('npc.inputPlaceholder', { name: npc.name })}
+              disabled={busy}
+              className="w-full bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[14px] text-ground-100 placeholder:text-ground-600 outline-none disabled:opacity-50"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void sendMessage({ message: draft })
+                }
+              }}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-display uppercase tracking-tightest text-ground-600">
+                {t('npc.privateNotice')}
+              </span>
+              <button
+                type="submit"
+                disabled={busy || draft.trim().length === 0}
+                className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest border border-ember-600 text-ember-300 hover:bg-ember-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {busy ? t('npc.thinking') : t('npc.send')}
+              </button>
+            </div>
+          </form>
         ) : (
           <div className="border border-ground-700 rounded-sharp p-3 text-[12px] text-ground-300 leading-relaxed">
             <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500 mb-1">
@@ -264,7 +312,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
               {showHistory ? t('npc.history.toggleHide') : t('npc.history.toggleShow')}
             </button>
             {showHistory && (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
                 <div className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
                   {t('npc.history.heading')}
                 </div>
@@ -311,13 +359,28 @@ function ConversationLog({
   return (
     <div className="flex flex-col gap-3">
       {turns.map((turn) => (
-        <div key={turn.id} className="flex flex-col gap-1">
-          <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500">
-            <span className="text-ember-500">› {t(INTENT_TAG_KEY[turn.intent])}</span>
-            <span className="ml-2 text-ground-700">tick {turn.tick}</span>
-          </div>
-          <div className="border-l-2 border-ember-600 pl-4 py-1 text-[15px] leading-relaxed text-ground-100">
-            {pickLocale(turn.line, locale)}
+        <div key={turn.id} className="flex flex-col gap-2">
+          {turn.playerMessage && (
+            <div className="self-end max-w-[85%]">
+              <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500 mb-1 text-right">
+                {t('npc.playerSpoke')}
+              </div>
+              <div className="bg-ground-800 border border-ground-700 rounded-sharp px-3 py-2 text-[14px] text-ground-100">
+                {turn.playerMessage}
+              </div>
+            </div>
+          )}
+          <div className="self-start max-w-[90%]">
+            <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500 mb-1">
+              <span className="text-ember-500">› {t(INTENT_TAG_KEY[turn.intent])}</span>
+              <span className="ml-2 text-ground-700">tick {turn.tick}</span>
+              {turn.replySource === 'fallback' && (
+                <span className="ml-2 text-ground-600">· {t('npc.fallbackBadge')}</span>
+              )}
+            </div>
+            <div className="border-l-2 border-ember-600 pl-4 py-1 text-[15px] leading-relaxed text-ground-100 whitespace-pre-line">
+              {pickLocale(turn.line, locale)}
+            </div>
           </div>
         </div>
       ))}
@@ -325,37 +388,12 @@ function ConversationLog({
   )
 }
 
-function TrustDeltaTag({
-  delta,
-  t
-}: {
-  delta: number
-  t: (key: TranslationKey, params?: Readonly<Record<string, string | number>>) => string
-}) {
-  if (delta === 0) {
-    return (
-      <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500">
-        {t('npc.trustUnchanged')}
-      </div>
-    )
-  }
-  const key: TranslationKey = delta > 0 ? 'npc.trustDeltaUp' : 'npc.trustDeltaDown'
-  const colour = delta > 0 ? 'text-moss-400' : 'text-ember-400'
-  return (
-    <div className={`text-[11px] font-display uppercase tracking-tightest ${colour}`}>
-      {t(key, { delta })}
-    </div>
-  )
-}
-
-function ResponseButton({
+function QuickIntent({
   label,
-  busy,
   disabled,
   onClick
 }: {
   label: string
-  busy: boolean
   disabled: boolean
   onClick: () => void
 }) {
@@ -364,15 +402,16 @@ function ResponseButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="gi-touch px-4 text-left text-[13px] text-ground-200 border border-ground-700 hover:border-ember-600 hover:text-ember-300 hover:bg-ember-500/5 rounded-sharp transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border border-ground-700 text-ground-300 hover:border-ember-600 hover:text-ember-300 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      {busy ? '…' : label}
+      {label}
     </button>
   )
 }
 
 function appendTurn(
   setTurns: React.Dispatch<React.SetStateAction<DialogTurn[]>>,
+  playerMessage: string,
   result: ServerNpcInteraction
 ) {
   setTurns((prev) => [
@@ -380,10 +419,12 @@ function appendTurn(
     {
       id: `${result.tick}-${result.personalEvent.id}`,
       intent: result.intent,
+      playerMessage,
       line: result.line,
       trustAfter: result.relationship.trust,
       trustDelta: result.relationship.delta,
-      tick: result.tick
+      tick: result.tick,
+      replySource: result.replySource
     }
   ])
 }

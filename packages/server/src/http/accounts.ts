@@ -79,6 +79,13 @@ export class AccountStore {
     const row = this.db.prepare('SELECT COUNT(*) as count FROM accounts').get() as { count: number }
     return row.count
   }
+
+  firstAccountId(): number | null {
+    const row = this.db.prepare('SELECT MIN(id) as id FROM accounts').get() as {
+      id: number | null
+    }
+    return row?.id ?? null
+  }
 }
 
 export class AccountError extends Error {

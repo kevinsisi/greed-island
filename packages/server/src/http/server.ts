@@ -1,5 +1,5 @@
-// Express app factory. Wires auth, world, NPC interaction, and SSE
-// routers under /api and exposes a health endpoint at /healthz.
+// Express app factory. Wires auth, world, NPC interaction, settings,
+// and SSE routers under /api and exposes a health endpoint at /healthz.
 
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
@@ -9,6 +9,8 @@ import { createWorldRouter } from './world.js'
 import { createSseRouter } from './sse.js'
 import { createNpcRouter } from './npc.js'
 import { PlayerStateStore } from './playerState.js'
+import { SettingsStore } from './settings.js'
+import { createSettingsRouter } from './settingsRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -18,6 +20,8 @@ export type HttpAppOptions = Readonly<{
   runtime: SimulationRuntime
   auth: AuthConfig
   bcryptCost: number
+  adminEmails: readonly string[]
+  geminiApiKeys: readonly string[]
 }>
 
 export function createHttpApp(options: HttpAppOptions): Express {
@@ -36,6 +40,14 @@ export function createHttpApp(options: HttpAppOptions): Express {
 
   const accountStore = new AccountStore(options.db, options.bcryptCost)
   const playerStore = new PlayerStateStore(options.db)
+  const settingsStore = new SettingsStore(options.db)
+
+  if (options.geminiApiKeys.length > 0) {
+    const seeded = settingsStore.addKeys(options.geminiApiKeys, 'env')
+    if (seeded > 0) {
+      console.log(`[boot] seeded ${seeded} Gemini API key(s) from GEMINI_API_KEY env`)
+    }
+  }
 
   app.use('/api/auth', createAuthRouter(accountStore, options.auth))
   app.use(
@@ -51,7 +63,17 @@ export function createHttpApp(options: HttpAppOptions): Express {
     createNpcRouter({
       runtime: options.runtime,
       store: playerStore,
+      settings: settingsStore,
       authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createSettingsRouter({
+      store: settingsStore,
+      accounts: accountStore,
+      authConfig: options.auth,
+      adminEmails: options.adminEmails,
     })
   )
   app.use('/api', createSseRouter(options.runtime))

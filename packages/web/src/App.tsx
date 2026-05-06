@@ -8,6 +8,7 @@ import { AreaPage } from './pages/AreaPage'
 import { CodexPage } from './pages/CodexPage'
 import { TimelinePage } from './pages/TimelinePage'
 import { AccountPage } from './pages/AccountPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
               <Route path="/codex" element={<CodexPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/account" element={<AccountPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </GameShell>

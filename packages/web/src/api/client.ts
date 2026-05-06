@@ -99,6 +99,8 @@ export type ServerNpcInteraction = {
   intent: NpcInteractIntent
   tick: number
   line: LocalizedLine
+  replySource: 'ai' | 'fallback'
+  aiError: string | null
   relationship: {
     trust: number
     previousTrust: number
@@ -113,6 +115,23 @@ export type ServerNpcInteraction = {
     occurredAt: string
     intent: NpcInteractIntent
   }
+}
+
+export type ServerApiKeySummary = {
+  id: number
+  fingerprint: string
+  source: 'env' | 'admin'
+  status: 'active' | 'disabled'
+  lastError: string | null
+  lastUsedAt: number | null
+  failureCount: number
+  createdAt: number
+}
+
+export type ServerSettingsHealth = {
+  activeKeys: number
+  totalKeys: number
+  adminAllowList: boolean
 }
 
 export type ServerNpcHistoryEvent = {
@@ -200,19 +219,58 @@ export const api = {
     jsonFetch<{ account: ServerAccount }>('/auth/me', {
       headers: authHeaders(token)
     }),
-  npcInteract: (token: string, npcId: string, intent: NpcInteractIntent) =>
+  npcInteract: (
+    token: string,
+    npcId: string,
+    payload: { message?: string; intent?: NpcInteractIntent }
+  ) =>
     jsonFetch<ServerNpcInteraction>(
       `/npc/${encodeURIComponent(npcId)}/interact`,
       {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ intent })
+        body: JSON.stringify(payload)
       }
     ),
   npcHistory: (token: string, npcId: string, limit = 20) =>
     jsonFetch<ServerNpcHistory>(
       `/npc/${encodeURIComponent(npcId)}/history?limit=${limit}`,
       {
+        headers: authHeaders(token)
+      }
+    ),
+  settingsHealth: (token: string) =>
+    jsonFetch<ServerSettingsHealth>('/settings/health', {
+      headers: authHeaders(token)
+    }),
+  settingsListKeys: (token: string) =>
+    jsonFetch<{ keys: ServerApiKeySummary[] }>('/settings/keys', {
+      headers: authHeaders(token)
+    }),
+  settingsAddKeys: (token: string, keys: string) =>
+    jsonFetch<{
+      inserted: number
+      submitted: number
+      duplicates: number
+      keys: ServerApiKeySummary[]
+    }>('/settings/keys', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ keys })
+    }),
+  settingsDeleteKey: (token: string, id: number) =>
+    jsonFetch<{ ok: true; keys: ServerApiKeySummary[] }>(
+      `/settings/keys/${id}`,
+      {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      }
+    ),
+  settingsReactivateKeys: (token: string) =>
+    jsonFetch<{ reactivated: number; keys: ServerApiKeySummary[] }>(
+      '/settings/keys/reactivate-all',
+      {
+        method: 'POST',
         headers: authHeaders(token)
       }
     )

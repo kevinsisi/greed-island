@@ -17,7 +17,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',         labelKey: 'nav.hub',      glyph: '◈' },
   { to: '/codex',    labelKey: 'nav.codex',    glyph: '☷' },
   { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
-  { to: '/account',  labelKey: 'nav.account',  glyph: '◐' }
+  { to: '/account',  labelKey: 'nav.account',  glyph: '◐' },
+  { to: '/settings', labelKey: 'nav.settings', glyph: '⚙' }
 ]
 
 export function GameShell({ children }: { children: ReactNode }) {
@@ -169,7 +170,7 @@ function MobileTabBar() {
   const { t } = useI18n()
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ground-800 bg-ground-900/95 backdrop-blur">
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {NAV_ITEMS.map((item) => (
           <li key={item.to}>
             <NavLink
