@@ -1,13 +1,13 @@
 {
   "id": "temple.cleric.sela",
   "name": { "zh": "瑟拉·靜湖", "en": "Sela of the Still Lake" },
-  "role": { "zh": "湖心神殿神職", "en": "Lake-Heart Cleric" },
-  "defaultLocation": "t_temple",
+  "role": { "zh": "地脈祭司", "en": "Ley-Strata Cleric" },
+  "defaultLocation": "t_dimai",
   "routine": [
-    { "fromTickOfDay": 0,     "toTickOfDay": 1440,  "location": "t_temple",  "label": "midnight vigil" },
-    { "fromTickOfDay": 1440,  "toTickOfDay": 12960, "location": "t_temple",  "label": "ritual hours" },
+    { "fromTickOfDay": 0,     "toTickOfDay": 1440,  "location": "t_dimai",   "label": "midnight vigil" },
+    { "fromTickOfDay": 1440,  "toTickOfDay": 12960, "location": "t_dimai",   "label": "ritual hours" },
     { "fromTickOfDay": 12960, "toTickOfDay": 15840, "location": "t_central", "label": "council attendance" },
-    { "fromTickOfDay": 15840, "toTickOfDay": 17280, "location": "t_temple",  "label": "evening close" }
+    { "fromTickOfDay": 15840, "toTickOfDay": 17280, "location": "t_dimai",   "label": "evening close" }
   ],
   "triggers": [
     {

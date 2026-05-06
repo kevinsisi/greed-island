@@ -20,10 +20,15 @@ export const en: Translations = {
 
   'hub.eyebrow': 'Tideway · districts',
   'hub.title': 'Tideway today',
-  'hub.description': 'The world never waits for you. Pick an area and step in to see who is there and what is happening.',
+  'hub.description': 'The world never waits for you. Walk the map, get close to NPCs to talk, cross into a district to see what is happening there.',
   'hub.enter': 'Step in →',
   'hub.npcCount': '{count} on site',
   'hub.empty': 'Empty for now.',
+  'hub.controlsHint': 'Arrow keys / WASD to walk · tap or hold the map to move · press E or Space near an NPC',
+  'hub.currentArea': 'You are in',
+  'hub.openArea': 'Open {name} →',
+  'hub.interactHint': 'Talk',
+  'hub.enterArea': 'Entering',
 
   'area.eyebrow': 'Area · {biome}',
   'area.back': '← Back to Tideway',

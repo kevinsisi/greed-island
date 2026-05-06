@@ -11,15 +11,17 @@ import type {
 // exists. Every value here is illustrative; the server will replace
 // these with EventLog-derived projections.
 
+// Locations are tile IDs (matching fixtureMap.tiles[].id) so the AreaPage
+// occupant filter (`npc.location === tileId`) works in fixture mode too.
 const NPC_NAMES: Array<{ id: string; name: string; role: string; location: string }> = [
-  { id: 'npc_anton', name: '安東·風行者', role: '商人', location: '碼頭區' },
-  { id: 'npc_lyra', name: '萊拉·夜歌', role: '尋寶獵人', location: '北方森林' },
-  { id: 'npc_orin', name: '奧林·冷鋼', role: '傭兵團長', location: '中央城' },
-  { id: 'npc_sela', name: '瑟拉·靜湖', role: '神職', location: '湖心神殿' },
-  { id: 'npc_kade', name: '凱德·斷指', role: '走私販', location: '南方廢墟' },
-  { id: 'npc_mira', name: '米拉·星圖', role: '占卜師', location: '中央城' },
-  { id: 'npc_borr', name: '波爾·磐石', role: '礦場領班', location: '東方山脈' },
-  { id: 'npc_yuna', name: '優娜·薄霧', role: '吟遊詩人', location: '碼頭區' },
+  { id: 'npc_anton', name: '安東·風行者', role: '霓港商人', location: 't_temple' },
+  { id: 'npc_lyra', name: '萊拉·夜歌', role: '尋寶獵人', location: 't_mountain' },
+  { id: 'npc_orin', name: '奧林·冷鋼', role: '傭兵團長', location: 't_central' },
+  { id: 'npc_sela', name: '瑟拉·靜湖', role: '地脈祭司', location: 't_dimai' },
+  { id: 'npc_kade', name: '凱德·斷指', role: '走私販', location: 't_desert' },
+  { id: 'npc_mira', name: '米拉·星圖', role: '占卜師', location: 't_forest' },
+  { id: 'npc_borr', name: '波爾·磐石', role: '廢場領班', location: 't_ruin' },
+  { id: 'npc_yuna', name: '優娜·薄霧', role: '海灘詩人', location: 't_dock' },
 ]
 
 export const fixtureNpcs: NpcSummary[] = NPC_NAMES.map((entry, index) => ({
@@ -140,17 +142,21 @@ export const fixtureEvents: EventSummary[] = [
   },
 ]
 
+// 潮鳴市八方街區。Tile IDs are kept stable so the server NPC profiles
+// (defaultLocation/routine using `t_dock` etc.) keep working even after
+// the rebrand to Tideway's eight districts.
 export const fixtureMap: WorldMap = {
   width: 8,
   height: 6,
   tiles: [
-    { id: 't_dock', name: '碼頭區', x: 0, y: 4, biome: 'water', npcIds: ['npc_anton', 'npc_yuna'] },
-    { id: 't_central', name: '中央城', x: 3, y: 3, biome: 'grass', npcIds: ['npc_orin', 'npc_mira'] },
-    { id: 't_temple', name: '湖心神殿', x: 4, y: 1, biome: 'water', npcIds: ['npc_sela'] },
-    { id: 't_forest', name: '北方森林', x: 2, y: 0, biome: 'forest', npcIds: ['npc_lyra'] },
-    { id: 't_ruin', name: '南方廢墟', x: 5, y: 5, biome: 'ruin', npcIds: ['npc_kade'] },
-    { id: 't_mountain', name: '東方山脈', x: 7, y: 2, biome: 'mountain', npcIds: ['npc_borr'] },
-    { id: 't_desert', name: '西緣荒地', x: 0, y: 1, biome: 'desert', npcIds: [] },
+    { id: 't_desert',   name: '潮聲區',  x: 0, y: 4, biome: 'desert',   npcIds: ['npc_kade'] },
+    { id: 't_forest',   name: '潮見丘',  x: 1, y: 1, biome: 'forest',   npcIds: ['npc_mira'] },
+    { id: 't_mountain', name: '煙嵐山',  x: 4, y: 0, biome: 'mountain', npcIds: ['npc_lyra'] },
+    { id: 't_temple',   name: '霓港區',  x: 7, y: 1, biome: 'water',    npcIds: ['npc_anton'] },
+    { id: 't_central',  name: '夜潮區',  x: 4, y: 3, biome: 'grass',    npcIds: ['npc_orin'] },
+    { id: 't_ruin',     name: '鏽灣區',  x: 7, y: 4, biome: 'ruin',     npcIds: ['npc_borr'] },
+    { id: 't_dock',     name: '浪花區',  x: 3, y: 5, biome: 'water',    npcIds: ['npc_yuna'] },
+    { id: 't_dimai',    name: '地脈層',  x: 4, y: 2, biome: 'ruin',     npcIds: ['npc_sela'] },
   ],
 }
 

@@ -79,7 +79,7 @@ const FALLBACK: DialogPack = {
     ],
     high: [
       {
-        zh: '「告訴你一個小事——下回潮汐節，碼頭區那條巷會開窗口。」',
+        zh: '「告訴你一個小事——下回潮汐節，浪花區那條巷會開窗口。」',
         en: '"A small tip — at the next tide festival, a window opens in that dock alley."',
       },
       {
@@ -404,12 +404,12 @@ const PACKS: Readonly<Record<string, DialogPack>> = {
         { zh: '「潮獵會的事不對外談。請見諒。」', en: '"Guild matters do not leave the lodge. My regrets."' },
       ],
       mid: [
-        { zh: '「最近碼頭區某些『生意』我們在留意。建議你晚上不要往南方廢墟走。」', en: '"We are watching certain businesses near the docks. Avoid the southern ruins after dark."' },
+        { zh: '「最近霓港區某些『生意』我們在留意。建議你晚上不要往鏽灣區走。」', en: '"We are watching certain businesses near Niport docks. Avoid Xiu-Wan after dark."' },
         { zh: '「沈所長那邊資訊比我多，但你得拿得起她的條件。」', en: '"Director Shen knows more than I — but her terms are not easy to meet."' },
       ],
       high: [
         { zh: '「一句話——潮獵會這次的目標，與紋卡黑市直接相關。我可以替你開一扇門。」', en: '"In one line — our current target ties directly to the black market for rune cards. I can open a door for you."' },
-        { zh: '「下次潮汐節結束後，我會在中央城等你，名單上有你。」', en: '"After the next festival, I will await you in the central city — your name is on the list."' },
+        { zh: '「下次潮汐節結束後，我會在夜潮區等你，名單上有你。」', en: '"After the next festival, I will await you in Ye-Chao — your name is on the list."' },
       ],
     },
     trade: {
