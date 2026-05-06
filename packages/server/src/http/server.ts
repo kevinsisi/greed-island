@@ -1,5 +1,6 @@
 // Express app factory. Wires auth, world, NPC interaction, settings,
-// and SSE routers under /api and exposes a health endpoint at /healthz.
+// social, and SSE routers under /api and exposes a health endpoint
+// at /healthz.
 
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
@@ -11,6 +12,10 @@ import { createNpcRouter } from './npc.js'
 import { PlayerStateStore } from './playerState.js'
 import { SettingsStore } from './settings.js'
 import { createSettingsRouter } from './settingsRouter.js'
+import { createAdminRouter } from './adminRouter.js'
+import { SocialStore } from './socialStore.js'
+import { SocialBus } from './socialBus.js'
+import { createSocialRouter, createSocialSseRouter } from './social.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -41,11 +46,20 @@ export function createHttpApp(options: HttpAppOptions): Express {
   const accountStore = new AccountStore(options.db, options.bcryptCost)
   const playerStore = new PlayerStateStore(options.db)
   const settingsStore = new SettingsStore(options.db)
+  const socialStore = new SocialStore(options.db)
+  const socialBus = new SocialBus()
 
   if (options.geminiApiKeys.length > 0) {
     const seeded = settingsStore.addKeys(options.geminiApiKeys, 'env')
     if (seeded > 0) {
       console.log(`[boot] seeded ${seeded} Gemini API key(s) from GEMINI_API_KEY env`)
+    }
+  }
+
+  if (options.adminEmails.length > 0) {
+    const promoted = accountStore.ensureAdminAllowList(options.adminEmails)
+    if (promoted > 0) {
+      console.log(`[boot] promoted ${promoted} account(s) to admin via GREED_ISLAND_ADMIN_EMAILS`)
     }
   }
 
@@ -76,6 +90,24 @@ export function createHttpApp(options: HttpAppOptions): Express {
       adminEmails: options.adminEmails,
     })
   )
+  app.use(
+    '/api',
+    createAdminRouter({
+      accounts: accountStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createSocialRouter({
+      runtime: options.runtime,
+      social: socialStore,
+      accounts: accountStore,
+      bus: socialBus,
+      authConfig: options.auth,
+    })
+  )
+  app.use('/api', createSocialSseRouter({ bus: socialBus, authConfig: options.auth }))
   app.use('/api', createSseRouter(options.runtime))
 
   app.use((req: Request, res: Response) => {

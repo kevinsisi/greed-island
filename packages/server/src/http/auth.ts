@@ -3,7 +3,13 @@
 
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
 import jwt, { type SignOptions } from 'jsonwebtoken'
-import { AccountError, type AccountStore } from './accounts.js'
+import {
+  AccountError,
+  isAccountRole,
+  type AccountRecord,
+  type AccountRole,
+  type AccountStore,
+} from './accounts.js'
 
 export type AuthConfig = Readonly<{
   jwtSecret: string
@@ -13,6 +19,7 @@ export type AuthConfig = Readonly<{
 export type AuthClaims = Readonly<{
   sub: number
   email: string
+  role: AccountRole
 }>
 
 declare module 'express-serve-static-core' {
@@ -30,10 +37,10 @@ export function createAuthRouter(store: AccountStore, config: AuthConfig): Route
     const { email, password } = parseAuthBody(req.body)
     try {
       const account = await store.createAccount(email, password)
-      const token = signToken(account.id, account.email, config)
+      const token = signToken(account, config)
       res.status(201).json({
         token,
-        account: { id: account.id, email: account.email, createdAt: account.createdAt }
+        account: toPublicAccount(account)
       })
     } catch (err) {
       if (err instanceof AccountError) {
@@ -53,10 +60,10 @@ export function createAuthRouter(store: AccountStore, config: AuthConfig): Route
         res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' })
         return
       }
-      const token = signToken(account.id, account.email, config)
+      const token = signToken(account, config)
       res.status(200).json({
         token,
-        account: { id: account.id, email: account.email, createdAt: account.createdAt }
+        account: toPublicAccount(account)
       })
     } catch (err) {
       if (err instanceof AccountError) {
@@ -77,7 +84,7 @@ export function createAuthRouter(store: AccountStore, config: AuthConfig): Route
       res.status(401).json({ error: 'UNAUTHORIZED' })
       return
     }
-    res.json({ account: { id: account.id, email: account.email, createdAt: account.createdAt } })
+    res.json({ account: toPublicAccount(account) })
   })
 
   return router
@@ -109,17 +116,68 @@ function readAuthClaims(req: Request, config: AuthConfig): AuthClaims | null {
   const token = header.slice(7).trim()
   if (token.length === 0) return null
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as { sub?: unknown; email?: unknown }
+    const decoded = jwt.verify(token, config.jwtSecret) as {
+      sub?: unknown
+      email?: unknown
+      role?: unknown
+    }
     if (typeof decoded.sub !== 'number' || typeof decoded.email !== 'string') return null
-    return { sub: decoded.sub, email: decoded.email }
+    const role = isAccountRole(decoded.role) ? decoded.role : 'player'
+    return { sub: decoded.sub, email: decoded.email, role }
   } catch {
     return null
   }
 }
 
-function signToken(id: number, email: string, config: AuthConfig): string {
+function signToken(account: AccountRecord, config: AuthConfig): string {
   const options = { expiresIn: config.jwtExpiresIn } as SignOptions
-  return jwt.sign({ sub: id, email }, config.jwtSecret, options)
+  return jwt.sign(
+    { sub: account.id, email: account.email, role: account.role },
+    config.jwtSecret,
+    options
+  )
+}
+
+function toPublicAccount(account: AccountRecord): {
+  id: number
+  email: string
+  createdAt: number
+  role: AccountRole
+} {
+  return {
+    id: account.id,
+    email: account.email,
+    createdAt: account.createdAt,
+    role: account.role,
+  }
+}
+
+export function requireRole(
+  config: AuthConfig,
+  store: AccountStore,
+  ...allowed: AccountRole[]
+): RequestHandler {
+  const roleSet = new Set<AccountRole>(allowed.length === 0 ? ['admin'] : allowed)
+  return (req, res, next) => {
+    const claims = readAuthClaims(req, config)
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    // Always re-read role from DB so demotions take effect immediately
+    // even if the JWT still carries an older role claim.
+    const account = store.findById(claims.sub)
+    if (!account) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    if (!roleSet.has(account.role)) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient role.' })
+      return
+    }
+    req.auth = { sub: account.id, email: account.email, role: account.role }
+    next()
+  }
 }
 
 function parseAuthBody(body: unknown): { email: string; password: string } {

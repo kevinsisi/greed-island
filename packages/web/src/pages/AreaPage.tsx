@@ -4,6 +4,7 @@ import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
+import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import type { NpcSummary } from '../state/types'
 
 export function AreaPage() {
@@ -14,6 +15,7 @@ export function AreaPage() {
 
   const tile = map.tiles.find((entry) => entry.id === tileId)
   const lore = loreFor(tileId)
+  usePresenceTouch(tile ? tileId : null)
   const tileNameById = useMemo(() => {
     const acc: Record<string, string> = {}
     for (const entry of map.tiles) acc[entry.id] = entry.name
@@ -107,6 +109,8 @@ export function AreaPage() {
           </div>
         )}
       </section>
+
+      <NearbyPlayers tileId={tileId} tileName={tile.name} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">

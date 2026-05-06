@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../state/AuthContext'
 import { useI18n, type TranslationKey } from '../../i18n'
@@ -6,20 +6,38 @@ import { AtmosphereBar } from '../game/AtmosphereBar'
 import { EventTicker, EventTickerStrip } from '../game/EventTicker'
 import { WorldEventsBanner } from '../game/WorldEventsBanner'
 import { APP_VERSION } from '../../version'
+import { api, type AccountRole } from '../../api/client'
 
 interface NavItem {
   to: string
   labelKey: TranslationKey
   glyph: string
+  visibleWhen?: (role: AccountRole | null) => boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/',         labelKey: 'nav.hub',      glyph: '◈' },
   { to: '/codex',    labelKey: 'nav.codex',    glyph: '☷' },
   { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
+  { to: '/social',   labelKey: 'nav.social',   glyph: '☍' },
   { to: '/account',  labelKey: 'nav.account',  glyph: '◐' },
-  { to: '/settings', labelKey: 'nav.settings', glyph: '⚙' }
+  {
+    to: '/admin',
+    labelKey: 'nav.admin',
+    glyph: '✶',
+    visibleWhen: (role) => role === 'admin',
+  },
+  {
+    to: '/settings',
+    labelKey: 'nav.settings',
+    glyph: '⚙',
+    visibleWhen: (role) => role === 'gm' || role === 'admin',
+  },
 ]
+
+function visibleNavItems(role: AccountRole | null): NavItem[] {
+  return NAV_ITEMS.filter((item) => !item.visibleWhen || item.visibleWhen(role))
+}
 
 export function GameShell({ children }: { children: ReactNode }) {
   return (
@@ -137,11 +155,50 @@ function LanguageToggle() {
   )
 }
 
+function useServerVersion(): string | null {
+  const [version, setVersion] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    api
+      .version()
+      .then((res) => {
+        if (!cancelled) setVersion(res.version)
+      })
+      .catch(() => {
+        // server unreachable — fall back to bundled APP_VERSION
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return version
+}
+
+function VersionTag() {
+  const serverVersion = useServerVersion()
+  const display = serverVersion ?? APP_VERSION
+  const mismatched = serverVersion !== null && serverVersion !== APP_VERSION
+  return (
+    <span
+      title={mismatched ? `client v${APP_VERSION} ↔ server v${serverVersion}` : `v${display}`}
+      className={[
+        'font-display text-[10px] uppercase tracking-tightest',
+        mismatched ? 'text-rust-400' : 'text-ground-600'
+      ].join(' ')}
+    >
+      v{display}
+      {mismatched && <span className="ml-1 text-rust-400">·!</span>}
+    </span>
+  )
+}
+
 function DesktopRail() {
   const { t } = useI18n()
+  const { account } = useAuth()
+  const items = visibleNavItems(account?.role ?? null)
   return (
     <nav className="hidden lg:flex flex-col w-48 shrink-0 border-r border-ground-800 bg-ground-900 px-3 py-6 gap-1">
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -159,8 +216,8 @@ function DesktopRail() {
           <span className="text-sm font-medium">{t(item.labelKey)}</span>
         </NavLink>
       ))}
-      <div className="mt-auto pt-6 text-[10px] font-display uppercase tracking-tightest text-ground-600">
-        v{APP_VERSION}
+      <div className="mt-auto pt-6">
+        <VersionTag />
       </div>
     </nav>
   )
@@ -168,10 +225,18 @@ function DesktopRail() {
 
 function MobileTabBar() {
   const { t } = useI18n()
+  const { account } = useAuth()
+  const items = visibleNavItems(account?.role ?? null)
+  // Cap mobile nav at 5 columns to keep tap targets large enough; admin
+  // users see admin/settings via the more menu (collapsed onto the
+  // account page) when the list overflows.
+  const visible = items.slice(0, 5)
+  const colsClass =
+    visible.length === 4 ? 'grid-cols-4' : visible.length === 5 ? 'grid-cols-5' : 'grid-cols-6'
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ground-800 bg-ground-900/95 backdrop-blur">
-      <ul className="grid grid-cols-5">
-        {NAV_ITEMS.map((item) => (
+      <ul className={`grid ${colsClass}`}>
+        {visible.map((item) => (
           <li key={item.to}>
             <NavLink
               to={item.to}
@@ -200,7 +265,7 @@ function DesktopFooter() {
   return (
     <footer className="hidden lg:flex border-t border-ground-800 bg-ground-900 px-10 py-3 text-[11px] font-display uppercase tracking-tightest text-ground-600 items-center justify-between">
       <span>{t('footer.tagline')}</span>
-      <span>v{APP_VERSION}</span>
+      <VersionTag />
     </footer>
   )
 }

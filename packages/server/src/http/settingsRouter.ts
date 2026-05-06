@@ -1,25 +1,25 @@
-// Settings HTTP router. Provides admin-only access to the API key
+// Settings HTTP router. Provides GM/admin-only access to the API key
 // pool used by the AI NPC dialog.
 //
-// Endpoints (all require auth + admin email allow-list):
+// Endpoints (all require role >= gm):
 //   GET    /api/settings/keys           list keys (fingerprints only)
 //   POST   /api/settings/keys           batch insert keys (text body)
 //   DELETE /api/settings/keys/:id       remove a key
 //   POST   /api/settings/keys/reactivate-all   re-enable disabled keys
 //   GET    /api/settings/health         summary for the Settings page
 //
-// Whether a user counts as admin is controlled by the
-// GREED_ISLAND_ADMIN_EMAILS env var (comma-separated). If unset, the
-// first registered account is treated as the admin (so a fresh deploy
-// is usable without extra config).
+// Whether a user counts as GM/admin is determined by the `role` column
+// on the accounts table. The first registered account is auto-promoted
+// to admin during account creation. The legacy GREED_ISLAND_ADMIN_EMAILS
+// env still works as a one-shot promotion list at boot.
 
-import { Router, type Request, type Response } from 'express'
+import { Router } from 'express'
 import {
   parseKeyList,
   summarize,
   type SettingsStore,
 } from './settings.js'
-import { requireAuth, type AuthConfig } from './auth.js'
+import { requireRole, type AuthConfig } from './auth.js'
 import type { AccountStore } from './accounts.js'
 
 export type SettingsRouterInput = Readonly<{
@@ -31,42 +31,9 @@ export type SettingsRouterInput = Readonly<{
 
 export function createSettingsRouter(input: SettingsRouterInput): Router {
   const router = Router()
-  const auth = requireAuth(input.authConfig)
-  const adminSet = new Set(input.adminEmails.map((e) => e.toLowerCase()))
+  const requireGm = requireRole(input.authConfig, input.accounts, 'gm', 'admin')
 
-  const ensureAdmin = (req: Request, res: Response): boolean => {
-    const claims = req.auth
-    if (!claims) {
-      res.status(401).json({ error: 'UNAUTHORIZED' })
-      return false
-    }
-    const email = (claims.email ?? '').toLowerCase()
-    if (adminSet.size > 0) {
-      if (!adminSet.has(email)) {
-        res.status(403).json({ error: 'FORBIDDEN', message: '需要管理員權限。' })
-        return false
-      }
-      return true
-    }
-    // No explicit allow-list: treat the first-registered account as admin.
-    if (input.accounts.countAccounts() === 0) {
-      res.status(403).json({ error: 'FORBIDDEN' })
-      return false
-    }
-    const first = input.accounts.findById(claims.sub)
-    if (first === null) {
-      res.status(403).json({ error: 'FORBIDDEN' })
-      return false
-    }
-    if (first.id !== input.accounts.firstAccountId()) {
-      res.status(403).json({ error: 'FORBIDDEN', message: '只有第一位註冊的帳號可管理金鑰。' })
-      return false
-    }
-    return true
-  }
-
-  router.get('/settings/health', auth, (req, res) => {
-    if (!ensureAdmin(req, res)) return
+  router.get('/settings/health', requireGm, (_req, res) => {
     res.json({
       activeKeys: input.store.countActive(),
       totalKeys: input.store.listKeys().length,
@@ -74,14 +41,12 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     })
   })
 
-  router.get('/settings/keys', auth, (req, res) => {
-    if (!ensureAdmin(req, res)) return
+  router.get('/settings/keys', requireGm, (_req, res) => {
     const records = input.store.listKeys()
     res.json({ keys: records.map(summarize) })
   })
 
-  router.post('/settings/keys', auth, (req, res) => {
-    if (!ensureAdmin(req, res)) return
+  router.post('/settings/keys', requireGm, (req, res) => {
     const body = req.body as { keys?: unknown }
     let raw: string[] = []
     if (Array.isArray(body?.keys)) {
@@ -109,8 +74,7 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     })
   })
 
-  router.delete('/settings/keys/:id', auth, (req, res) => {
-    if (!ensureAdmin(req, res)) return
+  router.delete('/settings/keys/:id', requireGm, (req, res) => {
     const id = Number.parseInt(String(req.params.id ?? ''), 10)
     if (!Number.isFinite(id) || id <= 0) {
       res.status(400).json({ error: 'INVALID_ID' })
@@ -124,8 +88,7 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     res.json({ ok: true, keys: input.store.listKeys().map(summarize) })
   })
 
-  router.post('/settings/keys/reactivate-all', auth, (req, res) => {
-    if (!ensureAdmin(req, res)) return
+  router.post('/settings/keys/reactivate-all', requireGm, (_req, res) => {
     const reactivated = input.store.reactivateAll()
     res.json({ reactivated, keys: input.store.listKeys().map(summarize) })
   })
