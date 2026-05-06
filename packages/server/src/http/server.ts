@@ -9,6 +9,7 @@ import { createWorldRouter } from './world.js'
 import { createSseRouter } from './sse.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
+import { APP_VERSION } from '../version.js'
 
 export type HttpAppOptions = Readonly<{
   db: Database.Database
@@ -24,7 +25,11 @@ export function createHttpApp(options: HttpAppOptions): Express {
   app.use(express.json({ limit: '64kb' }))
 
   app.get('/healthz', (_req, res) => {
-    res.json({ ok: true, tick: options.runtime.getSnapshot().tick })
+    res.json({ ok: true, version: APP_VERSION, tick: options.runtime.getSnapshot().tick })
+  })
+
+  app.get('/api/version', (_req, res) => {
+    res.json({ version: APP_VERSION })
   })
 
   const accountStore = new AccountStore(options.db, options.bcryptCost)

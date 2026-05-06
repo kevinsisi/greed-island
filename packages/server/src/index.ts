@@ -6,6 +6,7 @@ export * from './kernel/reducer.js'
 export * from './kernel/ruleEngine.js'
 export * from './kernel/types.js'
 
+export * from './version.js'
 export * from './config/world.js'
 export * from './cards/types.js'
 export { loadCardCatalog } from './cards/loader.js'
