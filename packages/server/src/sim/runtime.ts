@@ -201,6 +201,17 @@ export class SimulationRuntime {
     return this.rareWindowOpen
   }
 
+  getCurrentTick(): number {
+    return this.currentTick
+  }
+
+  findProfile(npcId: string): NpcProfile | null {
+    for (const profile of this.profiles) {
+      if (profile.id === npcId) return profile
+    }
+    return null
+  }
+
   private runTickSafely(): void {
     try {
       this.runTick()

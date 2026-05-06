@@ -31,6 +31,8 @@ export type ServerNpc = {
   relationshipScore: number
   lastActedTick: number
   internalState: Record<string, unknown>
+  interactionCount?: number
+  lastInteractionTick?: number
 }
 
 export type ServerCardCatalogEntry = {
@@ -77,6 +79,54 @@ export type ServerAccount = {
   createdAt: number
 }
 
+export type NpcInteractIntent = 'greet' | 'ask' | 'trade' | 'leave'
+
+export type LocalizedLine = { zh: string; en: string }
+
+export type ServerNpcInteraction = {
+  npcId: string
+  intent: NpcInteractIntent
+  tick: number
+  line: LocalizedLine
+  relationship: {
+    trust: number
+    previousTrust: number
+    delta: number
+    tier: 'low' | 'mid' | 'high'
+    interactionCount: number
+    min: number
+    max: number
+  }
+  personalEvent: {
+    id: number
+    occurredAt: string
+    intent: NpcInteractIntent
+  }
+}
+
+export type ServerNpcHistoryEvent = {
+  id: number
+  intent: NpcInteractIntent
+  line: LocalizedLine
+  tick: number
+  occurredAt: string
+  trustAfter: number
+}
+
+export type ServerNpcHistory = {
+  npcId: string
+  relationship: {
+    trust: number
+    tier: 'low' | 'mid' | 'high'
+    interactionCount: number
+    lastInteractionTick: number
+    min: number
+    max: number
+    seeded: boolean
+  }
+  events: ServerNpcHistoryEvent[]
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -112,9 +162,14 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
+function authHeaders(token: string | null): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export const api = {
   world: () => jsonFetch<ServerWorldSnapshot>('/world'),
-  npcs: () => jsonFetch<ServerNpc[]>('/npcs'),
+  npcs: (token: string | null = null) =>
+    jsonFetch<ServerNpc[]>('/npcs', { headers: authHeaders(token) }),
   events: (limit = 50) => jsonFetch<ServerNarrativeEvent[]>(`/events?limit=${limit}`),
   cards: () => jsonFetch<ServerCardCatalog>('/cards'),
   map: () => jsonFetch<ServerMap>('/map'),
@@ -131,8 +186,24 @@ export const api = {
     }),
   me: (token: string) =>
     jsonFetch<{ account: ServerAccount }>('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+      headers: authHeaders(token)
+    }),
+  npcInteract: (token: string, npcId: string, intent: NpcInteractIntent) =>
+    jsonFetch<ServerNpcInteraction>(
+      `/npc/${encodeURIComponent(npcId)}/interact`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ intent })
+      }
+    ),
+  npcHistory: (token: string, npcId: string, limit = 20) =>
+    jsonFetch<ServerNpcHistory>(
+      `/npc/${encodeURIComponent(npcId)}/history?limit=${limit}`,
+      {
+        headers: authHeaders(token)
+      }
+    )
 }
 
 export function streamUrl(): string {

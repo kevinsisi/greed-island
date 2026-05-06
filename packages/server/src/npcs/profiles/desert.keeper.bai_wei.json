@@ -1,0 +1,38 @@
+{
+  "id": "desert.keeper.bai_wei",
+  "name": { "zh": "白薇", "en": "Bai Wei" },
+  "role": { "zh": "潮語塔守燈人", "en": "Tide-Tongue Tower Keeper" },
+  "defaultLocation": "t_desert",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 5040,  "location": "t_desert",  "label": "pre-dawn lamp tending" },
+    { "fromTickOfDay": 5040,  "toTickOfDay": 11520, "location": "t_desert",  "label": "tower watch" },
+    { "fromTickOfDay": 11520, "toTickOfDay": 14400, "location": "t_temple",  "label": "afternoon listening at the lake" },
+    { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_desert",  "label": "evening lighting ritual" }
+  ],
+  "triggers": [
+    {
+      "id": "baiwei.signal-on-rare-window",
+      "when": "rareWindowOpen:tide_festival",
+      "emitCommand": "NPC_LISTEN",
+      "payload": { "duration": 240 }
+    },
+    {
+      "id": "baiwei.welcome-the-listener",
+      "when": "relationshipAbove:any:50",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "tide_omen" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_INTERACT", "WORLD_RARE_WINDOW_OPENED", "WORLD_WEATHER_CHANGED"],
+    "decayFn": "none",
+    "decayParam": 0
+  },
+  "personality": {
+    "patience": 0.9,
+    "greed": 0.05,
+    "trustBase": 45,
+    "ethereal": 0.95,
+    "factionLean": "tide_tongue"
+  }
+}

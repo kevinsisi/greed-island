@@ -1,0 +1,38 @@
+{
+  "id": "mountain.abbot.li_shu",
+  "name": { "zh": "厲叔", "en": "Uncle Li" },
+  "role": { "zh": "煙嵐山住持", "en": "Yanlan Mountain Abbot" },
+  "defaultLocation": "t_mountain",
+  "routine": [
+    { "fromTickOfDay": 0,     "toTickOfDay": 1440,  "location": "t_mountain", "label": "pre-dawn meditation" },
+    { "fromTickOfDay": 1440,  "toTickOfDay": 12960, "location": "t_mountain", "label": "monastery duties" },
+    { "fromTickOfDay": 12960, "toTickOfDay": 14400, "location": "t_mountain", "label": "sunset chant" },
+    { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_mountain", "label": "night vigil" }
+  ],
+  "triggers": [
+    {
+      "id": "lishu.test-the-disciple",
+      "when": "relationshipBelow:any:30",
+      "emitCommand": "NPC_DECLARE",
+      "payload": { "topic": "harsh_test" }
+    },
+    {
+      "id": "lishu.acknowledge-trusted",
+      "when": "relationshipAbove:any:70",
+      "emitCommand": "NPC_BLESS",
+      "payload": { "boon": "discipline" }
+    }
+  ],
+  "memory": {
+    "consultsEventTypes": ["NPC_GREET", "NPC_INTERACT", "CARD_DISCOVERED"],
+    "decayFn": "none",
+    "decayParam": 0
+  },
+  "personality": {
+    "patience": 0.99,
+    "greed": 0.05,
+    "trustBase": 30,
+    "sternness": 0.95,
+    "factionLean": "monastic"
+  }
+}
