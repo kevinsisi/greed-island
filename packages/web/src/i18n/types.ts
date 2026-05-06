@@ -115,6 +115,21 @@ export type TranslationKey =
   | 'time.tickUnit'
   | 'footer.tagline'
   | 'language.label'
+  // account
+  | 'nav.account'
+  | 'account.eyebrow'
+  | 'account.title'
+  | 'account.description'
+  | 'account.email'
+  | 'account.password'
+  | 'account.loginButton'
+  | 'account.registerButton'
+  | 'account.toggleToRegister'
+  | 'account.toggleToLogin'
+  | 'account.signedInAs'
+  | 'account.logout'
+  | 'account.errorGeneric'
+  | 'status.signin'
 
 export type Translations = Readonly<Record<TranslationKey, string>>
 

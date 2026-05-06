@@ -32,9 +32,11 @@ export interface NpcSummary {
   internalState: Record<string, unknown>
 }
 
+export type CardRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
+
 export interface CardCatalogEntry {
   id: number
-  rank: 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
+  rank: CardRank
   name: string
   description: string
   story: string

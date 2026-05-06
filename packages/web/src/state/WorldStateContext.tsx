@@ -1,20 +1,31 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  api,
+  streamUrl,
+  type ServerCardCatalog,
+  type ServerMap,
+  type ServerNarrativeEvent,
+  type ServerNpc,
+  type ServerWorldSnapshot
+} from '../api/client'
 import {
   fixtureCards,
   fixtureDashboard,
   fixtureEvents,
   fixtureMap,
   fixtureNpcs,
-  fixtureWorld,
+  fixtureWorld
 } from './fixtures'
 import type {
   CardCatalogEntry,
   DashboardSummary,
   EventSummary,
+  MapTile,
   NpcSummary,
   WorldMap,
-  WorldSnapshot,
+  WorldSnapshot
 } from './types'
+import { useI18n, type Locale } from '../i18n'
 
 interface WorldStateValue {
   world: WorldSnapshot
@@ -25,46 +36,179 @@ interface WorldStateValue {
   dashboard: DashboardSummary
   liveConnected: boolean
   source: 'fixture' | 'server'
+  loadError: string | null
 }
 
 const WorldStateContext = createContext<WorldStateValue | null>(null)
 
+const RECENT_EVENT_LIMIT = 100
+const POLL_FALLBACK_MS = 8_000
+const SSE_RECONNECT_MS = 5_000
+const VALID_BIOMES: readonly MapTile['biome'][] = [
+  'grass',
+  'forest',
+  'mountain',
+  'desert',
+  'water',
+  'ruin'
+]
+
 export function WorldStateProvider({ children }: { children: ReactNode }) {
-  // v1 placeholder: render fixture data when the server is unreachable.
-  // The real wire-up will subscribe to `/api/events/stream` and update
-  // the snapshot on each tick boundary.
-  const [world, setWorld] = useState<WorldSnapshot>(fixtureWorld)
-  const [events] = useState<EventSummary[]>(fixtureEvents)
-  const [liveConnected] = useState<boolean>(false)
+  const { locale } = useI18n()
+
+  const [serverWorld, setServerWorld] = useState<ServerWorldSnapshot | null>(null)
+  const [serverNpcs, setServerNpcs] = useState<ServerNpc[] | null>(null)
+  const [serverEvents, setServerEvents] = useState<ServerNarrativeEvent[] | null>(null)
+  const [serverCards, setServerCards] = useState<ServerCardCatalog | null>(null)
+  const [serverMap, setServerMap] = useState<ServerMap | null>(null)
+  const [liveConnected, setLiveConnected] = useState<boolean>(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const eventsRef = useRef<ServerNarrativeEvent[]>([])
+  eventsRef.current = serverEvents ?? []
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/world')
-      .then((res) => (res.ok ? (res.json() as Promise<WorldSnapshot>) : null))
-      .then((data) => {
-        if (!cancelled && data) setWorld(data)
+
+    const refreshAll = async () => {
+      try {
+        const [world, npcs, events, cards, map] = await Promise.all([
+          api.world(),
+          api.npcs(),
+          api.events(RECENT_EVENT_LIMIT),
+          api.cards(),
+          api.map()
+        ])
+        if (cancelled) return
+        setServerWorld(world)
+        setServerNpcs(npcs)
+        setServerEvents(events)
+        setServerCards(cards)
+        setServerMap(map)
+        setLoadError(null)
+      } catch (err) {
+        if (cancelled) return
+        const msg = err instanceof Error ? err.message : 'Failed to load world state.'
+        setLoadError(msg)
+      }
+    }
+
+    refreshAll()
+    const pollTimer = window.setInterval(refreshAll, POLL_FALLBACK_MS)
+
+    let source: EventSource | null = null
+    let reconnectTimer: number | null = null
+    let stopped = false
+
+    const connect = () => {
+      if (stopped) return
+      try {
+        source = new EventSource(streamUrl())
+      } catch {
+        return
+      }
+      source.addEventListener('open', () => setLiveConnected(true))
+      source.addEventListener('error', () => {
+        setLiveConnected(false)
+        if (source) {
+          source.close()
+          source = null
+        }
+        if (!stopped && reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null
+            connect()
+          }, SSE_RECONNECT_MS)
+        }
       })
-      .catch(() => {
-        // Server not yet running — keep fixtures so the UI still renders.
+      source.addEventListener('snapshot', (ev) => {
+        try {
+          const snap = JSON.parse((ev as MessageEvent).data) as ServerWorldSnapshot
+          setServerWorld(snap)
+        } catch {
+          // ignore malformed snapshot
+        }
       })
+      source.addEventListener('event', (ev) => {
+        try {
+          const event = JSON.parse((ev as MessageEvent).data) as ServerNarrativeEvent
+          const next = [event, ...eventsRef.current].slice(0, RECENT_EVENT_LIMIT)
+          eventsRef.current = next
+          setServerEvents(next)
+        } catch {
+          // ignore malformed event
+        }
+      })
+    }
+    connect()
+
     return () => {
       cancelled = true
+      stopped = true
+      window.clearInterval(pollTimer)
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+      if (source) source.close()
     }
   }, [])
 
-  const value = useMemo<WorldStateValue>(
-    () => ({
+  const value = useMemo<WorldStateValue>(() => {
+    const usingServer = serverWorld !== null
+
+    const world: WorldSnapshot = serverWorld
+      ? {
+          tick: serverWorld.tick,
+          lastSequence: serverWorld.lastSequence,
+          eventCount: serverWorld.eventCount,
+          npcCount: serverWorld.npcCount,
+          facts: serverWorld.facts,
+          generatedAt: serverWorld.generatedAt
+        }
+      : fixtureWorld
+
+    const events: EventSummary[] =
+      serverEvents !== null
+        ? serverEvents.map(toEventSummary)
+        : fixtureEvents
+
+    const npcs: NpcSummary[] =
+      serverNpcs !== null
+        ? serverNpcs.map((n) => toNpcSummary(n, locale))
+        : fixtureNpcs
+
+    const cards: CardCatalogEntry[] =
+      serverCards !== null
+        ? serverCards.entries.map((c) => toCardEntry(c, locale))
+        : fixtureCards
+
+    const map: WorldMap = serverMap !== null ? toWorldMap(serverMap) : fixtureMap
+
+    const cardsOwned = cards.filter((c) => c.owned).length
+    const recentEvents = events.slice(0, 5)
+    const rareWindowOpen = Boolean(world.facts['rareWindowOpen']) || fixtureDashboard.rareWindowOpen
+
+    const dashboard: DashboardSummary = usingServer
+      ? {
+          world,
+          cardsOwned,
+          cardsTotal: cards.length,
+          recentEvents,
+          rareWindowOpen,
+          ticksSinceLastVisit: 0
+        }
+      : { ...fixtureDashboard, world }
+
+    return {
       world,
-      npcs: fixtureNpcs,
+      npcs,
       events,
-      cards: fixtureCards,
-      map: fixtureMap,
-      dashboard: { ...fixtureDashboard, world },
+      cards,
+      map,
+      dashboard,
       liveConnected,
-      source: 'fixture',
-    }),
-    [world, events, liveConnected]
-  )
+      source: usingServer ? 'server' : 'fixture',
+      loadError
+    }
+  }, [serverWorld, serverNpcs, serverEvents, serverCards, serverMap, liveConnected, loadError, locale])
 
   return <WorldStateContext.Provider value={value}>{children}</WorldStateContext.Provider>
 }
@@ -75,4 +219,66 @@ export function useWorldState(): WorldStateValue {
     throw new Error('useWorldState must be used inside <WorldStateProvider>')
   }
   return value
+}
+
+function toEventSummary(event: ServerNarrativeEvent): EventSummary {
+  return {
+    sequence: event.sequence,
+    tick: event.tick,
+    eventType: event.eventType,
+    actorId: event.actorId,
+    occurredAt: event.occurredAt,
+    payload: event.payload,
+    narration: event.narration
+  }
+}
+
+function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
+  const name = pickLocaleString(npc.name, locale)
+  const role = pickLocaleString(npc.role, locale)
+  return {
+    id: npc.id,
+    name,
+    role,
+    location: npc.location,
+    relationshipScore: npc.relationshipScore,
+    lastActedTick: npc.lastActedTick,
+    internalState: { ...npc.internalState }
+  }
+}
+
+function toCardEntry(
+  card: { id: number; rank: string; nameZh: string; nameEn: string; description: string; story: string },
+  locale: Locale
+): CardCatalogEntry {
+  const rank = (card.rank as CardCatalogEntry['rank']) ?? 'H'
+  return {
+    id: card.id,
+    rank,
+    name: locale === 'zh' ? card.nameZh : card.nameEn,
+    description: card.description,
+    story: card.story,
+    owned: false
+  }
+}
+
+function toWorldMap(map: ServerMap): WorldMap {
+  return {
+    width: map.width,
+    height: map.height,
+    tiles: map.tiles.map((tile) => ({
+      id: tile.id,
+      name: tile.name,
+      x: tile.x,
+      y: tile.y,
+      biome: (VALID_BIOMES as readonly string[]).includes(tile.biome)
+        ? (tile.biome as MapTile['biome'])
+        : 'grass',
+      npcIds: tile.npcIds
+    }))
+  }
+}
+
+function pickLocaleString(value: { zh: string; en: string }, locale: Locale): string {
+  return locale === 'zh' ? value.zh : value.en
 }

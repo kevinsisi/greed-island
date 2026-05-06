@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useDeviceTier } from '../../state/deviceTier'
 import { useWorldState } from '../../state/WorldStateContext'
+import { useAuth } from '../../state/AuthContext'
 import { useI18n } from '../../i18n'
 import type { TranslationKey } from '../../i18n'
 import { APP_VERSION } from '../../version'
@@ -83,6 +84,7 @@ function TopBar(props: {
           )}
         </div>
         <LanguageToggle />
+        <AccountIndicator />
         <button
           type="button"
           onClick={() => onOverride(override === otherTier ? null : otherTier)}
@@ -92,6 +94,28 @@ function TopBar(props: {
         </button>
       </div>
     </header>
+  )
+}
+
+function AccountIndicator() {
+  const { account } = useAuth()
+  const { t } = useI18n()
+  return (
+    <NavLink
+      to="/account"
+      className={({ isActive }) =>
+        [
+          'gi-touch hidden sm:inline-flex px-3 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
+          isActive
+            ? 'border-ember-600 text-ember-400 bg-ember-500/5'
+            : account
+              ? 'border-moss-600 text-moss-400 hover:bg-moss-500/10'
+              : 'border-ground-700 text-ground-300 hover:border-ember-600 hover:text-ember-400'
+        ].join(' ')
+      }
+    >
+      {account ? account.email.split('@')[0] : t('status.signin')}
+    </NavLink>
   )
 }
 

@@ -101,4 +101,19 @@ export const en: Translations = {
 
   'footer.tagline': 'greed-island · observation client',
   'language.label': 'Language',
+
+  'nav.account': 'Account',
+  'account.eyebrow': 'GUEST IDENTITY',
+  'account.title': 'Account',
+  'account.description': 'Sign in or register to keep your footprint on Greed Island.',
+  'account.email': 'Email',
+  'account.password': 'Password',
+  'account.loginButton': 'Sign in',
+  'account.registerButton': 'Register',
+  'account.toggleToRegister': 'No account yet? Create one',
+  'account.toggleToLogin': 'Already have an account? Sign in',
+  'account.signedInAs': 'Signed in as {email}',
+  'account.logout': 'Sign out',
+  'account.errorGeneric': 'Something went wrong, please try again.',
+  'status.signin': 'Sign in',
 }

@@ -101,4 +101,19 @@ export const zh: Translations = {
 
   'footer.tagline': 'greed-island · 觀測客戶端',
   'language.label': '語言',
+
+  'nav.account': '帳號',
+  'account.eyebrow': '訪客身份',
+  'account.title': '帳號',
+  'account.description': '註冊或登入以保留你在貪婪之島上的足跡。',
+  'account.email': '電子郵件',
+  'account.password': '密碼',
+  'account.loginButton': '登入',
+  'account.registerButton': '註冊',
+  'account.toggleToRegister': '還沒帳號？建立一個',
+  'account.toggleToLogin': '已有帳號？回到登入',
+  'account.signedInAs': '登入為 {email}',
+  'account.logout': '登出',
+  'account.errorGeneric': '操作失敗，請重試。',
+  'status.signin': '登入',
 }

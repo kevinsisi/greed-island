@@ -5,9 +5,10 @@ import { useI18n } from '../i18n'
 import type { TranslationKey } from '../i18n'
 import type { CardCatalogEntry } from '../state/types'
 
-const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 const RANK_TONE: Record<CardCatalogEntry['rank'], string> = {
+  SS: 'border-ember-500 text-ember-300 bg-ember-500/15',
   S: 'border-ember-600 text-ember-400 bg-ember-500/10',
   A: 'border-ember-700 text-ember-500 bg-ember-500/5',
   B: 'border-ground-500 text-ground-200',
@@ -55,7 +56,7 @@ export function CardsPage() {
       />
 
       <div className="flex flex-wrap gap-2 items-center">
-        {RANK_ORDER.slice(0, 4).map((rank) => {
+        {RANK_ORDER.slice(0, 5).map((rank) => {
           const total = cards.filter((c) => c.rank === rank).length
           const ownedRank = cards.filter((c) => c.rank === rank && c.owned).length
           if (total === 0) return null
