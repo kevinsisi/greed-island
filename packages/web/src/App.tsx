@@ -1,14 +1,12 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { AppShell } from './components/layout/AppShell'
+import { GameShell } from './components/layout/GameShell'
 import { WorldStateProvider } from './state/WorldStateContext'
 import { AuthProvider } from './state/AuthContext'
 import { I18nProvider } from './i18n'
-import { DashboardPage } from './pages/DashboardPage'
-import { MapPage } from './pages/MapPage'
-import { NpcsPage } from './pages/NpcsPage'
-import { EventsPage } from './pages/EventsPage'
-import { CardsPage } from './pages/CardsPage'
-import { SinceLastVisitPage } from './pages/SinceLastVisitPage'
+import { HubPage } from './pages/HubPage'
+import { AreaPage } from './pages/AreaPage'
+import { CodexPage } from './pages/CodexPage'
+import { TimelinePage } from './pages/TimelinePage'
 import { AccountPage } from './pages/AccountPage'
 
 export function App() {
@@ -16,18 +14,16 @@ export function App() {
     <I18nProvider>
       <AuthProvider>
         <WorldStateProvider>
-          <AppShell>
+          <GameShell>
             <Routes>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/since" element={<SinceLastVisitPage />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/npcs" element={<NpcsPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/cards" element={<CardsPage />} />
+              <Route path="/" element={<HubPage />} />
+              <Route path="/area/:tileId" element={<AreaPage />} />
+              <Route path="/codex" element={<CodexPage />} />
+              <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/account" element={<AccountPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </AppShell>
+          </GameShell>
         </WorldStateProvider>
       </AuthProvider>
     </I18nProvider>
