@@ -58,7 +58,7 @@ import {
 import { BuildingRuntime } from '../buildings/buildingRuntime.js'
 import type { BuildingRuntimeView } from '../buildings/types.js'
 import { findBuildingById, listBuildingsForTile } from '../buildings/catalog.js'
-import { AmbientNarrator } from './ambientNarrator.js'
+import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -206,12 +206,42 @@ export class SimulationRuntime {
 
   attachAmbientNarrator(settings: SettingsStore): AmbientNarrator {
     if (this.ambientNarrator) return this.ambientNarrator
-    this.ambientNarrator = new AmbientNarrator(settings)
-    return this.ambientNarrator
+    const narrator = new AmbientNarrator(settings)
+    this.ambientNarrator = narrator
+    // v0.15.1：每 tick 主動推「最近被玩家請求過、cache 已過期」的 tile 進下一輪
+    // refresh，這樣下次 polling 拿到的 ambient 文字真的會變動，而不是靜止 30 tick。
+    this.subscribeTick((tick) => {
+      narrator.tickRefresh(tick, (tileId) => this.buildAmbientContext(tileId))
+    })
+    return narrator
   }
 
   getAmbientNarrator(): AmbientNarrator | null {
     return this.ambientNarrator
+  }
+
+  /**
+   * v0.15.1：建立 AmbientContext 給定 tileId。供 buildings router 與
+   * AmbientNarrator.tickRefresh 共用，避免 ambient context 在兩處重複組裝
+   * 失同步。回傳 null 表示 tile 不存在於此世界。
+   */
+  buildAmbientContext(tileId: string): AmbientContext | null {
+    const state = this.areaEngine.getState(tileId)
+    if (!state) return null
+    const presentNpcNames = this.getOutdoorNpcNamesAt(tileId)
+    const recentNarrations = this.getRecentEvents(20)
+      .filter((e) => e.narration)
+      .slice(0, 5)
+      .map((e) => e.narration!)
+    return {
+      tileId,
+      weather: this.weather,
+      season: this.season,
+      presentNpcNames,
+      recentNarrations,
+      areaState: state,
+      worldEvents: this.eventEngine.getActive()
+    }
   }
 
   start(): void {

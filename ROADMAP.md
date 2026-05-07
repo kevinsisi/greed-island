@@ -4,6 +4,30 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.1 ✅ shipped — 2026-05-07
+
+**主題：場景動態化 — AI ambient 主動刷新 + Phaser 天氣 VFX + 環境動畫**
+
+- ✅ **AI ambient 主動刷新** (`packages/server/src/sim/ambientNarrator.ts`)
+  - 新增 `AmbientNarrator.tickRefresh(currentTick, getContext)`：每 tick 由 runtime tick listener 主動呼叫
+  - 每個 tile 紀錄 `lastRequestedTickByTile`；最近 12 tick 內被玩家 polled 過的 tile 才會被推進下一輪 refresh，避免無人觀察時浪費 Gemini quota
+  - 既有 30-tick cache TTL 保留；改善的是「cache 過期那一刻」會立刻在背景跑 refresh，下次 polling 拿到的就是新的 AI 文字
+  - 修原本的「AreaPage 上看到同一段 ambient 文字 60+ tick 才換」靜態感
+- ✅ **runtime.buildAmbientContext** 抽出共用 helper (`packages/server/src/sim/runtime.ts`)：buildings router 與 ambient tickRefresh 共用同一份 context 組裝邏輯，避免兩處失同步
+- ✅ **Phaser 天氣 VFX** (`packages/web/src/game/AreaScene.ts`)
+  - 新 `applyWeather(weather)` + `disposeWeather()` + `weatherLayer` container（depth=200）
+  - 5 種天氣：晴 → 暖色覆蓋 + 太陽暈呼吸；陰 → 灰罩 + 飄移雲層；霧雨 → 薄霧斑 + 30 條細雨；驟雨 → 60 條雨線 + 偶發閃電；微風 → 飄落 🍃/🌸
+  - 由 `world.facts['weather']` (後端 fact) 驅動；`normaliseWeather` 把中文字串轉成 enum
+- ✅ **環境動畫** (`AreaScene.attachEnvAnimation`)
+  - 樹/植物 (🌲🌳🌵) → 左右搖擺 ±4°
+  - 燈籠/神社/招牌 (🪔⛩🏯🪧) → alpha 閃爍 0.7-1.0
+  - 海/船/港 (⚓⛵🛟🪝🐟🐚) → 上下漂浮 ±2px
+  - 結晶 (✦◈✧) → scale + alpha 同步脈動
+  - 廢墟/岩石 (🪨🏚⛰🏔) → 偶爾微抖
+  - tween phase 用 (col,row) hash 避免相鄰物件動作完全同步
+- ✅ **NPC 移動驗證**：v0.13.0 已實作（NpcEngine 每 tick 寫 subCol/subRow → AreaPage polls → AreaScene `tweenNpcTo` 4500ms tween）；本版檢查無 regression
+- ✅ tests：100 tests pass；full build (server tsc + vite) 通過
+
 ## v0.15.0 ✅ shipped — 2026-05-07
 
 **主題：紋卡系統大重設計 + 戰鬥系統 Phase B**

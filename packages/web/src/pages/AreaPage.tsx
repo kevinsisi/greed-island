@@ -7,7 +7,12 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
-import type { AreaMapBuilding, AreaMapNpc, AreaNpcActivity } from '../game/AreaScene'
+import {
+  normaliseWeather,
+  type AreaMapBuilding,
+  type AreaMapNpc,
+  type AreaNpcActivity
+} from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
 import type { NpcSummary, NpcActivity } from '../state/types'
 import type { TranslationKey } from '../i18n/types'
@@ -42,7 +47,11 @@ type DrawerTab = 'scene' | 'npcs' | 'cards' | 'events' | 'players'
 export function AreaPage() {
   const { tileId = '' } = useParams<{ tileId: string }>()
   const { t, locale } = useI18n()
-  const { map, npcs, events } = useWorldState()
+  const { map, npcs, events, world } = useWorldState()
+  const weather = useMemo(
+    () => normaliseWeather(typeof world.facts['weather'] === 'string' ? (world.facts['weather'] as string) : null),
+    [world.facts]
+  )
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [drawerTab, setDrawerTab] = useState<DrawerTab | null>(null)
@@ -219,6 +228,7 @@ export function AreaPage() {
           buildings={mapBuildings}
           locale={locale}
           hudStrings={hudStrings}
+          weather={weather}
           onNpcInteract={handleNpcInteract}
           onDropPickup={cardOverlay.pickupDrop}
           onNearbyNpcsChange={handleNearbyNpcsChange}
