@@ -388,4 +388,57 @@ describe('deterministic replay', () => {
     expect(memHash1).toBe(memHash2)
     expect(relHash1).toBe(relHash2)
   })
+
+  it('event deterministicKey ignores wall-clock submittedAt — same intent at different submittedAt yields same key', () => {
+    const { ruleEngine } = makeHarness()
+    const cmdEarly = makeLivingWorldCommand('NPC_MOVE', 'npc-a', 'npc', 7, 1000, {
+      npcId: 'npc-a',
+      from: 't_central',
+      to: 't_market',
+      activity: 'move',
+      reachedDest: false,
+      narration: 'walk'
+    })
+    const cmdLate = makeLivingWorldCommand('NPC_MOVE', 'npc-a', 'npc', 7, 999_999_999, {
+      npcId: 'npc-a',
+      from: 't_central',
+      to: 't_market',
+      activity: 'move',
+      reachedDest: false,
+      narration: 'walk'
+    })
+    const a = ruleEngine.evaluate(cmdEarly)
+    const b = ruleEngine.evaluate(cmdLate)
+    expect(a.accepted).toBe(true)
+    expect(b.accepted).toBe(true)
+    if (a.accepted && b.accepted) {
+      expect(a.events[0]!.deterministicKey).toBe(b.events[0]!.deterministicKey)
+      expect(a.events[0]!.eventId).toBe(b.events[0]!.eventId)
+    }
+  })
+
+  it('different ticks yield different deterministic keys for the same payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd5 = makeLivingWorldCommand('NPC_MOVE', 'npc-a', 'npc', 5, 1000, {
+      npcId: 'npc-a',
+      from: 't_central',
+      to: 't_market',
+      activity: 'move',
+      reachedDest: false,
+      narration: 'walk'
+    })
+    const cmd6 = makeLivingWorldCommand('NPC_MOVE', 'npc-a', 'npc', 6, 1000, {
+      npcId: 'npc-a',
+      from: 't_central',
+      to: 't_market',
+      activity: 'move',
+      reachedDest: false,
+      narration: 'walk'
+    })
+    const a = ruleEngine.evaluate(cmd5)
+    const b = ruleEngine.evaluate(cmd6)
+    if (a.accepted && b.accepted) {
+      expect(a.events[0]!.deterministicKey).not.toBe(b.events[0]!.deterministicKey)
+    }
+  })
 })

@@ -11,15 +11,20 @@ import { summarizeWindow } from '../kernel/catchUpSummary.js'
 import { deriveEmotionalSnapshot } from '../kernel/emotionalSimulation.js'
 import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
+import type { AccountStore } from './accounts.js'
+import { requireAuth, type AuthConfig } from './auth.js'
 
 export function createLivingWorldRouter(input: {
   runtime: SimulationRuntime
   memory: SqliteNpcMemoryStore
   relationships: SqliteNpcRelationshipsStore
+  accounts: AccountStore
+  authConfig: AuthConfig
   db: Database.Database
 }): Router {
   const router = Router()
   const eventStore = new SqliteEventStore(input.db)
+  const auth = requireAuth(input.authConfig)
 
   router.get('/world/catch-up', (req: Request, res: Response) => {
     const sinceTickRaw = Number.parseInt(String(req.query.sinceTick ?? '0'), 10)
@@ -28,6 +33,29 @@ export function createLivingWorldRouter(input: {
     const events = eventStore.readEvents()
     const summary = summarizeWindow(events, sinceTick, latestTick)
     res.json({ latestTick, summary })
+  })
+
+  // v0.11.0 — "while you were gone". Reads the player's last_seen_tick
+  // from accounts, summarizes the EventLog window, then bumps the
+  // pointer to the current tick so subsequent calls report only what
+  // happened after this acknowledgement.
+  router.get('/world/since-last-visit', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const accountId = claims.sub
+    const previousLastSeenTick = input.accounts.getLastSeenTick(accountId)
+    const latestTick = input.runtime.getCurrentTick()
+    const events = eventStore.readEvents()
+    const summary = summarizeWindow(events, previousLastSeenTick, latestTick)
+    input.accounts.setLastSeenTick(accountId, latestTick)
+    res.json({
+      previousLastSeenTick,
+      latestTick,
+      summary
+    })
   })
 
   router.get('/npc/:id/memory', (req: Request, res: Response) => {

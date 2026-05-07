@@ -20,9 +20,14 @@ import {
   type FactSetPayload
 } from '../kernel/types.js'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
-import { EVENT_FACT_SET } from '../kernel/ruleEngine.js'
+import {
+  COMMAND_SET_FACT,
+  EVENT_FACT_SET,
+  KernelRuleEngine
+} from '../kernel/ruleEngine.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
-import { reduceEventLog } from '../kernel/reducer.js'
+import { createInitialWorldState, reduceEventLog } from '../kernel/reducer.js'
+import type { Command } from '../kernel/types.js'
 import {
   LivingWorldRuleEngine,
   isLivingWorldCommandType,
@@ -138,6 +143,7 @@ export class SimulationRuntime {
   private readonly buildingRuntime: BuildingRuntime
   private readonly npcFactionLean: Map<string, FactionId>
   private readonly livingWorldRuleEngine = new LivingWorldRuleEngine()
+  private readonly kernelRuleEngine = new KernelRuleEngine()
   private npcMemory: SqliteNpcMemoryStore | null = null
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
@@ -794,43 +800,61 @@ export class SimulationRuntime {
     }
   }
 
+  /**
+   * Build a state-snapshot Event draft by routing a SET_FACT Command
+   * through the KernelRuleEngine, then re-hashing the deterministic
+   * key with the simulation tick so different-tick same-value entries
+   * remain distinct events. This is the only path the runtime uses
+   * to write FACT_SET state snapshots — direct draft construction is
+   * forbidden per ARCHITECTURE.md §4.
+   *
+   * Wall-clock `submittedAt` is audit-only and does not participate
+   * in the deterministic key.
+   */
   private factSetDraft(
     key: string,
     value: unknown,
     actorId: string,
     tick: number
   ): EventDraft<FactSetPayload> {
-    const occurredAt = Date.now()
+    const payload: FactSetPayload = { key, value }
+    const commandIdSeed = { commandType: COMMAND_SET_FACT, actorId, tick, payload }
+    const commandId = `cmd_${hashCanonicalJson(commandIdSeed).slice(0, 32)}`
+    const cmd: Command<FactSetPayload> = {
+      commandId,
+      commandType: COMMAND_SET_FACT,
+      actorId,
+      submittedAt: Date.now(),
+      payload
+    }
+    const result = this.kernelRuleEngine.evaluate(cmd, {
+      worldState: createInitialWorldState()
+    })
+    if (!result.accepted) {
+      throw new Error(
+        `[sim] kernel rejected SET_FACT key=${key}: ${result.rejection.reason}`
+      )
+    }
+    const base = result.events[0] as EventDraft<FactSetPayload>
+    // KernelRuleEngine has no concept of simulation tick. Re-hash the
+    // event seed with tick included so two same-(key,value) writes at
+    // different ticks produce different deterministic keys.
     const seed = {
       eventType: EVENT_FACT_SET,
-      occurredAt,
       actorId,
+      commandId,
       tick,
-      payload: { key, value },
-      rulesetVersion: DEFAULT_RULESET_VERSION,
-      version: KERNEL_EVENT_VERSION
+      payload,
+      rulesetVersion: base.rulesetVersion ?? DEFAULT_RULESET_VERSION,
+      version: base.version
     }
     const deterministicKey = hashCanonicalJson(seed)
     return {
-      eventType: EVENT_FACT_SET,
-      occurredAt,
-      actorId,
+      ...base,
       tick,
-      payload: { key, value },
-      rulesetVersion: DEFAULT_RULESET_VERSION,
-      version: KERNEL_EVENT_VERSION,
       eventId: `event_${deterministicKey.slice(0, 32)}`,
       deterministicKey
     }
-  }
-
-  private narrativeDraft(
-    actorId: string,
-    tick: number,
-    body: NarrativeEventPayload
-  ): EventDraft<FactSetPayload> {
-    const key = `${NARRATIVE_KEY_PREFIX}${tick}.${actorId}.${body.eventType}`
-    return this.factSetDraft(key, body, actorId, tick)
   }
 
   private deriveRelationshipScore(profile: NpcProfile): number {

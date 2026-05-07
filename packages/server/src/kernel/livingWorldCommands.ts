@@ -303,12 +303,14 @@ export class LivingWorldRuleEngine {
       data: command.payload,
       narration
     }
+    // Per ARCHITECTURE.md §1.3 — the deterministic key MUST NOT include
+    // wall-clock fields. Only `(commandType, actorId, actorType, tick,
+    // payload, rulesetVersion, version)` participate. `occurredAt` is
+    // pure audit metadata on the resulting Event.
     const seed = {
       eventType: command.commandType,
-      occurredAt: command.submittedAt,
       actorId: command.actorId,
       actorType: command.actorType,
-      commandId: command.commandId,
       tick: command.tick,
       payload: eventPayload,
       rulesetVersion,

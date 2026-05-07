@@ -197,6 +197,8 @@ export function createHttpApp(options: HttpAppOptions): Express {
       runtime: options.runtime,
       memory: npcMemoryStore,
       relationships: npcRelationshipsStore,
+      accounts: accountStore,
+      authConfig: options.auth,
       db: options.db,
     })
   )
