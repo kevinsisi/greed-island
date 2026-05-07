@@ -282,6 +282,19 @@ export type ServerCardDrop = {
   holderAccountId: number | null
   pickupAtTick: number | null
   storeDeadlineTick: number | null
+  /** v0.13.0：後端算過 ±N 秒精力誤差後給玩家看的剩餘秒數 */
+  perceivedSecondsLeft?: number | null
+  /** v0.13.0：後端真實秒數（不含誤差），給除錯/日誌用 */
+  rawSecondsLeft?: number | null
+}
+
+/** v0.13.0：玩家不在時的紋卡摘要 */
+export type ServerSinceLastVisit = {
+  dropsSpawned: number
+  dropsCollectedByOthers: number
+  dropsExpired: number
+  sinceTick: number
+  currentTick: number
 }
 
 export type ServerCardSlotType = 'sequencing' | 'carry'
@@ -687,6 +700,10 @@ export const api = {
       method: 'POST',
       headers: authHeaders(token),
       body: JSON.stringify({ dropId })
+    }),
+  cardsSinceLastVisit: (token: string) =>
+    jsonFetch<ServerSinceLastVisit>('/cards/since-last-visit', {
+      headers: authHeaders(token)
     }),
   codex: (token: string) =>
     jsonFetch<ServerCodexResponse>('/codex', { headers: authHeaders(token) }),
