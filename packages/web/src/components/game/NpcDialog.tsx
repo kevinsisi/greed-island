@@ -234,7 +234,9 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
         >
           {turns.length === 0 ? (
             <div className="border-l-2 border-ground-700 pl-4 py-2 text-[14px] leading-relaxed text-ground-400 italic">
-              {t('npc.lineFallback', { name: npc.name })}
+              {npc.greetLine
+                ? (locale === 'zh' ? npc.greetLine.zh : npc.greetLine.en)
+                : t('npc.lineFallback', { name: npc.name })}
             </div>
           ) : (
             <ConversationLog turns={turns} locale={locale} t={t} />

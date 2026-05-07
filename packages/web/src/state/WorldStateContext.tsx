@@ -279,7 +279,10 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(typeof npc.targetTile === 'string' ? { targetTile: npc.targetTile } : {}),
     ...(typeof npc.subCol === 'number' ? { subCol: npc.subCol } : {}),
     ...(typeof npc.subRow === 'number' ? { subRow: npc.subRow } : {}),
-    ...(typeof npc.color === 'number' ? { color: npc.color } : {})
+    ...(typeof npc.color === 'number' ? { color: npc.color } : {}),
+    ...(npc.greetLine && typeof npc.greetLine.zh === 'string' && typeof npc.greetLine.en === 'string'
+      ? { greetLine: { zh: npc.greetLine.zh, en: npc.greetLine.en } }
+      : {})
   }
   return summary
 }

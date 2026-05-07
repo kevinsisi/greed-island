@@ -63,6 +63,8 @@ export type ServerNpc = {
   subCol?: number
   subRow?: number
   color?: number
+  // v0.14.1+：personality-shaped greet placeholder 顯示在玩家還沒輸入時
+  greetLine?: { zh: string; en: string }
 }
 
 export type ServerCardCatalogEntry = {

@@ -43,6 +43,7 @@ import {
   TICKS_PER_MINUTE
 } from '../config/world.js'
 import type { NpcProfile } from '../npcs/types.js'
+import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
@@ -105,6 +106,9 @@ export type SimNpcState = Readonly<{
   subRow: number
   /** 24-bit 整數色（0xRRGGBB），前端用做 sprite 主色 */
   color: number
+  /** 玩家剛打開對話框、還沒輸入時顯示的 placeholder line。
+   *  根據 personality 派生（純函式），同一 NPC 永遠回同一句。 */
+  greetLine: { zh: string; en: string }
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -335,7 +339,8 @@ export class SimulationRuntime {
         targetTile: s.targetTile,
         subCol: s.subCol,
         subRow: s.subRow,
-        color: deriveNpcColor(profile.id, s.faction)
+        color: deriveNpcColor(profile.id, s.faction),
+        greetLine: derivePersonalityGreetLine(profile),
       }
     })
   }

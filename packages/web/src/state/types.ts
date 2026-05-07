@@ -50,6 +50,8 @@ export interface NpcSummary {
   subRow?: number
   /** 24-bit RGB sprite 主色（v0.12+） */
   color?: number
+  /** Personality-shaped placeholder shown before player types in NpcDialog (v0.14.1+) */
+  greetLine?: { zh: string; en: string }
 }
 
 export type CardRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
