@@ -57,7 +57,13 @@ export async function generateAiReply(
       systemPrompt,
       userPrompt,
       temperature: 0.9,
-      maxOutputTokens: 600,
+      // Chinese is token-heavy and Gemini sometimes adds 「」/punctuation
+      // that pushed the old 600-token cap to truncate mid-JSON, leaving
+      // the closing brace + markdown fence off and breaking the parser.
+      maxOutputTokens: 1024,
+      // Force raw JSON output (no ```json fences). Gemini-2.5-flash
+      // honours this and emits a parseable object directly.
+      responseMimeType: 'application/json',
     })
   } catch (err) {
     if (err instanceof GeminiUnavailableError) {
@@ -242,15 +248,62 @@ export function parseReply(raw: string): AiDialogReply | null {
 
 function extractJsonCandidates(raw: string): string[] {
   const out: string[] = []
+  // Closed ```json ... ``` block (preferred when present).
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
   if (fenced && fenced[1]) out.push(fenced[1].trim())
+  // Strip leading ``` / ```json fence even if the closing fence was
+  // truncated away — happens when Gemini hits maxOutputTokens mid-JSON.
+  const stripped = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  if (stripped !== raw.trim()) out.push(stripped)
+  // Standard slice between first { and last }.
   const first = raw.indexOf('{')
   const last = raw.lastIndexOf('}')
   if (first !== -1 && last !== -1 && last > first) {
     out.push(raw.slice(first, last + 1))
   }
+  // Truncated-JSON repair: balance unmatched braces and close any
+  // open string. Only kicks in when the last { has no matching }.
+  if (first !== -1) {
+    const repaired = repairTruncatedJson(raw.slice(first))
+    if (repaired) out.push(repaired)
+  }
   out.push(raw.trim())
   return out
+}
+
+/**
+ * Best-effort repair for JSON truncated mid-output (Gemini hit
+ * maxOutputTokens). If we're inside a string, close it; then close
+ * any unmatched `{` and `[`. Returns null when the head looks
+ * unrecoverable (e.g. truncated mid-key with no quotes yet).
+ */
+function repairTruncatedJson(slice: string): string | null {
+  let inString = false
+  let escape = false
+  const stack: string[] = []
+  for (let i = 0; i < slice.length; i++) {
+    const ch = slice[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (inString) {
+      if (ch === '\\') escape = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === '{') stack.push('}')
+    else if (ch === '[') stack.push(']')
+    else if (ch === '}' || ch === ']') stack.pop()
+  }
+  let repaired = slice
+  if (inString) repaired += '"'
+  while (stack.length > 0) repaired += stack.pop()
+  // If the truncation was mid-key (e.g. `"zh`) we've appended `"`
+  // but there's no value — JSON.parse will reject it. That's fine,
+  // this candidate just won't validate and we move on.
+  return repaired
 }
 
 function clampDelta(value: number): number {
