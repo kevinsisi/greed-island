@@ -39,6 +39,8 @@ export function AreaPage() {
   const { map, npcs, events } = useWorldState()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [drawerTab, setDrawerTab] = useState<DrawerTab | null>(null)
+  const [nearbyNpcIds, setNearbyNpcIds] = useState<Set<string>>(new Set())
+  const [tooFarFlash, setTooFarFlash] = useState<string | null>(null)
 
   const tile = map.tiles.find((entry) => entry.id === tileId)
   const lore = loreFor(tileId)
@@ -84,7 +86,11 @@ export function AreaPage() {
   )
 
   const hudStrings = useMemo(
-    () => ({ interact: t('hub.interactHint'), pickup: t('cards.pickup') }),
+    () => ({
+      interact: t('hub.interactHint'),
+      pickup: t('cards.pickup'),
+      tooFar: t('npc.tooFarHint')
+    }),
     [t]
   )
 
@@ -95,6 +101,20 @@ export function AreaPage() {
     },
     [npcs]
   )
+
+  // 從 AreaScene 接收當前在玩家身邊（INTERACT_RADIUS 內）的 NPC ids
+  const handleNearbyNpcsChange = useCallback((ids: string[]) => {
+    setNearbyNpcIds(new Set(ids))
+  }, [])
+
+  // 玩家點了一個太遠的 NPC sprite — flash 1.5s 提示在 React 層也顯示
+  const handleInteractTooFar = useCallback((npcId: string) => {
+    setTooFarFlash(npcId)
+    window.setTimeout(() => {
+      // 只有當前 flash 仍是這顆才清掉，避免後一個 click 的 timer 把後一個 toast 提早關
+      setTooFarFlash((prev) => (prev === npcId ? null : prev))
+    }, 1500)
+  }, [])
 
   const cardOverlay = useAreaCards(tileId)
 
@@ -117,6 +137,8 @@ export function AreaPage() {
           hudStrings={hudStrings}
           onNpcInteract={handleNpcInteract}
           onDropPickup={cardOverlay.pickupDrop}
+          onNearbyNpcsChange={handleNearbyNpcsChange}
+          onInteractTooFar={handleInteractTooFar}
         />
 
         {/* 上方：返回鈕 + 區域名稱 */}
@@ -156,37 +178,64 @@ export function AreaPage() {
 
               {drawerTab === 'npcs' && (
                 <div className="flex flex-col gap-2">
-                  <div className="font-display text-[10px] uppercase tracking-tightest text-ground-400">
-                    {t('area.npcs')}
+                  <div className="font-display text-[10px] uppercase tracking-tightest text-ground-400 flex items-center justify-between">
+                    <span>{t('area.npcs')}</span>
+                    <span className="text-ground-600 normal-case tracking-normal">
+                      {t('npc.nearbyHint')}
+                    </span>
                   </div>
                   {occupants.length === 0 ? (
                     <div className="text-[12px] text-ground-500 italic">{t('area.npcsEmpty')}</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {occupants.map((npc) => (
-                        <button
-                          key={npc.id}
-                          type="button"
-                          onClick={() => setActiveNpc(npc)}
-                          className="text-left flex items-center gap-3 px-2 py-2 rounded-sharp border border-ground-700 hover:border-ember-600 transition-colors"
-                        >
-                          <span className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-ember-600/60 bg-ground-900 text-[14px] text-ember-300 font-display font-extrabold shrink-0">
-                            {npc.name.charAt(0)}
-                          </span>
-                          <div className="min-w-0 flex flex-col">
-                            <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500 truncate">
-                              {npc.role}
+                      {occupants.map((npc) => {
+                        const isNearby = nearbyNpcIds.has(npc.id)
+                        return (
+                          <button
+                            key={npc.id}
+                            type="button"
+                            disabled={!isNearby}
+                            onClick={() =>
+                              isNearby ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
+                            }
+                            className={[
+                              'text-left flex items-center gap-3 px-2 py-2 rounded-sharp border transition-colors',
+                              isNearby
+                                ? 'border-ground-700 hover:border-ember-600 cursor-pointer'
+                                : 'border-ground-800 opacity-50 cursor-not-allowed'
+                            ].join(' ')}
+                            title={isNearby ? '' : t('npc.tooFarHint')}
+                          >
+                            <span
+                              className={[
+                                'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
+                                isNearby
+                                  ? 'border-ember-600/60 text-ember-300'
+                                  : 'border-ground-700 text-ground-500'
+                              ].join(' ')}
+                            >
+                              {npc.name.charAt(0)}
+                            </span>
+                            <div className="min-w-0 flex flex-col">
+                              <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500 truncate">
+                                {npc.role}
+                              </div>
+                              <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
+                                {npc.name}
+                              </div>
+                              <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
+                                {t('npc.relationship')}{' '}
+                                <span className="text-ground-200">{npc.relationshipScore}</span>
+                                {!isNearby && (
+                                  <span className="ml-2 text-ground-600 normal-case tracking-normal">
+                                    · {t('npc.tooFarBadge')}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
-                              {npc.name}
-                            </div>
-                            <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
-                              {t('npc.relationship')}{' '}
-                              <span className="text-ground-200">{npc.relationshipScore}</span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -274,6 +323,12 @@ export function AreaPage() {
           </div>
         </div>
       </div>
+
+      {tooFarFlash && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sharp bg-rust-900/95 border border-rust-600 text-rust-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-none">
+          {t('npc.tooFarHint')}
+        </div>
+      )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
     </div>

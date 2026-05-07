@@ -94,6 +94,9 @@ export const en: Translations = {
   'npc.activity.sleep': 'resting',
   'npc.activity.trade': 'trading',
   'npc.activity.patrol': 'patrolling',
+  'npc.tooFarHint': 'Get closer to talk',
+  'npc.tooFarBadge': 'too far',
+  'npc.nearbyHint': 'only nearby NPCs can be engaged',
 
   'settings.eyebrow': 'Admin · system',
   'settings.title': 'Admin settings',

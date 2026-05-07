@@ -94,6 +94,9 @@ export const zh: Translations = {
   'npc.activity.sleep': '休息',
   'npc.activity.trade': '交易',
   'npc.activity.patrol': '巡邏',
+  'npc.tooFarHint': '走近一點才能交談',
+  'npc.tooFarBadge': '太遠',
+  'npc.nearbyHint': '只有你身邊的人能交談',
 
   'settings.eyebrow': '管理 · 系統設定',
   'settings.title': '管理設定',
