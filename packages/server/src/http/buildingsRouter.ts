@@ -183,24 +183,10 @@ export function createBuildingsRouter(input: {
     const ambient = input.runtime.getAmbientNarrator()
     let ambientResult = null
     if (ambient) {
-      const presentNpcNames = input.runtime.getOutdoorNpcNamesAt(tileId)
-      const recentNarrations = input.runtime
-        .getRecentEvents(20)
-        .filter((e) => e.narration)
-        .slice(0, 5)
-        .map((e) => e.narration!)
-      ambientResult = ambient.getOrSchedule(
-        {
-          tileId,
-          weather: input.runtime.getCurrentWeather(),
-          season: input.runtime.getCurrentSeason(),
-          presentNpcNames,
-          recentNarrations,
-          areaState: state,
-          worldEvents: input.runtime.getActiveWorldEvents()
-        },
-        input.runtime.getCurrentTick()
-      )
+      const ctx = input.runtime.buildAmbientContext(tileId)
+      if (ctx) {
+        ambientResult = ambient.getOrSchedule(ctx, input.runtime.getCurrentTick())
+      }
     }
     res.json({ areaState: state, ambient: ambientResult })
   })

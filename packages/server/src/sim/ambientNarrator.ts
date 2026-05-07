@@ -14,6 +14,12 @@ import type { AreaState } from './areaStateEngine.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
 export const AMBIENT_REFRESH_TICKS = 30
+/**
+ * 主動 refresh 觸發距離：getOrSchedule 在過去 RECENT_VISITOR_WINDOW_TICKS
+ * tick 內被呼叫的 tile，視為「玩家還在看」，會被 tickRefresh 主動推下一輪。
+ * 12 tick ≈ 1 分鐘 (5s tick)，比前端 polling 間隔 (12s) 寬一些避免 race。
+ */
+const RECENT_VISITOR_WINDOW_TICKS = 12
 
 export type AmbientContext = Readonly<{
   tileId: string
@@ -50,10 +56,13 @@ const REGEX_FENCE = /```(?:[a-z]+)?\s*([\s\S]*?)```/i
 export class AmbientNarrator {
   private readonly cache: Map<string, AmbientResult> = new Map()
   private readonly inflight: Map<string, Promise<AmbientResult>> = new Map()
+  /** v0.15.1：每個 tile 上次被 getOrSchedule 呼叫的 tick；用來判斷「還有玩家在看」。 */
+  private readonly lastRequestedTickByTile: Map<string, number> = new Map()
 
   constructor(private readonly settings: SettingsStore) {}
 
   getOrSchedule(ctx: AmbientContext, currentTick: number): AmbientResult {
+    this.lastRequestedTickByTile.set(ctx.tileId, currentTick)
     const cached = this.cache.get(ctx.tileId)
     if (cached && currentTick - cached.generatedAtTick < AMBIENT_REFRESH_TICKS) {
       return cached
@@ -64,6 +73,29 @@ export class AmbientNarrator {
       })
     }
     return cached ?? this.fallbackOf(ctx, currentTick)
+  }
+
+  /**
+   * v0.15.1：runtime tick listener 主動觸發。對「最近被 getOrSchedule 過」
+   * 的 tile（過去 RECENT_VISITOR_WINDOW_TICKS 內），如果 cached 已過期就主動
+   * 跑下一輪 refresh。這樣下次 player polling 拉到的就是新的 AI 文字，
+   * 而不是「30 tick 後才看到下一段、實際變化要 60 tick 才會出現」。
+   */
+  tickRefresh(
+    currentTick: number,
+    getContext: (tileId: string) => AmbientContext | null
+  ): void {
+    if (this.settings.listActiveKeys().length === 0) return
+    for (const [tileId, lastRequestedTick] of this.lastRequestedTickByTile) {
+      if (currentTick - lastRequestedTick > RECENT_VISITOR_WINDOW_TICKS) continue
+      const cached = this.cache.get(tileId)
+      // refresh 條件：(a) 沒 cache，或 (b) cache 已超過 30 tick
+      if (cached && currentTick - cached.generatedAtTick < AMBIENT_REFRESH_TICKS) continue
+      if (this.inflight.has(tileId)) continue
+      const ctx = getContext(tileId)
+      if (!ctx) continue
+      void this.refresh(ctx, currentTick).catch(() => {})
+    }
   }
 
   async refresh(ctx: AmbientContext, currentTick: number): Promise<AmbientResult> {

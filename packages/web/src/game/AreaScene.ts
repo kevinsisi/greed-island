@@ -22,6 +22,25 @@ const NPC_MOVE_TWEEN_MS = 4500
 /** AreaScene 對外保留的型別 alias；和 NpcActivity 完全等價，給 React 層使用。 */
 export type AreaNpcActivity = NpcActivity
 
+/**
+ * 後端 weather string enum（runtime.ts WEATHERS）；前端純粹用來決定 VFX 風格。
+ * 任何外傳的字串都先 normalise 成下面這一份；不認得的值就視同 'clear'。
+ */
+export type AreaWeather = 'clear' | 'overcast' | 'mist' | 'storm' | 'breeze'
+
+const WEATHER_BY_ZH: Readonly<Record<string, AreaWeather>> = {
+  晴: 'clear',
+  陰: 'overcast',
+  霧雨: 'mist',
+  驟雨: 'storm',
+  微風: 'breeze'
+}
+
+export function normaliseWeather(raw: string | null | undefined): AreaWeather {
+  if (!raw) return 'clear'
+  return WEATHER_BY_ZH[raw] ?? 'clear'
+}
+
 export interface AreaMapNpc {
   id: string
   /** 顯示在 sprite 上方的完整名字 */
@@ -93,6 +112,8 @@ export interface AreaSceneInit {
   buildings?: AreaMapBuilding[]
   /** 從 localStorage 讀回的位置；若無則 null。座標必須在 canvas 範圍內。 */
   startPosition: { x: number; y: number } | null
+  /** v0.15.1：當前世界天氣（後端 fact）；用於 Phaser VFX 切換 */
+  weather?: AreaWeather
 }
 
 const DROP_SPRITE_SIZE = 22
@@ -135,6 +156,12 @@ export class AreaScene extends Phaser.Scene {
   private startPosition: { x: number; y: number } | null = null
   private nearbyNpcIdsCache = ''
   private tooFarHintTimer: Phaser.Time.TimerEvent | null = null
+  private weather: AreaWeather = 'clear'
+  /** v0.15.1：天氣 VFX layer，applyWeather 切換時整批 destroy 重畫。 */
+  private weatherLayer: Phaser.GameObjects.Container | null = null
+  /** v0.15.1：環境動畫的 tween 池（裝飾物擺動 / 燈火閃爍 / 水波漣漪）。 */
+  private envTweens: Phaser.Tweens.Tween[] = []
+  private envSprites: Phaser.GameObjects.Text[] = []
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -168,6 +195,7 @@ export class AreaScene extends Phaser.Scene {
     this.buildings = data.buildings ?? []
     this.hudStrings = data.hudStrings
     this.startPosition = data.startPosition
+    this.weather = data.weather ?? 'clear'
   }
 
   create(): void {
@@ -179,12 +207,21 @@ export class AreaScene extends Phaser.Scene {
     this.spawnDrops()
     this.setupInput()
     this.setupHud()
+    this.applyWeather(this.weather)
 
     this.physics.world.setBounds(0, 0, AREA_CANVAS_WIDTH, AREA_CANVAS_HEIGHT)
     this.player.setCollideWorldBounds(true)
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.flushPositionSave())
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.flushPositionSave())
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.flushPositionSave()
+      this.disposeWeather()
+      this.disposeEnvAnimations()
+    })
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      this.flushPositionSave()
+      this.disposeWeather()
+      this.disposeEnvAnimations()
+    })
   }
 
   applyExternalUpdate(payload: {
@@ -192,6 +229,7 @@ export class AreaScene extends Phaser.Scene {
     drops?: AreaMapDrop[]
     locale?: 'zh' | 'en'
     hudStrings?: AreaSceneInit['hudStrings']
+    weather?: AreaWeather
   }): void {
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
     if (payload.npcs) {
@@ -201,6 +239,10 @@ export class AreaScene extends Phaser.Scene {
     if (payload.drops) {
       this.drops = payload.drops
       this.refreshDropSprites()
+    }
+    if (payload.weather && payload.weather !== this.weather) {
+      this.weather = payload.weather
+      this.applyWeather(payload.weather)
     }
   }
 
@@ -263,22 +305,360 @@ export class AreaScene extends Phaser.Scene {
     const buildingCells = new Set(this.buildings.map((b) => `${b.col},${b.row}`))
     for (const deco of decoSet.props) {
       if (buildingCells.has(`${deco.col},${deco.row}`)) continue
-      const text = this.add.text(
-        deco.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
-        deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
-        deco.glyph,
-        {
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
-          fontSize: `${deco.size}px`,
-          color: '#ffffff',
-          stroke: '#0a0a0a',
-          strokeThickness: 2
-        }
-      )
+      const cx = deco.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+      const cy = deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+      const text = this.add.text(cx, cy, deco.glyph, {
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+        fontSize: `${deco.size}px`,
+        color: '#ffffff',
+        stroke: '#0a0a0a',
+        strokeThickness: 2
+      })
       text.setOrigin(0.5, 0.5)
       text.setDepth(40)
+      this.attachEnvAnimation(text, deco.glyph, cx, cy, deco.col, deco.row)
     }
+  }
+
+  /**
+   * v0.15.1：依 emoji 類型給裝飾物套不同的 idle tween，讓區域不再像靜態棋盤。
+   * - 樹 / 草：左右搖擺（風）
+   * - 燈籠 / 神社：alpha 閃爍（火光）
+   * - 水 / 船 / 海洋物件：上下漂浮（浪）
+   * - 結晶 / 星：scale + alpha 同步脈動（能量）
+   * - 廢墟 / 岩石：偶爾微抖（地動）
+   * 全部 tween 都是 deterministic seed by (col,row)，避免相鄰物件動作完全同步。
+   */
+  private attachEnvAnimation(
+    sprite: Phaser.GameObjects.Text,
+    glyph: string,
+    cx: number,
+    cy: number,
+    col: number,
+    row: number
+  ): void {
+    this.envSprites.push(sprite)
+    // hash (col,row) 算 deterministic phase delay，0..2000ms
+    const seed = (col * 31 + row * 17) & 0xff
+    const delay = (seed * 8) % 2000
+
+    // 樹 & 植物 → 左右搖擺
+    if (/[🌲🌳🌵🪵🌾🌿]/u.test(glyph)) {
+      const tween = this.tweens.add({
+        targets: sprite,
+        angle: { from: -4, to: 4 },
+        duration: 1800 + (seed % 600),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        delay
+      })
+      this.envTweens.push(tween)
+      return
+    }
+    // 燈籠 / 神社 / 招牌 / 火光 → alpha 閃爍
+    if (/[🪔⛩🏯🪧]/u.test(glyph)) {
+      const tween = this.tweens.add({
+        targets: sprite,
+        alpha: { from: 0.7, to: 1 },
+        duration: 700 + (seed % 500),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        delay
+      })
+      this.envTweens.push(tween)
+      return
+    }
+    // 海 / 船 / 港 → 上下漂浮（水波感）
+    if (/[⚓⛵🛟🪝🐟🐚]/u.test(glyph)) {
+      const tween = this.tweens.add({
+        targets: sprite,
+        y: { from: cy - 2, to: cy + 2 },
+        duration: 1500 + (seed % 700),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        delay
+      })
+      this.envTweens.push(tween)
+      return
+    }
+    // 結晶 / 星 / 能量 → scale + alpha 脈動
+    if (/[✦✧◈]/u.test(glyph)) {
+      const tween = this.tweens.add({
+        targets: sprite,
+        scale: { from: 0.85, to: 1.15 },
+        alpha: { from: 0.6, to: 1 },
+        duration: 1100 + (seed % 600),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        delay
+      })
+      this.envTweens.push(tween)
+      return
+    }
+    // 廢墟 / 岩石 → 久久才微抖一次（隨機）
+    if (/[🪨🏚⛰🏔]/u.test(glyph)) {
+      const tween = this.tweens.add({
+        targets: sprite,
+        x: { from: cx - 0.8, to: cx + 0.8 },
+        duration: 4000 + (seed % 1500),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        delay: delay + 1000
+      })
+      this.envTweens.push(tween)
+      return
+    }
+    // 普通建築 / 商店 / 一般房子 → 不動（保留靜態 silhouette）
+  }
+
+  private disposeEnvAnimations(): void {
+    for (const tween of this.envTweens) {
+      try {
+        tween.stop()
+      } catch {
+        // 場景銷毀時 tweens manager 可能已 nuked
+      }
+    }
+    this.envTweens = []
+    this.envSprites = []
+  }
+
+  /**
+   * v0.15.1：依後端 weather string 套上 Phaser VFX 圖層。
+   * - clear → 微暖陽光暈（覆蓋層 + glow）
+   * - overcast → 灰色輕罩
+   * - mist → 薄白雲狀霧 + 細雨點
+   * - storm → 較深藍灰罩 + 密集雨線
+   * - breeze → 飄落的葉片
+   * 所有 VFX 都加在 weatherLayer container（depth=200），切換時整批 destroy 重畫。
+   */
+  applyWeather(weather: AreaWeather): void {
+    this.weather = weather
+    this.disposeWeather()
+    const layer = this.add.container(0, 0)
+    layer.setDepth(200)
+    layer.setName('weatherLayer')
+    this.weatherLayer = layer
+
+    if (weather === 'clear') {
+      // 暖色覆蓋層 + 緩緩呼吸的太陽暈
+      const overlay = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0xfff5b8,
+        0.06
+      )
+      const sun = this.add.circle(AREA_CANVAS_WIDTH * 0.78, 40, 56, 0xfff2a8, 0.18)
+      sun.setStrokeStyle(2, 0xfff5b8, 0.25)
+      this.tweens.add({
+        targets: sun,
+        scale: { from: 0.95, to: 1.1 },
+        alpha: { from: 0.18, to: 0.32 },
+        duration: 3500,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1
+      })
+      layer.add([overlay, sun])
+      return
+    }
+
+    if (weather === 'overcast') {
+      const overlay = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0x4a525e,
+        0.18
+      )
+      // 緩慢飄移的雲層 — 三條淺灰矩形，左右回拉
+      for (let i = 0; i < 3; i += 1) {
+        const cloud = this.add.rectangle(
+          AREA_CANVAS_WIDTH * (0.2 + i * 0.3),
+          40 + i * 30,
+          AREA_CANVAS_WIDTH * 0.55,
+          24,
+          0x9aa3ad,
+          0.12
+        )
+        this.tweens.add({
+          targets: cloud,
+          x: { from: cloud.x - 24, to: cloud.x + 24 },
+          duration: 6000 + i * 1500,
+          ease: 'Sine.easeInOut',
+          yoyo: true,
+          repeat: -1
+        })
+        layer.add(cloud)
+      }
+      layer.add(overlay)
+      return
+    }
+
+    if (weather === 'mist') {
+      const overlay = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0xc8d2dc,
+        0.18
+      )
+      layer.add(overlay)
+      // 霧斑 5 個
+      for (let i = 0; i < 5; i += 1) {
+        const fog = this.add.circle(
+          AREA_CANVAS_WIDTH * (0.15 + i * 0.18),
+          AREA_CANVAS_HEIGHT * (0.2 + (i % 2) * 0.5),
+          60 + (i % 3) * 18,
+          0xffffff,
+          0.08
+        )
+        this.tweens.add({
+          targets: fog,
+          x: { from: fog.x - 18, to: fog.x + 18 },
+          alpha: { from: 0.05, to: 0.14 },
+          duration: 4500 + i * 700,
+          ease: 'Sine.easeInOut',
+          yoyo: true,
+          repeat: -1
+        })
+        layer.add(fog)
+      }
+      // 細雨：30 條短斜線，循環下落
+      for (let i = 0; i < 30; i += 1) {
+        const x = (i * 47) % AREA_CANVAS_WIDTH
+        const y = (i * 31) % AREA_CANVAS_HEIGHT
+        const drop = this.add.rectangle(x, y, 1, 5, 0xb6e3ff, 0.55)
+        drop.setOrigin(0.5, 0.5)
+        this.tweens.add({
+          targets: drop,
+          y: { from: y - AREA_CANVAS_HEIGHT, to: y + AREA_CANVAS_HEIGHT },
+          x: { from: x, to: x + 18 },
+          duration: 1200 + (i % 5) * 250,
+          ease: 'Linear',
+          repeat: -1,
+          delay: (i * 60) % 1500
+        })
+        layer.add(drop)
+      }
+      return
+    }
+
+    if (weather === 'storm') {
+      const overlay = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0x18243a,
+        0.32
+      )
+      layer.add(overlay)
+      // 大雨：60 條較長雨線
+      for (let i = 0; i < 60; i += 1) {
+        const x = (i * 23) % AREA_CANVAS_WIDTH
+        const y = (i * 17) % AREA_CANVAS_HEIGHT
+        const drop = this.add.rectangle(x, y, 1.5, 9, 0xa3c9ff, 0.7)
+        drop.setOrigin(0.5, 0.5)
+        this.tweens.add({
+          targets: drop,
+          y: { from: y - AREA_CANVAS_HEIGHT, to: y + AREA_CANVAS_HEIGHT },
+          x: { from: x, to: x + 32 },
+          duration: 700 + (i % 5) * 130,
+          ease: 'Linear',
+          repeat: -1,
+          delay: (i * 28) % 900
+        })
+        layer.add(drop)
+      }
+      // 偶發閃電：每 6-12 秒一次
+      const flash = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0xffffff,
+        0
+      )
+      layer.add(flash)
+      const triggerFlash = (): void => {
+        if (!this.weatherLayer) return
+        this.tweens.add({
+          targets: flash,
+          alpha: { from: 0, to: 0.55 },
+          duration: 80,
+          yoyo: true,
+          onComplete: () => {
+            if (!this.weatherLayer) return
+            this.time.delayedCall(6000 + Math.floor(Math.random() * 7000), triggerFlash)
+          }
+        })
+      }
+      this.time.delayedCall(3500 + Math.floor(Math.random() * 4000), triggerFlash)
+      return
+    }
+
+    if (weather === 'breeze') {
+      const overlay = this.add.rectangle(
+        AREA_CANVAS_WIDTH / 2,
+        AREA_CANVAS_HEIGHT / 2,
+        AREA_CANVAS_WIDTH,
+        AREA_CANVAS_HEIGHT,
+        0xd4e8ff,
+        0.06
+      )
+      layer.add(overlay)
+      // 飄葉 / 花瓣：14 顆，從左飄到右
+      for (let i = 0; i < 14; i += 1) {
+        const startY = (i * 31) % AREA_CANVAS_HEIGHT
+        const leaf = this.add.text(
+          -10,
+          startY,
+          i % 2 === 0 ? '🍃' : '🌸',
+          {
+            fontFamily:
+              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+            fontSize: '14px',
+            color: '#ffffff'
+          }
+        )
+        leaf.setOrigin(0.5, 0.5)
+        leaf.setAlpha(0.85)
+        this.tweens.add({
+          targets: leaf,
+          x: { from: -20, to: AREA_CANVAS_WIDTH + 20 },
+          y: { from: startY, to: startY + 30 + (i % 3) * 12 },
+          angle: { from: 0, to: 360 },
+          duration: 5000 + (i % 5) * 600,
+          ease: 'Linear',
+          repeat: -1,
+          delay: i * 320
+        })
+        layer.add(leaf)
+      }
+      return
+    }
+  }
+
+  private disposeWeather(): void {
+    if (!this.weatherLayer) return
+    // 關閉所有 tween 後 destroy。每個子物件可能還有 tween 連到它
+    const layer = this.weatherLayer
+    for (const child of layer.getAll()) {
+      this.tweens.killTweensOf(child)
+    }
+    layer.destroy(true)
+    this.weatherLayer = null
   }
 
   /** 把伺服器送來的 buildings 畫成 interactive sprite。 */

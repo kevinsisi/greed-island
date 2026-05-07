@@ -7,7 +7,8 @@ import {
   type AreaMapBuilding,
   type AreaMapDrop,
   type AreaMapNpc,
-  type AreaSceneInit
+  type AreaSceneInit,
+  type AreaWeather
 } from './AreaScene'
 import type { DistrictId } from './districts'
 
@@ -49,6 +50,8 @@ export interface AreaPhaserGameProps {
   buildings?: AreaMapBuilding[]
   locale: 'zh' | 'en'
   hudStrings: { interact: string; pickup: string; tooFar: string; enterBuilding?: string }
+  /** v0.15.1：當前世界天氣（已 normalise）；AreaScene 用來切換 VFX */
+  weather?: AreaWeather
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
   onNearbyNpcsChange?: (ids: string[]) => void
@@ -68,6 +71,7 @@ export function AreaPhaserGame({
   buildings,
   locale,
   hudStrings,
+  weather,
   onNpcInteract,
   onDropPickup,
   onNearbyNpcsChange,
@@ -136,7 +140,8 @@ export function AreaPhaserGame({
       ...(buildings ? { buildings } : {}),
       locale,
       hudStrings,
-      startPosition: loadPosition(tileId)
+      startPosition: loadPosition(tileId),
+      ...(weather ? { weather } : {})
     }
     game.scene.start(AreaScene.KEY, init)
 
@@ -148,14 +153,20 @@ export function AreaPhaserGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileId])
 
-  // npcs / drops / locale / hud 字串變動 → 通知場景刷新
+  // npcs / drops / locale / hud / weather 變動 → 通知場景刷新
   useEffect(() => {
     const game = gameRef.current
     if (!game) return
     const scene = game.scene.getScene(AreaScene.KEY) as AreaScene | null
     if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({ npcs, drops, locale, hudStrings })
-  }, [npcs, drops, locale, hudStrings])
+    scene.applyExternalUpdate({
+      npcs,
+      drops,
+      locale,
+      hudStrings,
+      ...(weather ? { weather } : {})
+    })
+  }, [npcs, drops, locale, hudStrings, weather])
 
   return (
     <div
