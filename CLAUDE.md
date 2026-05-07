@@ -10,9 +10,17 @@ This codebase is **Greed Island**, an AI-driven living-world game. Three archite
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — kernel-level Command/Event/Rule Engine separation, deterministic replay, AI-as-renderer principle. Every state-changing PR must conform.
 - [`COMBAT_ARCHITECTURE.md`](./COMBAT_ARCHITECTURE.md) — real-time combat sub-runtime準則。**Phase B (v0.15.0) 已 ship**（單擊判決 + Command/Event 管線）；Phase C/D 仍未實作。所有戰鬥相關 PR (commands / events / 紋卡優先級) 必須遵守此文。
-- [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。v0.15.0 已 ship（紋卡系統大重設計 + 戰鬥 Phase B + 動態 greet）；v0.16-v0.17 戰鬥系統 Phase C/D 藍圖；OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
+- [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。v0.15.3 已 ship（場景動態化 + AI 反幻覺 + 編年史多樣化 + 角色職責綁定 home tile）；v0.15.0 紋卡系統大重設計 + 戰鬥 Phase B；v0.16-v0.17 戰鬥系統 Phase C/D 藍圖；OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
 
 **所有狀態改變必須走 Command → Rule Engine → Event → 投影**。違反這條的 PR（不論是世界模擬、戰鬥、玩家動作）必須被拒絕，並在 PR 描述中註明違反 ARCHITECTURE.md 的哪一條。AI 在系統裡只能做 read-only 旁白與意圖分類；AI 不可下 Command、不可改 hp、不可影響 priority / damage 計算。
+
+## AI Narration 反幻覺鐵則（v0.15.3+）
+
+AI 旁白（ambient + worldEvent + dialog）只能引用 user prompt 中明確列出的名字 — 不可以虛構任何具名 NPC、建築、結構名。Prompt 必須帶：(a) 此區可命名的 NPC 清單（缺值時明示「無 NPC 在場 → 不可提及任何具名人物」）、(b) 此區可命名建築清單（缺值時明示「不要使用任何具體建築名」）。設計新 AI prompt 時 **必須** 加這個約束區塊；違反者 review 時擋下。
+
+## NPC 跨區規則（v0.15.3+）
+
+職責綁定 NPC（`isRoleLockedToHomeTile` 為 true）整天不離開 `defaultLocation`，即使 profile JSON 寫了跨區 schedule slot 也會被壓回家鄉。lock 條件：archetype ∈ {mystic, shopkeeper, craftsman, guard, civic, cleric}，或 role 含「祭司 / 僧 / 守衛 / 店長 / 老闆 / 鑄 / 匠 / 修 / 醫 / 工 / 員工」/ `abbot|cleric|priest|guard|shopkeeper|smith`。Wanderer archetype（entertainer / outsider / hunter / 流浪 / 報童）才會跨區。
 
 ## Global Working Rules
 

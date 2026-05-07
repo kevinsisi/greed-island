@@ -229,6 +229,9 @@ export class SimulationRuntime {
     const state = this.areaEngine.getState(tileId)
     if (!state) return null
     const presentNpcNames = this.getOutdoorNpcNamesAt(tileId)
+    const presentBuildingNames = this.buildingRuntime
+      .snapshotForTile(tileId)
+      .map((b) => b.def.nameZh)
     const recentNarrations = this.getRecentEvents(20)
       .filter((e) => e.narration)
       .slice(0, 5)
@@ -238,6 +241,7 @@ export class SimulationRuntime {
       weather: this.weather,
       season: this.season,
       presentNpcNames,
+      presentBuildingNames,
       recentNarrations,
       areaState: state,
       worldEvents: this.eventEngine.getActive()

@@ -26,6 +26,9 @@ export type AmbientContext = Readonly<{
   weather: string
   season: string
   presentNpcNames: readonly string[]
+  /** v0.15.3：此區可被命名的建築物中文名清單（從 BuildingRuntime 拉）。
+   *  prompt 嚴格限制 AI 只能引用這些名字，不可虛構建築 / 神社 / 商店。 */
+  presentBuildingNames: readonly string[]
   recentNarrations: readonly string[]
   areaState: AreaState | null
   worldEvents: readonly ActiveWorldEvent[]
@@ -123,7 +126,8 @@ export class AmbientNarrator {
           '你只負責把一段世界事件的模板敘述改寫成更有故事感、更口語、不重複模板字的繁體中文。',
           '規則：',
           '- 1~2 句，總長度不超過 80 字。',
-          '- 不要新增模板沒提到的事實（不要捏造名字 / 時間 / 派系勝負）。',
+          '- ⚠️ 嚴禁虛構：不要新增模板沒提到的事實。**不可以**捏造任何具名人物（包括「祭司」「商人」「守衛」這類聽似合理的角色名），也不可以捏造時間 / 派系勝負 / 建築物 / 具體結構名。',
+          '- 模板沒提到的人 → 只能用無名稱群眾詞（行人 / 攤主 / 巡邏的人）。',
           '- 不要使用引號包整句、不要 emoji、不要 markdown。',
           '- 直接輸出敘事文字，不要前綴 / 標籤。'
         ].join('\n'),
@@ -239,11 +243,17 @@ function buildSystemPrompt(): string {
     '世界觀：潮鳴市是一座被脈網覆蓋的港都，紋卡承載術式與記憶，潮汐節期間會開啟稀有窗口。',
     '玩家剛打開某個區域的頁面 — 你要為他寫「此地此景」的一段氛圍描述。',
     '',
-    '輸出規則（必須遵守）：',
+    '⚠️ 嚴禁虛構（最重要）：',
+    '- 你只能使用 user prompt 中明確給出的名字。**不可以**創造任何「祭司 / 守衛 / 商人 / 老闆」之類的具名 NPC（即使聽起來合理）。',
+    '- 如果 user prompt 列出「在場 NPC」清單 → 你只能引用清單上的名字；其它人物只能用無名稱的群眾詞（例如「行人」「攤主」「巡邏的人」）。',
+    '- 如果 user prompt 寫「目前沒有 NPC 在場」→ 整段敘事**完全不可以**提到任何具名人物，也不要說「祭司守在門前」這種隱含具體角色的句子。',
+    '- 你只能引用 user prompt 中明確列出的建築物名字；不可以憑空想像「神社拱門」「第一層」「鐘樓」之類沒被列出的具體場所結構。',
+    '- 不要捏造劇情事件（不能說「昨夜有兇殺案」「祭司守在第一層的拱門前」除非提示明確）。',
+    '',
+    '輸出規則：',
     '- 1~2 句，總長度約 50~120 字繁體中文。',
-    '- 寫場景的氣味、聲音、光線、人群，不要列數值（不要寫「治安 35」這種詞）。',
+    '- 寫場景的氣味、聲音、光線、群眾感受，不要列數值（不要寫「治安 35」這種詞）。',
     '- 可以暗示派系氣氛（如潮獵會肅殺 / 公會嚴整 / 平民熱鬧）但不直接點名 control 數值。',
-    '- 不要捏造模板沒有提供的具體事件（不能說「昨夜有兇殺案」除非提示明確）。',
     '- 不要 emoji、不要 markdown、不要引號包整句、不要前綴。',
     '- 不要對玩家說話、不要呼喚「你」「您」；以第三人稱描述環境。'
   ].join('\n')
@@ -271,7 +281,23 @@ function buildUserPrompt(ctx: AmbientContext): string {
   }
 
   if (ctx.presentNpcNames.length > 0) {
-    lines.push(`此刻在場 NPC：${ctx.presentNpcNames.slice(0, 6).join('、')}`)
+    lines.push(
+      `此刻在場 NPC（你只能引用這些名字，其它人物用「行人 / 攤主 / 巡邏的人」這類無名稱群眾詞）：${ctx.presentNpcNames.slice(0, 8).join('、')}`
+    )
+  } else {
+    lines.push(
+      '此刻沒有任何具名 NPC 在場。整段敘事**不可以**提到任何人名，也不要說「祭司守在門前」「老闆探出頭」這種隱含具體角色的句子；要寫「人」就只能用無名稱群眾詞（行人 / 路過的旅客 / 遠處的攤車聲）。'
+    )
+  }
+
+  if (ctx.presentBuildingNames.length > 0) {
+    lines.push(
+      `此區可引用的建築物名字（不可以提其它建築，也不可以虛構「拱門」「第一層」「鐘樓」這類具體結構名）：${ctx.presentBuildingNames.slice(0, 8).join('、')}`
+    )
+  } else {
+    lines.push(
+      '此區沒有可命名的建築物 — 不要使用任何具體建築名（包括「神社」「會所」「祠堂」等具體名詞），只能用區域類型詞（巷子 / 街口 / 路邊 / 海濱）。'
+    )
   }
 
   if (ctx.worldEvents.length > 0) {
