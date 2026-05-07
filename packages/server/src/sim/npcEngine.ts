@@ -453,6 +453,11 @@ function pairRoll(tick: number, a: string, b: string): number {
   return (h % 1000) / 1000
 }
 
+/**
+ * 互動敘事：根據兩位 NPC 的 archetype + role 寫具體場景，而不是模板兩
+ * 行字。我們不真的呼 AI（會 burn 太多 quota），而是用 deterministic
+ * 句型庫從一組挑句子，並依 archetype / faction 決定語氣。
+ */
 function composeInteractionNarration(
   a: NpcProfile,
   b: NpcProfile,
@@ -460,10 +465,56 @@ function composeInteractionNarration(
   tile: string
 ): string {
   const tileName = TILE_NAME_BY_ID[tile] ?? tile
+  const archA = String(a.personality.archetype ?? '')
+  const archB = String(b.personality.archetype ?? '')
+  const factionA = String(a.personality.factionLean ?? '')
+  const factionB = String(b.personality.factionLean ?? '')
+  const sameFaction = factionA && factionA === factionB
+
+  // deterministic seed per pair
+  let seed = 5381
+  for (const ch of `${a.id}|${b.id}|${tile}|${mode}`) seed = ((seed * 33) ^ ch.charCodeAt(0)) >>> 0
+  const pick = <T>(arr: readonly T[]): T => arr[seed % arr.length]!
+
   if (mode === 'chat') {
-    return `${a.name.zh}與${b.name.zh}在${tileName}低聲交談了幾句，似乎在交換消息。`
+    if (sameFaction) {
+      return pick([
+        `${a.name.zh}和${b.name.zh}在${tileName}互換最近聽到的風聲，腦袋湊得很近。`,
+        `${a.name.zh}遞給${b.name.zh}一張抄寫的字條，兩人在${tileName}的角落低聲對齊細節。`,
+        `${a.name.zh}與${b.name.zh}在${tileName}並肩站著，從口風到肢體都看得出是熟人。`
+      ])
+    }
+    if (archA === 'shopkeeper' || archB === 'shopkeeper') {
+      return `${a.name.zh}在${tileName}向${b.name.zh}打聽某張紋卡的最新價碼，雙方互相試水溫。`
+    }
+    if (archA === 'mystic' || archB === 'mystic') {
+      return `${a.name.zh}在${tileName}聽${b.name.zh}解釋一條脈網訊號，眼神凝重。`
+    }
+    if (archA === 'craftsman' || archB === 'craftsman') {
+      return `${a.name.zh}在${tileName}向${b.name.zh}炫耀自己昨日做出來的物件，對方半笑半點頭。`
+    }
+    return pick([
+      `${a.name.zh}與${b.name.zh}在${tileName}低聲交談了幾句，似乎在交換消息。`,
+      `${a.name.zh}和${b.name.zh}在${tileName}的攤車旁站了一會，話題從天氣岔到最近的紋卡傳聞。`,
+      `${a.name.zh}遇上${b.name.zh}，兩人在${tileName}寒暄三句後又各自轉身離開。`
+    ])
   }
-  return `${a.name.zh}與${b.name.zh}在${tileName}起了爭執，氣氛緊繃。`
+
+  // argue
+  if (factionA && factionB && factionA !== factionB) {
+    return pick([
+      `${a.name.zh}與${b.name.zh}在${tileName}就派系規矩起了口角，圍觀的人都退了半步。`,
+      `${a.name.zh}指著${b.name.zh}的鼻尖在${tileName}爭吵，兩個派系的氣味在街口僵持。`
+    ])
+  }
+  if (archA === 'shopkeeper' && archB === 'shopkeeper') {
+    return `${a.name.zh}和${b.name.zh}在${tileName}為了一筆訂金的歸屬撕破臉，攤位之間突然冷清。`
+  }
+  return pick([
+    `${a.name.zh}與${b.name.zh}在${tileName}起了爭執，氣氛緊繃。`,
+    `${a.name.zh}的話被${b.name.zh}打斷，兩人在${tileName}的牆角僵成一塊。`,
+    `${a.name.zh}冷笑了一聲，${b.name.zh}在${tileName}沒有讓步。`
+  ])
 }
 
 function isActivity(value: unknown): value is NpcActivity {

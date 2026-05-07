@@ -4,6 +4,7 @@ import {
   AREA_CANVAS_HEIGHT,
   AREA_CANVAS_WIDTH,
   AreaScene,
+  type AreaMapBuilding,
   type AreaMapDrop,
   type AreaMapNpc,
   type AreaSceneInit
@@ -45,12 +46,14 @@ export interface AreaPhaserGameProps {
   tileId: DistrictId
   npcs: AreaMapNpc[]
   drops: AreaMapDrop[]
+  buildings?: AreaMapBuilding[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string; pickup: string; tooFar: string }
+  hudStrings: { interact: string; pickup: string; tooFar: string; enterBuilding?: string }
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
   onNearbyNpcsChange?: (ids: string[]) => void
   onInteractTooFar?: (npcId: string) => void
+  onBuildingEnter?: (buildingId: string) => void
 }
 
 /**
@@ -62,12 +65,14 @@ export function AreaPhaserGame({
   tileId,
   npcs,
   drops,
+  buildings,
   locale,
   hudStrings,
   onNpcInteract,
   onDropPickup,
   onNearbyNpcsChange,
-  onInteractTooFar
+  onInteractTooFar,
+  onBuildingEnter
 }: AreaPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
@@ -77,13 +82,15 @@ export function AreaPhaserGame({
     onDropPickup,
     tileId,
     onNearbyNpcsChange,
-    onInteractTooFar
+    onInteractTooFar,
+    onBuildingEnter
   })
   callbacksRef.current.onNpcInteract = onNpcInteract
   callbacksRef.current.onDropPickup = onDropPickup
   callbacksRef.current.tileId = tileId
   callbacksRef.current.onNearbyNpcsChange = onNearbyNpcsChange
   callbacksRef.current.onInteractTooFar = onInteractTooFar
+  callbacksRef.current.onBuildingEnter = onBuildingEnter
 
   // tileId 變動 → 重建場景以套用新的 startPosition
   useEffect(() => {
@@ -120,11 +127,13 @@ export function AreaPhaserGame({
         onDropPickup: (id) => callbacksRef.current.onDropPickup(id),
         onPositionChange: (pos) => savePosition(callbacksRef.current.tileId, pos),
         onNearbyNpcsChange: (ids) => callbacksRef.current.onNearbyNpcsChange?.(ids),
-        onInteractTooFar: (id) => callbacksRef.current.onInteractTooFar?.(id)
+        onInteractTooFar: (id) => callbacksRef.current.onInteractTooFar?.(id),
+        onBuildingEnter: (id) => callbacksRef.current.onBuildingEnter?.(id)
       },
       tileId,
       npcs,
       drops,
+      ...(buildings ? { buildings } : {}),
       locale,
       hudStrings,
       startPosition: loadPosition(tileId)

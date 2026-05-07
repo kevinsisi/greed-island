@@ -33,6 +33,17 @@ import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_NAME_BY_ID } from './mapGraph.js'
 import { NpcEngine, type NpcActivity, type NpcRuntimeState } from './npcEngine.js'
+import {
+  AreaStateEngine,
+  type AreaState,
+  type FactionId,
+  FACTIONS
+} from './areaStateEngine.js'
+import { BuildingRuntime } from '../buildings/buildingRuntime.js'
+import type { BuildingRuntimeView } from '../buildings/types.js'
+import { findBuildingById, listBuildingsForTile } from '../buildings/catalog.js'
+import { AmbientNarrator } from './ambientNarrator.js'
+import type { SettingsStore } from '../http/settings.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -42,6 +53,8 @@ const FACT_SEASON = 'world.season'
 const FACT_RARE_WINDOW = 'world.rareWindow.tide_festival'
 const FACT_ACTIVE_EVENTS = 'world.activeEvents'
 const NPC_STATE_PREFIX = 'npc.state.'
+const AREA_STATE_PREFIX = 'area.state.'
+const FACT_BUILDING_OCCUPANTS = 'world.buildingOccupants'
 
 const WEATHERS = ['晴', '陰', '霧雨', '驟雨', '微風'] as const
 const SEASONS = ['霜之月', '雨之月', '潮之月', '熾之月'] as const
@@ -111,6 +124,10 @@ export class SimulationRuntime {
   private eventCount = 0
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
+  private readonly areaEngine: AreaStateEngine
+  private readonly buildingRuntime: BuildingRuntime
+  private readonly npcFactionLean: Map<string, FactionId>
+  private ambientNarrator: AmbientNarrator | null = null
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -119,7 +136,20 @@ export class SimulationRuntime {
     private readonly tickDurationMs: number = TICK_DURATION_MS
   ) {
     this.npcEngine = new NpcEngine(profiles)
+    this.areaEngine = new AreaStateEngine(MAP_TILES.map((t) => t.id))
+    this.buildingRuntime = new BuildingRuntime()
+    this.npcFactionLean = buildNpcFactionLean(profiles)
     this.hydrateFromEventLog()
+  }
+
+  attachAmbientNarrator(settings: SettingsStore): AmbientNarrator {
+    if (this.ambientNarrator) return this.ambientNarrator
+    this.ambientNarrator = new AmbientNarrator(settings)
+    return this.ambientNarrator
+  }
+
+  getAmbientNarrator(): AmbientNarrator | null {
+    return this.ambientNarrator
   }
 
   start(): void {
@@ -159,10 +189,55 @@ export class SimulationRuntime {
         season: this.season,
         rareWindowOpen: this.rareWindowOpen,
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
-        activeEvents: this.eventEngine.getActive()
+        activeEvents: this.eventEngine.getActive(),
+        areaStates: this.areaEngine.snapshotAll()
       },
       generatedAt: new Date().toISOString()
     }
+  }
+
+  getAreaStates(): readonly AreaState[] {
+    return this.areaEngine.snapshotAll()
+  }
+
+  getAreaState(tileId: string): AreaState | null {
+    return this.areaEngine.getState(tileId)
+  }
+
+  getBuildingsOnTile(tileId: string): readonly BuildingRuntimeView[] {
+    return this.buildingRuntime.snapshotForTile(tileId)
+  }
+
+  getAllBuildings(): readonly BuildingRuntimeView[] {
+    return this.buildingRuntime.snapshotAll()
+  }
+
+  getCurrentWeather(): string {
+    return this.weather
+  }
+
+  getCurrentSeason(): string {
+    return this.season
+  }
+
+  getNpcFaction(npcId: string): FactionId | null {
+    return this.npcFactionLean.get(npcId) ?? null
+  }
+
+  isNpcInsideBuilding(npcId: string, buildingId: string): boolean {
+    return this.buildingRuntime.isNpcInside(npcId, buildingId)
+  }
+
+  getOutdoorNpcsAt(tileId: string): string[] {
+    const all = this.npcEngine.snapshotAll()
+    return this.buildingRuntime.npcsOutsideOnTile(all).get(tileId) ?? []
+  }
+
+  getOutdoorNpcNamesAt(tileId: string): string[] {
+    const ids = this.getOutdoorNpcsAt(tileId)
+    return ids
+      .map((id) => this.profiles.find((p) => p.id === id)?.name.zh ?? id)
+      .slice(0, 8)
   }
 
   getActiveWorldEvents(): readonly ActiveWorldEvent[] {
@@ -218,13 +293,28 @@ export class SimulationRuntime {
       npcIds: string[]
     }>
   }> {
+    // 室內 NPC 不算在 area scene 上 — 玩家進建築才看到
     const tiles = MAP_TILES.map((tile) => ({
       ...tile,
       npcIds: this.profiles
-        .filter((p) => (this.npcEngine.getState(p.id)?.tile ?? p.defaultLocation) === tile.id)
+        .filter((p) => {
+          const tileMatch = (this.npcEngine.getState(p.id)?.tile ?? p.defaultLocation) === tile.id
+          if (!tileMatch) return false
+          const insideBuildingId = this.getNpcBuildingId(p.id)
+          return insideBuildingId === null
+        })
         .map((p) => p.id)
     }))
     return { width: 8, height: 6, tiles }
+  }
+
+  /** 此 NPC 是否在某棟建築內？回傳建築 id 或 null。 */
+  getNpcBuildingId(npcId: string): string | null {
+    const buildings = this.buildingRuntime.snapshotAll()
+    for (const view of buildings) {
+      if (view.occupants.some((o) => o.npcId === npcId)) return view.def.id
+    }
+    return null
   }
 
   isRareWindowOpen(): boolean {
@@ -333,6 +423,71 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- BuildingRuntime：reconcile 室內 NPC 狀態 ----
+    const npcSnapshot = this.npcEngine.snapshotAll()
+    const buildingDeltas = this.buildingRuntime.reconcile(npcSnapshot)
+    for (const delta of buildingDeltas) {
+      const profile = this.profiles.find((p) => p.id === delta.npcId)
+      const name = profile?.name.zh ?? delta.npcId
+      if (delta.to !== null) {
+        const def = findBuildingById(delta.to)
+        if (def) {
+          drafts.push(
+            this.narrativeDraft(`${delta.npcId}.bld.enter`, nextTick, {
+              eventType: 'NPC_BUILDING_ENTER',
+              actorId: delta.npcId,
+              payload: { buildingId: delta.to, tileId: def.tileId },
+              narration: `${name}走進了${def.nameZh}。`
+            })
+          )
+        }
+      } else if (delta.from !== null) {
+        const def = findBuildingById(delta.from)
+        if (def) {
+          drafts.push(
+            this.narrativeDraft(`${delta.npcId}.bld.leave`, nextTick, {
+              eventType: 'NPC_BUILDING_LEAVE',
+              actorId: delta.npcId,
+              payload: { buildingId: delta.from, tileId: def.tileId },
+              narration: `${name}從${def.nameZh}走了出來。`
+            })
+          )
+        }
+      }
+    }
+    if (buildingDeltas.length > 0) {
+      drafts.push(
+        this.factSetDraft(
+          FACT_BUILDING_OCCUPANTS,
+          this.buildingRuntime.toJSON(),
+          SIM_ACTOR_WORLD,
+          nextTick
+        )
+      )
+    }
+
+    // ---- AreaState engine：每 tile 派系 / 資源演化 ----
+    const areaResult = this.areaEngine.tick(nextTick, {
+      weather: this.weather,
+      npcStates: npcSnapshot,
+      npcFactionLean: this.npcFactionLean
+    })
+    for (const next of areaResult.changed) {
+      drafts.push(
+        this.factSetDraft(`${AREA_STATE_PREFIX}${next.tileId}`, next, SIM_ACTOR_WORLD, nextTick)
+      )
+    }
+    for (const pe of areaResult.pressureEvents) {
+      drafts.push(
+        this.narrativeDraft(`area.${pe.tileId}.${pe.kind}`, nextTick, {
+          eventType: 'AREA_PRESSURE',
+          actorId: SIM_ACTOR_WORLD,
+          payload: { tileId: pe.tileId, kind: pe.kind, ...pe.detail },
+          narration: pe.narration
+        })
+      )
+    }
+
     // ---- 天氣 / 季節 / 稀有窗口 / 世界事件 ----
     if (nextTick % WEATHER_CADENCE_TICKS === 0) {
       const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
@@ -410,6 +565,7 @@ export class SimulationRuntime {
     if (eventDelta.spawned.length > 0 || eventDelta.expired.length > 0) {
       drafts.push(this.factSetDraft(FACT_ACTIVE_EVENTS, eventDelta.active, SIM_ACTOR_WORLD, nextTick))
       for (const event of eventDelta.spawned) {
+        // 模板敘事先寫入 — 之後若 AI 成功回來，再 broadcast 一個增強版
         drafts.push(
           this.narrativeDraft(`world.event.${event.id}`, nextTick, {
             eventType: 'WORLD_EVENT_SPAWNED',
@@ -425,6 +581,37 @@ export class SimulationRuntime {
             narration: event.text.zh
           })
         )
+        // 非阻塞：把 AI 增強版本當成 NarrativeEvent 推到 listener（純 in-memory；
+        // 不再寫 EventLog，避免 hash 衝突 + 等待 AI 影響 tick 速度）
+        const ambient = this.ambientNarrator
+        if (ambient) {
+          void ambient
+            .narrateWorldEvent(event)
+            .then((res) => {
+              if (res.source !== 'ai') return
+              const enhanced: NarrativeEvent = {
+                sequence: this.lastSequence + 0.5,
+                tick: nextTick,
+                eventType: 'WORLD_EVENT_AI_NARRATION',
+                actorId: SIM_ACTOR_WORLD,
+                occurredAt: new Date().toISOString(),
+                payload: {
+                  worldEventId: event.id,
+                  templateId: event.templateId
+                },
+                narration: res.text
+              }
+              this.pushRecent(enhanced)
+              for (const listener of this.listeners) {
+                try {
+                  listener(enhanced)
+                } catch {
+                  // ignore
+                }
+              }
+            })
+            .catch(() => {})
+        }
       }
       for (const event of eventDelta.expired) {
         drafts.push(
@@ -569,6 +756,14 @@ export class SimulationRuntime {
         this.npcEngine.hydrate(profile.id, { tile: legacy, targetTile: legacy })
       }
     }
+    // hydrate area states
+    for (const tile of MAP_TILES) {
+      const raw = state.facts[`${AREA_STATE_PREFIX}${tile.id}`]
+      if (raw) this.areaEngine.hydrate(tile.id, raw)
+    }
+    const buildingFact = state.facts[FACT_BUILDING_OCCUPANTS]
+    if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
+
     const activeEventsFact = state.facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
       const restored: ActiveWorldEvent[] = []
@@ -645,4 +840,25 @@ function activityVerb(activity: NpcActivity): string {
     case 'move':
       return '正在移動'
   }
+}
+
+function buildNpcFactionLean(profiles: readonly NpcProfile[]): Map<string, FactionId> {
+  const map = new Map<string, FactionId>()
+  for (const p of profiles) {
+    const lean = (p.personality.factionLean as string | undefined) ?? 'civilian'
+    if ((FACTIONS as readonly string[]).includes(lean)) {
+      map.set(p.id, lean as FactionId)
+    } else {
+      // 將 profile 自定義的 faction (exchange / monastic / underground / tide_tongue 等)
+      // 折合到四大主派系
+      if (lean === 'exchange' || lean === 'monastic' || lean === 'tide_tongue') {
+        map.set(p.id, 'guild')
+      } else if (lean === 'underground') {
+        map.set(p.id, 'free_runners')
+      } else {
+        map.set(p.id, 'civilian')
+      }
+    }
+  }
+  return map
 }

@@ -324,6 +324,75 @@ export type ServerCardConfig = {
   carrySlotCount: number
 }
 
+export type ServerFactionId = 'tide_hunters' | 'free_runners' | 'guild' | 'civilian'
+
+export type ServerAreaState = {
+  tileId: string
+  factionControl: Record<ServerFactionId, number>
+  dominantFaction: ServerFactionId | null
+  resources: { food: number; safety: number; economy: number }
+  lastUpdatedTick: number
+  recentEvents: Array<{
+    tick: number
+    kind: string
+    narration: string
+    detail: Record<string, string | number>
+  }>
+}
+
+export type ServerAmbient = {
+  tileId: string
+  text: string
+  source: 'ai' | 'fallback'
+  generatedAtTick: number
+  generatedAt: string
+  aiError: string | null
+}
+
+export type ServerShift = 'morning' | 'afternoon' | 'night'
+
+export type ServerBuildingDef = {
+  id: string
+  tileId: string
+  nameZh: string
+  nameEn: string
+  descriptionZh: string
+  type: string
+  placement: { col: number; row: number; glyph: string; size: number }
+  interior: {
+    cols: number
+    rows: number
+    props: Array<{ col: number; row: number; glyph: string; size?: number; label?: string }>
+    backgroundColor?: number
+  }
+  ownerNpcId: string | null
+  hiring: Array<{ shift: ServerShift; capacity: number; wage: number; taskZh: string }>
+  enterable: boolean
+  restorative: boolean
+}
+
+export type ServerBuildingView = {
+  def: ServerBuildingDef
+  occupants: Array<{ npcId: string; shift: ServerShift | null; isOwner: boolean }>
+}
+
+export type ServerPlayerJob = {
+  accountId: number
+  buildingId: string
+  shift: ServerShift
+  hiredAtTick: number
+  totalEarnings: number
+  shiftsCompleted: number
+  lastShiftTick: number
+}
+
+export type ServerPlayerWallet = {
+  accountId: number
+  gold: number
+  energy: number
+  updatedAt: number
+}
+
 export type SocialStreamEvent =
   | { type: 'friend.request'; from: number; requestId: number; occurredAt: string }
   | { type: 'friend.accepted'; from: number; requestId: number; occurredAt: string }
@@ -649,6 +718,57 @@ export const api = {
   tradeCancel: (token: string, tradeId: number) =>
     jsonFetch<{ trade: ServerTradeDto }>(`/trade/cancel/${tradeId}`, {
       method: 'POST',
+      headers: authHeaders(token)
+    }),
+  // -- Living World v0.10.0 --
+  areaState: (tileId: string) =>
+    jsonFetch<{ areaState: ServerAreaState; ambient: ServerAmbient | null }>(
+      `/areas/${encodeURIComponent(tileId)}`
+    ),
+  areaStates: () => jsonFetch<{ areas: ServerAreaState[] }>('/areas'),
+  buildings: (tileId?: string) =>
+    jsonFetch<{ buildings: ServerBuildingView[] }>(
+      tileId ? `/buildings?tileId=${encodeURIComponent(tileId)}` : '/buildings'
+    ),
+  buildingDetail: (buildingId: string) =>
+    jsonFetch<{ building: ServerBuildingView }>(`/buildings/${encodeURIComponent(buildingId)}`),
+  buildingApply: (token: string, buildingId: string, shift: ServerShift) =>
+    jsonFetch<{ job: ServerPlayerJob; building: ServerBuildingDef }>(
+      `/buildings/${encodeURIComponent(buildingId)}/apply`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ shift })
+      }
+    ),
+  buildingQuit: (token: string, buildingId: string, shift: ServerShift) =>
+    jsonFetch<{ removed: boolean }>(
+      `/buildings/${encodeURIComponent(buildingId)}/quit`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ shift })
+      }
+    ),
+  buildingWork: (token: string, buildingId: string) =>
+    jsonFetch<{
+      job: ServerPlayerJob
+      wallet: ServerPlayerWallet
+      wage: number
+    }>(`/buildings/${encodeURIComponent(buildingId)}/work`, {
+      method: 'POST',
+      headers: authHeaders(token)
+    }),
+  buildingRest: (token: string, buildingId: string) =>
+    jsonFetch<{ wallet: ServerPlayerWallet; restoredAt: number; building: ServerBuildingDef }>(
+      `/buildings/${encodeURIComponent(buildingId)}/rest`,
+      {
+        method: 'POST',
+        headers: authHeaders(token)
+      }
+    ),
+  wallet: (token: string) =>
+    jsonFetch<{ wallet: ServerPlayerWallet; jobs: ServerPlayerJob[] }>('/wallet', {
       headers: authHeaders(token)
     })
 }

@@ -51,6 +51,19 @@ export interface AreaSceneCallbacks {
   onNearbyNpcsChange?: (ids: string[]) => void
   /** 玩家點了一個太遠的 NPC sprite。React 層可以彈個 toast。 */
   onInteractTooFar?: (npcId: string) => void
+  /** 玩家走進建築物提示範圍 → 點該建築可進入。React 層應 navigate。 */
+  onBuildingEnter?: (buildingId: string) => void
+}
+
+export interface AreaMapBuilding {
+  id: string
+  nameZh: string
+  type: string
+  col: number
+  row: number
+  glyph: string
+  size: number
+  enterable: boolean
 }
 
 export interface AreaSceneInit {
@@ -59,7 +72,14 @@ export interface AreaSceneInit {
   npcs: AreaMapNpc[]
   drops: AreaMapDrop[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string; pickup: string; tooFar: string }
+  hudStrings: {
+    interact: string
+    pickup: string
+    tooFar: string
+    enterBuilding?: string
+  }
+  /** 該 tile 上的建築物（從 server catalog 來）。可選。 */
+  buildings?: AreaMapBuilding[]
   /** 從 localStorage 讀回的位置；若無則 null。座標必須在 canvas 範圍內。 */
   startPosition: { x: number; y: number } | null
 }
@@ -94,7 +114,13 @@ export class AreaScene extends Phaser.Scene {
   private tileId!: DistrictId
   private npcs: AreaMapNpc[] = []
   private drops: AreaMapDrop[] = []
-  private hudStrings: AreaSceneInit['hudStrings'] = { interact: '', pickup: '', tooFar: '' }
+  private buildings: AreaMapBuilding[] = []
+  private hudStrings: AreaSceneInit['hudStrings'] = {
+    interact: '',
+    pickup: '',
+    tooFar: '',
+    enterBuilding: '進入'
+  }
   private startPosition: { x: number; y: number } | null = null
   private nearbyNpcIdsCache = ''
   private tooFarHintTimer: Phaser.Time.TimerEvent | null = null
@@ -106,6 +132,8 @@ export class AreaScene extends Phaser.Scene {
   private pointerTarget: { x: number; y: number } | null = null
   private nearbyNpcId: string | null = null
   private nearbyDropId: number | null = null
+  private nearbyBuildingId: string | null = null
+  private buildingSprites: Map<string, Phaser.GameObjects.Container> = new Map()
   /** 玩家剛點到 NPC sprite 的時候設成 true，下一個 scene-level pointerdown
    *  就忽略掉 (避免點完 NPC 之後，玩家還繼續走向那個位置)。 */
   private suppressNextPointerTarget = false
@@ -126,6 +154,7 @@ export class AreaScene extends Phaser.Scene {
     this.tileId = data.tileId
     this.npcs = data.npcs
     this.drops = data.drops
+    this.buildings = data.buildings ?? []
     this.hudStrings = data.hudStrings
     this.startPosition = data.startPosition
   }
@@ -134,6 +163,7 @@ export class AreaScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x12141a)
     this.drawBackground()
     this.spawnPlayer()
+    this.spawnBuildings()
     this.spawnNpcs()
     this.spawnDrops()
     this.setupInput()
@@ -167,6 +197,7 @@ export class AreaScene extends Phaser.Scene {
     this.handleMovement(delta)
     this.checkNpcProximity()
     this.checkDropProximity()
+    this.checkBuildingProximity()
     this.tickPositionSave(delta)
   }
 
@@ -216,8 +247,11 @@ export class AreaScene extends Phaser.Scene {
     g.lineStyle(3, 0xfff5b8, 0.85)
     g.strokeRect(1.5, 1.5, AREA_CANVAS_WIDTH - 3, AREA_CANVAS_HEIGHT - 3)
 
-    // 環境物件 (建築 / 樹 / 地標)：用 emoji text 當 placeholder
+    // 環境物件 (建築 / 樹 / 地標)：用 emoji text 當 placeholder。
+    // 注意：建築物 cell（即將被 spawnBuildings 接管）會被略過，避免重疊。
+    const buildingCells = new Set(this.buildings.map((b) => `${b.col},${b.row}`))
     for (const deco of decoSet.props) {
+      if (buildingCells.has(`${deco.col},${deco.row}`)) continue
       const text = this.add.text(
         deco.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
         deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
@@ -234,6 +268,99 @@ export class AreaScene extends Phaser.Scene {
       text.setOrigin(0.5, 0.5)
       text.setDepth(40)
     }
+  }
+
+  /** 把伺服器送來的 buildings 畫成 interactive sprite。 */
+  private spawnBuildings(): void {
+    for (const b of this.buildings) {
+      const cx = b.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+      const cy = b.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+
+      // hit area：覆蓋約 2 個 tile 的範圍，方便手機點擊
+      const hitW = AREA_TILE_SIZE * 1.5
+      const hitH = AREA_TILE_SIZE * 1.5
+      const hitRect = this.add.rectangle(cx, cy, hitW, hitH, 0x000000, 0)
+      hitRect.setOrigin(0.5, 0.5)
+
+      const glyph = this.add.text(cx, cy, b.glyph, {
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+        fontSize: `${b.size + 4}px`,
+        color: '#ffffff',
+        stroke: '#0a0a0a',
+        strokeThickness: 3
+      })
+      glyph.setOrigin(0.5, 0.5)
+
+      const nameLabel = this.add.text(cx, cy + b.size * 0.7, b.nameZh, {
+        fontFamily:
+          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '10px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 2
+      })
+      nameLabel.setOrigin(0.5, 0)
+
+      // 互動提示氣泡（玩家走進範圍時 浮出）
+      const bubble = this.add.text(cx, cy - b.size * 0.95, b.enterable ? '✋' : '🔍', {
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+        fontSize: '16px',
+        color: '#ffffff',
+        stroke: '#0a0a0a',
+        strokeThickness: 2
+      })
+      bubble.setOrigin(0.5, 1)
+      bubble.setVisible(false)
+
+      const container = this.add.container(0, 0, [hitRect, glyph, nameLabel, bubble])
+      container.setDepth(45)
+      container.setData('buildingId', b.id)
+      container.setData('bubble', bubble)
+      container.setData('cx', cx)
+      container.setData('cy', cy)
+
+      // hitRect 接收 input
+      hitRect.setInteractive({ useHandCursor: true })
+      hitRect.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        // 距離檢查：必須走近才能進入
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, cx, cy)
+        if (d > AREA_TILE_SIZE * 2) {
+          // 太遠 — 玩家點了遠處的建築 → 自動走過去
+          this.pointerTarget = { x: cx, y: cy + AREA_TILE_SIZE }
+          this.suppressNextPointerTarget = false
+          this.flashApproachHint(b.nameZh)
+          return
+        }
+        if (b.enterable && this.callbacks.onBuildingEnter) {
+          this.callbacks.onBuildingEnter(b.id)
+        }
+      })
+
+      this.buildingSprites.set(b.id, container)
+    }
+  }
+
+  private flashApproachHint(name: string): void {
+    const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
+    const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
+    const msg = `走近 ${name}…`
+    promptText.setText(msg)
+    promptText.setColor('#fff5b8')
+    const w = Math.max(140, promptText.width + 24)
+    promptBg.setSize(w, 26)
+    promptBg.setStrokeStyle(1, 0xfff5b8, 0.9)
+    this.interactPrompt.setPosition(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.4)
+    this.interactPrompt.setVisible(true)
+    this.interactPrompt.setData('lockedUntil', this.time.now + 1000)
+    if (this.tooFarHintTimer) this.tooFarHintTimer.remove(false)
+    this.tooFarHintTimer = this.time.delayedCall(1000, () => {
+      this.interactPrompt.setData('lockedUntil', 0)
+      this.tooFarHintTimer = null
+    })
   }
 
   // ---------- 玩家 / NPC sprite ----------
@@ -422,15 +549,28 @@ export class AreaScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      // idle wander tween：sprite 在 anchor 周圍 ±18px 內漂移；label 隨之移動
-      const wanderRadius = 18 + (idx % 3) * 4
-      const wanderDuration = 1800 + (idx % 5) * 200
+      // 每位 NPC 獨立 wander 行為：用 npc.id hash 決定
+      //   - 30% 機率為「站著不動」型（守衛 / 守店）
+      //   - 其餘有不同方向、不同半徑、不同速度、不同延遲開始
+      let h = 5381
+      for (const ch of npc.id) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+      const stander = h % 100 < 30
+      const dirAngle = ((h >>> 1) % 360) * (Math.PI / 180)
+      const wanderRadiusX = stander ? 2 : 8 + (h % 16)
+      const wanderRadiusY = stander ? 2 : 4 + ((h >>> 4) % 10)
+      const wanderDuration = stander ? 4000 : 1500 + ((h >>> 8) % 1800)
+      const startDelay = (h >>> 12) % 2400 // ms — 不要全員同步起跑
+      // Phaser tween yoyo 走 sin 曲線：把 tx/ty 範圍設成 dirAngle 投影，
+      // 讓每位 NPC 有不同主軸方向，看起來不像合唱隊。
+      const dx = Math.cos(dirAngle) * wanderRadiusX
+      const dy = Math.sin(dirAngle) * wanderRadiusY
       const tween = this.tweens.add({
         targets: { tx: 0, ty: 0 },
-        tx: { from: -wanderRadius, to: wanderRadius },
-        ty: { from: -wanderRadius * 0.5, to: wanderRadius * 0.5 },
+        tx: { from: -dx, to: dx },
+        ty: { from: -dy, to: dy },
         duration: wanderDuration,
-        ease: 'Sine.easeInOut',
+        delay: startDelay,
+        ease: stander ? 'Sine.easeInOut' : 'Quad.easeInOut',
         yoyo: true,
         repeat: -1,
         onUpdate: (_t, target: { tx: number; ty: number }) => {
@@ -438,7 +578,6 @@ export class AreaScene extends Phaser.Scene {
           const ay = sprite.getData('anchorY') as number
           const newX = ax + target.tx
           const newY = ay + target.ty
-          // 朝向：依水平移動方向左右翻轉
           const lastX = (sprite.getData('lastX') as number | undefined) ?? newX
           if (newX > lastX + 0.05) sprite.setFlipX(false)
           else if (newX < lastX - 0.05) sprite.setFlipX(true)
@@ -521,19 +660,28 @@ export class AreaScene extends Phaser.Scene {
       container.setData('dropId', drop.id)
       container.setData('fill', fill)
       container.setData('halo', halo)
-      container.setSize(DROP_SPRITE_SIZE + 8, DROP_SPRITE_SIZE + 8)
+      // hit area 加大，方便手機點擊（DROP_SPRITE_SIZE+8 太小常常點不到）
+      const HIT_PAD = 14
+      container.setSize(DROP_SPRITE_SIZE + HIT_PAD * 2, DROP_SPRITE_SIZE + HIT_PAD * 2)
       container.setInteractive(
         new Phaser.Geom.Rectangle(
-          -DROP_SPRITE_SIZE / 2 - 4,
-          -DROP_SPRITE_SIZE / 2 - 4,
-          DROP_SPRITE_SIZE + 8,
-          DROP_SPRITE_SIZE + 8
+          -(DROP_SPRITE_SIZE / 2 + HIT_PAD),
+          -(DROP_SPRITE_SIZE / 2 + HIT_PAD),
+          DROP_SPRITE_SIZE + HIT_PAD * 2,
+          DROP_SPRITE_SIZE + HIT_PAD * 2
         ),
         Phaser.Geom.Rectangle.Contains
       )
       container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        // 玩家點擊 drop 的位置：先確認玩家是否已經夠近，否則自動走過去
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, drop.x, drop.y)
+        if (d > DROP_PICKUP_RADIUS) {
+          this.pointerTarget = { x: drop.x, y: drop.y }
+          this.suppressNextPointerTarget = false
+          return
+        }
         this.callbacks.onDropPickup(drop.id)
       })
       // 閃光 tween：halo 縮放 + alpha
@@ -583,6 +731,28 @@ export class AreaScene extends Phaser.Scene {
       }
     }
     this.nearbyDropId = nearestId
+  }
+
+  /** 檢查最接近的建築物（距離 ≤ 2 tiles），更新 nearbyBuildingId 並切 bubble。 */
+  private checkBuildingProximity(): void {
+    const NEAR = AREA_TILE_SIZE * 2
+    let nearestId: string | null = null
+    let nearestDist = NEAR
+    for (const b of this.buildings) {
+      const sprite = this.buildingSprites.get(b.id)
+      if (!sprite) continue
+      const cx = sprite.getData('cx') as number
+      const cy = sprite.getData('cy') as number
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, cx, cy)
+      const inRange = d < NEAR
+      const bubble = sprite.getData('bubble') as Phaser.GameObjects.Text | undefined
+      if (bubble) bubble.setVisible(inRange)
+      if (inRange && d < nearestDist) {
+        nearestDist = d
+        nearestId = b.id
+      }
+    }
+    this.nearbyBuildingId = nearestId
   }
 
   private makeSquareTexture(
@@ -649,6 +819,10 @@ export class AreaScene extends Phaser.Scene {
     }
     if (this.nearbyNpcId) {
       this.callbacks.onNpcInteract(this.nearbyNpcId)
+      return
+    }
+    if (this.nearbyBuildingId && this.callbacks.onBuildingEnter) {
+      this.callbacks.onBuildingEnter(this.nearbyBuildingId)
     }
   }
 
@@ -739,6 +913,10 @@ export class AreaScene extends Phaser.Scene {
     } else if (nearestId) {
       const npc = this.npcs.find((n) => n.id === nearestId)
       text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
+    } else if (this.nearbyBuildingId) {
+      const b = this.buildings.find((bb) => bb.id === this.nearbyBuildingId)
+      const enterLabel = this.hudStrings.enterBuilding ?? '進入'
+      text = b ? `${enterLabel}：${b.nameZh}` : enterLabel
     }
 
     // 如果 flashTooFarHint 正在顯示，這 1.2s 內不蓋掉文字
