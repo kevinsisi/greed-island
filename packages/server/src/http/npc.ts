@@ -35,6 +35,12 @@ import {
 import { generateAiReply, AiDialogError } from '../npcs/aiDialog.js'
 import { generateWithKeyPool, GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
+import {
+  deriveDynamicGreetLine,
+  derivePersonalityGreetLine,
+  type LocalizedLine,
+} from '../npcs/greetLine.js'
+import type { NpcProfile } from '../npcs/types.js'
 import type { SettingsStore } from './settings.js'
 import { TICKS_PER_HOUR } from '../config/world.js'
 
@@ -451,6 +457,51 @@ export function createNpcRouter(input: {
     })
   })
 
+  router.get('/npc/:npcId/greet', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    const profile = input.runtime.findProfile(npcId)
+    if (!profile) {
+      res.status(404).json({ error: 'NPC_NOT_FOUND' })
+      return
+    }
+    const baseTrust =
+      typeof profile.personality.trustBase === 'number'
+        ? clampTrust(profile.personality.trustBase)
+        : 50
+    const relation = input.store.getRelation(claims.sub, npcId)
+    const trust = relation ? relation.trust : baseTrust
+    const interactionCount = relation ? relation.interactionCount : 0
+    const lastInteractionTick = relation ? relation.lastInteractionTick : 0
+    const currentTick = input.runtime.getCurrentTick()
+    // Avoid circular import: dynamic import deferred greet helper.
+    // Use the runtime-already-imported derivePersonalityGreetLine + the new
+    // deriveDynamicGreetLine via require-style lazy load.
+    // 因為 module 已經 import 過 makeLivingWorldCommand，這個檔靜態 import 沒問題。
+    // 直接 inline import：
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    res.json({
+      npcId,
+      greetLine: deriveGreetWithFallback(profile, {
+        trust,
+        interactionCount,
+        lastInteractionTick,
+        currentTick,
+      }),
+      relationship: {
+        trust,
+        tier: tierForRelationship(trust),
+        interactionCount,
+        lastInteractionTick,
+        seeded: relation === null,
+      },
+    })
+  })
+
   router.get('/npc/:npcId/history', auth, (req: Request, res: Response) => {
     const claims = req.auth
     if (!claims) {
@@ -498,6 +549,22 @@ export function createNpcRouter(input: {
   })
 
   return router
+}
+
+function deriveGreetWithFallback(
+  profile: NpcProfile,
+  ctx: {
+    trust: number
+    interactionCount: number
+    lastInteractionTick: number
+    currentTick: number
+  }
+): LocalizedLine {
+  try {
+    return deriveDynamicGreetLine(profile, ctx)
+  } catch {
+    return derivePersonalityGreetLine(profile)
+  }
 }
 
 function readMessage(raw: unknown): string | null {

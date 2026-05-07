@@ -10,19 +10,14 @@ import {
 } from '../api/client'
 import type { CardCatalogEntry } from '../state/types'
 
-const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['S', 'A', 'B', 'C', 'D']
 
 const RANK_TONE: Record<CardCatalogEntry['rank'], string> = {
-  SS: 'border-ember-500 text-ember-300 bg-ember-500/15',
-  S: 'border-ember-600 text-ember-400 bg-ember-500/10',
-  A: 'border-ember-700 text-ember-500 bg-ember-500/5',
-  B: 'border-ground-500 text-ground-200',
-  C: 'border-ground-600 text-ground-300',
-  D: 'border-ground-600 text-ground-400',
-  E: 'border-ground-700 text-ground-400',
-  F: 'border-ground-700 text-ground-500',
-  G: 'border-ground-800 text-ground-500',
-  H: 'border-ground-800 text-ground-600'
+  S: 'border-ember-500 text-ember-300 bg-ember-500/15',
+  A: 'border-ember-600 text-ember-400 bg-ember-500/10',
+  B: 'border-ember-700 text-ember-500 bg-ember-500/5',
+  C: 'border-ground-500 text-ground-200',
+  D: 'border-ground-700 text-ground-400'
 }
 
 interface CardFilter {

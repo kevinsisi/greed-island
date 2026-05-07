@@ -288,11 +288,23 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
 }
 
 function toCardEntry(
-  card: { id: number; rank: string; nameZh: string; nameEn: string; description: string; story: string },
+  card: {
+    id: number
+    rank: string
+    category?: string
+    nameZh: string
+    nameEn: string
+    description: string
+    story: string
+    maxCopies?: number
+    acquisitionMethod?: string
+    acquisitionDetail?: string
+    effectDescription?: string
+  },
   locale: Locale
 ): CardCatalogEntry {
-  const rank = (card.rank as CardCatalogEntry['rank']) ?? 'H'
-  return {
+  const rank = (card.rank as CardCatalogEntry['rank']) ?? 'D'
+  const result: CardCatalogEntry = {
     id: card.id,
     rank,
     name: locale === 'zh' ? card.nameZh : card.nameEn,
@@ -300,6 +312,18 @@ function toCardEntry(
     story: card.story,
     owned: false
   }
+  if (typeof card.category === 'string') {
+    result.category = card.category as NonNullable<CardCatalogEntry['category']>
+  }
+  if (typeof card.maxCopies === 'number') result.maxCopies = card.maxCopies
+  if (typeof card.acquisitionMethod === 'string') {
+    result.acquisitionMethod = card.acquisitionMethod as NonNullable<
+      CardCatalogEntry['acquisitionMethod']
+    >
+  }
+  if (card.acquisitionDetail) result.acquisitionDetail = card.acquisitionDetail
+  if (card.effectDescription) result.effectDescription = card.effectDescription
+  return result
 }
 
 function toWorldMap(map: ServerMap): WorldMap {

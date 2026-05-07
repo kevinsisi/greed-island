@@ -4,6 +4,45 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.0 ✅ shipped — 2026-05-07
+
+**主題：紋卡系統大重設計 + 戰鬥系統 Phase B**
+
+- ✅ **定序卡 100 張完整重設計**
+  - Rank 從 SS/S/A/B/C/D/E/F/G/H 收斂為 S/A/B/C/D（5 階）
+  - 10 大分類（潮源系 / 食飲系 / 技藝系 / 地景系 / 潮器系 / 生靈系 / 契約系 / 秘聞系 / 潮術系 / 深淵系），各 10 張 (1×S, 2×A, 3×B, 2×C, 2×D)
+  - 新欄位：`category` / `maxCopies` / `effectDescription` / `acquisitionMethod` / `acquisitionDetail`
+  - 取得方式 enum：`main_quest` / `side_quest` / `affinity_bond` / `combat_victory` / `shop_purchase` / `location_trigger` / `puzzle_solve` / `random_drop`
+  - 高階卡（S/A/B）絕不會隨機掉落 — 必須走任務 / 戰鬥 / 好感度 / 解謎；只有 D 階共 20 張進 random_drop 池子
+- ✅ **掉落率大幅調低**
+  - 基準 spawn chance 從 1.2% → 0.24% per-tile per-tick（5×降低）
+  - 大潮日 (rare window) ×1.8、雨天 ×1.3
+  - tile category boosts：鏽灣區→技藝系/秘聞系；潮聲區→地景系/食飲系；霓港區→潮器系/食飲系；地脈層→深淵系/潮術系；浪花區→生靈系
+- ✅ **15 張術式卡完整設計** (`packages/server/src/cards/techniques.ts`)
+  - 戰鬥型 7 / 探索型 5 / 社交型 3
+  - 不掉落，只能在「天際百貨」(t_temple, 霓港區) 用潮幣購買
+  - 每張有具體效果 mechanic 描述（Phase C 才接戰鬥引擎 hook）
+  - 新表 `player_techniques` 記錄玩家持有
+- ✅ **天際百貨商店 router** (`packages/server/src/http/techniqueShopRouter.ts`)
+  - `GET /api/shop/techniques`、`POST /api/shop/techniques/:id/buy`、`GET /api/me/techniques`
+  - 必須在 t_temple tile + 足夠潮幣 + 未達持有上限
+- ✅ **戰鬥系統 Phase B：單擊判決** (`packages/server/src/combat/`)
+  - `commands.ts`：`COMBAT_INITIATE` / `COMBAT_PLAYER_ACTION` (attack/defend/flee) / `COMBAT_RESOLVE`，加進 `LIVING_WORLD_COMMAND_TYPES`
+  - `ruleEngine.ts`：deterministic 公式 + `hashSeed(combatId, actorId, round)` 暴擊；逃跑永遠成功；玩家輸 energy=0、NPC 輸 incapacitated 5 秒
+  - `combatStore.ts`：`combat_sessions` + `combat_log` + in-memory NPC incap map
+  - `http/combatRouter.ts`：`POST /api/combat/initiate`、`POST /api/combat/:id/action`、`GET /api/combat/active`、`GET /api/combat/:id`
+  - 同 tile 才能戰鬥；player energy=0 不可挑戰；玩家同時只能有一場 active
+- ✅ **Web 戰鬥 HUD** (`packages/web/src/components/game/CombatHud.tsx`)
+  - 三按鈕（攻擊 / 防禦 / 逃跑）+ 雙方 hp bar + 上回合 result row
+  - `NpcDialog` 在 `trust ≤ 30 + npc.health > 0` 時出現「挑戰開戰」按鈕
+- ✅ **Personality + history-aware AI greet** (`packages/server/src/npcs/greetLine.ts` + `/api/npc/:id/greet`)
+  - 依 trust / interactionCount / sinceTickGap 派生不同 bucket（fresh / hostile / familiar / bonded / reconnect）
+  - 仍 deterministic（不靠 AI），但每位玩家對每位 NPC 的招呼會根據關係階段動態變
+- ✅ **Architecture 合規**：所有戰鬥動作都產生 typed Command 經 `LivingWorldRuleEngine` 寫進 EventLog（`COMBAT_INITIATE` / `COMBAT_PLAYER_ACTION` / `COMBAT_RESOLVE` 三型）；CombatStore 是 SQLite projection；無 `Math.random()` 進 deterministicKey
+- ✅ tests：`combat/ruleEngine.test.ts` 7 tests、`cards/catalog.test.ts` 9 tests，全 100 tests pass
+
+OpenSpec: `combat-phase-b-single-shot/`（archived） + `card-catalog-redesign/`（new for v0.15）
+
 ## v0.14.1 ✅ shipped — 2026-05-07
 
 **主題：NPC dialog 空狀態 personality-based + 戰鬥 Phase B OpenSpec**
@@ -35,17 +74,14 @@
 
 OpenSpec: `world-pressure-and-dialog-fixes/` + `player-intervene-and-combat/` + `combat-system/`
 
-## v0.15 — 戰鬥系統 Phase B：單擊判決
+## v0.15.x — Phase B 後續強化（暫無排程）
 
-**Goal：用最簡形驗證 Command/Event/Rule Engine 管線能承載戰鬥 domain**
+**Goal：v0.15.0 Phase B 已 ship；以下是 Phase B 範圍內未做的補強**
 
-- [ ] `combat/commands.ts`：`COMBAT_INITIATE` / `COMBAT_PLAYER_ACTION` (attack/defend/flee) / `COMBAT_RESOLVE`
-- [ ] `combat/ruleEngine.ts`：一次算完輸贏，公式用 personality + health + 紋卡加成，暴擊用 `hash(combatId, actorId)` seed
-- [ ] `http/combatRouter.ts`：`POST /api/combat/initiate` / `POST /api/combat/:id/action`
-- [ ] `web` UI：戰鬥 HUD 三按鈕 + hp 顯示 + 上一輪結果
 - [ ] 玩家介入爭執前端 UI（HubPage / AreaPage 看到 argument 時跳出 modal，4 按鈕 + message 輸入框）
-- [ ] vitest：rule engine deterministic + replay test
 - [ ] 戰鬥事件接 `summarizeWindow` → `SinceLastVisitPanel` 顯示「不在時打了 N 場」
+- [ ] 戰鬥失敗的世界副作用更完整：玩家 carry slot 隨機掉一張卡、NPC 倒地進 buildings 拉長至更可感知的時間
+- [ ] 100 張定序卡與術式卡的紋典 UI 分組（按 category）+ 商店 / 任務獎勵 hook 上線
 
 ## v0.16 — 戰鬥系統 Phase C：實時 sub-tick + 紋卡
 

@@ -140,7 +140,7 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
         return {
           id: d.id,
           cardId: d.cardId,
-          rank: c?.rank ?? 'H',
+          rank: c?.rank ?? 'D',
           x: d.x,
           y: d.y,
           ticksRemaining: Math.max(0, d.expiresAtTick - active.tick)

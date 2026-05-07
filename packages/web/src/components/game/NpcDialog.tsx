@@ -7,10 +7,12 @@ import {
   ApiError,
   type LocalizedLine,
   type NpcInteractIntent,
+  type ServerCombatSession,
   type ServerNpcHistory,
   type ServerNpcInteraction
 } from '../../api/client'
 import type { Locale, TranslationKey } from '../../i18n/types'
+import { CombatHud } from './CombatHud'
 
 const INTENT_TAG_KEY: Readonly<Record<NpcInteractIntent, TranslationKey>> = {
   greet: 'npc.intentGreet',
@@ -53,6 +55,9 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const [history, setHistory] = useState<ServerNpcHistory | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [draft, setDraft] = useState('')
+  const [combatSession, setCombatSession] = useState<ServerCombatSession | null>(null)
+  const [combatBusy, setCombatBusy] = useState(false)
+  const [dynamicGreet, setDynamicGreet] = useState<LocalizedLine | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const conversationRef = useRef<HTMLDivElement | null>(null)
 
@@ -164,6 +169,61 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     [sendMessage]
   )
 
+  const handleChallenge = useCallback(async () => {
+    if (!npc || !token || combatBusy) return
+    setCombatBusy(true)
+    setError(null)
+    try {
+      const r = await api.combatInitiate(token, npc.id)
+      setCombatSession(r.session)
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.code
+          ? `${err.code} · ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : 'unknown error'
+      setError(msg)
+    } finally {
+      setCombatBusy(false)
+    }
+  }, [npc, token, combatBusy])
+
+  // Fetch dynamic greet line per (player, npc) when dialog opens.
+  useEffect(() => {
+    if (!npc || !token) return
+    let cancelled = false
+    api
+      .npcGreet(token, npc.id)
+      .then((r) => {
+        if (!cancelled) setDynamicGreet(r.greetLine)
+      })
+      .catch(() => {
+        // fall back to npc.greetLine static line
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [npc?.id, token])
+
+  // On open, also check if there's an active combat with this NPC.
+  useEffect(() => {
+    if (!npc || !token) return
+    let cancelled = false
+    api
+      .combatActive(token)
+      .then((r) => {
+        if (cancelled) return
+        if (r.active && r.active.npcId === npc.id) setCombatSession(r.active)
+      })
+      .catch(() => {
+        // no active combat
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [npc?.id, token])
+
   const handleToggleHistory = useCallback(() => {
     if (!showHistory) {
       setShowHistory(true)
@@ -177,6 +237,23 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const lastDelta = useMemo(() => (lastTurn ? lastTurn.trustDelta : null), [lastTurn])
 
   if (!npc) return null
+
+  // 戰鬥中：直接畫 CombatHud 蓋過 dialog
+  if (combatSession && combatSession.state === 'active') {
+    return (
+      <CombatHud
+        npcName={npc.name}
+        initialSession={combatSession}
+        onClose={() => {
+          setCombatSession(null)
+          onClose()
+        }}
+      />
+    )
+  }
+
+  // 顯示 challenge 按鈕的條件：低 trust + NPC health > 0
+  const canChallenge = (trust ?? 0) <= 30 && (npc.health ?? 0) > 0
 
   return (
     <div
@@ -219,13 +296,26 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="gi-touch shrink-0 px-3 text-[11px] font-display uppercase tracking-tightest text-ground-400 hover:text-ground-100 border border-ground-700 hover:border-ground-500 rounded-sharp"
-          >
-            {t('npc.dialogClose')}
-          </button>
+          <div className="flex gap-2">
+            {canChallenge && account && (
+              <button
+                type="button"
+                onClick={handleChallenge}
+                disabled={combatBusy}
+                className="gi-touch shrink-0 px-3 text-[11px] font-display uppercase tracking-tightest text-ember-300 hover:text-ember-200 border border-ember-700 hover:border-ember-500 rounded-sharp disabled:opacity-40"
+                title="開戰（trust ≤ 30 才可挑戰）"
+              >
+                {combatBusy ? '…' : '挑戰開戰'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="gi-touch shrink-0 px-3 text-[11px] font-display uppercase tracking-tightest text-ground-400 hover:text-ground-100 border border-ground-700 hover:border-ground-500 rounded-sharp"
+            >
+              {t('npc.dialogClose')}
+            </button>
+          </div>
         </header>
 
         <div
@@ -234,9 +324,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
         >
           {turns.length === 0 ? (
             <div className="border-l-2 border-ground-700 pl-4 py-2 text-[14px] leading-relaxed text-ground-400 italic">
-              {npc.greetLine
-                ? (locale === 'zh' ? npc.greetLine.zh : npc.greetLine.en)
-                : t('npc.lineFallback', { name: npc.name })}
+              {dynamicGreet
+                ? (locale === 'zh' ? dynamicGreet.zh : dynamicGreet.en)
+                : npc.greetLine
+                  ? (locale === 'zh' ? npc.greetLine.zh : npc.greetLine.en)
+                  : t('npc.lineFallback', { name: npc.name })}
             </div>
           ) : (
             <ConversationLog turns={turns} locale={locale} t={t} />

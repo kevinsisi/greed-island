@@ -24,6 +24,8 @@ import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
 import { CardActionPipeline } from './cardCommands.js'
 import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { createBuildingsRouter } from './buildingsRouter.js'
+import { createCombatRouter } from './combatRouter.js'
+import { createTechniqueShopRouter } from './techniqueShopRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -195,6 +197,25 @@ export function createHttpApp(options: HttpAppOptions): Express {
     createBuildingsRouter({
       runtime: options.runtime,
       jobs: jobsStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createCombatRouter({
+      db: options.db,
+      runtime: options.runtime,
+      jobs: jobsStore,
+      social: socialStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createTechniqueShopRouter({
+      db: options.db,
+      jobs: jobsStore,
+      social: socialStore,
       authConfig: options.auth,
     })
   )

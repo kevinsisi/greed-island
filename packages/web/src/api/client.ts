@@ -67,13 +67,40 @@ export type ServerNpc = {
   greetLine?: { zh: string; en: string }
 }
 
+export type ServerCardCategory =
+  | '潮源系'
+  | '食飲系'
+  | '技藝系'
+  | '地景系'
+  | '潮器系'
+  | '生靈系'
+  | '契約系'
+  | '秘聞系'
+  | '潮術系'
+  | '深淵系'
+
+export type ServerCardAcquisitionMethod =
+  | 'main_quest'
+  | 'side_quest'
+  | 'affinity_bond'
+  | 'combat_victory'
+  | 'shop_purchase'
+  | 'location_trigger'
+  | 'puzzle_solve'
+  | 'random_drop'
+
 export type ServerCardCatalogEntry = {
   id: number
-  rank: 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
+  rank: 'S' | 'A' | 'B' | 'C' | 'D'
+  category: ServerCardCategory
   nameZh: string
   nameEn: string
   description: string
   story: string
+  maxCopies: number
+  acquisitionMethod: ServerCardAcquisitionMethod
+  acquisitionDetail: string
+  effectDescription: string
   discoveryRuleId: string
   restrictionRuleId: string
 }
@@ -857,7 +884,116 @@ export const api = {
   wallet: (token: string) =>
     jsonFetch<{ wallet: ServerPlayerWallet; jobs: ServerPlayerJob[] }>('/wallet', {
       headers: authHeaders(token)
+    }),
+  // ── Combat (Phase B, v0.15.0) ──
+  combatActive: (token: string) =>
+    jsonFetch<{ active: ServerCombatSession | null; log?: ServerCombatLogRow[] }>(
+      '/combat/active',
+      { headers: authHeaders(token) }
+    ),
+  combatGet: (token: string, combatId: string) =>
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+      `/combat/${encodeURIComponent(combatId)}`,
+      { headers: authHeaders(token) }
+    ),
+  combatInitiate: (token: string, targetNpcId: string) =>
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+      '/combat/initiate',
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ targetNpcId })
+      }
+    ),
+  combatAction: (
+    token: string,
+    combatId: string,
+    action: 'attack' | 'defend' | 'flee',
+    cardId?: number
+  ) =>
+    jsonFetch<{
+      session: ServerCombatSession
+      events: Array<{ eventType: string; payload: Record<string, unknown> }>
+      resolved: null | { outcome: 'player_victory' | 'npc_victory' | 'fled' }
+      log: ServerCombatLogRow[]
+    }>(`/combat/${encodeURIComponent(combatId)}/action`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(cardId !== undefined ? { action, cardId } : { action })
+    }),
+  // ── Technique shop (Phase B, v0.15.0) ──
+  shopTechniques: (token: string) =>
+    jsonFetch<{ items: ServerTechniqueShopItem[]; locationTile: string }>(
+      '/shop/techniques',
+      { headers: authHeaders(token) }
+    ),
+  shopBuyTechnique: (token: string, cardId: number) =>
+    jsonFetch<{ owned: { card_id: number; count: number }; wallet: ServerPlayerWallet }>(
+      `/shop/techniques/${cardId}/buy`,
+      { method: 'POST', headers: authHeaders(token) }
+    ),
+  myTechniques: (token: string) =>
+    jsonFetch<{
+      owned: Array<{
+        cardId: number
+        count: number
+        lastPurchasedAt: number
+        card: {
+          nameZh: string
+          nameEn: string
+          category: 'combat' | 'explore' | 'social'
+          description: string
+          effectDescription: string
+        } | null
+      }>
+    }>('/me/techniques', { headers: authHeaders(token) }),
+  // ── Per-player dynamic NPC greet (Phase B) ──
+  npcGreet: (token: string, npcId: string) =>
+    jsonFetch<{
+      npcId: string
+      greetLine: { zh: string; en: string }
+      relationship: { trust: number; tier: 'low' | 'mid' | 'high'; interactionCount: number }
+    }>(`/npc/${encodeURIComponent(npcId)}/greet`, {
+      headers: authHeaders(token)
     })
+}
+
+export type ServerCombatSession = {
+  combatId: string
+  playerAccountId: number
+  npcId: string
+  tileId: string
+  startedTick: number
+  playerHp: number
+  npcHp: number
+  combatRound: number
+  state: 'active' | 'resolved'
+  outcome: 'player_victory' | 'npc_victory' | 'fled' | null
+  resolvedTick: number | null
+  initialHp: number
+  npcIncapTicks: number
+}
+
+export type ServerCombatLogRow = {
+  id: number
+  combat_id: string
+  tick: number
+  combat_round: number
+  event_type: string
+  payload_json: string
+  occurred_at: number
+}
+
+export type ServerTechniqueShopItem = {
+  id: number
+  nameZh: string
+  nameEn: string
+  category: 'combat' | 'explore' | 'social'
+  priceGold: number
+  maxOwnedPerPlayer: number
+  description: string
+  effectDescription: string
+  ownedCount: number
 }
 
 export function streamUrl(): string {

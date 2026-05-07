@@ -123,3 +123,92 @@ export function derivePersonalityGreetLine(profile: NpcProfile): LocalizedLine {
     en: tpl.en.replaceAll('{name}', profile.name.en),
   }
 }
+
+// ── v0.15.0：dynamic greet 改進 ───────────────────────────────────
+//
+// 玩家打開對話框時，前端先 call /api/npc/:id/greet?accountId=… 拿一句
+// 帶好感度 + 互動歷史的招呼語。這仍然是 deterministic 的（用
+// (profile, trust, interactionCount) 做 seed），不是 AI；目的是讓「空
+// 對話」的占位符根據雙方目前狀態而變，而不是固定一句。
+
+const GREET_FAMILIAR_TIER: ReadonlyArray<LocalizedLine> = [
+  { zh: '「啊，又見面了。」', en: '"Ah — you again."' },
+  { zh: '「來啦？我以為你今天不會出門。」', en: '"There you are. I thought you were holed up today."' },
+  { zh: '「來坐。茶還熱。」', en: '"Come, sit. Tea\'s still warm."' },
+  { zh: '「看到你進來，我笑了一下。」', en: '"Caught myself smiling when I saw you walk in."' },
+]
+
+const GREET_BONDED_TIER: ReadonlyArray<LocalizedLine> = [
+  { zh: '「你回來了。」（語氣比平時放鬆一點）', en: '"You\'re back." (the voice softens a touch)' },
+  { zh: '「我猜你今天會來。對吧。」', en: '"I had a feeling you\'d come today. I was right."' },
+  { zh: '「老樣子？還是想換個說法。」', en: '"The usual — or do you want a fresh take?"' },
+  { zh: '「先別走。我有事要跟你說。」', en: '"Don\'t leave just yet. There\'s something for you."' },
+]
+
+const GREET_HOSTILE_TIER: ReadonlyArray<LocalizedLine> = [
+  { zh: '「又是你？」（眉一挑）', en: '"You — again." (eyebrow raised)' },
+  { zh: '「我以為昨天那場事沒講完。」', en: '"I thought we hadn\'t finished yesterday\'s business."' },
+  { zh: '「別站太近。」', en: '"Don\'t stand so close."' },
+]
+
+const GREET_FRESH_TIER: ReadonlyArray<LocalizedLine> = [
+  { zh: '（{name} 上下打量了你一眼。）', en: '({name} looks you up and down once.)' },
+  { zh: '「面生啊。是來找我的？」', en: '"Don\'t know your face. Looking for me?"' },
+  { zh: '「先說名字，再開口。」', en: '"Name first. Then speak."' },
+]
+
+const GREET_RECONNECT_TIER: ReadonlyArray<LocalizedLine> = [
+  { zh: '「好久不見。」', en: '"It has been a while."' },
+  { zh: '「我以為你不會再來了。」', en: '"I thought you wouldn\'t come back."' },
+  { zh: '「久違。坐下說。」', en: '"It\'s been long. Sit."' },
+]
+
+/**
+ * Per-player dynamic greet：依好感度 + 互動次數 + 上次互動 tick 差挑句。
+ *
+ * Tier rules:
+ *   * trust >= 80：bonded — 親密語氣
+ *   * trust >= 55 + interactions >= 5：familiar — 熟客
+ *   * trust <= 20：hostile — 防衛
+ *   * sinceTickGap >= 2400 (≈3.3 hr 模擬時) + interactions >= 3：reconnect — 久別
+ *   * 其它：fall back to personality-based line
+ */
+export function deriveDynamicGreetLine(
+  profile: NpcProfile,
+  options: {
+    trust: number
+    interactionCount: number
+    lastInteractionTick: number
+    currentTick: number
+  }
+): LocalizedLine {
+  const sinceGap = Math.max(0, options.currentTick - options.lastInteractionTick)
+  let bucket: ReadonlyArray<LocalizedLine> | null = null
+  if (options.interactionCount === 0) {
+    bucket = GREET_FRESH_TIER
+  } else if (options.trust <= 20) {
+    bucket = GREET_HOSTILE_TIER
+  } else if (options.trust >= 80) {
+    bucket = GREET_BONDED_TIER
+  } else if (
+    options.trust >= 55 &&
+    options.interactionCount >= 5 &&
+    sinceGap < 2400
+  ) {
+    bucket = GREET_FAMILIAR_TIER
+  } else if (options.interactionCount >= 3 && sinceGap >= 2400) {
+    bucket = GREET_RECONNECT_TIER
+  }
+
+  if (!bucket) {
+    return derivePersonalityGreetLine(profile)
+  }
+  // Deterministic by (profile.id, trust, interactionCount)
+  const seed = hash(`${profile.id}|${options.trust}|${options.interactionCount}`)
+  const idx = seed % bucket.length
+  const tpl = bucket[idx]!
+  return {
+    zh: tpl.zh.replaceAll('{name}', profile.name.zh),
+    en: tpl.en.replaceAll('{name}', profile.name.en),
+  }
+}

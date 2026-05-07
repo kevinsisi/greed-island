@@ -35,7 +35,11 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_OPEN',
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
-  'PLAYER_INTERVENE'
+  'PLAYER_INTERVENE',
+  // v0.15.0 — Combat Phase B (single-shot judgement)
+  'COMBAT_INITIATE',
+  'COMBAT_PLAYER_ACTION',
+  'COMBAT_RESOLVE'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -155,6 +159,42 @@ export type PlayerIntervenecmd = Readonly<{
   narration: string
 }>
 
+/** v0.15.0 Combat Phase B — 全部 combat 動作都走 LivingWorld pipeline */
+export type CombatInitiateCmd = Readonly<{
+  combatId: string
+  playerAccountId: string
+  npcId: string
+  tile: string
+  playerCombatHp: number
+  npcCombatHp: number
+  reason: 'player_challenge' | 'npc_aggression'
+  narration: string
+}>
+
+export type CombatPlayerActionCmd = Readonly<{
+  combatId: string
+  playerAccountId: string
+  npcId: string
+  combatRound: number
+  action: 'attack' | 'defend' | 'flee'
+  /** Phase B 預留紋卡欄位；rule engine 看到時寫 COMBAT_CARD_IGNORED warning */
+  cardId?: number
+  narration: string
+}>
+
+export type CombatResolveCmd = Readonly<{
+  combatId: string
+  playerAccountId: string
+  npcId: string
+  outcome: 'player_victory' | 'npc_victory' | 'fled'
+  durationRounds: number
+  finalPlayerHp: number
+  finalNpcHp: number
+  playerEnergyToZero: boolean
+  npcIncapacitatedTicks: number
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -170,6 +210,9 @@ export type LivingWorldCommandPayload =
   | RareWindowCloseCmd
   | WorldTickCmd
   | PlayerIntervenecmd
+  | CombatInitiateCmd
+  | CombatPlayerActionCmd
+  | CombatResolveCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -293,6 +336,50 @@ const VALIDATORS: Readonly<
   WORLD_TICK: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.tick !== 'number' || !Number.isFinite(p.tick)) return 'tick required'
+    return null
+  },
+  COMBAT_INITIATE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.combatId !== 'string' || p.combatId.length === 0) return 'combatId required'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0)
+      return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (typeof p.playerCombatHp !== 'number' || p.playerCombatHp <= 0) return 'playerCombatHp required'
+    if (typeof p.npcCombatHp !== 'number' || p.npcCombatHp <= 0) return 'npcCombatHp required'
+    if (p.reason !== 'player_challenge' && p.reason !== 'npc_aggression') return 'invalid reason'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  COMBAT_PLAYER_ACTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.combatId !== 'string' || p.combatId.length === 0) return 'combatId required'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0)
+      return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.combatRound !== 'number' || p.combatRound < 0) return 'combatRound required'
+    if (p.action !== 'attack' && p.action !== 'defend' && p.action !== 'flee') return 'invalid action'
+    if (typeof p.cardId !== 'undefined' && typeof p.cardId !== 'number') return 'cardId must be number or unset'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  COMBAT_RESOLVE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.combatId !== 'string' || p.combatId.length === 0) return 'combatId required'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0)
+      return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (
+      p.outcome !== 'player_victory' &&
+      p.outcome !== 'npc_victory' &&
+      p.outcome !== 'fled'
+    ) return 'invalid outcome'
+    if (typeof p.durationRounds !== 'number' || p.durationRounds < 0) return 'durationRounds required'
+    if (typeof p.finalPlayerHp !== 'number') return 'finalPlayerHp required'
+    if (typeof p.finalNpcHp !== 'number') return 'finalNpcHp required'
+    if (typeof p.playerEnergyToZero !== 'boolean') return 'playerEnergyToZero required'
+    if (typeof p.npcIncapacitatedTicks !== 'number') return 'npcIncapacitatedTicks required'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
   PLAYER_INTERVENE: (p) => {

@@ -35,18 +35,17 @@ export type DropState = 'available' | 'held' | 'expired' | 'stored'
 export type SlotType = 'sequencing' | 'carry'
 export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired'
 
-/** 各等級的「同時存世上限」基準。後續可由 catalog 覆寫。 */
+/**
+ * v0.15.0：rank → existence cap 改由 catalog 直接宣告（entry.maxCopies）。
+ * 這個 fallback 表只在 catalog 沒給 maxCopies（不會發生，validator 阻擋）
+ * 時用，僅為向後相容保留。
+ */
 export const RANK_EXISTENCE_CAP: Readonly<Record<CardRank, number>> = {
-  SS: 1,
-  S: 2,
-  A: 4,
+  S: 1,
+  A: 3,
   B: 6,
-  C: 8,
-  D: 10,
-  E: 12,
-  F: 16,
-  G: 20,
-  H: 25,
+  C: 12,
+  D: 20,
 }
 
 export type DropRow = Readonly<{
@@ -331,7 +330,8 @@ export class CardWorldStore {
   }): DropRow | null {
     const entry = this.findCatalogEntry(input.cardId)
     if (!entry) return null
-    const cap = RANK_EXISTENCE_CAP[entry.rank]
+    // v0.15.0：以 catalog.maxCopies 為主，fallback 到 RANK_EXISTENCE_CAP
+    const cap = entry.maxCopies ?? RANK_EXISTENCE_CAP[entry.rank]
     if (this.countCardInExistence(input.cardId) >= cap) return null
 
     const expires = input.currentTick + SIXTY_SECOND_RULE_TICKS

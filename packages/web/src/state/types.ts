@@ -54,14 +54,41 @@ export interface NpcSummary {
   greetLine?: { zh: string; en: string }
 }
 
-export type CardRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
+export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'
+
+export type CardCategory =
+  | '潮源系'
+  | '食飲系'
+  | '技藝系'
+  | '地景系'
+  | '潮器系'
+  | '生靈系'
+  | '契約系'
+  | '秘聞系'
+  | '潮術系'
+  | '深淵系'
+
+export type CardAcquisitionMethod =
+  | 'main_quest'
+  | 'side_quest'
+  | 'affinity_bond'
+  | 'combat_victory'
+  | 'shop_purchase'
+  | 'location_trigger'
+  | 'puzzle_solve'
+  | 'random_drop'
 
 export interface CardCatalogEntry {
   id: number
   rank: CardRank
+  category?: CardCategory
   name: string
   description: string
   story: string
+  maxCopies?: number
+  acquisitionMethod?: CardAcquisitionMethod
+  acquisitionDetail?: string
+  effectDescription?: string
   owned: boolean
   discoveredAtTick?: number
 }
