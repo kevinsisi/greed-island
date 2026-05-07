@@ -87,6 +87,13 @@ export const zh: Translations = {
   'npc.quickAsk': '探聽',
   'npc.quickTrade': '提議交易',
   'npc.quickLeave': '告辭',
+  'npc.activity.idle': '稍作停留',
+  'npc.activity.move': '移動中',
+  'npc.activity.work': '工作中',
+  'npc.activity.eat': '用餐',
+  'npc.activity.sleep': '休息',
+  'npc.activity.trade': '交易',
+  'npc.activity.patrol': '巡邏',
 
   'settings.eyebrow': '管理 · 系統設定',
   'settings.title': '管理設定',

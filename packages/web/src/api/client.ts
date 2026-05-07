@@ -34,6 +34,15 @@ export type ServerNarrativeEvent = {
   narration: string | null
 }
 
+export type ServerNpcActivity =
+  | 'idle'
+  | 'move'
+  | 'work'
+  | 'eat'
+  | 'sleep'
+  | 'trade'
+  | 'patrol'
+
 export type ServerNpc = {
   id: string
   name: { zh: string; en: string }
@@ -44,6 +53,12 @@ export type ServerNpc = {
   internalState: Record<string, unknown>
   interactionCount?: number
   lastInteractionTick?: number
+  // Living-world v0.9+
+  activity?: ServerNpcActivity
+  mood?: number
+  health?: number
+  faction?: string
+  targetTile?: string
 }
 
 export type ServerCardCatalogEntry = {

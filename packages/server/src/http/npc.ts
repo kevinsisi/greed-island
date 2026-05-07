@@ -34,10 +34,17 @@ import {
 } from '../npcs/dialog.js'
 import { generateAiReply, AiDialogError } from '../npcs/aiDialog.js'
 import type { SettingsStore } from './settings.js'
+import { TICKS_PER_HOUR } from '../config/world.js'
 
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
 const PLAYER_MESSAGE_MAX_CHARS = 800
+
+// greet 冷卻：每位玩家對每個 NPC 在這個 tick 視窗內最多 +1，避免連點 quick intent 灌好感
+const GREET_COOLDOWN_TICKS = TICKS_PER_HOUR
+// AI 回傳的 trustDelta 在 server side 再 clamp 一次：上界 +2，避免 AI 隨意給 +3
+const AI_TRUST_DELTA_MAX = 2
+const AI_TRUST_DELTA_MIN = -5
 
 type ReplySource = 'ai' | 'fallback'
 
@@ -133,7 +140,19 @@ export function createNpcRouter(input: {
       const line = pickLine(npcId, intent, tier, rotationSeed)
       replyZh = line.zh
       replyEn = line.en
-      aiTrustDelta = staticTrustDelta(intent, previousTrust, profile)
+      aiTrustDelta = staticTrustDelta(intent, previousTrust, profile, {
+        tick,
+        lastInteractionTick: existing?.lastInteractionTick ?? 0,
+        interactionCount: previousCount,
+      })
+    } else if (aiTrustDelta !== null) {
+      // AI 回傳的值再做一次伺服器端 clamp：上限收緊，避免 AI 連續給高分把好感拉滿
+      aiTrustDelta = serverClampAiDelta(aiTrustDelta, {
+        intent: resolvedIntent,
+        playerMessage,
+        tick,
+        lastInteractionTick: existing?.lastInteractionTick ?? 0,
+      })
     }
 
     const trustAfter = clampTrust(previousTrust + (aiTrustDelta ?? 0))
@@ -252,25 +271,55 @@ function fallbackMessageFor(intent: InteractIntent): string {
 function staticTrustDelta(
   intent: InteractIntent,
   previous: number,
-  profile: { personality: Readonly<Record<string, number | string>> }
+  profile: { personality: Readonly<Record<string, number | string>> },
+  ctx: { tick: number; lastInteractionTick: number; interactionCount: number }
 ): number {
-  const base: Record<InteractIntent, number> = {
-    greet: 1,
-    ask: 0,
-    trade: 0,
-    leave: 0,
-  }
-  let delta = base[intent]
-  if (intent === 'trade') {
-    if (previous < 30) delta -= 1
-    else if (previous >= 60) delta += 1
-  }
+  // greet 在 fallback 路徑加 cooldown：每位 NPC 每 GREET_COOLDOWN_TICKS 內最多 +1
   if (intent === 'greet') {
+    const sinceLast = ctx.tick - ctx.lastInteractionTick
+    const isFirstEver = ctx.interactionCount === 0
+    const cooldownPassed = sinceLast >= GREET_COOLDOWN_TICKS
+    if (!isFirstEver && !cooldownPassed) return 0
     const patience =
       typeof profile.personality.patience === 'number' ? profile.personality.patience : 0.5
-    if (patience < 0.3) delta = 0
+    if (patience < 0.3) return 0
+    return 1
   }
-  return delta
+  // ask / trade 在 fallback 路徑（沒有實際資訊或物品交換）回 0；
+  // 之後 trade 接到實際物品交換時，再用 trade 撮合結果額外加分
+  if (intent === 'trade' && previous < 30) return -1
+  return 0
+}
+
+/**
+ * AI 回傳的 trustDelta 在伺服器端再做收緊：
+ * - 上限：+2（AI 不可單次給 +3）
+ * - greet 額外套 cooldown：1 小時內最多 +1
+ * - 短訊息（< 4 字）忽略 +N，最多 +0
+ * - 下界保留 -5 給嚴重冒犯
+ */
+function serverClampAiDelta(
+  raw: number,
+  ctx: {
+    intent: InteractIntent
+    playerMessage: string
+    tick: number
+    lastInteractionTick: number
+  }
+): number {
+  let v = Math.round(raw)
+  if (v > AI_TRUST_DELTA_MAX) v = AI_TRUST_DELTA_MAX
+  if (v < AI_TRUST_DELTA_MIN) v = AI_TRUST_DELTA_MIN
+  if (ctx.intent === 'greet' && v > 0) {
+    const sinceLast = ctx.tick - ctx.lastInteractionTick
+    if (sinceLast < GREET_COOLDOWN_TICKS) v = 0
+    else if (v > 1) v = 1
+  }
+  if (v > 0 && ctx.playerMessage.trim().length < 4) {
+    // 太短的訊息（例如「嗯」「喔」）視為無實質互動
+    v = 0
+  }
+  return v
 }
 
 function clampInt(raw: unknown, min: number, max: number, fallback: number): number {

@@ -262,15 +262,23 @@ function toEventSummary(event: ServerNarrativeEvent): EventSummary {
 function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
   const name = pickLocaleString(npc.name, locale)
   const role = pickLocaleString(npc.role, locale)
-  return {
+  // exactOptionalPropertyTypes forbids assigning `undefined` to optional fields;
+  // build with conditional spreads instead.
+  const summary: NpcSummary = {
     id: npc.id,
     name,
     role,
     location: npc.location,
     relationshipScore: npc.relationshipScore,
     lastActedTick: npc.lastActedTick,
-    internalState: { ...npc.internalState }
+    internalState: { ...npc.internalState },
+    ...(npc.activity ? { activity: npc.activity } : {}),
+    ...(typeof npc.mood === 'number' ? { mood: npc.mood } : {}),
+    ...(typeof npc.health === 'number' ? { health: npc.health } : {}),
+    ...(typeof npc.faction === 'string' ? { faction: npc.faction } : {}),
+    ...(typeof npc.targetTile === 'string' ? { targetTile: npc.targetTile } : {})
   }
+  return summary
 }
 
 function toCardEntry(

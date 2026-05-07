@@ -87,6 +87,13 @@ export const en: Translations = {
   'npc.quickAsk': 'Ask',
   'npc.quickTrade': 'Trade',
   'npc.quickLeave': 'Leave',
+  'npc.activity.idle': 'idle',
+  'npc.activity.move': 'moving',
+  'npc.activity.work': 'working',
+  'npc.activity.eat': 'eating',
+  'npc.activity.sleep': 'resting',
+  'npc.activity.trade': 'trading',
+  'npc.activity.patrol': 'patrolling',
 
   'settings.eyebrow': 'Admin · system',
   'settings.title': 'Admin settings',

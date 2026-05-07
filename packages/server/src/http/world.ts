@@ -29,6 +29,7 @@ export function createWorldRouter(input: {
   router.get('/npcs', overlay, (req: Request, res: Response) => {
     const npcs = input.runtime.getNpcs()
     const accountId = req.auth?.sub ?? null
+    // npcs 已含 activity / mood / health / faction / targetTile
     if (accountId === null) {
       res.json(npcs)
       return

@@ -27,6 +27,8 @@ export interface AreaMapNpc {
   name: string
   /** sprite 內部的單字 badge / aria 用途 */
   shortName: string
+  /** 當前活動，用 i18n 字串顯示在名字下方；缺值就不顯示活動行 */
+  activityLabel?: string
 }
 
 /** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
@@ -207,34 +209,62 @@ export class AreaScene extends Phaser.Scene {
     this.refreshNpcSprites()
   }
 
+  /**
+   * 把當前 npcs 列表 sync 到場景。
+   * - 已存在的 NPC sprite：原地保留（連帶 wander tween 與位置），只更新名字 / 活動字串
+   * - 新增 NPC：建立 sprite + label + idle wander tween
+   * - 移除 NPC：清掉 sprite + label + tween
+   * 這樣 SSE 觸發 mapNpcs 重組時，sprite 不會閃爍重生。
+   */
   private refreshNpcSprites(): void {
-    for (const sprite of this.npcSprites.values()) {
-      const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
-      const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
-      if (badge) badge.destroy()
-      if (nameLabel) nameLabel.destroy()
-      sprite.destroy()
+    const seen = new Set<string>()
+
+    if (this.npcs.length === 0) {
+      // 沒有 NPC：全部清掉
+      for (const [id, sprite] of this.npcSprites) {
+        this.disposeNpcSprite(id, sprite)
+      }
+      return
     }
-    this.npcSprites.clear()
 
-    if (this.npcs.length === 0) return
-
-    // 將 NPC 平均散佈在以畫布中心為圓心的圓上，避免疊在玩家出生點
+    // 將 NPC 平均散佈在以畫布中心為圓心的圓上，做為 anchor 位置（wander 起點）
     const cx = AREA_CANVAS_WIDTH / 2
     const cy = AREA_CANVAS_HEIGHT / 2
     const radius = Math.min(AREA_CANVAS_WIDTH, AREA_CANVAS_HEIGHT) * 0.32
     const total = this.npcs.length
 
     this.npcs.forEach((npc, idx) => {
+      seen.add(npc.id)
       const angle = (idx / total) * Math.PI * 2 - Math.PI / 2
-      const x = cx + Math.cos(angle) * radius
-      const y = cy + Math.sin(angle) * radius
+      const anchorX = cx + Math.cos(angle) * radius
+      const anchorY = cy + Math.sin(angle) * radius
 
+      const existing = this.npcSprites.get(npc.id)
+      if (existing) {
+        // 既有 sprite — 只更新名字 / 活動 label，保留位置與 tween
+        const nameLabel = existing.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+        const activityLabel = existing.getData('activityLabel') as
+          | Phaser.GameObjects.Text
+          | undefined
+        if (nameLabel && nameLabel.text !== npc.name) nameLabel.setText(npc.name)
+        if (activityLabel) {
+          const desired = npc.activityLabel ?? ''
+          if (activityLabel.text !== desired) activityLabel.setText(desired)
+          activityLabel.setVisible(desired.length > 0)
+        }
+        existing.setData('anchorX', anchorX)
+        existing.setData('anchorY', anchorY)
+        return
+      }
+
+      // 新增 sprite
       const tex = this.npcTextureKey(npc.id)
       this.makeSquareTexture(tex, NPC_SPRITE_SIZE, NPC_BADGE_COLOR, 0x1c1300, 2)
-      const sprite = this.physics.add.sprite(x, y, tex)
+      const sprite = this.physics.add.sprite(anchorX, anchorY, tex)
       sprite.setDepth(70)
       sprite.setData('npcId', npc.id)
+      sprite.setData('anchorX', anchorX)
+      sprite.setData('anchorY', anchorY)
       sprite.setInteractive({ useHandCursor: true })
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
@@ -242,7 +272,7 @@ export class AreaScene extends Phaser.Scene {
       })
 
       // sprite 中央的單字 badge
-      const badge = this.add.text(x, y, npc.shortName, {
+      const badge = this.add.text(anchorX, anchorY, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
@@ -253,8 +283,8 @@ export class AreaScene extends Phaser.Scene {
       badge.setDepth(71)
       sprite.setData('badge', badge)
 
-      // sprite 正上方顯示完整名字，玩家不必走近就能讀到
-      const nameLabel = this.add.text(x, y - NPC_SPRITE_SIZE * 0.85, npc.name, {
+      // sprite 正上方顯示完整名字
+      const nameLabel = this.add.text(anchorX, anchorY - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '11px',
@@ -266,8 +296,76 @@ export class AreaScene extends Phaser.Scene {
       nameLabel.setDepth(72)
       sprite.setData('nameLabel', nameLabel)
 
+      // sprite 下方顯示活動狀態（工作中 / 用餐 / 移動 …）
+      const activityLabel = this.add.text(
+        anchorX,
+        anchorY + NPC_SPRITE_SIZE * 0.65,
+        npc.activityLabel ?? '',
+        {
+          fontFamily:
+            '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+          fontSize: '10px',
+          color: '#b6e3ff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        }
+      )
+      activityLabel.setOrigin(0.5, 0)
+      activityLabel.setDepth(72)
+      activityLabel.setVisible((npc.activityLabel ?? '').length > 0)
+      sprite.setData('activityLabel', activityLabel)
+
+      // idle wander tween：sprite 在 anchor 周圍 ±18px 內漂移；label 隨之移動
+      const wanderRadius = 18 + (idx % 3) * 4
+      const wanderDuration = 1800 + (idx % 5) * 200
+      const tween = this.tweens.add({
+        targets: { tx: 0, ty: 0 },
+        tx: { from: -wanderRadius, to: wanderRadius },
+        ty: { from: -wanderRadius * 0.5, to: wanderRadius * 0.5 },
+        duration: wanderDuration,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+        onUpdate: (_t, target: { tx: number; ty: number }) => {
+          const ax = sprite.getData('anchorX') as number
+          const ay = sprite.getData('anchorY') as number
+          const newX = ax + target.tx
+          const newY = ay + target.ty
+          // 朝向：依水平移動方向左右翻轉
+          const lastX = (sprite.getData('lastX') as number | undefined) ?? newX
+          if (newX > lastX + 0.05) sprite.setFlipX(false)
+          else if (newX < lastX - 0.05) sprite.setFlipX(true)
+          sprite.setData('lastX', newX)
+          sprite.setPosition(newX, newY)
+          badge.setPosition(newX, newY)
+          nameLabel.setPosition(newX, newY - NPC_SPRITE_SIZE * 0.85)
+          activityLabel.setPosition(newX, newY + NPC_SPRITE_SIZE * 0.65)
+        }
+      })
+      sprite.setData('wanderTween', tween)
+
       this.npcSprites.set(npc.id, sprite)
     })
+
+    // 清掉本 tick 之後不再存在的 NPC
+    for (const [id, sprite] of this.npcSprites) {
+      if (!seen.has(id)) this.disposeNpcSprite(id, sprite)
+    }
+  }
+
+  private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
+    const tween = sprite.getData('wanderTween') as Phaser.Tweens.Tween | undefined
+    if (tween) {
+      this.tweens.remove(tween)
+    }
+    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+    const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+    const activityLabel = sprite.getData('activityLabel') as Phaser.GameObjects.Text | undefined
+    if (badge) badge.destroy()
+    if (nameLabel) nameLabel.destroy()
+    if (activityLabel) activityLabel.destroy()
+    sprite.destroy()
+    this.npcSprites.delete(id)
   }
 
   private npcTextureKey(npcId: string): string {
