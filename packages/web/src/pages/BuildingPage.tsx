@@ -88,13 +88,18 @@ export function BuildingPage() {
     return view.occupants.map((occ) => {
       const profile = npcs.find((n) => n.id === occ.npcId)
       const fullName = profile?.name ?? occ.npcId
-      return {
+      const base: BuildingSceneNpc = {
         id: occ.npcId,
         name: fullName,
         shortName: fullName.charAt(0),
-        isOwner: occ.isOwner,
-        ...(profile?.activity ? { activityLabel: profile.activity } : {})
+        isOwner: occ.isOwner
       }
+      if (profile?.activity) {
+        base.activity = profile.activity
+        base.activityLabel = profile.activity
+      }
+      if (typeof profile?.color === 'number') base.color = profile.color
+      return base
     })
   }, [view, npcs])
 

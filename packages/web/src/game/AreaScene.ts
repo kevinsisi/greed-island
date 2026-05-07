@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
+import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import type { NpcActivity } from '../state/types'
 
 // 區域內地圖：比城市地圖小，給玩家在單一街區裡走動。
 export const AREA_TILE_SIZE = 40
@@ -17,38 +19,8 @@ const POSITION_SAVE_INTERVAL_MS = 500
 // 後端 tick 為 5 秒；NPC 從上次位置 tween 到新位置花 ≈4.5 秒，剛好接到下個 tick
 const NPC_MOVE_TWEEN_MS = 4500
 
-const ACTIVITY_GLYPH: Readonly<Record<AreaNpcActivity, string>> = {
-  idle: '',
-  move: '👣',
-  work: '🛠️',
-  eat: '🍴',
-  sleep: '💤',
-  trade: '💰',
-  patrol: '👁️'
-}
-
-function activityGlyphFor(a: AreaNpcActivity): string {
-  return ACTIVITY_GLYPH[a] ?? ''
-}
-
-/** 給定 24-bit 背景色，回傳適合在上面顯示文字的顏色（深 / 淺二選一）。 */
-function textColorForBg(color: number): string {
-  const r = (color >> 16) & 0xff
-  const g = (color >> 8) & 0xff
-  const b = color & 0xff
-  // 標準感知亮度
-  const luma = 0.299 * r + 0.587 * g + 0.114 * b
-  return luma > 140 ? '#1a1407' : '#fff5b8'
-}
-
-export type AreaNpcActivity =
-  | 'idle'
-  | 'move'
-  | 'work'
-  | 'eat'
-  | 'sleep'
-  | 'trade'
-  | 'patrol'
+/** AreaScene 對外保留的型別 alias；和 NpcActivity 完全等價，給 React 層使用。 */
+export type AreaNpcActivity = NpcActivity
 
 export interface AreaMapNpc {
   id: string

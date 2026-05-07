@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 import type { ServerBuildingDef } from '../api/client'
+import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import type { NpcActivity } from '../state/types'
 
 // 建築物室內小場景：10x6 cell、每 cell 32px。內部裝飾從 building.interior
 // 來；NPC（owner / 室內僱員）以 sprite 在椅子或櫃台旁出現。
@@ -10,7 +12,10 @@ const PLAYER_SPEED = 130
 
 const PLAYER_COLOR = 0xfff5b8
 const PLAYER_OUTLINE = 0x1a1407
-const NPC_COLOR = 0xb6e3ff
+/** 後端沒給 color 時的 fallback */
+const NPC_FALLBACK_COLOR = 0xb6e3ff
+/** Owner 多一道金邊 */
+const OWNER_OUTLINE = 0xffd966
 const FLOOR_LIGHT = 0x2a2438
 const FLOOR_DARK = 0x1f1a2c
 const FLOOR_RESTAURANT = 0x4a2a1a
@@ -42,6 +47,10 @@ export interface BuildingSceneNpc {
   shortName: string
   isOwner: boolean
   activityLabel?: string
+  /** 24-bit RGB sprite 主色（後端 v0.12+ 推；缺值用 NPC_FALLBACK_COLOR） */
+  color?: number
+  /** 後端 activity → sprite 上方 emoji icon */
+  activity?: NpcActivity
 }
 
 export interface BuildingSceneInit {
@@ -193,9 +202,12 @@ export class BuildingScene extends Phaser.Scene {
         return
       }
 
-      const tex = this.npcTextureKey(npc.id)
-      const color = npc.isOwner ? 0xffd966 : NPC_COLOR
-      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, color, 0x1a1407, 2)
+      const fillColor = npc.color ?? NPC_FALLBACK_COLOR
+      const badgeColor = npc.color === undefined ? '#1a1407' : textColorForBg(fillColor)
+      const outline = npc.isOwner ? OWNER_OUTLINE : 0x1a1407
+      const outlineWidth = npc.isOwner ? 3 : 2
+      const tex = this.npcTextureKey(npc.id, fillColor)
+      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, outline, outlineWidth)
       const sprite = this.physics.add.sprite(ax, ay, tex)
       sprite.setDepth(70)
       sprite.setInteractive({ useHandCursor: true })
@@ -209,7 +221,7 @@ export class BuildingScene extends Phaser.Scene {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '12px',
-        color: '#1a1407',
+        color: badgeColor,
         fontStyle: 'bold'
       })
       badge.setOrigin(0.5, 0.5)
@@ -230,7 +242,29 @@ export class BuildingScene extends Phaser.Scene {
       sprite.setData('anchorX', ax)
       sprite.setData('anchorY', ay)
 
-      // gentle bob tween，每位 NPC 不同節奏
+      // 活動 emoji（idle 不顯示） — 釘在 sprite 右上肩，跟著 bob tween 一起更新
+      const iconGlyph = activityGlyphFor(npc.activity)
+      let iconText: Phaser.GameObjects.Text | null = null
+      if (iconGlyph) {
+        iconText = this.add.text(
+          ax + NPC_SPRITE_SIZE * 0.55,
+          ay - NPC_SPRITE_SIZE * 0.55,
+          iconGlyph,
+          {
+            fontFamily:
+              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+            fontSize: '13px',
+            color: '#ffffff',
+            stroke: '#0a0a0a',
+            strokeThickness: 2
+          }
+        )
+        iconText.setOrigin(0.5, 0.5)
+        iconText.setDepth(73)
+        sprite.setData('activityIcon', iconText)
+      }
+
+      // gentle bob tween（每位 NPC 不同節奏；idle 呼吸動畫，不是 wander）
       const tween = this.tweens.add({
         targets: { t: 0 },
         t: { from: -2, to: 2 },
@@ -245,6 +279,9 @@ export class BuildingScene extends Phaser.Scene {
           sprite.setPosition(ax2, ny)
           badge.setPosition(ax2, ny)
           label.setPosition(ax2, ny - NPC_SPRITE_SIZE * 0.85)
+          if (iconText) {
+            iconText.setPosition(ax2 + NPC_SPRITE_SIZE * 0.55, ny - NPC_SPRITE_SIZE * 0.55)
+          }
         }
       })
       sprite.setData('tween', tween)
@@ -257,15 +294,18 @@ export class BuildingScene extends Phaser.Scene {
       if (tween) this.tweens.remove(tween)
       const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
       const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+      const iconText = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
       badge?.destroy()
       nameLabel?.destroy()
+      iconText?.destroy()
       sprite.destroy()
       this.npcSprites.delete(id)
     }
   }
 
-  private npcTextureKey(id: string): string {
-    return `bld-npc-${id}`
+  private npcTextureKey(id: string, color?: number): string {
+    if (color === undefined) return `bld-npc-${id}`
+    return `bld-npc-${id}-${color.toString(16)}`
   }
 
   private makeSquareTexture(
