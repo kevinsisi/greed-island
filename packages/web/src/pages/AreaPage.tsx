@@ -238,10 +238,13 @@ export function AreaPage() {
           </div>
         </div>
 
-        {/* 下方：可收合的分頁抽屜。預設收合，只露 tab 列。 */}
-        <div className="absolute bottom-2 left-2 right-2 z-10 flex flex-col gap-2 pointer-events-none">
-          {drawerTab && (
-            <div className="pointer-events-auto bg-ground-900/95 backdrop-blur border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
+        {/* 下方留個空 anchor，讓建築物提示氣泡不會被 tab 蓋到 */}
+      </div>
+
+      {/* tab 區（已移出地圖，避免蓋住建築 / NPC） */}
+      <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
+        {drawerTab && (
+          <div className="bg-ground-900/95 border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
               {drawerTab === 'scene' && (
                 <div className="flex flex-col gap-2">
                   <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500 flex items-center gap-2">
@@ -403,40 +406,39 @@ export function AreaPage() {
                 </div>
               )}
 
-              {drawerTab === 'players' && (
-                <NearbyPlayers tileId={tileId} tileName={tile.name} />
-              )}
-            </div>
-          )}
-
-          {/* tab 列 (永遠可見) */}
-          <div className="pointer-events-auto flex items-stretch gap-1 bg-ground-900/85 backdrop-blur border border-ground-700 rounded-sharp p-1">
-            <DrawerTabButton
-              label={t('area.scene')}
-              active={drawerTab === 'scene'}
-              onClick={() => toggleTab('scene')}
-            />
-            <DrawerTabButton
-              label={`${t('area.npcs')} ${occupants.length}`}
-              active={drawerTab === 'npcs'}
-              onClick={() => toggleTab('npcs')}
-            />
-            <DrawerTabButton
-              label={t('cards.tabLabel')}
-              active={drawerTab === 'cards'}
-              onClick={() => toggleTab('cards')}
-            />
-            <DrawerTabButton
-              label={`${t('area.events')} ${localEvents.length}`}
-              active={drawerTab === 'events'}
-              onClick={() => toggleTab('events')}
-            />
-            <DrawerTabButton
-              label={t('social.peerNearby')}
-              active={drawerTab === 'players'}
-              onClick={() => toggleTab('players')}
-            />
+            {drawerTab === 'players' && (
+              <NearbyPlayers tileId={tileId} tileName={tile.name} />
+            )}
           </div>
+        )}
+
+        {/* tab 列（已移到地圖外面） */}
+        <div className="flex items-stretch gap-1 bg-ground-900/85 border border-ground-700 rounded-sharp p-1">
+          <DrawerTabButton
+            label={t('area.scene')}
+            active={drawerTab === 'scene'}
+            onClick={() => toggleTab('scene')}
+          />
+          <DrawerTabButton
+            label={`${t('area.npcs')} ${occupants.length}`}
+            active={drawerTab === 'npcs'}
+            onClick={() => toggleTab('npcs')}
+          />
+          <DrawerTabButton
+            label={t('cards.tabLabel')}
+            active={drawerTab === 'cards'}
+            onClick={() => toggleTab('cards')}
+          />
+          <DrawerTabButton
+            label={`${t('area.events')} ${localEvents.length}`}
+            active={drawerTab === 'events'}
+            onClick={() => toggleTab('events')}
+          />
+          <DrawerTabButton
+            label={t('social.peerNearby')}
+            active={drawerTab === 'players'}
+            onClick={() => toggleTab('players')}
+          />
         </div>
       </div>
 
