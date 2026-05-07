@@ -42,14 +42,32 @@ describe('parseReply', () => {
     expect(out!.trustDelta).toBe(5)
   })
 
-  it('rejects invalid intent', () => {
-    const raw = JSON.stringify({ zh: 'a', en: 'b', intent: 'bogus', trustDelta: 0 })
-    expect(parseReply(raw)).toBeNull()
+  it('falls back to ask when intent is missing or invalid (v0.12 tolerance)', () => {
+    // Per ARCHITECTURE §9 the AI's intent is advisory: when the model
+    // omits it or returns garbage we still want a reply line, not the
+    // whole static fallback library kicking in.
+    const bogus = JSON.stringify({ zh: 'a', en: 'b', intent: 'bogus', trustDelta: 0 })
+    const out = parseReply(bogus)
+    expect(out).not.toBeNull()
+    expect(out!.intent).toBe('ask')
+    expect(out!.zh).toBe('a')
   })
 
-  it('rejects missing fields', () => {
-    expect(parseReply('{"zh":"a"}')).toBeNull()
+  it('uses zh as fallback for missing/truncated en (v0.12 tolerance)', () => {
+    // Reproduces the production failure: Gemini wrote a full zh string
+    // then ran out of tokens mid-en. Old parser threw the whole reply
+    // away; new parser keeps zh and mirrors it into en.
+    const raw = '{"zh":"完整中文回覆","en":"Sorry I cut off mid-'
+    const out = parseReply(raw)
+    expect(out).not.toBeNull()
+    expect(out!.zh).toBe('完整中文回覆')
+    expect(out!.en.length).toBeGreaterThan(0)
+  })
+
+  it('rejects only when zh itself is missing or junk', () => {
+    // Without a zh string we genuinely have nothing to show the player.
     expect(parseReply('not json at all')).toBeNull()
+    expect(parseReply('{"en":"only english"}')).toBeNull()
   })
 
   it('parses a fenced reply whose closing ``` was truncated', () => {

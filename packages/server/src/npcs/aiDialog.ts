@@ -57,10 +57,12 @@ export async function generateAiReply(
       systemPrompt,
       userPrompt,
       temperature: 0.9,
-      // Chinese is token-heavy and Gemini sometimes adds 「」/punctuation
-      // that pushed the old 600-token cap to truncate mid-JSON, leaving
-      // the closing brace + markdown fence off and breaking the parser.
-      maxOutputTokens: 1024,
+      // Chinese is token-heavy. Gemini-2.5-flash often spends 800+
+      // tokens on the zh string alone for verbose NPCs (e.g. mountain
+      // porters explaining their job), then runs out of budget before
+      // closing the en field. 2048 gives comfortable headroom for the
+      // full {zh, en, intent, trustDelta} object.
+      maxOutputTokens: 2048,
       // Force raw JSON output (no ```json fences). Gemini-2.5-flash
       // honours this and emits a parseable object directly.
       responseMimeType: 'application/json',
@@ -219,25 +221,37 @@ function describeTier(tier: RelationshipTier): string {
   return '深交，願意分享內部消息、給予照顧或承諾，但仍維持自身立場'
 }
 
-/** Try to extract a JSON object from a possibly-wrapped Gemini reply. */
+/**
+ * Try to extract a JSON object from a possibly-wrapped Gemini reply.
+ *
+ * Tolerance rules (per ARCHITECTURE §9 — AI is advisory, the canonical
+ * trustDelta comes from the deterministic server rule, so a missing
+ * trustDelta from AI is fine and never the reason to fall back):
+ *   - `zh` is required (this is the reply line shown to Chinese players)
+ *   - `en` falls back to `zh` if missing or truncated mid-string
+ *   - `intent` falls back to 'ask' if missing/invalid
+ *   - `trustDelta` falls back to 0 (server overwrites it anyway)
+ *
+ * This was tightened in v0.12 after Gemini occasionally truncated mid
+ * `en` field and the parser threw away an otherwise usable `zh`,
+ * making every NPC dialog flip back to the static fallback library.
+ */
 export function parseReply(raw: string): AiDialogReply | null {
   const candidates = extractJsonCandidates(raw)
   for (const candidate of candidates) {
     try {
       const obj = JSON.parse(candidate) as Partial<AiDialogReply>
-      if (
-        typeof obj.zh === 'string' &&
-        typeof obj.en === 'string' &&
-        isInteractIntent(obj.intent) &&
-        typeof obj.trustDelta === 'number' &&
-        Number.isFinite(obj.trustDelta)
-      ) {
-        return {
-          zh: obj.zh.trim(),
-          en: obj.en.trim(),
-          intent: obj.intent,
-          trustDelta: clampDelta(obj.trustDelta),
-        }
+      if (typeof obj.zh !== 'string' || obj.zh.trim().length === 0) continue
+      const zh = obj.zh.trim()
+      const en = typeof obj.en === 'string' && obj.en.trim().length > 0 ? obj.en.trim() : zh
+      const intent: InteractIntent = isInteractIntent(obj.intent) ? obj.intent : 'ask'
+      const rawDelta =
+        typeof obj.trustDelta === 'number' && Number.isFinite(obj.trustDelta) ? obj.trustDelta : 0
+      return {
+        zh,
+        en,
+        intent,
+        trustDelta: clampDelta(rawDelta),
       }
     } catch {
       continue
