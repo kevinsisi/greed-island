@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type DistrictId } from './districts'
-import { MapScene, type MapNpc, type MapSceneInit } from './MapScene'
+import { MapScene, type MapAreaOverlay, type MapNpc, type MapSceneInit } from './MapScene'
 
 export interface PhaserGameProps {
   npcs: MapNpc[]
@@ -9,6 +9,8 @@ export interface PhaserGameProps {
   hudStrings: MapSceneInit['hudStrings']
   onAreaEnter: (districtId: DistrictId) => void
   onNpcInteract: (npcId: string) => void
+  /** v0.14.0：每 tile 的派系 / 治安 / 經濟 overlay。空陣列 = 無 overlay。 */
+  areaOverlays?: MapAreaOverlay[]
 }
 
 const PLAYER_POS_STORAGE_KEY = 'gi:hub:player-pos:v1'
@@ -48,7 +50,7 @@ function savePlayerPosition(pos: { x: number; y: number } | null): void {
  * 把 Phaser 場景嵌進 React。生命週期：mount 建一次 game，unmount 才 destroy。
  * Props 變動 (npcs / locale / hud strings) 會以 emit 形式餵進 scene，避免重建整個 game。
  */
-export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInteract }: PhaserGameProps) {
+export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInteract, areaOverlays }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
 
@@ -99,7 +101,8 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
       npcs,
       locale,
       hudStrings,
-      initialPosition: loadPlayerPosition()
+      initialPosition: loadPlayerPosition(),
+      areaOverlays: areaOverlays ?? []
     }
     game.scene.start(MapScene.KEY, init)
 
@@ -133,14 +136,14 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // npcs / locale / hud 字串變動 → 通知場景刷新
+  // npcs / locale / hud 字串 / area overlay 變動 → 通知場景刷新
   useEffect(() => {
     const game = gameRef.current
     if (!game) return
     const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
     if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({ npcs, locale, hudStrings })
-  }, [npcs, locale, hudStrings])
+    scene.applyExternalUpdate({ npcs, locale, hudStrings, areaOverlays })
+  }, [npcs, locale, hudStrings, areaOverlays])
 
   return (
     <div

@@ -66,6 +66,11 @@ export async function generateAiReply(
       // Force raw JSON output (no ```json fences). Gemini-2.5-flash
       // honours this and emits a parseable object directly.
       responseMimeType: 'application/json',
+      // v0.14.0：2.5-flash 預設會耗一部分 maxOutputTokens 在內部 CoT
+      // (chain-of-thought) tokens 上，對「短 JSON 對話」這種任務常常導致
+      // 實際 text candidate 為空字串、parser 失敗、整個 NPC 對話掉到
+      // fallback。把 thinking budget 設成 0 → 全部 budget 留給輸出。
+      thinkingBudget: 0,
     })
   } catch (err) {
     if (err instanceof GeminiUnavailableError) {

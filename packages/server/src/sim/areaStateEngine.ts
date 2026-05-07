@@ -42,6 +42,7 @@ export const FACTION_LABEL_EN: Readonly<Record<FactionId, string>> = {
 }
 
 const FACTION_DOMINANCE_THRESHOLD = 80
+const FACTION_RISING_THRESHOLD = 60
 const FACTION_SHIFT_PER_NPC_TICK = 0.6
 const FACTION_DECAY_PER_TICK = 0.08
 
@@ -49,6 +50,7 @@ const RESOURCE_MIN = 0
 const RESOURCE_MAX = 100
 const RESOURCE_NATURAL_DECAY_PER_HOUR = 4
 const RESOURCE_PRESSURE_THRESHOLD = 30
+const RESOURCE_RECOVERY_THRESHOLD = 55
 const RESOURCE_PRESSURE_COOLDOWN_TICKS = TICKS_PER_HOUR
 
 type ResourceKey = 'food' | 'safety' | 'economy'
@@ -64,6 +66,12 @@ export type AreaState = Readonly<{
   resources: ResourceMap
   lastUpdatedTick: number
   recentEvents: ReadonlyArray<AreaLocalEvent>
+  /**
+   * Per-resource cooldown ticks for pressure / recovery threshold-crossing
+   * events. Persisted in the area-state fact so a server restart does not
+   * re-fire the same pressure event 1s later.
+   */
+  pressureCooldowns?: Readonly<Record<string, number>>
 }>
 
 export type AreaLocalEvent = Readonly<{
@@ -74,6 +82,10 @@ export type AreaLocalEvent = Readonly<{
     | 'pressure.food_shortage'
     | 'pressure.crime_spike'
     | 'pressure.price_hike'
+    | 'recovery.food_restored'
+    | 'recovery.safety_restored'
+    | 'recovery.economy_restored'
+    | 'faction.rising'
   narration: string
   detail: Record<string, string | number>
 }>
@@ -111,7 +123,8 @@ function makeInitialState(tileId: string): AreaState {
     dominantFaction: null,
     resources: { ...INITIAL_RESOURCES },
     lastUpdatedTick: 0,
-    recentEvents: []
+    recentEvents: [],
+    pressureCooldowns: {}
   }
 }
 
@@ -201,13 +214,24 @@ export class AreaStateEngine {
 
     const dominantFaction = isFactionId(r.dominantFaction) ? r.dominantFaction : null
 
+    const pressureCooldowns: Record<string, number> = {}
+    if (r.pressureCooldowns && typeof r.pressureCooldowns === 'object') {
+      for (const [k, v] of Object.entries(r.pressureCooldowns as Record<string, unknown>)) {
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          pressureCooldowns[k] = v
+          this.lastPressureTickByKey.set(`${tileId}:${k}`, v)
+        }
+      }
+    }
+
     this.states.set(tileId, {
       tileId,
       factionControl,
       dominantFaction,
       resources,
       lastUpdatedTick: typeof r.lastUpdatedTick === 'number' ? r.lastUpdatedTick : 0,
-      recentEvents
+      recentEvents,
+      pressureCooldowns
     })
   }
 
@@ -333,32 +357,108 @@ export class AreaStateEngine {
         }
       }
 
+      // Pressure events (resource crosses below threshold) + recovery events
+      // (resource bounces back above the recovery threshold). Each kind has a
+      // shared cooldown so we don't fire pressure→recovery→pressure rapidly.
       for (const k of RESOURCE_KEYS) {
-        if (resources[k] < RESOURCE_PRESSURE_THRESHOLD) {
-          const pkey = `${tileId}:${k}`
-          const lastTick = this.lastPressureTickByKey.get(pkey) ?? -RESOURCE_PRESSURE_COOLDOWN_TICKS
-          if (currentTick - lastTick < RESOURCE_PRESSURE_COOLDOWN_TICKS) continue
-          this.lastPressureTickByKey.set(pkey, currentTick)
-          const tileName = TILE_NAME_BY_ID[tileId] ?? tileId
+        const pkey = `${tileId}:${k}`
+        const lastTick =
+          this.lastPressureTickByKey.get(pkey) ?? -RESOURCE_PRESSURE_COOLDOWN_TICKS
+        const onCooldown = currentTick - lastTick < RESOURCE_PRESSURE_COOLDOWN_TICKS
+        const beforeVal = before.resources[k]
+        const afterVal = resources[k]
+        const tileName = TILE_NAME_BY_ID[tileId] ?? tileId
+
+        const crossedDown =
+          beforeVal >= RESOURCE_PRESSURE_THRESHOLD && afterVal < RESOURCE_PRESSURE_THRESHOLD
+        const stillBelow = afterVal < RESOURCE_PRESSURE_THRESHOLD && !onCooldown
+        if (crossedDown || stillBelow) {
           const kind: AreaLocalEvent['kind'] =
             k === 'food'
               ? 'pressure.food_shortage'
               : k === 'safety'
                 ? 'pressure.crime_spike'
                 : 'pressure.price_hike'
-          const narration = composePressureNarration(kind, tileName, resources[k])
+          const narration = composePressureNarration(kind, tileName, afterVal)
           pushLocalEvent({
             tick: currentTick,
             kind,
             narration,
-            detail: { resource: k, value: Math.round(resources[k]) }
+            detail: { resource: k, value: Math.round(afterVal) }
           })
           pressureEvents.push({
             tileId,
             kind,
             narration,
-            detail: { resource: k, value: Math.round(resources[k]) }
+            detail: { resource: k, value: Math.round(afterVal) }
           })
+          this.lastPressureTickByKey.set(pkey, currentTick)
+          continue
+        }
+        const crossedUp =
+          beforeVal < RESOURCE_RECOVERY_THRESHOLD && afterVal >= RESOURCE_RECOVERY_THRESHOLD
+        if (crossedUp && !onCooldown) {
+          const kind: AreaLocalEvent['kind'] =
+            k === 'food'
+              ? 'recovery.food_restored'
+              : k === 'safety'
+                ? 'recovery.safety_restored'
+                : 'recovery.economy_restored'
+          const narration = composeRecoveryNarration(kind, tileName, afterVal)
+          pushLocalEvent({
+            tick: currentTick,
+            kind,
+            narration,
+            detail: { resource: k, value: Math.round(afterVal) }
+          })
+          pressureEvents.push({
+            tileId,
+            kind,
+            narration,
+            detail: { resource: k, value: Math.round(afterVal) }
+          })
+          this.lastPressureTickByKey.set(pkey, currentTick)
+        }
+      }
+
+      // Faction "rising" event：跨過 60 但還沒到 dominance 80。讓玩家看到
+      // 派系鬥爭過程，而不是只在 80 跨過時的 dominance 事件。
+      for (const f of FACTIONS) {
+        const beforeScore = before.factionControl[f]
+        const afterScore = factionControl[f]
+        const fkey = `${tileId}:faction.${f}`
+        const lastTick =
+          this.lastPressureTickByKey.get(fkey) ?? -RESOURCE_PRESSURE_COOLDOWN_TICKS
+        const onCooldown = currentTick - lastTick < RESOURCE_PRESSURE_COOLDOWN_TICKS
+        if (
+          beforeScore < FACTION_RISING_THRESHOLD &&
+          afterScore >= FACTION_RISING_THRESHOLD &&
+          !onCooldown &&
+          afterScore < FACTION_DOMINANCE_THRESHOLD
+        ) {
+          const tileName = TILE_NAME_BY_ID[tileId] ?? tileId
+          const factionName = FACTION_LABEL_ZH[f]
+          const narration = `${factionName}在${tileName}的影響力悄悄爬到 ${Math.round(afterScore)}，已能左右半個街區。`
+          pushLocalEvent({
+            tick: currentTick,
+            kind: 'faction.rising',
+            narration,
+            detail: { faction: f, value: Math.round(afterScore) }
+          })
+          pressureEvents.push({
+            tileId,
+            kind: 'faction.rising',
+            narration,
+            detail: { faction: f, value: Math.round(afterScore) }
+          })
+          this.lastPressureTickByKey.set(fkey, currentTick)
+        }
+      }
+
+      const persistedCooldowns: Record<string, number> = {}
+      for (const [k, v] of this.lastPressureTickByKey.entries()) {
+        if (k.startsWith(`${tileId}:`)) {
+          persistedCooldowns[k.slice(tileId.length + 1)] = v
         }
       }
 
@@ -368,7 +468,8 @@ export class AreaStateEngine {
         dominantFaction,
         resources,
         lastUpdatedTick: currentTick,
-        recentEvents: newRecentEvents
+        recentEvents: newRecentEvents,
+        pressureCooldowns: persistedCooldowns
       }
       if (areaStatesEqualForPersist(before, next)) {
         const merged: AreaState = { ...before, lastUpdatedTick: currentTick }
@@ -406,7 +507,8 @@ function cloneState(s: AreaState): AreaState {
     dominantFaction: s.dominantFaction,
     resources: { ...s.resources },
     lastUpdatedTick: s.lastUpdatedTick,
-    recentEvents: s.recentEvents.map((e) => ({ ...e, detail: { ...e.detail } }))
+    recentEvents: s.recentEvents.map((e) => ({ ...e, detail: { ...e.detail } })),
+    pressureCooldowns: { ...(s.pressureCooldowns ?? {}) }
   }
 }
 
@@ -425,5 +527,23 @@ function composePressureNarration(
       return `${tileName}經濟蕭條（指數 ${v}），物價飆漲讓商戶都皺起眉頭。`
     default:
       return `${tileName}承受著未知的壓力。`
+  }
+}
+
+function composeRecoveryNarration(
+  kind: AreaLocalEvent['kind'],
+  tileName: string,
+  value: number
+): string {
+  const v = Math.round(value)
+  switch (kind) {
+    case 'recovery.food_restored':
+      return `${tileName}的糧倉重新堆滿（存量 ${v}），市集飄出久違的香氣。`
+    case 'recovery.safety_restored':
+      return `${tileName}的治安回穩（指數 ${v}），巡守隊終於能在午後喘口氣。`
+    case 'recovery.economy_restored':
+      return `${tileName}的市況轉熱（指數 ${v}），商戶重新拉開大幅的攤位。`
+    default:
+      return `${tileName}的壓力暫時鬆動。`
   }
 }

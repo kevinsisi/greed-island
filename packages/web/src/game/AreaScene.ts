@@ -37,6 +37,10 @@ export interface AreaMapNpc {
   color: number
   /** 活動 enum，用來顯示活動圖示 emoji */
   activity: AreaNpcActivity
+  /** v0.14.0：mood < 30 時 name label 用灰色顯示低落感 */
+  mood?: number
+  /** v0.14.0：health < 30 時 sprite 旁加 🤕 圖示 */
+  health?: number
 }
 
 /** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
@@ -422,11 +426,24 @@ export class AreaScene extends Phaser.Scene {
         const activityIcon = existing.getData('activityIcon') as
           | Phaser.GameObjects.Text
           | undefined
+        const healthIcon = existing.getData('healthIcon') as
+          | Phaser.GameObjects.Text
+          | undefined
         if (nameLabel && nameLabel.text !== npc.name) nameLabel.setText(npc.name)
+        // mood < 30 → name label 變灰；其餘維持 cream
+        if (nameLabel) {
+          const moodLow = typeof npc.mood === 'number' && npc.mood < 30
+          const targetColor = moodLow ? '#8a8a8a' : '#fff5b8'
+          if (nameLabel.style.color !== targetColor) nameLabel.setColor(targetColor)
+        }
         if (activityIcon) {
           const glyph = activityGlyphFor(npc.activity)
           if (activityIcon.text !== glyph) activityIcon.setText(glyph)
           activityIcon.setVisible(glyph.length > 0)
+        }
+        if (healthIcon) {
+          const injured = typeof npc.health === 'number' && npc.health < 30
+          healthIcon.setVisible(injured)
         }
         // sprite 顏色（faction 變更也跟著換）
         const currentColor = existing.getData('npcColor') as number | undefined
@@ -475,18 +492,39 @@ export class AreaScene extends Phaser.Scene {
       badge.setDepth(71)
       sprite.setData('badge', badge)
 
-      // 完整名字
+      // 完整名字（mood < 30 → 灰；其餘 cream）
+      const moodLow = typeof npc.mood === 'number' && npc.mood < 30
       const nameLabel = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '11px',
-        color: '#fff5b8',
+        color: moodLow ? '#8a8a8a' : '#fff5b8',
         stroke: '#0a0a0a',
         strokeThickness: 3
       })
       nameLabel.setOrigin(0.5, 1)
       nameLabel.setDepth(72)
       sprite.setData('nameLabel', nameLabel)
+
+      // health < 30 → sprite 左上角加 🤕，視覺上標示「受傷」
+      const injured = typeof npc.health === 'number' && npc.health < 30
+      const healthIcon = this.add.text(
+        target.x - NPC_SPRITE_SIZE * 0.55,
+        target.y - NPC_SPRITE_SIZE * 0.55,
+        '🤕',
+        {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        }
+      )
+      healthIcon.setOrigin(0.5, 0.5)
+      healthIcon.setDepth(73)
+      healthIcon.setVisible(injured)
+      sprite.setData('healthIcon', healthIcon)
 
       // sprite 右上角的活動 emoji
       const glyph = activityGlyphFor(npc.activity)
@@ -559,6 +597,7 @@ export class AreaScene extends Phaser.Scene {
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
+    const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
     const startX = sprite.x
     const distance = Phaser.Math.Distance.Between(startX, sprite.y, x, y)
@@ -568,6 +607,8 @@ export class AreaScene extends Phaser.Scene {
       if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
       if (activityIcon)
         activityIcon.setPosition(x + NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
+      if (healthIcon)
+        healthIcon.setPosition(x - NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
       if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
       return
     }
@@ -585,6 +626,8 @@ export class AreaScene extends Phaser.Scene {
         if (nameLabel) nameLabel.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 0.85)
         if (activityIcon)
           activityIcon.setPosition(t.px + NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
+        if (healthIcon)
+          healthIcon.setPosition(t.px - NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
         if (chatBubble) chatBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.6)
       }
     })
@@ -628,10 +671,12 @@ export class AreaScene extends Phaser.Scene {
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
+    const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
     if (badge) badge.destroy()
     if (nameLabel) nameLabel.destroy()
     if (activityIcon) activityIcon.destroy()
+    if (healthIcon) healthIcon.destroy()
     if (chatBubble) chatBubble.destroy()
     sprite.destroy()
     this.npcSprites.delete(id)

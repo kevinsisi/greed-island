@@ -34,7 +34,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'BUILDING_LEAVE',
   'RARE_WINDOW_OPEN',
   'RARE_WINDOW_CLOSE',
-  'WORLD_TICK'
+  'WORLD_TICK',
+  'PLAYER_INTERVENE'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -132,6 +133,28 @@ export type WorldTickCmd = Readonly<{
   tick: number
 }>
 
+/**
+ * v0.14.0：玩家介入兩位 NPC 的衝突。actor 為 'player'，actorId = accountId
+ * 字串形式（保持 Command.actorId 為 string 一致性）。intentClass 由前端傳給
+ * 後端 OR 後端用 AI 從 message 判斷後再放進命令裡 — Rule Engine 拿到的是
+ * 已分類過的命令。AI 不直接寫 EventLog，符合 ARCHITECTURE §9。
+ */
+export type PlayerIntervenecmd = Readonly<{
+  playerAccountId: string
+  npcA: string
+  npcB: string
+  tile: string
+  /**
+   * intentClass：mediate=和事佬 / provoke=煽風點火 / watch=旁觀 /
+   * threaten=威脅。後端在 AI 失敗時 fallback 到 'watch'。
+   */
+  intentClass: 'mediate' | 'provoke' | 'watch' | 'threaten'
+  /** 玩家自由輸入的原文（可空字串：純按鈕介入） */
+  message: string
+  /** 一行敘事，給 catch-up summary / SSE listener 用 */
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -146,6 +169,7 @@ export type LivingWorldCommandPayload =
   | RareWindowOpenCmd
   | RareWindowCloseCmd
   | WorldTickCmd
+  | PlayerIntervenecmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -269,6 +293,27 @@ const VALIDATORS: Readonly<
   WORLD_TICK: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.tick !== 'number' || !Number.isFinite(p.tick)) return 'tick required'
+    return null
+  },
+  PLAYER_INTERVENE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) {
+      return 'playerAccountId required'
+    }
+    if (typeof p.npcA !== 'string' || p.npcA.length === 0) return 'npcA required'
+    if (typeof p.npcB !== 'string' || p.npcB.length === 0) return 'npcB required'
+    if (p.npcA === p.npcB) return 'npcA and npcB must differ'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (
+      p.intentClass !== 'mediate' &&
+      p.intentClass !== 'provoke' &&
+      p.intentClass !== 'watch' &&
+      p.intentClass !== 'threaten'
+    ) {
+      return 'intentClass must be mediate / provoke / watch / threaten'
+    }
+    if (typeof p.message !== 'string') return 'message required (can be empty string)'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   }
 }
