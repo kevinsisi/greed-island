@@ -60,6 +60,7 @@ export function AreaPage() {
   const [areaState, setAreaState] = useState<ServerAreaState | null>(null)
   const [ambient, setAmbient] = useState<ServerAmbient | null>(null)
   const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
+  const [nearbyBuildingId, setNearbyBuildingId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -186,6 +187,15 @@ export function AreaPage() {
     [navigate]
   )
 
+  const handleNearbyBuildingChange = useCallback((id: string | null) => {
+    setNearbyBuildingId(id)
+  }, [])
+
+  const nearbyBuilding = useMemo(
+    () => (nearbyBuildingId ? buildings.find((b) => b.def.id === nearbyBuildingId) ?? null : null),
+    [nearbyBuildingId, buildings]
+  )
+
   const handleNpcInteract = useCallback(
     (npcId: string) => {
       const npc = npcs.find((n) => n.id === npcId)
@@ -220,7 +230,29 @@ export function AreaPage() {
 
   return (
     <div className="relative w-full max-w-[600px] mx-auto">
-      <div className="relative w-full">
+      {/* 上方 chrome：返回鈕 + 區域名稱（在地圖上方，不再蓋住地圖內容） */}
+      <div className="px-2 py-2 flex items-center justify-between gap-2">
+        <Link
+          to="/"
+          className="gi-touch px-3 inline-flex items-center text-[11px] font-display uppercase tracking-tightest text-ground-200 bg-ground-900/85 border border-ground-700 hover:border-ember-600 hover:text-ember-400 rounded-sharp transition-colors"
+        >
+          {t('area.back')}
+        </Link>
+        <div className="flex flex-col items-end bg-ground-900/85 border border-ground-700 rounded-sharp px-3 py-1.5 max-w-[70%]">
+          <span className="font-display text-[10px] uppercase tracking-tightest text-ember-500 leading-tight">
+            {t('area.eyebrow', { biome: biomeLabel(tile.biome, locale) })}
+          </span>
+          <span className="flex items-center gap-1 font-display font-extrabold text-base tracking-tightest text-ground-100 leading-tight">
+            <span aria-hidden="true" className="text-ember-500/80">
+              {lore.glyph}
+            </span>
+            <span className="truncate">{tile.name}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 地圖 — 純畫面，沒有疊任何 HTML 按鈕 */}
+      <div className="w-full">
         <AreaPhaserGame
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
@@ -234,50 +266,29 @@ export function AreaPage() {
           onNearbyNpcsChange={handleNearbyNpcsChange}
           onInteractTooFar={handleInteractTooFar}
           onBuildingEnter={handleBuildingEnter}
+          onNearbyBuildingChange={handleNearbyBuildingChange}
         />
-
-        {/* 上方：返回鈕 + 區域名稱 */}
-        <div className="absolute top-2 left-2 right-2 z-10 flex items-start justify-between gap-2 pointer-events-none">
-          <Link
-            to="/"
-            className="pointer-events-auto gi-touch px-3 inline-flex items-center text-[11px] font-display uppercase tracking-tightest text-ground-200 bg-ground-900/85 backdrop-blur border border-ground-700 hover:border-ember-600 hover:text-ember-400 rounded-sharp transition-colors"
-          >
-            {t('area.back')}
-          </Link>
-          <div className="pointer-events-none flex flex-col items-end bg-ground-900/85 backdrop-blur border border-ground-700 rounded-sharp px-3 py-1.5 max-w-[60%]">
-            <span className="font-display text-[10px] uppercase tracking-tightest text-ember-500 leading-tight">
-              {t('area.eyebrow', { biome: biomeLabel(tile.biome, locale) })}
-            </span>
-            <span className="flex items-center gap-1 font-display font-extrabold text-base tracking-tightest text-ground-100 leading-tight">
-              <span aria-hidden="true" className="text-ember-500/80">
-                {lore.glyph}
-              </span>
-              <span className="truncate">{tile.name}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* 下方留個空 anchor，讓建築物提示氣泡不會被 tab 蓋到 */}
       </div>
 
-      {/* tab 區（已移出地圖，避免蓋住建築 / NPC） */}
+      {/* 下方：建築物進入按鈕 + tab 區 */}
       <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
+        {nearbyBuilding && nearbyBuilding.def.enterable && (
+          <button
+            type="button"
+            onClick={() => handleBuildingEnter(nearbyBuilding.def.id)}
+            className="gi-touch w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sharp bg-ember-600 hover:bg-ember-500 text-ground-950 font-display font-extrabold text-sm tracking-tightest transition-colors"
+          >
+            <span aria-hidden="true">{nearbyBuilding.def.placement.glyph}</span>
+            <span>進入 {nearbyBuilding.def.nameZh}</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        )}
         {drawerTab && (
           <div className="bg-ground-900/95 border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
               {drawerTab === 'scene' && (
                 <div className="flex flex-col gap-2">
-                  <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500 flex items-center gap-2">
-                    <span>{t('area.scene')}</span>
-                    {ambient && (
-                      <span className={[
-                        'text-[9px] tracking-tight px-1.5 py-0.5 rounded',
-                        ambient.source === 'ai'
-                          ? 'bg-ember-700/40 text-ember-200'
-                          : 'bg-ground-800 text-ground-400'
-                      ].join(' ')}>
-                        {ambient.source === 'ai' ? 'AI' : '靜態'}
-                      </span>
-                    )}
+                  <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500">
+                    {t('area.scene')}
                   </div>
                   <p className="text-[13px] text-ground-100 leading-relaxed">
                     {ambient?.text ?? lore.scene[locale]}

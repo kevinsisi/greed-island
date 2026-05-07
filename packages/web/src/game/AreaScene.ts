@@ -83,6 +83,8 @@ export interface AreaSceneCallbacks {
   onInteractTooFar?: (npcId: string) => void
   /** 玩家走進建築物提示範圍 → 點該建築可進入。React 層應 navigate。 */
   onBuildingEnter?: (buildingId: string) => void
+  /** v0.15.2：玩家最近的可進入建築變動時 fire；React 渲染地圖外面的「進入 X」HTML 按鈕。 */
+  onNearbyBuildingChange?: (buildingId: string | null) => void
 }
 
 export interface AreaMapBuilding {
@@ -962,12 +964,41 @@ export class AreaScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
+      this.attachNpcIdleAnimation(sprite, npc.id)
       this.npcSprites.set(npc.id, sprite)
     }
 
     for (const [id, sprite] of this.npcSprites) {
       if (!seen.has(id)) this.disposeNpcSprite(id, sprite)
     }
+  }
+
+  /**
+   * v0.15.2：給 NPC sprite 套上一個微微「呼吸」的 idle tween (scaleY 0.95-1.05)。
+   * 解決問題：玩家進場景時，沒下一輪 polling 之前 NPC subCol/subRow 不會變，
+   * 沒有位置 tween 觸發 → sprite 完全靜止 → 場景看起來像截圖。idle tween
+   * 是純視覺、跟位置 tween 走不同 axis (scaleY vs x/y)，不互相干擾。
+   * phase delay 用 npcId hash，避免每位 NPC 完全同步呼吸。
+   */
+  private attachNpcIdleAnimation(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    npcId: string
+  ): void {
+    const existing = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
+    if (existing) return
+    let h = 5381
+    for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+    const delay = h % 800
+    const tween = this.tweens.add({
+      targets: sprite,
+      scaleY: { from: 0.93, to: 1.06 },
+      duration: 1200 + (h % 400),
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1,
+      delay
+    })
+    sprite.setData('idleTween', tween)
   }
 
   /** 把當前 sprite + 旁邊所有 label 從現在位置 tween 到目標 (x,y)。 */
@@ -1048,6 +1079,8 @@ export class AreaScene extends Phaser.Scene {
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
     const moveTween = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (moveTween) this.tweens.remove(moveTween)
+    const idleTween = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
+    if (idleTween) this.tweens.remove(idleTween)
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
@@ -1193,7 +1226,10 @@ export class AreaScene extends Phaser.Scene {
         nearestId = b.id
       }
     }
-    this.nearbyBuildingId = nearestId
+    if (nearestId !== this.nearbyBuildingId) {
+      this.nearbyBuildingId = nearestId
+      this.callbacks.onNearbyBuildingChange?.(nearestId)
+    }
   }
 
   private makeSquareTexture(

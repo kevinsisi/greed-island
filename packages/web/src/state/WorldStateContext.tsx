@@ -45,7 +45,9 @@ interface WorldStateValue {
 const WorldStateContext = createContext<WorldStateValue | null>(null)
 
 const RECENT_EVENT_LIMIT = 100
-const POLL_FALLBACK_MS = 8_000
+// 後端 tick 5s。短於 tick 的 polling 確保 NPC subCol/subRow 變動最多 ≈3s 後就送到
+// 前端，AreaScene tweenNpcTo 4500ms 就能順暢接上下一輪位置變動。
+const POLL_FALLBACK_MS = 3_000
 const SSE_RECONNECT_MS = 5_000
 const VALID_BIOMES: readonly MapTile['biome'][] = [
   'grass',
