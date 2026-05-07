@@ -211,6 +211,8 @@ export const zh: Translations = {
   'ticker.expand': '展開',
 
   'worldEvent.heading': '潮鳴市現場',
+  'worldEvent.collapse': '收起',
+  'worldEvent.expand': '展開',
   'worldEvent.empty': '此刻沒有正在發生的世界事件。',
   'worldEvent.scopeWorld': '全城',
   'worldEvent.scopeRegion': '區域 · {regions}',

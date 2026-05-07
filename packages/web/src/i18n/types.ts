@@ -228,6 +228,8 @@ export type TranslationKey =
   | 'ticker.expand'
   // world events banner
   | 'worldEvent.heading'
+  | 'worldEvent.collapse'
+  | 'worldEvent.expand'
   | 'worldEvent.empty'
   | 'worldEvent.scopeWorld'
   | 'worldEvent.scopeRegion'

@@ -7,6 +7,7 @@ import {
   PLAYER_OUTLINE,
   type DistrictId
 } from './districts'
+import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
 
 // 區域內地圖：比城市地圖小，給玩家在單一街區裡走動。
 export const AREA_TILE_SIZE = 40
@@ -105,6 +106,9 @@ export class AreaScene extends Phaser.Scene {
   private pointerTarget: { x: number; y: number } | null = null
   private nearbyNpcId: string | null = null
   private nearbyDropId: number | null = null
+  /** 玩家剛點到 NPC sprite 的時候設成 true，下一個 scene-level pointerdown
+   *  就忽略掉 (避免點完 NPC 之後，玩家還繼續走向那個位置)。 */
+  private suppressNextPointerTarget = false
 
   private interactPrompt!: Phaser.GameObjects.Container
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
@@ -170,11 +174,24 @@ export class AreaScene extends Phaser.Scene {
 
   private drawBackground(): void {
     const def = DISTRICTS[this.tileId] ?? DISTRICTS.t_road
+    const decoSet = AREA_DECORATIONS[this.tileId] ?? AREA_DECORATIONS.t_road
+    // 把道路 cell 做成 set 方便 O(1) 查
+    const roadKeys = new Set<string>()
+    for (const cell of decoSet.roadCells) roadKeys.add(`${cell.col},${cell.row}`)
+
     const g = this.add.graphics()
     for (let row = 0; row < AREA_GRID_ROWS; row += 1) {
       for (let col = 0; col < AREA_GRID_COLS; col += 1) {
         const checker = (col + row) % 2 === 0
-        g.fillStyle(checker ? def.color : def.shade, 1)
+        const isRoad = roadKeys.has(`${col},${row}`)
+        const fill = isRoad
+          ? checker
+            ? AREA_ROAD_COLOR
+            : AREA_ROAD_SHADE
+          : checker
+            ? def.color
+            : def.shade
+        g.fillStyle(fill, 1)
         g.fillRect(col * AREA_TILE_SIZE, row * AREA_TILE_SIZE, AREA_TILE_SIZE, AREA_TILE_SIZE)
         g.lineStyle(1, def.border, 0.35)
         g.strokeRect(
@@ -183,11 +200,40 @@ export class AreaScene extends Phaser.Scene {
           AREA_TILE_SIZE - 1,
           AREA_TILE_SIZE - 1
         )
+        // 道路再加上中央車道虛線，跟普通 tile 區隔開
+        if (isRoad) {
+          g.fillStyle(0xfff5b8, 0.45)
+          g.fillRect(
+            col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2 - 1,
+            row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2 - 4,
+            2,
+            8
+          )
+        }
       }
     }
-    // 街區外框
-    g.lineStyle(2, 0xfff5b8, 0.55)
-    g.strokeRect(1, 1, AREA_CANVAS_WIDTH - 2, AREA_CANVAS_HEIGHT - 2)
+    // 街區外框 — 黃白色高亮，明顯區隔
+    g.lineStyle(3, 0xfff5b8, 0.85)
+    g.strokeRect(1.5, 1.5, AREA_CANVAS_WIDTH - 3, AREA_CANVAS_HEIGHT - 3)
+
+    // 環境物件 (建築 / 樹 / 地標)：用 emoji text 當 placeholder
+    for (const deco of decoSet.props) {
+      const text = this.add.text(
+        deco.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
+        deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
+        deco.glyph,
+        {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: `${deco.size}px`,
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        }
+      )
+      text.setOrigin(0.5, 0.5)
+      text.setDepth(40)
+    }
   }
 
   // ---------- 玩家 / NPC sprite ----------
@@ -274,6 +320,9 @@ export class AreaScene extends Phaser.Scene {
       sprite.setInteractive({ useHandCursor: true })
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
+        // scene-level 的 pointerdown 之後也會 fire，會把玩家 tap-to-move 設到
+        // NPC sprite 的位置上。設個 flag 讓那一次忽略 target 設定，避免雙觸。
+        this.suppressNextPointerTarget = true
         // 距離檢查：玩家必須在 INTERACT_RADIUS 內才能點開對話。
         // 太遠就閃一段 HUD 提示「走近一點才能交談」並通知 React 層。
         const d = Phaser.Math.Distance.Between(
@@ -334,6 +383,45 @@ export class AreaScene extends Phaser.Scene {
       activityLabel.setVisible((npc.activityLabel ?? '').length > 0)
       sprite.setData('activityLabel', activityLabel)
 
+      // 玩家走進 INTERACT_RADIUS 後，sprite 正上方 (比名字再高一階) 浮出 💬
+      // 提示玩家「直接點 sprite 即可交談」。預設 hidden，由 checkNpcProximity
+      // 依距離切換 visibility。
+      const chatBubble = this.add.text(
+        anchorX,
+        anchorY - NPC_SPRITE_SIZE * 1.6,
+        '💬',
+        {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: '18px',
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        }
+      )
+      chatBubble.setOrigin(0.5, 1)
+      chatBubble.setDepth(73)
+      chatBubble.setVisible(false)
+      sprite.setData('chatBubble', chatBubble)
+      // 讓氣泡也可以點 — 有些玩家會先看到氣泡再點，比較直覺
+      chatBubble.setInteractive({ useHandCursor: true })
+      chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        const d = Phaser.Math.Distance.Between(
+          this.player.x,
+          this.player.y,
+          sprite.x,
+          sprite.y
+        )
+        if (d > INTERACT_RADIUS) {
+          this.flashTooFarHint()
+          this.callbacks.onInteractTooFar?.(npc.id)
+          return
+        }
+        this.callbacks.onNpcInteract(npc.id)
+      })
+
       // idle wander tween：sprite 在 anchor 周圍 ±18px 內漂移；label 隨之移動
       const wanderRadius = 18 + (idx % 3) * 4
       const wanderDuration = 1800 + (idx % 5) * 200
@@ -359,6 +447,7 @@ export class AreaScene extends Phaser.Scene {
           badge.setPosition(newX, newY)
           nameLabel.setPosition(newX, newY - NPC_SPRITE_SIZE * 0.85)
           activityLabel.setPosition(newX, newY + NPC_SPRITE_SIZE * 0.65)
+          chatBubble.setPosition(newX, newY - NPC_SPRITE_SIZE * 1.6)
         }
       })
       sprite.setData('wanderTween', tween)
@@ -380,9 +469,11 @@ export class AreaScene extends Phaser.Scene {
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityLabel = sprite.getData('activityLabel') as Phaser.GameObjects.Text | undefined
+    const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
     if (badge) badge.destroy()
     if (nameLabel) nameLabel.destroy()
     if (activityLabel) activityLabel.destroy()
+    if (chatBubble) chatBubble.destroy()
     sprite.destroy()
     this.npcSprites.delete(id)
   }
@@ -442,6 +533,7 @@ export class AreaScene extends Phaser.Scene {
       )
       container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
         this.callbacks.onDropPickup(drop.id)
       })
       // 閃光 tween：halo 縮放 + alpha
@@ -532,7 +624,14 @@ export class AreaScene extends Phaser.Scene {
 
     // 點地圖上某點 -> 玩家走過去 (sticky)。手機上單擊一次也能持續移動，
     // 走到目標附近 (handleMovement 內判斷) 才清掉 target。
+    // suppressNextPointerTarget：當這次 pointerdown 是落在 NPC sprite / 紋卡 sprite
+    // 上時，sprite 的 handler 會設此 flag，這裡就不要把目標設成那個座標
+    // (避免點 NPC 後玩家還繼續走過去 / 雙觸)。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.suppressNextPointerTarget) {
+        this.suppressNextPointerTarget = false
+        return
+      }
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -610,11 +709,15 @@ export class AreaScene extends Phaser.Scene {
     const allNearby: string[] = []
     for (const [id, sprite] of this.npcSprites) {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y)
-      if (d < INTERACT_RADIUS) allNearby.push(id)
+      const inRange = d < INTERACT_RADIUS
+      if (inRange) allNearby.push(id)
       if (d < nearestDist) {
         nearestDist = d
         nearestId = id
       }
+      // 顯示 / 隱藏 sprite 上方的 💬 提示氣泡。只在玩家進入互動半徑時才浮出。
+      const bubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+      if (bubble) bubble.setVisible(inRange)
     }
     this.nearbyNpcId = nearestId
 

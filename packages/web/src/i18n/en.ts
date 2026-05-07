@@ -211,6 +211,8 @@ export const en: Translations = {
   'ticker.expand': 'Show',
 
   'worldEvent.heading': 'Tideway happenings',
+  'worldEvent.collapse': 'Hide',
+  'worldEvent.expand': 'Show',
   'worldEvent.empty': 'No live world events right now.',
   'worldEvent.scopeWorld': 'City-wide',
   'worldEvent.scopeRegion': 'Region · {regions}',
