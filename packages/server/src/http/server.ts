@@ -21,6 +21,7 @@ import { createSocialRouter, createSocialSseRouter } from './social.js'
 import { CardWorldStore } from './cardWorldStore.js'
 import { createCardWorldRouter } from './cardWorldRouter.js'
 import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
+import { CardActionPipeline } from './cardCommands.js'
 import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { createBuildingsRouter } from './buildingsRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -65,12 +66,20 @@ export function createHttpApp(options: HttpAppOptions): Express {
   const passwordResetStore = new PasswordResetStore(options.db)
   const socialStore = new SocialStore(options.db)
   const socialBus = new SocialBus()
+  // Living World v0.10.0：Buildings + AmbientNarrator (jobs store comes
+  // first so the card router can read player energy via jobs.getWallet())
+  const jobsStore = new PlayerJobsStore(options.db)
+  options.runtime.attachAmbientNarrator(settingsStore)
+
   const cardCatalog = options.runtime.getCardCatalog()
   const cardWorldStore = new CardWorldStore(options.db, cardCatalog)
+  const cardActionPipeline = new CardActionPipeline(options.db, cardWorldStore)
   const cardDropEngine = new CardDropEngine(
     cardWorldStore,
+    cardActionPipeline,
     cardCatalog,
-    tileIdsFromRuntime(options.runtime)
+    tileIdsFromRuntime(options.runtime),
+    options.runtime
   )
   cardDropEngine.seedInitialDrops(options.runtime.getCurrentTick())
   options.runtime.subscribeTick((tick) => cardDropEngine.onTick(tick))
@@ -85,10 +94,6 @@ export function createHttpApp(options: HttpAppOptions): Express {
       console.log(`[boot] seeded ${seeded} Gemini API key(s) from GEMINI_API_KEY env`)
     }
   }
-
-  // Living World v0.10.0：Buildings + AmbientNarrator
-  const jobsStore = new PlayerJobsStore(options.db)
-  options.runtime.attachAmbientNarrator(settingsStore)
 
   // Living World v0.11.0：NPC memory + relationship projections.
   // Tables are created lazily by the constructors. The runtime
@@ -178,8 +183,10 @@ export function createHttpApp(options: HttpAppOptions): Express {
     '/api',
     createCardWorldRouter({
       store: cardWorldStore,
+      pipeline: cardActionPipeline,
       runtime: options.runtime,
       accounts: accountStore,
+      jobs: jobsStore,
       authConfig: options.auth,
     })
   )

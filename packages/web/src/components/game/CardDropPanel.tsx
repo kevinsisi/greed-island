@@ -148,13 +148,24 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
       })
   }, [active, catalogById])
 
-  // server tick → wall-clock 秒
+  // server tick → wall-clock 秒。
+  // v0.13.0：server 已經算了 `perceivedSecondsLeft`（含 ±N 秒精力誤差），
+  // 前端優先用後端值；缺值才回退到本地推算。
   const tickDurationMs = 5_000
   const serverTickAtFetch = active.tick
   const fetchedAtMs = lastFetchedAt.current
 
-  function ticksToSeconds(deadlineTick: number | null): number {
+  function ticksToSeconds(
+    deadlineTick: number | null,
+    perceived?: number | null
+  ): number {
     if (deadlineTick === null) return 0
+    if (typeof perceived === 'number') {
+      // server 已經套了精力誤差。用 wall-clock 倒算「自從 fetch 以來過了多久」
+      // 再從 perceived 秒數扣掉，以保持每秒倒數平滑感。
+      const elapsedSec = (Date.now() - fetchedAtMs) / 1000
+      return Math.max(0, Math.floor(perceived - elapsedSec))
+    }
     const elapsedSinceFetchSec = (Date.now() - fetchedAtMs) / 1000
     const ticksLeftAtFetch = deadlineTick - serverTickAtFetch
     const secLeft = ticksLeftAtFetch * (tickDurationMs / 1000) - elapsedSinceFetchSec
@@ -191,7 +202,7 @@ interface CardSectionProps {
   onPickup: (dropId: number) => void
   onStore: (dropId: number, slotType: ServerCardSlotType) => void
   onRelease: (dropId: number) => void
-  ticksToSeconds: (deadlineTick: number | null) => number
+  ticksToSeconds: (deadlineTick: number | null, perceived?: number | null) => number
   flash: string | null
   error: string | null
   dismissFlash: () => void
@@ -249,7 +260,7 @@ function CardSection({
         <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {drops.map((d) => {
             const c = catalogById.get(d.cardId)
-            const secLeft = ticksToSeconds(d.expiresAtTick)
+            const secLeft = ticksToSeconds(d.expiresAtTick, d.perceivedSecondsLeft)
             return (
               <li key={d.id} className="gi-panel p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-3">
@@ -289,7 +300,7 @@ function CardSection({
         <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {held.map((d) => {
             const c = catalogById.get(d.cardId)
-            const secLeft = ticksToSeconds(d.storeDeadlineTick)
+            const secLeft = ticksToSeconds(d.storeDeadlineTick, d.perceivedSecondsLeft)
             return (
               <li key={d.id} className="gi-panel border-ember-700/40 p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-3">

@@ -1,9 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
+import { useAuth } from '../state/AuthContext'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { PhaserGame } from '../game/PhaserGame'
+import { api, type ServerSinceLastVisit } from '../api/client'
 import {
   DISTRICTS,
   type DistrictId,
@@ -33,9 +35,31 @@ const KNOWN_DISTRICTS = new Set<DistrictId>([
 export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs } = useWorldState()
+  const { token } = useAuth()
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [currentDistrict, setCurrentDistrict] = useState<DistrictId | null>(null)
+  const [sinceLastVisit, setSinceLastVisit] = useState<ServerSinceLastVisit | null>(null)
+  const [sinceDismissed, setSinceDismissed] = useState(false)
+
+  // 進入 Hub → 拉一次「不在時掉了什麼」摘要。後端順手把 last_seen_tick
+  // 推到 currentTick，所以下次進來只會看到「自上次進來之後」的數字。
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    api
+      .cardsSinceLastVisit(token)
+      .then((r) => {
+        if (cancelled) return
+        if (r.dropsSpawned > 0 || r.dropsCollectedByOthers > 0 || r.dropsExpired > 0) {
+          setSinceLastVisit(r)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   // 把世界狀態裡的 NPC 做成 Phaser 場景需要的形狀。
   // 後端 v0.12+ 會推每位 NPC 的 color + activity；舊資料缺少時 sprite 走 fallback。
@@ -51,6 +75,9 @@ export function HubPage() {
         }
         if (typeof n.color === 'number') base.color = n.color
         if (n.activity) base.activity = n.activity
+        // 後端 sub-tile：MapScene 用來把 NPC 在 district 範圍裡微移動
+        if (typeof n.subCol === 'number') base.subCol = n.subCol
+        if (typeof n.subRow === 'number') base.subRow = n.subRow
         return base
       })
   }, [npcs])
@@ -129,6 +156,27 @@ export function HubPage() {
           </div>
         )}
       </div>
+
+      {sinceLastVisit && !sinceDismissed && (
+        <button
+          type="button"
+          onClick={() => setSinceDismissed(true)}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[480px] px-4 py-2 rounded-sharp bg-ground-900/95 border border-ember-700 text-ember-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-auto"
+          aria-label="dismiss"
+        >
+          <div className="flex items-baseline gap-2 leading-snug">
+            <span className="text-ember-400 font-extrabold uppercase text-[10px]">
+              不在時
+            </span>
+            <span>
+              世界掉了 <b className="text-ember-300">{sinceLastVisit.dropsSpawned}</b> 張紋卡，
+              其中 <b className="text-rust-300">{sinceLastVisit.dropsCollectedByOthers}</b> 張被別人撿走、
+              <b className="text-ground-400">{sinceLastVisit.dropsExpired}</b> 張已現形消失。
+            </span>
+            <span className="text-ground-500">×</span>
+          </div>
+        </button>
+      )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
     </div>

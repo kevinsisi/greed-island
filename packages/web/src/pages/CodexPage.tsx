@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n, type TranslationKey } from '../i18n'
 import { useAuth } from '../state/AuthContext'
 import { useWorldState } from '../state/WorldStateContext'
@@ -106,23 +106,65 @@ export function CodexPage() {
   const selected = cardsWithOwnership.find((c) => c.id === selectedId) ?? null
   const selectedCodexEntry = selected ? codexByCardId.get(selected.id) ?? null : null
 
-  const handleMaterialize = useCallback(
-    async (codexId: number) => {
+  // v0.13.0：長按 2 秒實體化 — 比 window.confirm 更符合「不可逆」操作的
+  // 物理感。手指放開或滑開就取消。整個動作期間進度條從 0 → 100%。
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressTickRef = useRef<number | null>(null)
+  const [longPressProgress, setLongPressProgress] = useState(0)
+  const [longPressCodexId, setLongPressCodexId] = useState<number | null>(null)
+
+  const startMaterializeLongPress = useCallback(
+    (codexId: number) => {
       if (!token) return
-      const ok = window.confirm(t('codex.materializeConfirm'))
-      if (!ok) return
-      setBusy(true)
-      try {
-        await api.codexMaterialize(token, codexId)
-        await refresh()
-      } catch (err) {
-        if (err instanceof ApiError) setError(err.message)
-        else if (err instanceof Error) setError(err.message)
-      } finally {
-        setBusy(false)
-      }
+      setLongPressCodexId(codexId)
+      setLongPressProgress(0)
+      const startedAt = Date.now()
+      const HOLD_MS = 2000
+      longPressTickRef.current = window.setInterval(() => {
+        const elapsed = Date.now() - startedAt
+        setLongPressProgress(Math.min(1, elapsed / HOLD_MS))
+      }, 50)
+      longPressTimerRef.current = window.setTimeout(async () => {
+        if (longPressTickRef.current !== null) {
+          window.clearInterval(longPressTickRef.current)
+          longPressTickRef.current = null
+        }
+        setLongPressProgress(1)
+        setBusy(true)
+        try {
+          await api.codexMaterialize(token, codexId)
+          await refresh()
+        } catch (err) {
+          if (err instanceof ApiError) setError(err.message)
+          else if (err instanceof Error) setError(err.message)
+        } finally {
+          setBusy(false)
+          setLongPressCodexId(null)
+          setLongPressProgress(0)
+        }
+      }, HOLD_MS)
     },
-    [token, t, refresh]
+    [token, refresh]
+  )
+  const cancelMaterializeLongPress = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    if (longPressTickRef.current !== null) {
+      window.clearInterval(longPressTickRef.current)
+      longPressTickRef.current = null
+    }
+    setLongPressCodexId(null)
+    setLongPressProgress(0)
+  }, [])
+  // unmount 時清理避免 leak
+  useEffect(
+    () => () => {
+      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current)
+      if (longPressTickRef.current !== null) window.clearInterval(longPressTickRef.current)
+    },
+    []
   )
 
   // Build sequencing slots (1..sequencingCount) — slot_index === card_id
@@ -295,14 +337,38 @@ export function CodexPage() {
                   </>
                 )}
                 {selected.owned && selectedCodexEntry && (
-                  <button
-                    type="button"
-                    onClick={() => handleMaterialize(selectedCodexEntry.id)}
-                    disabled={busy}
-                    className="gi-touch self-start px-3 text-[11px] font-display uppercase tracking-tightest text-rust-300 border border-rust-700 hover:bg-rust-500/10 rounded-sharp disabled:opacity-60"
-                  >
-                    {busy ? t('codex.materializing') : `${t('codex.materialize')} · ${t('codex.materializeWarning')}`}
-                  </button>
+                  <div className="self-start flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onPointerDown={() =>
+                        startMaterializeLongPress(selectedCodexEntry.id)
+                      }
+                      onPointerUp={cancelMaterializeLongPress}
+                      onPointerLeave={cancelMaterializeLongPress}
+                      onPointerCancel={cancelMaterializeLongPress}
+                      onContextMenu={(e) => e.preventDefault()}
+                      disabled={busy}
+                      title="長按 2 秒實體化（不可逆）"
+                      className="relative gi-touch px-3 text-[11px] font-display uppercase tracking-tightest text-rust-300 border border-rust-700 hover:bg-rust-500/10 rounded-sharp disabled:opacity-60 select-none overflow-hidden"
+                    >
+                      <span className="relative z-10">
+                        {busy
+                          ? t('codex.materializing')
+                          : longPressCodexId === selectedCodexEntry.id
+                            ? '按住中… 放開取消'
+                            : `${t('codex.materialize')} · 長按 2 秒`}
+                      </span>
+                      {longPressCodexId === selectedCodexEntry.id && (
+                        <span
+                          className="absolute inset-y-0 left-0 bg-rust-500/30 transition-[width] duration-75 ease-linear z-0"
+                          style={{ width: `${longPressProgress * 100}%` }}
+                        />
+                      )}
+                    </button>
+                    <span className="text-[10px] text-ground-500 italic">
+                      {t('codex.materializeWarning')}
+                    </span>
+                  </div>
                 )}
                 {!selected.owned && (
                   <>
