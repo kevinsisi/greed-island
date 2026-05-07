@@ -18,6 +18,8 @@ import {
   type DistrictId
 } from './districts'
 import { CITY_DECORATIONS } from './decorations'
+import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import type { NpcActivity } from '../state/types'
 
 export interface MapNpc {
   id: string
@@ -25,6 +27,10 @@ export interface MapNpc {
   shortName: string
   /** 對應 fixtureMap.tiles[].id */
   districtId: DistrictId
+  /** 24-bit RGB sprite 主色（後端 v0.12+ 會帶；缺值用 NPC_BADGE_COLOR fallback） */
+  color?: number
+  /** 後端 activity → 上方 emoji 圖示（idle/move 不顯示） */
+  activity?: NpcActivity
 }
 
 export interface MapSceneCallbacks {
@@ -311,21 +317,38 @@ export class MapScene extends Phaser.Scene {
     for (const sprite of this.npcSprites.values()) {
       const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
       const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+      const activityIconText = sprite.getData('activityIcon') as
+        | Phaser.GameObjects.Text
+        | undefined
       const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
       if (badge) badge.destroy()
       if (nameLabel) nameLabel.destroy()
+      if (activityIconText) activityIconText.destroy()
       if (chatBubble) chatBubble.destroy()
       sprite.destroy()
     }
     this.npcSprites.clear()
 
+    // 同 districtId 多人時用 hash 順序排成 60° 間隔的小環，避免重疊
+    const seqByDistrict = new Map<DistrictId, number>()
     for (const npc of this.npcs) {
       const def = DISTRICTS[npc.districtId]
       if (!def) continue
-      const tex = this.npcTextureKey(npc.id)
-      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, NPC_BADGE_COLOR, 0x1c1300, 2)
-      const x = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
-      const y = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+      const seq = seqByDistrict.get(npc.districtId) ?? 0
+      seqByDistrict.set(npc.districtId, seq + 1)
+
+      const fillColor = npc.color ?? NPC_BADGE_COLOR
+      const badgeColor = npc.color === undefined ? NPC_BADGE_TEXT : textColorForBg(fillColor)
+      // 每位 NPC 自己一份 texture（key 含顏色 hex 避免共用）
+      const tex = this.npcTextureKey(npc.id, fillColor)
+      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, 0x1c1300, 2)
+
+      const ringAngle = (seq * 60 * Math.PI) / 180
+      const ringR = seq === 0 ? 0 : 12
+      const x =
+        def.anchor.col * TILE_SIZE + TILE_SIZE / 2 + Math.cos(ringAngle) * ringR
+      const y =
+        def.anchor.row * TILE_SIZE + TILE_SIZE / 2 + Math.sin(ringAngle) * ringR
       const sprite = this.physics.add.sprite(x, y, tex)
       sprite.setDepth(70)
       sprite.setData('npcId', npc.id)
@@ -337,19 +360,17 @@ export class MapScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      // sprite 中央的單字 badge
       const badge = this.add.text(x, y, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
-        color: NPC_BADGE_TEXT,
+        color: badgeColor,
         fontStyle: 'bold'
       })
       badge.setOrigin(0.5, 0.5)
       badge.setDepth(71)
       sprite.setData('badge', badge)
 
-      // 完整名字浮在 sprite 上方，不必走近就讀得到
       const nameLabel = this.add.text(x, y - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
@@ -361,6 +382,27 @@ export class MapScene extends Phaser.Scene {
       nameLabel.setOrigin(0.5, 1)
       nameLabel.setDepth(72)
       sprite.setData('nameLabel', nameLabel)
+
+      // 活動 emoji icon（idle 不顯示）— 釘在 sprite 右上肩
+      const iconGlyph = activityGlyphFor(npc.activity)
+      if (iconGlyph) {
+        const activityIconText = this.add.text(
+          x + NPC_SPRITE_SIZE * 0.55,
+          y - NPC_SPRITE_SIZE * 0.55,
+          iconGlyph,
+          {
+            fontFamily:
+              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+            fontSize: '13px',
+            color: '#ffffff',
+            stroke: '#0a0a0a',
+            strokeThickness: 2
+          }
+        )
+        activityIconText.setOrigin(0.5, 0.5)
+        activityIconText.setDepth(73)
+        sprite.setData('activityIcon', activityIconText)
+      }
 
       // 玩家走進 INTERACT_RADIUS 後，sprite 正上方浮出 💬 提示「直接點即可交談」
       const chatBubble = this.add.text(x, y - NPC_SPRITE_SIZE * 1.6, '💬', {
@@ -386,8 +428,9 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  private npcTextureKey(npcId: string): string {
-    return `npc-tex-${npcId}`
+  private npcTextureKey(npcId: string, color?: number): string {
+    if (color === undefined) return `npc-tex-${npcId}`
+    return `npc-tex-${npcId}-${color.toString(16)}`
   }
 
   /**

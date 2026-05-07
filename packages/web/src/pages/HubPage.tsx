@@ -38,15 +38,21 @@ export function HubPage() {
   const [currentDistrict, setCurrentDistrict] = useState<DistrictId | null>(null)
 
   // 把世界狀態裡的 NPC 做成 Phaser 場景需要的形狀。
+  // 後端 v0.12+ 會推每位 NPC 的 color + activity；舊資料缺少時 sprite 走 fallback。
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return npcs
       .filter((n) => KNOWN_DISTRICTS.has(n.location as DistrictId))
-      .map((n) => ({
-        id: n.id,
-        name: n.name,
-        shortName: n.name.charAt(0),
-        districtId: n.location as DistrictId
-      }))
+      .map((n) => {
+        const base: MapNpc = {
+          id: n.id,
+          name: n.name,
+          shortName: n.name.charAt(0),
+          districtId: n.location as DistrictId
+        }
+        if (typeof n.color === 'number') base.color = n.color
+        if (n.activity) base.activity = n.activity
+        return base
+      })
   }, [npcs])
 
   const hudStrings = useMemo(
