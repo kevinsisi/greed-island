@@ -148,7 +148,7 @@ export class MapScene extends Phaser.Scene {
     this.locale = data.locale
     this.hudStrings = data.hudStrings
     this.initialPosition = data.initialPosition ?? null
-    this.areaOverlays = data.areaOverlays ?? []
+    if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
   private areaOverlays: MapAreaOverlay[] = []
