@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useI18n, type TranslationKey } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
 import type { ServerActiveWorldEvent } from '../../api/client'
@@ -20,6 +20,8 @@ const TYPE_LABEL: Record<ServerActiveWorldEvent['type'], TranslationKey> = {
 export function WorldEventsBanner() {
   const { worldEvents, world, map } = useWorldState()
   const { t, locale } = useI18n()
+  // 預設收合：地圖才是主要視覺空間，事件列表只在玩家點開時展開。
+  const [expanded, setExpanded] = useState(false)
 
   const tileNameById = useMemo(() => {
     const acc: Record<string, string> = {}
@@ -32,12 +34,24 @@ export function WorldEventsBanner() {
   return (
     <section
       aria-label={t('worldEvent.heading')}
-      className="border-b border-ground-800 bg-ground-900/95 px-4 sm:px-6 lg:px-10 py-3"
+      className="border border-ground-800 rounded-sharp bg-ground-900/95"
     >
-      <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500 mb-2">
-        ▾ {t('worldEvent.heading')} <span className="text-ground-600">({worldEvents.length})</span>
-      </div>
-      <ul className="flex flex-col gap-2 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="w-full px-3 py-2 flex items-center justify-between text-left font-display text-[11px] uppercase tracking-tightest text-ember-500 hover:text-ember-400 transition-colors"
+      >
+        <span>
+          {expanded ? '▾' : '▸'} {t('worldEvent.heading')}{' '}
+          <span className="text-ground-600">({worldEvents.length})</span>
+        </span>
+        <span className="text-ground-500 normal-case tracking-normal text-[10px]">
+          {expanded ? t('worldEvent.collapse') : t('worldEvent.expand')}
+        </span>
+      </button>
+      {!expanded ? null : (
+      <ul className="px-3 pb-3 flex flex-col gap-2 lg:grid lg:grid-cols-2 xl:grid-cols-3">
         {worldEvents.map((event) => {
           const remaining = Math.max(0, event.endsAtTick - world.tick)
           const tone = TYPE_TONE[event.type] ?? TYPE_TONE.city
@@ -67,6 +81,7 @@ export function WorldEventsBanner() {
           )
         })}
       </ul>
+      )}
     </section>
   )
 }

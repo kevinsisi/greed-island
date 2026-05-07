@@ -17,6 +17,7 @@ import {
   type DistrictDef,
   type DistrictId
 } from './districts'
+import { CITY_DECORATIONS } from './decorations'
 
 export interface MapNpc {
   id: string
@@ -73,6 +74,9 @@ export class MapScene extends Phaser.Scene {
 
   private currentDistrict: DistrictId = 't_road'
   private nearbyNpcId: string | null = null
+  /** 玩家剛點到 NPC sprite 的時候設成 true，下一個 scene-level pointerdown
+   *  就忽略掉，避免點 NPC 後玩家還走過去。 */
+  private suppressNextPointerTarget = false
 
   private interactPrompt!: Phaser.GameObjects.Container
   private districtBanner!: Phaser.GameObjects.Container
@@ -105,6 +109,7 @@ export class MapScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x12141a)
 
     this.drawTiles()
+    this.drawDecorations()
     this.drawDistrictLabels()
     this.spawnPlayer()
     this.spawnNpcs()
@@ -163,14 +168,48 @@ export class MapScene extends Phaser.Scene {
         // 街區內側細邊框 (讓街區整體看起來像一個方塊)
         g.lineStyle(1, def.border, 0.35)
         g.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
+        // 街道再加上中央車道虛線，讓「可走的路」一眼就分辨出來
+        if (id === 't_road') {
+          g.fillStyle(0xfff5b8, 0.55)
+          g.fillRect(x + TILE_SIZE / 2 - 1, y + TILE_SIZE / 2 - 4, 2, 8)
+        }
       }
     }
-    // 街區外框
+    // 街區外框 — 黃白色高亮，明顯區隔不同街區
     this.drawDistrictBoundaries(g)
   }
 
+  /**
+   * 在街區色塊上灑點建築 / 樹 / 地標 emoji，避免地圖看起來只是一堆色塊。
+   * 每個街區的位置由 decorations.ts deterministically 配置好，跨 reload
+   * 一致。glyph 用 Text object 直接畫，不需要美術資產。
+   */
+  private drawDecorations(): void {
+    for (const id of DISTRICT_IDS) {
+      const list = CITY_DECORATIONS[id]
+      if (!list) continue
+      for (const deco of list) {
+        const text = this.add.text(
+          deco.col * TILE_SIZE + TILE_SIZE / 2,
+          deco.row * TILE_SIZE + TILE_SIZE / 2,
+          deco.glyph,
+          {
+            fontFamily:
+              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+            fontSize: `${deco.size}px`,
+            color: '#ffffff',
+            stroke: '#0a0a0a',
+            strokeThickness: 2
+          }
+        )
+        text.setOrigin(0.5, 0.5)
+        text.setDepth(40)
+      }
+    }
+  }
+
   private drawDistrictBoundaries(g: Phaser.GameObjects.Graphics): void {
-    g.lineStyle(2, 0xfff5b8, 0.55)
+    g.lineStyle(3, 0xfff5b8, 0.85)
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let col = 0; col < GRID_COLS; col += 1) {
         const here = DISTRICT_GRID[row]![col]!
@@ -272,8 +311,10 @@ export class MapScene extends Phaser.Scene {
     for (const sprite of this.npcSprites.values()) {
       const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
       const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+      const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
       if (badge) badge.destroy()
       if (nameLabel) nameLabel.destroy()
+      if (chatBubble) chatBubble.destroy()
       sprite.destroy()
     }
     this.npcSprites.clear()
@@ -292,6 +333,7 @@ export class MapScene extends Phaser.Scene {
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         // 防止 pointerdown 同時觸發地圖 tap-to-move
         pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
         this.callbacks.onNpcInteract(npc.id)
       })
 
@@ -319,6 +361,26 @@ export class MapScene extends Phaser.Scene {
       nameLabel.setOrigin(0.5, 1)
       nameLabel.setDepth(72)
       sprite.setData('nameLabel', nameLabel)
+
+      // 玩家走進 INTERACT_RADIUS 後，sprite 正上方浮出 💬 提示「直接點即可交談」
+      const chatBubble = this.add.text(x, y - NPC_SPRITE_SIZE * 1.6, '💬', {
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+        fontSize: '18px',
+        color: '#ffffff',
+        stroke: '#0a0a0a',
+        strokeThickness: 2
+      })
+      chatBubble.setOrigin(0.5, 1)
+      chatBubble.setDepth(73)
+      chatBubble.setVisible(false)
+      chatBubble.setInteractive({ useHandCursor: true })
+      chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        this.callbacks.onNpcInteract(npc.id)
+      })
+      sprite.setData('chatBubble', chatBubble)
 
       this.npcSprites.set(npc.id, sprite)
     }
@@ -370,7 +432,13 @@ export class MapScene extends Phaser.Scene {
 
     // 點擊或拖曳 -> 朝目標移動。手機上單擊也會持續移動到該點，
     // 走到目標附近 (handleMovement 內判斷) 才清掉 target。
+    // suppressNextPointerTarget：點到 NPC sprite 時 sprite handler 會設此 flag，
+    // 這次 pointerdown 就不要把目標設成那個座標 (避免雙觸)。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.suppressNextPointerTarget) {
+        this.suppressNextPointerTarget = false
+        return
+      }
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -492,10 +560,14 @@ export class MapScene extends Phaser.Scene {
     let nearestDist = INTERACT_RADIUS
     for (const [id, sprite] of this.npcSprites) {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y)
+      const inRange = d < INTERACT_RADIUS
       if (d < nearestDist) {
         nearestDist = d
         nearestId = id
       }
+      // 顯示 / 隱藏 sprite 上方的 💬 提示氣泡
+      const bubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+      if (bubble) bubble.setVisible(inRange)
     }
     this.nearbyNpcId = nearestId
 

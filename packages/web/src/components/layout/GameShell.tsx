@@ -61,15 +61,20 @@ export function GameShell({ children }: { children: ReactNode }) {
     <div className="min-h-full flex flex-col bg-ground-900 text-ground-100">
       <Brandbar />
       <AtmosphereBar />
-      <WorldEventsBanner />
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         <DesktopRail />
 
-        {/* 行動裝置底部從上到下：EventTickerStrip (fixed bottom-[60px], ~36px) + MobileTabBar (fixed bottom-0, ~56px)。
-            main 必須留至少 ~96px padding，才能完整捲到底不被遮。pb-28 = 112px。 */}
+        {/* 行動裝置底部從上到下：WorldEventsBanner (預設收合) + EventTickerStrip
+            (fixed bottom-[60px], ~36px) + MobileTabBar (fixed bottom-0, ~56px)。
+            main 必須留至少 ~96px padding，才能完整捲到底不被遮。pb-28 = 112px。
+            v0.9.1：WorldEventsBanner 從「main 上面」搬到「main 下面」，地圖
+            才是主要視覺空間。 */}
         <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 pt-5 lg:pt-8 pb-28 lg:pb-12">
           {children}
+          <div className="mt-4">
+            <WorldEventsBanner />
+          </div>
         </main>
 
         <EventTicker />
