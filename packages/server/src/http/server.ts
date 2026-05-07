@@ -26,6 +26,9 @@ import { createBuildingsRouter } from './buildingsRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
+import { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
+import { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
+import { createLivingWorldRouter } from './livingWorldRouter.js'
 
 // Owner emails always promoted to admin on boot. Hardcoded so a fresh
 // deploy gives the project owner GM access without env-var hand-holding.
@@ -86,6 +89,17 @@ export function createHttpApp(options: HttpAppOptions): Express {
   // Living World v0.10.0：Buildings + AmbientNarrator
   const jobsStore = new PlayerJobsStore(options.db)
   options.runtime.attachAmbientNarrator(settingsStore)
+
+  // Living World v0.11.0：NPC memory + relationship projections.
+  // Tables are created lazily by the constructors. The runtime
+  // rebuilds projections from the existing EventLog the first time
+  // it sees an empty memory table — see attachLivingWorldProjections.
+  const npcMemoryStore = new SqliteNpcMemoryStore(options.db)
+  const npcRelationshipsStore = new SqliteNpcRelationshipsStore(options.db)
+  options.runtime.attachLivingWorldProjections({
+    memory: npcMemoryStore,
+    relationships: npcRelationshipsStore,
+  })
   console.log(
     `[boot] ambient narrator attached (${settingsStore.listActiveKeys().length} active key(s))`
   )
@@ -175,6 +189,17 @@ export function createHttpApp(options: HttpAppOptions): Express {
       runtime: options.runtime,
       jobs: jobsStore,
       authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createLivingWorldRouter({
+      runtime: options.runtime,
+      memory: npcMemoryStore,
+      relationships: npcRelationshipsStore,
+      accounts: accountStore,
+      authConfig: options.auth,
+      db: options.db,
     })
   )
   app.use('/api', createSseRouter(options.runtime))

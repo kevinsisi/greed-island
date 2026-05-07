@@ -42,9 +42,10 @@ export function createFactSetEvent(
   payload: FactSetPayload,
   rulesetVersion = DEFAULT_RULESET_VERSION
 ): EventDraft<FactSetPayload> {
+  // Per ARCHITECTURE.md §1.3: deterministic key MUST NOT include
+  // wall-clock fields. Only the intent identity and payload participate.
   const seed = {
     eventType: EVENT_FACT_SET,
-    occurredAt: command.submittedAt,
     actorId: command.actorId,
     commandId: command.commandId,
     payload,
@@ -54,7 +55,13 @@ export function createFactSetEvent(
   const deterministicKey = hashCanonicalJson(seed)
 
   return {
-    ...seed,
+    eventType: EVENT_FACT_SET,
+    occurredAt: command.submittedAt,
+    actorId: command.actorId,
+    commandId: command.commandId,
+    payload,
+    rulesetVersion,
+    version: KERNEL_EVENT_VERSION,
     eventId: `event_${deterministicKey.slice(0, 32)}`,
     deterministicKey
   }

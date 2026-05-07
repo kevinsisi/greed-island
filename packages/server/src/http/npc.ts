@@ -42,6 +42,8 @@ const PLAYER_MESSAGE_MAX_CHARS = 800
 
 // greet 冷卻：每位玩家對每個 NPC 在這個 tick 視窗內最多 +1，避免連點 quick intent 灌好感
 const GREET_COOLDOWN_TICKS = TICKS_PER_HOUR
+// AI trust-delta clamp constants kept for backward reference only;
+// AI's trustDelta is no longer applied (see §9 of ARCHITECTURE.md).
 // AI 回傳的 trustDelta 在 server side 再 clamp 一次：上界 +2，避免 AI 隨意給 +3
 const AI_TRUST_DELTA_MAX = 2
 const AI_TRUST_DELTA_MIN = -5
@@ -140,20 +142,16 @@ export function createNpcRouter(input: {
       const line = pickLine(npcId, intent, tier, rotationSeed)
       replyZh = line.zh
       replyEn = line.en
-      aiTrustDelta = staticTrustDelta(intent, previousTrust, profile, {
-        tick,
-        lastInteractionTick: existing?.lastInteractionTick ?? 0,
-        interactionCount: previousCount,
-      })
-    } else if (aiTrustDelta !== null) {
-      // AI 回傳的值再做一次伺服器端 clamp：上限收緊，避免 AI 連續給高分把好感拉滿
-      aiTrustDelta = serverClampAiDelta(aiTrustDelta, {
-        intent: resolvedIntent,
-        playerMessage,
-        tick,
-        lastInteractionTick: existing?.lastInteractionTick ?? 0,
-      })
     }
+    // Per ARCHITECTURE.md §9 — AI is read-only and MAY suggest a
+    // trustDelta, but the canonical delta MUST come from a server
+    // deterministic rule. We discard the AI value and recompute via
+    // staticTrustDelta on every path (AI or fallback).
+    aiTrustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
+      tick,
+      lastInteractionTick: existing?.lastInteractionTick ?? 0,
+      interactionCount: previousCount,
+    })
 
     const trustAfter = clampTrust(previousTrust + (aiTrustDelta ?? 0))
     const newTier = tierForRelationship(trustAfter)
@@ -291,36 +289,14 @@ function staticTrustDelta(
   return 0
 }
 
-/**
- * AI 回傳的 trustDelta 在伺服器端再做收緊：
- * - 上限：+2（AI 不可單次給 +3）
- * - greet 額外套 cooldown：1 小時內最多 +1
- * - 短訊息（< 4 字）忽略 +N，最多 +0
- * - 下界保留 -5 給嚴重冒犯
- */
-function serverClampAiDelta(
-  raw: number,
-  ctx: {
-    intent: InteractIntent
-    playerMessage: string
-    tick: number
-    lastInteractionTick: number
-  }
-): number {
-  let v = Math.round(raw)
-  if (v > AI_TRUST_DELTA_MAX) v = AI_TRUST_DELTA_MAX
-  if (v < AI_TRUST_DELTA_MIN) v = AI_TRUST_DELTA_MIN
-  if (ctx.intent === 'greet' && v > 0) {
-    const sinceLast = ctx.tick - ctx.lastInteractionTick
-    if (sinceLast < GREET_COOLDOWN_TICKS) v = 0
-    else if (v > 1) v = 1
-  }
-  if (v > 0 && ctx.playerMessage.trim().length < 4) {
-    // 太短的訊息（例如「嗯」「喔」）視為無實質互動
-    v = 0
-  }
-  return v
-}
+// `serverClampAiDelta` was removed in v0.11.0 — per ARCHITECTURE.md §9
+// AI is advisory only and the canonical trust delta comes from
+// `staticTrustDelta` regardless of whether the line was AI-rendered or
+// from the fallback library. The constants AI_TRUST_DELTA_MAX/MIN are
+// kept above so older modules importing them keep compiling, but the
+// runtime no longer references them.
+void AI_TRUST_DELTA_MAX
+void AI_TRUST_DELTA_MIN
 
 function clampInt(raw: unknown, min: number, max: number, fallback: number): number {
   const n = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN

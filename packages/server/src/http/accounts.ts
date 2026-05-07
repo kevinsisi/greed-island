@@ -212,6 +212,25 @@ export class AccountStore {
     }
     return promoted
   }
+
+  /** v0.11.0 — read the player's "last seen" tick (0 if never seen). */
+  getLastSeenTick(accountId: number): number {
+    const row = this.db
+      .prepare('SELECT last_seen_tick FROM accounts WHERE id = ?')
+      .get(accountId) as { last_seen_tick: number } | undefined
+    if (!row || typeof row.last_seen_tick !== 'number') return 0
+    return row.last_seen_tick
+  }
+
+  /** v0.11.0 — bump the "last seen" tick after a catch-up. Idempotent. */
+  setLastSeenTick(accountId: number, tick: number): void {
+    if (!Number.isFinite(tick) || tick < 0) return
+    this.db
+      .prepare(
+        'UPDATE accounts SET last_seen_tick = MAX(last_seen_tick, ?) WHERE id = ?'
+      )
+      .run(tick, accountId)
+  }
 }
 
 export class AccountError extends Error {
@@ -249,6 +268,12 @@ export function initializeAccountSchema(db: DatabaseConnection): void {
   }
   if (!colNames.has('avatar')) {
     db.exec(`ALTER TABLE accounts ADD COLUMN avatar TEXT NOT NULL DEFAULT '${DEFAULT_AVATAR}'`)
+  }
+  if (!colNames.has('last_seen_tick')) {
+    // v0.11.0: per-player last-seen pointer for the "while you were
+    // gone" catch-up summary. Defaults to 0 so brand-new accounts get
+    // the full history on their first call.
+    db.exec('ALTER TABLE accounts ADD COLUMN last_seen_tick INTEGER NOT NULL DEFAULT 0')
   }
   // Best-effort: if no admin exists, promote the earliest account so the
   // /settings + /admin pages have a controller on a fresh deploy.
