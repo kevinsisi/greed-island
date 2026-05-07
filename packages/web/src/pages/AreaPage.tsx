@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
@@ -7,10 +7,16 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
-import type { AreaMapNpc } from '../game/AreaScene'
+import type { AreaMapBuilding, AreaMapNpc } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
 import type { NpcSummary, NpcActivity } from '../state/types'
 import type { TranslationKey } from '../i18n/types'
+import {
+  api,
+  type ServerAmbient,
+  type ServerAreaState,
+  type ServerBuildingView
+} from '../api/client'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle: 'npc.activity.idle',
@@ -37,10 +43,55 @@ export function AreaPage() {
   const { tileId = '' } = useParams<{ tileId: string }>()
   const { t, locale } = useI18n()
   const { map, npcs, events } = useWorldState()
+  const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [drawerTab, setDrawerTab] = useState<DrawerTab | null>(null)
   const [nearbyNpcIds, setNearbyNpcIds] = useState<Set<string>>(new Set())
   const [tooFarFlash, setTooFarFlash] = useState<string | null>(null)
+  const [areaState, setAreaState] = useState<ServerAreaState | null>(null)
+  const [ambient, setAmbient] = useState<ServerAmbient | null>(null)
+  const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!tileId) return
+    api
+      .areaState(tileId)
+      .then((r) => {
+        if (cancelled) return
+        setAreaState(r.areaState)
+        setAmbient(r.ambient)
+      })
+      .catch(() => {
+        // ignore — areaState 是錦上添花
+      })
+    api
+      .buildings(tileId)
+      .then((r) => {
+        if (!cancelled) setBuildings(r.buildings)
+      })
+      .catch(() => {})
+    const id = window.setInterval(() => {
+      api
+        .areaState(tileId)
+        .then((r) => {
+          if (cancelled) return
+          setAreaState(r.areaState)
+          setAmbient(r.ambient)
+        })
+        .catch(() => {})
+      api
+        .buildings(tileId)
+        .then((r) => {
+          if (!cancelled) setBuildings(r.buildings)
+        })
+        .catch(() => {})
+    }, 12_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [tileId])
 
   const tile = map.tiles.find((entry) => entry.id === tileId)
   const lore = loreFor(tileId)
@@ -89,9 +140,32 @@ export function AreaPage() {
     () => ({
       interact: t('hub.interactHint'),
       pickup: t('cards.pickup'),
-      tooFar: t('npc.tooFarHint')
+      tooFar: t('npc.tooFarHint'),
+      enterBuilding: '進入'
     }),
     [t]
+  )
+
+  const mapBuildings = useMemo<AreaMapBuilding[]>(
+    () =>
+      buildings.map((view) => ({
+        id: view.def.id,
+        nameZh: view.def.nameZh,
+        type: view.def.type,
+        col: view.def.placement.col,
+        row: view.def.placement.row,
+        glyph: view.def.placement.glyph,
+        size: view.def.placement.size,
+        enterable: view.def.enterable
+      })),
+    [buildings]
+  )
+
+  const handleBuildingEnter = useCallback(
+    (buildingId: string) => {
+      navigate(`/building/${buildingId}`)
+    },
+    [navigate]
   )
 
   const handleNpcInteract = useCallback(
@@ -133,12 +207,14 @@ export function AreaPage() {
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
           drops={cardOverlay.drops}
+          buildings={mapBuildings}
           locale={locale}
           hudStrings={hudStrings}
           onNpcInteract={handleNpcInteract}
           onDropPickup={cardOverlay.pickupDrop}
           onNearbyNpcsChange={handleNearbyNpcsChange}
           onInteractTooFar={handleInteractTooFar}
+          onBuildingEnter={handleBuildingEnter}
         />
 
         {/* 上方：返回鈕 + 區域名稱 */}
@@ -162,17 +238,60 @@ export function AreaPage() {
           </div>
         </div>
 
-        {/* 下方：可收合的分頁抽屜。預設收合，只露 tab 列。 */}
-        <div className="absolute bottom-2 left-2 right-2 z-10 flex flex-col gap-2 pointer-events-none">
-          {drawerTab && (
-            <div className="pointer-events-auto bg-ground-900/95 backdrop-blur border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
+        {/* 下方留個空 anchor，讓建築物提示氣泡不會被 tab 蓋到 */}
+      </div>
+
+      {/* tab 區（已移出地圖，避免蓋住建築 / NPC） */}
+      <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
+        {drawerTab && (
+          <div className="bg-ground-900/95 border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
               {drawerTab === 'scene' && (
                 <div className="flex flex-col gap-2">
-                  <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500">
-                    {t('area.scene')}
+                  <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500 flex items-center gap-2">
+                    <span>{t('area.scene')}</span>
+                    {ambient && (
+                      <span className={[
+                        'text-[9px] tracking-tight px-1.5 py-0.5 rounded',
+                        ambient.source === 'ai'
+                          ? 'bg-ember-700/40 text-ember-200'
+                          : 'bg-ground-800 text-ground-400'
+                      ].join(' ')}>
+                        {ambient.source === 'ai' ? 'AI' : '靜態'}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-[13px] text-ground-100 leading-relaxed">{lore.scene[locale]}</p>
+                  <p className="text-[13px] text-ground-100 leading-relaxed">
+                    {ambient?.text ?? lore.scene[locale]}
+                  </p>
                   <p className="text-[11px] text-ground-500 italic leading-relaxed">{lore.whisper[locale]}</p>
+
+                  {areaState && (
+                    <div className="mt-2 pt-2 border-t border-ground-700 flex flex-col gap-1.5">
+                      <div className="font-display text-[10px] uppercase tracking-tightest text-ground-400">
+                        區域狀態
+                      </div>
+                      <ResourceBar label="糧食" value={areaState.resources.food} colorOk="#9ee0c7" />
+                      <ResourceBar label="治安" value={areaState.resources.safety} colorOk="#b6e3ff" />
+                      <ResourceBar label="經濟" value={areaState.resources.economy} colorOk="#ffd966" />
+                      {areaState.dominantFaction && (
+                        <div className="text-[10px] text-rust-300 mt-1">
+                          ⚑ 此區由「{factionLabel(areaState.dominantFaction)}」掌控
+                        </div>
+                      )}
+                      {areaState.recentEvents.length > 0 && (
+                        <div className="mt-1.5 flex flex-col gap-1">
+                          <div className="text-[9px] uppercase tracking-tightest text-ground-500">
+                            本地事件
+                          </div>
+                          {areaState.recentEvents.slice(-3).reverse().map((ev, i) => (
+                            <div key={i} className="text-[11px] text-ground-200 leading-snug">
+                              · {ev.narration}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -287,40 +406,39 @@ export function AreaPage() {
                 </div>
               )}
 
-              {drawerTab === 'players' && (
-                <NearbyPlayers tileId={tileId} tileName={tile.name} />
-              )}
-            </div>
-          )}
-
-          {/* tab 列 (永遠可見) */}
-          <div className="pointer-events-auto flex items-stretch gap-1 bg-ground-900/85 backdrop-blur border border-ground-700 rounded-sharp p-1">
-            <DrawerTabButton
-              label={t('area.scene')}
-              active={drawerTab === 'scene'}
-              onClick={() => toggleTab('scene')}
-            />
-            <DrawerTabButton
-              label={`${t('area.npcs')} ${occupants.length}`}
-              active={drawerTab === 'npcs'}
-              onClick={() => toggleTab('npcs')}
-            />
-            <DrawerTabButton
-              label={t('cards.tabLabel')}
-              active={drawerTab === 'cards'}
-              onClick={() => toggleTab('cards')}
-            />
-            <DrawerTabButton
-              label={`${t('area.events')} ${localEvents.length}`}
-              active={drawerTab === 'events'}
-              onClick={() => toggleTab('events')}
-            />
-            <DrawerTabButton
-              label={t('social.peerNearby')}
-              active={drawerTab === 'players'}
-              onClick={() => toggleTab('players')}
-            />
+            {drawerTab === 'players' && (
+              <NearbyPlayers tileId={tileId} tileName={tile.name} />
+            )}
           </div>
+        )}
+
+        {/* tab 列（已移到地圖外面） */}
+        <div className="flex items-stretch gap-1 bg-ground-900/85 border border-ground-700 rounded-sharp p-1">
+          <DrawerTabButton
+            label={t('area.scene')}
+            active={drawerTab === 'scene'}
+            onClick={() => toggleTab('scene')}
+          />
+          <DrawerTabButton
+            label={`${t('area.npcs')} ${occupants.length}`}
+            active={drawerTab === 'npcs'}
+            onClick={() => toggleTab('npcs')}
+          />
+          <DrawerTabButton
+            label={t('cards.tabLabel')}
+            active={drawerTab === 'cards'}
+            onClick={() => toggleTab('cards')}
+          />
+          <DrawerTabButton
+            label={`${t('area.events')} ${localEvents.length}`}
+            active={drawerTab === 'events'}
+            onClick={() => toggleTab('events')}
+          />
+          <DrawerTabButton
+            label={t('social.peerNearby')}
+            active={drawerTab === 'players'}
+            onClick={() => toggleTab('players')}
+          />
         </div>
       </div>
 
@@ -333,6 +451,41 @@ export function AreaPage() {
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
     </div>
   )
+}
+
+function ResourceBar({ label, value, colorOk }: { label: string; value: number; colorOk: string }) {
+  const v = Math.max(0, Math.min(100, Math.round(value)))
+  const low = v < 30
+  const fill = low ? '#ff6b6b' : colorOk
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-display uppercase tracking-tightest text-ground-400 w-8 shrink-0">
+        {label}
+      </span>
+      <div className="flex-1 h-2 bg-ground-800 rounded-full overflow-hidden">
+        <div
+          style={{ width: `${v}%`, backgroundColor: fill }}
+          className="h-full transition-all"
+        />
+      </div>
+      <span className="text-[10px] text-ground-300 w-8 text-right">{v}</span>
+    </div>
+  )
+}
+
+function factionLabel(faction: string): string {
+  switch (faction) {
+    case 'tide_hunters':
+      return '潮獵會'
+    case 'free_runners':
+      return '自由潮感者'
+    case 'guild':
+      return '公會'
+    case 'civilian':
+      return '平民'
+    default:
+      return faction
+  }
 }
 
 function DrawerTabButton({

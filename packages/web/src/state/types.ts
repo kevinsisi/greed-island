@@ -82,3 +82,121 @@ export interface DashboardSummary {
   rareWindowOpen: boolean
   ticksSinceLastVisit: number
 }
+
+// ─── Living World v0.10.0 — Areas + Buildings ───────────────────
+
+export type FactionId = 'tide_hunters' | 'free_runners' | 'guild' | 'civilian'
+
+export interface AreaResources {
+  food: number
+  safety: number
+  economy: number
+}
+
+export interface AreaLocalEvent {
+  tick: number
+  kind:
+    | 'faction.dominance'
+    | 'faction.lost'
+    | 'pressure.food_shortage'
+    | 'pressure.crime_spike'
+    | 'pressure.price_hike'
+  narration: string
+  detail: Record<string, string | number>
+}
+
+export interface AreaStateView {
+  tileId: string
+  factionControl: Record<FactionId, number>
+  dominantFaction: FactionId | null
+  resources: AreaResources
+  lastUpdatedTick: number
+  recentEvents: AreaLocalEvent[]
+}
+
+export type BuildingType =
+  | 'residential'
+  | 'shop'
+  | 'restaurant'
+  | 'office'
+  | 'factory'
+  | 'library'
+  | 'exchange'
+  | 'temple'
+  | 'landmark'
+
+export type Shift = 'morning' | 'afternoon' | 'night'
+
+export interface BuildingHiringSlot {
+  shift: Shift
+  capacity: number
+  wage: number
+  taskZh: string
+}
+
+export interface InteriorProp {
+  col: number
+  row: number
+  glyph: string
+  size?: number
+  label?: string
+}
+
+export interface InteriorLayout {
+  cols: number
+  rows: number
+  props: InteriorProp[]
+  backgroundColor?: number
+}
+
+export interface BuildingDef {
+  id: string
+  tileId: string
+  nameZh: string
+  nameEn: string
+  descriptionZh: string
+  type: BuildingType
+  placement: { col: number; row: number; glyph: string; size: number }
+  interior: InteriorLayout
+  ownerNpcId: string | null
+  hiring: BuildingHiringSlot[]
+  enterable: boolean
+  restorative: boolean
+}
+
+export interface BuildingOccupant {
+  npcId: string
+  shift: Shift | null
+  isOwner: boolean
+}
+
+export interface BuildingView {
+  def: BuildingDef
+  occupants: BuildingOccupant[]
+}
+
+export interface PlayerJob {
+  accountId: number
+  buildingId: string
+  shift: Shift
+  hiredAtTick: number
+  totalEarnings: number
+  shiftsCompleted: number
+  lastShiftTick: number
+}
+
+export interface PlayerWallet {
+  accountId: number
+  gold: number
+  energy: number
+  updatedAt: number
+}
+
+export interface AmbientResult {
+  tileId: string
+  text: string
+  source: 'ai' | 'fallback'
+  generatedAtTick: number
+  generatedAt: string
+  aiError: string | null
+}

@@ -5,6 +5,7 @@ import { AuthProvider } from './state/AuthContext'
 import { I18nProvider } from './i18n'
 import { HubPage } from './pages/HubPage'
 import { AreaPage } from './pages/AreaPage'
+import { BuildingPage } from './pages/BuildingPage'
 import { CodexPage } from './pages/CodexPage'
 import { TimelinePage } from './pages/TimelinePage'
 import { AccountPage } from './pages/AccountPage'
@@ -24,6 +25,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<HubPage />} />
               <Route path="/area/:tileId" element={<AreaPage />} />
+              <Route path="/building/:buildingId" element={<BuildingPage />} />
               <Route path="/codex" element={<CodexPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/social" element={<SocialPage />} />

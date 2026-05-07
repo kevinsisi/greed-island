@@ -21,6 +21,8 @@ import { createSocialRouter, createSocialSseRouter } from './social.js'
 import { CardWorldStore } from './cardWorldStore.js'
 import { createCardWorldRouter } from './cardWorldRouter.js'
 import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
+import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
+import { createBuildingsRouter } from './buildingsRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -80,6 +82,13 @@ export function createHttpApp(options: HttpAppOptions): Express {
       console.log(`[boot] seeded ${seeded} Gemini API key(s) from GEMINI_API_KEY env`)
     }
   }
+
+  // Living World v0.10.0：Buildings + AmbientNarrator
+  const jobsStore = new PlayerJobsStore(options.db)
+  options.runtime.attachAmbientNarrator(settingsStore)
+  console.log(
+    `[boot] ambient narrator attached (${settingsStore.listActiveKeys().length} active key(s))`
+  )
 
   // Merge the hardcoded owner allow-list with any env-supplied emails.
   // Both run through ensureAdminAllowList so we promote whatever is
@@ -157,6 +166,14 @@ export function createHttpApp(options: HttpAppOptions): Express {
       store: cardWorldStore,
       runtime: options.runtime,
       accounts: accountStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createBuildingsRouter({
+      runtime: options.runtime,
+      jobs: jobsStore,
       authConfig: options.auth,
     })
   )
