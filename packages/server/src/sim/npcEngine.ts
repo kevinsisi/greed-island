@@ -59,6 +59,10 @@ export type NpcStateChange = Readonly<{
 
 export type NpcTickResult = Readonly<{
   events: readonly NpcDecisionEvent[]
+  /**
+   * 每位 NPC 在本 tick 內的最終狀態快照（已 dedupe），保證 npcId
+   * 不重複。避免兩次「mood 已 clamp 到底」的相同狀態寫入產生同 hash。
+   */
   changedStates: readonly NpcStateChange[]
 }>
 
@@ -148,7 +152,12 @@ export class NpcEngine {
   /** 跑一個 tick 的 NPC decisioning，回傳要寫入的事件 + 狀態變更。 */
   tick(currentTick: number): NpcTickResult {
     const events: NpcDecisionEvent[] = []
-    const changedStates: NpcStateChange[] = []
+    // 用 Set 紀錄本 tick 內變動過的 npcId，最後再從 state map 取一份快照，
+    // 確保每個 npcId 在 changedStates 中只出現一次（避免重複 FactSet 同 hash）。
+    const dirty = new Set<string>()
+    // 儲存進 tick 開始時的初始狀態，以便最後比對是否真的改變
+    const initial = new Map<string, NpcRuntimeState>()
+    for (const [id, s] of this.state) initial.set(id, s)
 
     // ---- Phase 1: 每個 NPC 自己的決策 ----
     for (const profile of this.profiles) {
@@ -180,7 +189,7 @@ export class NpcEngine {
         next.targetTile !== before.targetTile
       ) {
         this.state.set(profile.id, next)
-        changedStates.push({ npcId: profile.id, state: next })
+        dirty.add(profile.id)
       }
     }
 
@@ -223,7 +232,7 @@ export class NpcEngine {
             mode,
             narration
           })
-          // 互動影響 mood
+          // 互動影響 mood（clamp 後寫回 state map；最後 dedupe 統一 emit）
           const sa = this.state.get(a)!
           const sb = this.state.get(b)!
           const delta = mode === 'chat' ? +1 : -2
@@ -231,10 +240,21 @@ export class NpcEngine {
           const nb = { ...sb, mood: clamp(sb.mood + delta, MOOD_MIN, MOOD_MAX) }
           this.state.set(a, na)
           this.state.set(b, nb)
-          changedStates.push({ npcId: a, state: na })
-          changedStates.push({ npcId: b, state: nb })
+          dirty.add(a)
+          dirty.add(b)
         }
       }
+    }
+
+    // ---- Phase 3: 從 dirty set 產出 dedupe 後的 changedStates ----
+    const changedStates: NpcStateChange[] = []
+    for (const id of dirty) {
+      const final = this.state.get(id)
+      const start = initial.get(id)
+      if (!final) continue
+      // 比對 tick 開始與結束狀態：完全沒變就不要 emit FactSet
+      if (start && statesEqual(start, final)) continue
+      changedStates.push({ npcId: id, state: final })
     }
 
     return { events, changedStates }
@@ -373,6 +393,18 @@ function isActivity(value: unknown): value is NpcActivity {
   return (
     typeof value === 'string' &&
     ['idle', 'move', 'work', 'eat', 'sleep', 'trade', 'patrol'].includes(value)
+  )
+}
+
+function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
+  return (
+    a.tile === b.tile &&
+    a.targetTile === b.targetTile &&
+    a.activity === b.activity &&
+    a.faction === b.faction &&
+    a.lastActedTick === b.lastActedTick &&
+    Math.round(a.mood) === Math.round(b.mood) &&
+    Math.round(a.health) === Math.round(b.health)
   )
 }
 
