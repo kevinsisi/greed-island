@@ -87,6 +87,7 @@ function Brandbar() {
     <header className="sticky top-0 z-20 border-b border-ground-800 bg-ground-900/95 backdrop-blur supports-[backdrop-filter]:bg-ground-900/70">
       <div className="px-4 sm:px-6 lg:px-10 h-14 flex items-center gap-3">
         <BrandMark />
+        <VersionTag />
         <div className="flex-1" />
         <LanguageToggle />
         <NavLink

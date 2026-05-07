@@ -4,7 +4,7 @@
 // inside the page rather than only from the brand bar.
 
 import { useEffect, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { PageHeader } from '../components/common/PageHeader'
 import { Avatar, AvatarPicker, AVATAR_PRESETS } from '../components/common/Avatar'
 import { useAuth } from '../state/AuthContext'
@@ -130,6 +130,35 @@ export function ProfilePage() {
           </div>
         </div>
       </section>
+
+      {(account.role === 'gm' || account.role === 'admin') && (
+        <section className="gi-panel p-5 flex flex-col gap-3">
+          <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">
+            {t('profile.staffShortcuts')}
+          </h2>
+          <p className="text-[12px] text-ground-500 leading-relaxed">
+            {t('profile.staffShortcutsHint')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/settings"
+              className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
+            >
+              <span aria-hidden="true">⚙</span>
+              {t('nav.settings')}
+            </Link>
+            {account.role === 'admin' && (
+              <Link
+                to="/admin"
+                className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
+              >
+                <span aria-hidden="true">✶</span>
+                {t('nav.admin')}
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
 
       <form className="gi-panel p-5 flex flex-col gap-4" onSubmit={onSaveProfile}>
         <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">

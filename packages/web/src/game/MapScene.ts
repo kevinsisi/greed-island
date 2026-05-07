@@ -40,6 +40,8 @@ export interface MapSceneInit {
     interact: string
     enterArea: string
   }
+  /** 上次離開時的玩家座標，用來在重新進場景時還原位置。 */
+  initialPosition?: { x: number; y: number } | null
 }
 
 const PLAYER_SPEED = 180 // px/s
@@ -79,6 +81,8 @@ export class MapScene extends Phaser.Scene {
 
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
 
+  private initialPosition: { x: number; y: number } | null = null
+
   constructor() {
     super({ key: MapScene.KEY })
   }
@@ -88,6 +92,13 @@ export class MapScene extends Phaser.Scene {
     this.npcs = data.npcs
     this.locale = data.locale
     this.hudStrings = data.hudStrings
+    this.initialPosition = data.initialPosition ?? null
+  }
+
+  /** 給外部 (PhaserGame) 在 unmount 前讀出玩家當前座標，以便寫入 localStorage。 */
+  getPlayerPosition(): { x: number; y: number } | null {
+    if (!this.player) return null
+    return { x: this.player.x, y: this.player.y }
   }
 
   create(): void {
@@ -227,9 +238,17 @@ export class MapScene extends Phaser.Scene {
 
   private spawnPlayer(): void {
     const tex = this.makeSquareTexture('player', PLAYER_SPRITE_SIZE, PLAYER_COLOR, PLAYER_OUTLINE, 2)
-    // 玩家從中央地脈層附近的街道出生
-    const startX = CANVAS_WIDTH / 2
-    const startY = CANVAS_HEIGHT / 2 - TILE_SIZE
+    // 預設出生點：中央地脈層附近的街道。如果有上次離開時的座標，
+    // 就把玩家還原到那邊；座標會被 clamp 到地圖內以避免無效值。
+    const defaultX = CANVAS_WIDTH / 2
+    const defaultY = CANVAS_HEIGHT / 2 - TILE_SIZE
+    const saved = this.initialPosition
+    const startX = saved
+      ? Math.min(Math.max(saved.x, 0), CANVAS_WIDTH)
+      : defaultX
+    const startY = saved
+      ? Math.min(Math.max(saved.y, 0), CANVAS_HEIGHT)
+      : defaultY
     this.player = this.physics.add.sprite(startX, startY, tex)
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)

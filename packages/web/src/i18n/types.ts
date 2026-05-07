@@ -256,6 +256,8 @@ export type TranslationKey =
   | 'profile.avatar.moon'
   | 'profile.avatar.flame'
   | 'profile.avatar.mask'
+  | 'profile.staffShortcuts'
+  | 'profile.staffShortcutsHint'
   // social
   | 'social.eyebrow'
   | 'social.title'

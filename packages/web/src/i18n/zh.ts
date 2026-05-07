@@ -241,6 +241,8 @@ export const zh: Translations = {
   'profile.avatar.moon': '月相',
   'profile.avatar.flame': '焰心',
   'profile.avatar.mask': '面具',
+  'profile.staffShortcuts': '管理捷徑',
+  'profile.staffShortcutsHint': '行動裝置底部 nav 受限，這裡放管理者用得到的入口。',
 
   'social.eyebrow': '同袍 · 結誓',
   'social.title': '同袍',

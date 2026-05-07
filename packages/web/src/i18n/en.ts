@@ -241,6 +241,8 @@ export const en: Translations = {
   'profile.avatar.moon': 'Moon',
   'profile.avatar.flame': 'Flame',
   'profile.avatar.mask': 'Mask',
+  'profile.staffShortcuts': 'Staff shortcuts',
+  'profile.staffShortcutsHint': 'Mobile nav is capped — these admin/GM entrances live here for quick access.',
 
   'social.eyebrow': 'Social · Bonds',
   'social.title': 'Social',

@@ -11,6 +11,39 @@ export interface PhaserGameProps {
   onNpcInteract: (npcId: string) => void
 }
 
+const PLAYER_POS_STORAGE_KEY = 'gi:hub:player-pos:v1'
+const PLAYER_POS_AUTOSAVE_MS = 2_000
+
+function loadPlayerPosition(): { x: number; y: number } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(PLAYER_POS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown }
+    const x = typeof parsed.x === 'number' ? parsed.x : NaN
+    const y = typeof parsed.y === 'number' ? parsed.y : NaN
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+    return {
+      x: Math.min(Math.max(x, 0), CANVAS_WIDTH),
+      y: Math.min(Math.max(y, 0), CANVAS_HEIGHT)
+    }
+  } catch {
+    return null
+  }
+}
+
+function savePlayerPosition(pos: { x: number; y: number } | null): void {
+  if (typeof window === 'undefined' || !pos) return
+  try {
+    window.localStorage.setItem(
+      PLAYER_POS_STORAGE_KEY,
+      JSON.stringify({ x: pos.x, y: pos.y })
+    )
+  } catch {
+    // localStorage may be full or disabled — non-fatal for the prototype.
+  }
+}
+
 /**
  * 把 Phaser 場景嵌進 React。生命週期：mount 建一次 game，unmount 才 destroy。
  * Props 變動 (npcs / locale / hud strings) 會以 emit 形式餵進 scene，避免重建整個 game。
@@ -65,11 +98,34 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
       },
       npcs,
       locale,
-      hudStrings
+      hudStrings,
+      initialPosition: loadPlayerPosition()
     }
     game.scene.start(MapScene.KEY, init)
 
+    // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
+    const autosaveTimer = window.setInterval(() => {
+      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+      if (scene && scene.scene.isActive()) {
+        savePlayerPosition(scene.getPlayerPosition())
+      }
+    }, PLAYER_POS_AUTOSAVE_MS)
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') {
+        const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+        if (scene && scene.scene.isActive()) {
+          savePlayerPosition(scene.getPlayerPosition())
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
+      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+      if (scene) savePlayerPosition(scene.getPlayerPosition())
+      window.clearInterval(autosaveTimer)
+      document.removeEventListener('visibilitychange', handleVisibility)
       game.destroy(true)
       gameRef.current = null
     }
