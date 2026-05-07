@@ -270,6 +270,10 @@ export class MapScene extends Phaser.Scene {
   private refreshNpcSprites(): void {
     // 全部清掉重建。Prototype 等級夠用。
     for (const sprite of this.npcSprites.values()) {
+      const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+      const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+      if (badge) badge.destroy()
+      if (nameLabel) nameLabel.destroy()
       sprite.destroy()
     }
     this.npcSprites.clear()
@@ -291,17 +295,30 @@ export class MapScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      // NPC 名字標籤 (取首字)
-      const label = this.add.text(x, y, npc.shortName, {
+      // sprite 中央的單字 badge
+      const badge = this.add.text(x, y, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
         color: NPC_BADGE_TEXT,
         fontStyle: 'bold'
       })
-      label.setOrigin(0.5, 0.5)
-      label.setDepth(71)
-      sprite.setData('label', label)
+      badge.setOrigin(0.5, 0.5)
+      badge.setDepth(71)
+      sprite.setData('badge', badge)
+
+      // 完整名字浮在 sprite 上方，不必走近就讀得到
+      const nameLabel = this.add.text(x, y - NPC_SPRITE_SIZE * 0.85, npc.name, {
+        fontFamily:
+          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 3
+      })
+      nameLabel.setOrigin(0.5, 1)
+      nameLabel.setDepth(72)
+      sprite.setData('nameLabel', nameLabel)
 
       this.npcSprites.set(npc.id, sprite)
     }
@@ -351,7 +368,8 @@ export class MapScene extends Phaser.Scene {
     this.wasd.E.on('down', () => this.tryInteract())
     this.wasd.SPACE.on('down', () => this.tryInteract())
 
-    // 點擊或拖曳 -> 朝目標移動
+    // 點擊或拖曳 -> 朝目標移動。手機上單擊也會持續移動到該點，
+    // 走到目標附近 (handleMovement 內判斷) 才清掉 target。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
@@ -359,9 +377,6 @@ export class MapScene extends Phaser.Scene {
       if (pointer.isDown) {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
-    })
-    this.input.on('pointerup', () => {
-      this.pointerTarget = null
     })
   }
 
@@ -442,9 +457,12 @@ export class MapScene extends Phaser.Scene {
       const dx = this.pointerTarget.x - this.player.x
       const dy = this.pointerTarget.y - this.player.y
       const dist = Math.hypot(dx, dy)
-      if (dist > 4) {
+      if (dist > 6) {
         vx = dx / dist
         vy = dy / dist
+      } else {
+        // 抵達目標附近，停下並清掉 target，避免抖動
+        this.pointerTarget = null
       }
     }
 

@@ -23,7 +23,9 @@ const POSITION_SAVE_INTERVAL_MS = 500
 
 export interface AreaMapNpc {
   id: string
+  /** 顯示在 sprite 上方的完整名字 */
   name: string
+  /** sprite 內部的單字 badge / aria 用途 */
   shortName: string
 }
 
@@ -207,8 +209,10 @@ export class AreaScene extends Phaser.Scene {
 
   private refreshNpcSprites(): void {
     for (const sprite of this.npcSprites.values()) {
-      const label = sprite.getData('label') as Phaser.GameObjects.Text | undefined
-      if (label) label.destroy()
+      const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+      const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+      if (badge) badge.destroy()
+      if (nameLabel) nameLabel.destroy()
       sprite.destroy()
     }
     this.npcSprites.clear()
@@ -237,16 +241,30 @@ export class AreaScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      const label = this.add.text(x, y, npc.shortName, {
+      // sprite 中央的單字 badge
+      const badge = this.add.text(x, y, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
         color: NPC_BADGE_TEXT,
         fontStyle: 'bold'
       })
-      label.setOrigin(0.5, 0.5)
-      label.setDepth(71)
-      sprite.setData('label', label)
+      badge.setOrigin(0.5, 0.5)
+      badge.setDepth(71)
+      sprite.setData('badge', badge)
+
+      // sprite 正上方顯示完整名字，玩家不必走近就能讀到
+      const nameLabel = this.add.text(x, y - NPC_SPRITE_SIZE * 0.85, npc.name, {
+        fontFamily:
+          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 3
+      })
+      nameLabel.setOrigin(0.5, 1)
+      nameLabel.setDepth(72)
+      sprite.setData('nameLabel', nameLabel)
 
       this.npcSprites.set(npc.id, sprite)
     })
@@ -395,6 +413,8 @@ export class AreaScene extends Phaser.Scene {
     this.wasd.E.on('down', () => this.tryInteract())
     this.wasd.SPACE.on('down', () => this.tryInteract())
 
+    // 點地圖上某點 -> 玩家走過去 (sticky)。手機上單擊一次也能持續移動，
+    // 走到目標附近 (handleMovement 內判斷) 才清掉 target。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
@@ -402,9 +422,6 @@ export class AreaScene extends Phaser.Scene {
       if (pointer.isDown) {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
-    })
-    this.input.on('pointerup', () => {
-      this.pointerTarget = null
     })
   }
 
@@ -453,9 +470,12 @@ export class AreaScene extends Phaser.Scene {
       const dx = this.pointerTarget.x - this.player.x
       const dy = this.pointerTarget.y - this.player.y
       const dist = Math.hypot(dx, dy)
-      if (dist > 4) {
+      if (dist > 6) {
         vx = dx / dist
         vy = dy / dist
+      } else {
+        // 抵達目標附近，停下並清掉 target，避免抖動
+        this.pointerTarget = null
       }
     }
 
