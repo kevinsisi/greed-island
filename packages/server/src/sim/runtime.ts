@@ -275,12 +275,23 @@ export class SimulationRuntime {
         const name = profile?.name.zh ?? event.npcId
         const fromName = TILE_NAME_BY_ID[event.from] ?? event.from
         const toName = TILE_NAME_BY_ID[event.to] ?? event.to
+        // 檢查 NPC 是否已到達目的地（next.tile === target_tile）以給更明確的敘事
+        const npcState = this.npcEngine.getState(event.npcId)
+        const reachedDest = npcState !== null && npcState.tile === npcState.targetTile
+        const narration = reachedDest
+          ? `${name}抵達了${toName}。`
+          : `${name}離開了${fromName}，前往${toName}。`
         drafts.push(
           this.narrativeDraft(event.npcId, nextTick, {
             eventType: 'NPC_MOVE',
             actorId: event.npcId,
-            payload: { from: event.from, to: event.to, activity: event.activity },
-            narration: `${name}從${fromName}前往${toName}。`
+            payload: {
+              from: event.from,
+              to: event.to,
+              activity: event.activity,
+              reachedDest
+            },
+            narration
           })
         )
       } else if (event.kind === 'activity') {

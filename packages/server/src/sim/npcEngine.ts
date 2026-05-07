@@ -14,7 +14,7 @@
 
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR } from '../config/world.js'
-import { TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
+import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 
 export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
 
@@ -194,8 +194,13 @@ export class NpcEngine {
     }
 
     // ---- Phase 2: 同 tile NPC 兩兩互動 ----
+    // 規則：
+    //   - 必須同一 tile（NPC 必須真的走到對方旁邊，不能隔空）
+    //   - 兩位 NPC 都不能正在移動（activity != 'move'）— 路上交錯不算交談
+    //   - 每個 tile 每 tick 最多 1 個互動事件，挑 pairRoll 最低的 pair
     const byTile = new Map<string, string[]>()
     for (const [npcId, s] of this.state) {
+      if (s.activity === 'move') continue // 路上不算「在場」
       const arr = byTile.get(s.tile) ?? []
       arr.push(npcId)
       byTile.set(s.tile, arr)
@@ -203,6 +208,8 @@ export class NpcEngine {
     for (const [tile, ids] of byTile) {
       if (ids.length < 2) continue
       const sorted = [...ids].sort()
+      // 找出本 tile 內 pairRoll 最小且未在冷卻內的一對 — 只觸發一次
+      let bestPair: { a: string; b: string; roll: number } | null = null
       for (let i = 0; i < sorted.length; i += 1) {
         for (let j = i + 1; j < sorted.length; j += 1) {
           const a = sorted[i]!
@@ -212,38 +219,42 @@ export class NpcEngine {
           if (currentTick - last < INTERACT_COOLDOWN_TICKS) continue
           const roll = pairRoll(currentTick, a, b)
           if (roll >= INTERACT_PROBABILITY) continue
-          this.lastInteractTickByPair.set(pairKey, currentTick)
-
-          const profileA = this.profiles.find((p) => p.id === a)
-          const profileB = this.profiles.find((p) => p.id === b)
-          if (!profileA || !profileB) continue
-          const factionA = this.factions.get(a) ?? 'neutral'
-          const factionB = this.factions.get(b) ?? 'neutral'
-          const sameFaction = factionA === factionB
-          const moodSum =
-            (this.state.get(a)?.mood ?? 50) + (this.state.get(b)?.mood ?? 50)
-          // 同派系 + mood 高 → chat；其它情況偏向 argue
-          const mode: 'chat' | 'argue' = sameFaction && moodSum > 100 ? 'chat' : 'argue'
-          const narration = composeInteractionNarration(profileA, profileB, mode, tile)
-          events.push({
-            kind: 'interact',
-            tile,
-            participants: [a, b],
-            mode,
-            narration
-          })
-          // 互動影響 mood（clamp 後寫回 state map；最後 dedupe 統一 emit）
-          const sa = this.state.get(a)!
-          const sb = this.state.get(b)!
-          const delta = mode === 'chat' ? +1 : -2
-          const na = { ...sa, mood: clamp(sa.mood + delta, MOOD_MIN, MOOD_MAX) }
-          const nb = { ...sb, mood: clamp(sb.mood + delta, MOOD_MIN, MOOD_MAX) }
-          this.state.set(a, na)
-          this.state.set(b, nb)
-          dirty.add(a)
-          dirty.add(b)
+          if (!bestPair || roll < bestPair.roll) bestPair = { a, b, roll }
         }
       }
+      if (!bestPair) continue
+
+      const { a, b } = bestPair
+      const pairKey = `${a}|${b}`
+      this.lastInteractTickByPair.set(pairKey, currentTick)
+
+      const profileA = this.profiles.find((p) => p.id === a)
+      const profileB = this.profiles.find((p) => p.id === b)
+      if (!profileA || !profileB) continue
+      const factionA = this.factions.get(a) ?? 'neutral'
+      const factionB = this.factions.get(b) ?? 'neutral'
+      const sameFaction = factionA === factionB
+      const moodSum = (this.state.get(a)?.mood ?? 50) + (this.state.get(b)?.mood ?? 50)
+      // 同派系 + mood 高 → chat；其它情況偏向 argue
+      const mode: 'chat' | 'argue' = sameFaction && moodSum > 100 ? 'chat' : 'argue'
+      const narration = composeInteractionNarration(profileA, profileB, mode, tile)
+      events.push({
+        kind: 'interact',
+        tile,
+        participants: [a, b],
+        mode,
+        narration
+      })
+      // 互動影響 mood（clamp 後寫回 state map；最後 dedupe 統一 emit）
+      const sa = this.state.get(a)!
+      const sb = this.state.get(b)!
+      const delta = mode === 'chat' ? +1 : -2
+      const na = { ...sa, mood: clamp(sa.mood + delta, MOOD_MIN, MOOD_MAX) }
+      const nb = { ...sb, mood: clamp(sb.mood + delta, MOOD_MIN, MOOD_MAX) }
+      this.state.set(a, na)
+      this.state.set(b, nb)
+      dirty.add(a)
+      dirty.add(b)
     }
 
     // ---- Phase 3: 從 dirty set 產出 dedupe 後的 changedStates ----
@@ -341,6 +352,72 @@ function deriveSchedule(profile: NpcProfile): ScheduleSlot[] {
       toTickOfDay: TICKS_PER_DAY,
       location: profile.defaultLocation,
       activity: 'idle'
+    })
+  }
+  // 若整天行程的所有 location 都相同，注入一段「跨區外出」slot：
+  // 取最長的 slot，把它的 location 換成 deterministic 鄰居 tile，
+  // 確保 NPC 每天至少跨區一次（大部分 daily-life NPC 原本永遠待原地）。
+  return injectCrossTileWanderIfStuck(profile, out)
+}
+
+function injectCrossTileWanderIfStuck(
+  profile: NpcProfile,
+  slots: ScheduleSlot[]
+): ScheduleSlot[] {
+  const distinctLocations = new Set(slots.map((s) => s.location))
+  if (distinctLocations.size > 1) return slots
+
+  const home = slots[0]?.location ?? profile.defaultLocation
+  const neighbors = MAP_ADJACENCY[home] ?? []
+  if (neighbors.length === 0) return slots
+
+  // deterministic neighbor pick：用 npcId hash mod neighbor count
+  let h = 5381
+  for (const ch of profile.id) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+  const target = neighbors[h % neighbors.length]!
+  if (target === home) return slots
+
+  // 找最長的 slot 把它中間 1/3 切成跨區外出
+  let longestIdx = 0
+  let longestLen = 0
+  for (let i = 0; i < slots.length; i += 1) {
+    const len = slots[i]!.toTickOfDay - slots[i]!.fromTickOfDay
+    if (len > longestLen) {
+      longestLen = len
+      longestIdx = i
+    }
+  }
+  const slot = slots[longestIdx]!
+  const span = slot.toTickOfDay - slot.fromTickOfDay
+  if (span < 60) return slots // 太短的 slot 不切
+
+  const startCut = slot.fromTickOfDay + Math.floor(span / 3)
+  const endCut = slot.fromTickOfDay + Math.floor((span * 2) / 3)
+  const outActivity = inferActivityFromLabel('errand', profile)
+
+  const out: ScheduleSlot[] = []
+  for (let i = 0; i < slots.length; i += 1) {
+    if (i !== longestIdx) {
+      out.push(slots[i]!)
+      continue
+    }
+    out.push({
+      fromTickOfDay: slot.fromTickOfDay,
+      toTickOfDay: startCut,
+      location: home,
+      activity: slot.activity
+    })
+    out.push({
+      fromTickOfDay: startCut,
+      toTickOfDay: endCut,
+      location: target,
+      activity: outActivity
+    })
+    out.push({
+      fromTickOfDay: endCut,
+      toTickOfDay: slot.toTickOfDay,
+      location: home,
+      activity: slot.activity
     })
   }
   return out

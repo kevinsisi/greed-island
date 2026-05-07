@@ -112,4 +112,53 @@ describe('NpcEngine', () => {
     // moved one tile from t_temple toward target
     expect(s.tile).not.toBe('t_temple')
   })
+
+  it('injects a cross-tile wander slot when all routine slots share one location', () => {
+    // 'stuck' 整天都待 t_central — engine 應該把中段切出去鄰居 tile
+    const stuck = makeProfile({
+      id: 'stuck',
+      defaultLocation: 't_central',
+      routine: [
+        {
+          fromTickOfDay: 0,
+          toTickOfDay: TICKS_PER_DAY,
+          location: 't_central',
+          label: 'shop counter'
+        }
+      ]
+    })
+    const engine = new NpcEngine([stuck])
+    // 跑半天分散的 tick，看是否有 NPC tile 變更（不只 t_central）
+    const visited = new Set<string>(['t_central'])
+    for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
+      engine.tick(t)
+      visited.add(engine.getState('stuck')!.tile)
+    }
+    expect(visited.size).toBeGreaterThan(1)
+  })
+
+  it('NPCs in transit (activity=move) cannot interact', () => {
+    // 兩個 NPC 都從 t_dock 走向 t_mountain — 路上不應產生 interact
+    const A = makeProfile({
+      id: 'A',
+      defaultLocation: 't_dock',
+      routine: [
+        { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_mountain', label: 'work' }
+      ]
+    })
+    const B = makeProfile({
+      id: 'B',
+      defaultLocation: 't_dock',
+      routine: [
+        { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_mountain', label: 'work' }
+      ]
+    })
+    const engine = new NpcEngine([A, B])
+    let interactCount = 0
+    for (let t = 1; t <= 4; t += 1) {
+      const r = engine.tick(t)
+      interactCount += r.events.filter((e) => e.kind === 'interact').length
+    }
+    expect(interactCount).toBe(0) // 兩位都在路上 (activity=move) 不互動
+  })
 })
