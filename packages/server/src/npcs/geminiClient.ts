@@ -24,6 +24,12 @@ export type GeminiGenerationOptions = Readonly<{
   userPrompt: string
   temperature?: number
   maxOutputTokens?: number
+  /**
+   * Forces Gemini's output MIME type. Set to `'application/json'` to
+   * make the model emit raw JSON without markdown ```json fences,
+   * which otherwise blow up the parser when output is truncated.
+   */
+  responseMimeType?: string
 }>
 
 export class GeminiUnavailableError extends Error {
@@ -87,6 +93,13 @@ async function callGemini(
   options: GeminiGenerationOptions
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`
+  const generationConfig: Record<string, unknown> = {
+    temperature: options.temperature ?? 0.85,
+    maxOutputTokens: options.maxOutputTokens ?? 512,
+  }
+  if (options.responseMimeType) {
+    generationConfig.responseMimeType = options.responseMimeType
+  }
   const body = {
     systemInstruction: {
       parts: [{ text: options.systemPrompt }],
@@ -97,10 +110,7 @@ async function callGemini(
         parts: [{ text: options.userPrompt }],
       },
     ],
-    generationConfig: {
-      temperature: options.temperature ?? 0.85,
-      maxOutputTokens: options.maxOutputTokens ?? 512,
-    },
+    generationConfig,
   }
 
   const controller = new AbortController()

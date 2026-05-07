@@ -51,4 +51,24 @@ describe('parseReply', () => {
     expect(parseReply('{"zh":"a"}')).toBeNull()
     expect(parseReply('not json at all')).toBeNull()
   })
+
+  it('parses a fenced reply whose closing ``` was truncated', () => {
+    // Reproduces the production failure: Gemini opens ```json + complete
+    // object but maxOutputTokens cuts off before the closing fence.
+    const raw =
+      '```json\n' +
+      JSON.stringify({ zh: '喔？交易啊。', en: 'Trade, huh?', intent: 'trade', trustDelta: 0 })
+    const out = parseReply(raw)
+    expect(out).not.toBeNull()
+    expect(out!.intent).toBe('trade')
+  })
+
+  it('repairs JSON truncated mid-string by closing the open string and braces', () => {
+    // String value is cut off — repair should append `"` then `}`.
+    const raw = '{"zh":"完整中文","en":"Hello there","intent":"ask","trustDelta":1'
+    const out = parseReply(raw)
+    expect(out).not.toBeNull()
+    expect(out!.intent).toBe('ask')
+    expect(out!.trustDelta).toBe(1)
+  })
 })
