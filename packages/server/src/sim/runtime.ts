@@ -1,10 +1,11 @@
 // Simulation runtime — drives a 5-second tick loop on top of the
 // append-only kernel event log. Every tick the runtime:
 //   1. Increments world.tick
-//   2. Re-evaluates each NPC's routine slot and emits NPC_MOVE
-//      narrative events when the resolved location changes
+//   2. Hands off to NpcEngine for per-NPC decisioning (move tile-by-tile,
+//      activity transitions, mood/health drift, NPC↔NPC interaction)
 //   3. On a fixed cadence, rotates weather / season and toggles the
 //      tide_festival rare window
+//   4. Spawns / expires WorldEventEngine entries
 //
 // All state is persisted as FACT_SET events so it can be reconstructed
 // on restart via the kernel reducer. The runtime also keeps an in-
@@ -23,7 +24,6 @@ import type { SqliteEventStore } from '../kernel/eventStore.js'
 import { reduceEventLog } from '../kernel/reducer.js'
 import {
   TICK_DURATION_MS,
-  TICKS_PER_DAY,
   TICKS_PER_HOUR,
   TICKS_PER_MINUTE
 } from '../config/world.js'
@@ -31,6 +31,8 @@ import type { NpcProfile } from '../npcs/types.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
+import { MAP_TILES, TILE_NAME_BY_ID } from './mapGraph.js'
+import { NpcEngine, type NpcActivity, type NpcRuntimeState } from './npcEngine.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -39,8 +41,7 @@ const FACT_WEATHER = 'world.weather'
 const FACT_SEASON = 'world.season'
 const FACT_RARE_WINDOW = 'world.rareWindow.tide_festival'
 const FACT_ACTIVE_EVENTS = 'world.activeEvents'
-const NPC_LOCATION_PREFIX = 'npc.'
-const NPC_LOCATION_SUFFIX = '.location'
+const NPC_STATE_PREFIX = 'npc.state.'
 
 const WEATHERS = ['晴', '陰', '霧雨', '驟雨', '微風'] as const
 const SEASONS = ['霜之月', '雨之月', '潮之月', '熾之月'] as const
@@ -49,14 +50,6 @@ const WEATHER_CADENCE_TICKS = TICKS_PER_MINUTE
 const SEASON_CADENCE_TICKS = TICKS_PER_HOUR
 const RARE_WINDOW_PERIOD_TICKS = TICKS_PER_MINUTE * 10
 const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
-const NPC_HEARTBEAT_CADENCE_TICKS = TICKS_PER_MINUTE * 2
-const NPC_OBSERVATIONS = [
-  '感受到島的低語，停下手邊的事物。',
-  '檢視今日的進度，眉頭微皺。',
-  '在風中嗅到什麼，視線投向遠方。',
-  '輕聲念誦一句咒語，繼續前行。',
-  '與身邊的人交換了一個短暫的眼神。'
-] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -73,6 +66,11 @@ export type SimNpcState = Readonly<{
   relationshipScore: number
   lastActedTick: number
   internalState: Record<string, unknown>
+  activity: NpcActivity
+  mood: number
+  health: number
+  faction: string
+  targetTile: string
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -105,8 +103,6 @@ export class SimulationRuntime {
   private season: string = SEASONS[0]
   private rareWindowOpen = false
   private rareWindowClosesAtTick = 0
-  private readonly npcLocations = new Map<string, string>()
-  private readonly npcLastActed = new Map<string, number>()
   private readonly recentEvents: NarrativeEvent[] = []
   private readonly listeners = new Set<Listener>()
   private readonly tickListeners = new Set<TickListener>()
@@ -114,6 +110,7 @@ export class SimulationRuntime {
   private lastSequence = 0
   private eventCount = 0
   private readonly eventEngine = new WorldEventEngine()
+  private readonly npcEngine: NpcEngine
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -121,6 +118,7 @@ export class SimulationRuntime {
     private readonly cards: CardCatalog,
     private readonly tickDurationMs: number = TICK_DURATION_MS
   ) {
+    this.npcEngine = new NpcEngine(profiles)
     this.hydrateFromEventLog()
   }
 
@@ -173,18 +171,33 @@ export class SimulationRuntime {
 
   getNpcs(): SimNpcState[] {
     return this.profiles.map((profile) => {
-      const location = this.npcLocations.get(profile.id) ?? profile.defaultLocation
+      const s =
+        this.npcEngine.getState(profile.id) ??
+        ({
+          tile: profile.defaultLocation,
+          mood: 60,
+          health: 80,
+          activity: 'idle',
+          faction: 'neutral',
+          targetTile: profile.defaultLocation,
+          lastActedTick: 0
+        } as NpcRuntimeState)
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
         role: { zh: profile.role.zh, en: profile.role.en },
-        location,
+        location: s.tile,
         relationshipScore: this.deriveRelationshipScore(profile),
-        lastActedTick: this.npcLastActed.get(profile.id) ?? 0,
+        lastActedTick: s.lastActedTick,
         internalState: {
           patience: profile.personality.patience ?? null,
           greed: profile.personality.greed ?? null
-        }
+        },
+        activity: s.activity,
+        mood: Math.round(s.mood),
+        health: Math.round(s.health),
+        faction: s.faction,
+        targetTile: s.targetTile
       }
     })
   }
@@ -208,7 +221,7 @@ export class SimulationRuntime {
     const tiles = MAP_TILES.map((tile) => ({
       ...tile,
       npcIds: this.profiles
-        .filter((p) => (this.npcLocations.get(p.id) ?? p.defaultLocation) === tile.id)
+        .filter((p) => (this.npcEngine.getState(p.id)?.tile ?? p.defaultLocation) === tile.id)
         .map((p) => p.id)
     }))
     return { width: 8, height: 6, tiles }
@@ -254,36 +267,62 @@ export class SimulationRuntime {
       )
     }
 
-    for (const profile of this.profiles) {
-      const slot = findRoutineSlotForTick(profile, nextTick)
-      const newLocation = slot?.location ?? profile.defaultLocation
-      const oldLocation = this.npcLocations.get(profile.id) ?? profile.defaultLocation
-      if (oldLocation !== newLocation) {
+    // ---- NPC engine：tile-by-tile 移動、活動、互動 ----
+    const npcResult = this.npcEngine.tick(nextTick)
+    for (const event of npcResult.events) {
+      const profile = this.profiles.find((p) => p.id === ('npcId' in event ? event.npcId : ''))
+      if (event.kind === 'move') {
+        const name = profile?.name.zh ?? event.npcId
+        const fromName = TILE_NAME_BY_ID[event.from] ?? event.from
+        const toName = TILE_NAME_BY_ID[event.to] ?? event.to
         drafts.push(
-          this.factSetDraft(
-            `${NPC_LOCATION_PREFIX}${profile.id}${NPC_LOCATION_SUFFIX}`,
-            newLocation,
-            profile.id,
-            nextTick
-          )
-        )
-        drafts.push(
-          this.narrativeDraft(profile.id, nextTick, {
+          this.narrativeDraft(event.npcId, nextTick, {
             eventType: 'NPC_MOVE',
-            actorId: profile.id,
-            payload: {
-              from: oldLocation,
-              to: newLocation,
-              ...(slot?.label === undefined ? {} : { label: slot.label })
-            },
-            narration: this.composeMoveNarration(profile, oldLocation, newLocation)
+            actorId: event.npcId,
+            payload: { from: event.from, to: event.to, activity: event.activity },
+            narration: `${name}從${fromName}前往${toName}。`
           })
         )
-        this.npcLocations.set(profile.id, newLocation)
-        this.npcLastActed.set(profile.id, nextTick)
+      } else if (event.kind === 'activity') {
+        const name = profile?.name.zh ?? event.npcId
+        const tileName = TILE_NAME_BY_ID[event.tile] ?? event.tile
+        drafts.push(
+          this.narrativeDraft(event.npcId, nextTick, {
+            eventType: 'NPC_ACTIVITY',
+            actorId: event.npcId,
+            payload: { tile: event.tile, from: event.from, to: event.to },
+            narration: `${name}在${tileName}${activityVerb(event.to)}。`
+          })
+        )
+      } else if (event.kind === 'interact') {
+        const [a, b] = event.participants
+        drafts.push(
+          this.narrativeDraft(`${a}.${b}`, nextTick, {
+            eventType: 'NPC_INTERACT',
+            actorId: a,
+            payload: {
+              tile: event.tile,
+              with: b,
+              mode: event.mode
+            },
+            narration: event.narration
+          })
+        )
       }
     }
+    // 把 NPC state 變更寫回 FACT_SET，讓重啟可 hydrate
+    for (const change of npcResult.changedStates) {
+      drafts.push(
+        this.factSetDraft(
+          `${NPC_STATE_PREFIX}${change.npcId}`,
+          { ...change.state },
+          change.npcId,
+          nextTick
+        )
+      )
+    }
 
+    // ---- 天氣 / 季節 / 稀有窗口 / 世界事件 ----
     if (nextTick % WEATHER_CADENCE_TICKS === 0) {
       const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
       if (next !== this.weather) {
@@ -322,7 +361,14 @@ export class SimulationRuntime {
     if (phase === 0 && !this.rareWindowOpen) {
       this.rareWindowOpen = true
       this.rareWindowClosesAtTick = nextTick + RARE_WINDOW_OPEN_TICKS
-      drafts.push(this.factSetDraft(FACT_RARE_WINDOW, { open: true, closesAt: this.rareWindowClosesAtTick }, SIM_ACTOR_WORLD, nextTick))
+      drafts.push(
+        this.factSetDraft(
+          FACT_RARE_WINDOW,
+          { open: true, closesAt: this.rareWindowClosesAtTick },
+          SIM_ACTOR_WORLD,
+          nextTick
+        )
+      )
       drafts.push(
         this.narrativeDraft('world.rareWindow', nextTick, {
           eventType: 'WORLD_RARE_WINDOW_OPENED',
@@ -333,7 +379,9 @@ export class SimulationRuntime {
       )
     } else if (this.rareWindowOpen && nextTick >= this.rareWindowClosesAtTick) {
       this.rareWindowOpen = false
-      drafts.push(this.factSetDraft(FACT_RARE_WINDOW, { open: false, closesAt: null }, SIM_ACTOR_WORLD, nextTick))
+      drafts.push(
+        this.factSetDraft(FACT_RARE_WINDOW, { open: false, closesAt: null }, SIM_ACTOR_WORLD, nextTick)
+      )
       drafts.push(
         this.narrativeDraft('world.rareWindow', nextTick, {
           eventType: 'WORLD_RARE_WINDOW_CLOSED',
@@ -377,23 +425,6 @@ export class SimulationRuntime {
           })
         )
       }
-    }
-
-    if (this.profiles.length > 0 && nextTick % NPC_HEARTBEAT_CADENCE_TICKS === 0) {
-      const idx = (nextTick / NPC_HEARTBEAT_CADENCE_TICKS) % this.profiles.length
-      const profile = this.profiles[Math.floor(idx)]!
-      const obsIdx = Math.floor(nextTick / NPC_HEARTBEAT_CADENCE_TICKS) % NPC_OBSERVATIONS.length
-      const observation = NPC_OBSERVATIONS[obsIdx]!
-      const location = this.npcLocations.get(profile.id) ?? profile.defaultLocation
-      drafts.push(
-        this.narrativeDraft(profile.id, nextTick, {
-          eventType: 'NPC_OBSERVE',
-          actorId: profile.id,
-          payload: { location },
-          narration: `${profile.name.zh}${observation}`
-        })
-      )
-      this.npcLastActed.set(profile.id, nextTick)
     }
 
     const committed = this.store.appendEvents(drafts)
@@ -474,18 +505,6 @@ export class SimulationRuntime {
     return this.factSetDraft(key, body, actorId, tick)
   }
 
-  private composeMoveNarration(
-    profile: NpcProfile,
-    from: string,
-    to: string
-  ): string | null {
-    if (from === to) return null
-    const name = profile.name.zh
-    const fromName = TILE_NAME_BY_ID[from] ?? from
-    const toName = TILE_NAME_BY_ID[to] ?? to
-    return `${name}從${fromName}前往${toName}。`
-  }
-
   private deriveRelationshipScore(profile: NpcProfile): number {
     const base = typeof profile.personality.trustBase === 'number' ? profile.personality.trustBase : 50
     return base
@@ -523,10 +542,21 @@ export class SimulationRuntime {
       this.rareWindowOpen = !!r.open
       this.rareWindowClosesAtTick = r.closesAt ?? 0
     }
+    // Hydrate NPC state from the new npc.state.<id> facts. Backward-
+    // compatible：若這些 keys 不存在但舊版本的 npc.<id>.location 存在，
+    // 就把舊的位置補上去。
     for (const profile of this.profiles) {
-      const k = `${NPC_LOCATION_PREFIX}${profile.id}${NPC_LOCATION_SUFFIX}`
-      const loc = state.facts[k]
-      this.npcLocations.set(profile.id, typeof loc === 'string' ? loc : profile.defaultLocation)
+      const newKey = `${NPC_STATE_PREFIX}${profile.id}`
+      const newRaw = state.facts[newKey]
+      if (newRaw) {
+        this.npcEngine.hydrate(profile.id, newRaw)
+        continue
+      }
+      const legacyKey = `npc.${profile.id}.location`
+      const legacy = state.facts[legacyKey]
+      if (typeof legacy === 'string') {
+        this.npcEngine.hydrate(profile.id, { tile: legacy, targetTile: legacy })
+      }
     }
     const activeEventsFact = state.facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
@@ -566,16 +596,6 @@ export class SimulationRuntime {
   }
 }
 
-function findRoutineSlotForTick(profile: NpcProfile, tick: number) {
-  const tickOfDay = ((tick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
-  for (const slot of profile.routine) {
-    if (tickOfDay >= slot.fromTickOfDay && tickOfDay < slot.toTickOfDay) {
-      return slot
-    }
-  }
-  return null
-}
-
 function pickFromCycle<T>(values: readonly T[], step: number): T {
   const i = ((step % values.length) + values.length) % values.length
   return values[i]!
@@ -597,31 +617,21 @@ function readNarrativePayload(payload: unknown): NarrativeEventPayload | null {
   }
 }
 
-// 潮鳴市八方街區。Tile IDs are kept stable so existing NPC profiles
-// (defaultLocation/routine using the historical t_dock/t_central/...
-// IDs) continue to resolve correctly after the Tideway rebrand.
-// `t_dimai` (地脈層) is the only new tile.
-const MAP_TILES: ReadonlyArray<{
-  id: string
-  name: string
-  x: number
-  y: number
-  biome: string
-}> = [
-  { id: 't_desert',   name: '潮聲區',  x: 0, y: 4, biome: 'desert'   },
-  { id: 't_forest',   name: '潮見丘',  x: 1, y: 1, biome: 'forest'   },
-  { id: 't_mountain', name: '煙嵐山',  x: 4, y: 0, biome: 'mountain' },
-  { id: 't_temple',   name: '霓港區',  x: 7, y: 1, biome: 'water'    },
-  { id: 't_central',  name: '夜潮區',  x: 4, y: 3, biome: 'grass'    },
-  { id: 't_ruin',     name: '鏽灣區',  x: 7, y: 4, biome: 'ruin'     },
-  { id: 't_dock',     name: '浪花區',  x: 3, y: 5, biome: 'water'    },
-  { id: 't_dimai',    name: '地脈層',  x: 4, y: 2, biome: 'ruin'     }
-]
-
-const TILE_NAME_BY_ID: Record<string, string> = MAP_TILES.reduce(
-  (acc, tile) => {
-    acc[tile.id] = tile.name
-    return acc
-  },
-  {} as Record<string, string>
-)
+function activityVerb(activity: NpcActivity): string {
+  switch (activity) {
+    case 'work':
+      return '開始工作'
+    case 'eat':
+      return '正在用餐'
+    case 'sleep':
+      return '進入休息狀態'
+    case 'trade':
+      return '擺出交易陣式'
+    case 'patrol':
+      return '巡視四周'
+    case 'idle':
+      return '稍作停留'
+    case 'move':
+      return '正在移動'
+  }
+}

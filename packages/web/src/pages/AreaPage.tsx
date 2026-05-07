@@ -9,7 +9,18 @@ import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
 import type { AreaMapNpc } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
-import type { NpcSummary } from '../state/types'
+import type { NpcSummary, NpcActivity } from '../state/types'
+import type { TranslationKey } from '../i18n/types'
+
+const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
+  idle: 'npc.activity.idle',
+  move: 'npc.activity.move',
+  work: 'npc.activity.work',
+  eat: 'npc.activity.eat',
+  sleep: 'npc.activity.sleep',
+  trade: 'npc.activity.trade',
+  patrol: 'npc.activity.patrol'
+}
 
 type DrawerTab = 'scene' | 'npcs' | 'cards' | 'events' | 'players'
 
@@ -60,12 +71,16 @@ export function AreaPage() {
 
   const mapNpcs = useMemo<AreaMapNpc[]>(
     () =>
-      occupants.map((npc) => ({
-        id: npc.id,
-        name: npc.name,
-        shortName: npc.name.charAt(0)
-      })),
-    [occupants]
+      occupants.map((npc) => {
+        const base: AreaMapNpc = {
+          id: npc.id,
+          name: npc.name,
+          shortName: npc.name.charAt(0)
+        }
+        if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
+        return base
+      }),
+    [occupants, t]
   )
 
   const hudStrings = useMemo(

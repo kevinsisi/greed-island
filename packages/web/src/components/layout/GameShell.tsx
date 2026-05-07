@@ -66,7 +66,9 @@ export function GameShell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         <DesktopRail />
 
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 pt-5 lg:pt-8 pb-32 lg:pb-12">
+        {/* 行動裝置底部從上到下：EventTickerStrip (fixed bottom-[60px], ~36px) + MobileTabBar (fixed bottom-0, ~56px)。
+            main 必須留至少 ~96px padding，才能完整捲到底不被遮。pb-28 = 112px。 */}
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 pt-5 lg:pt-8 pb-28 lg:pb-12">
           {children}
         </main>
 

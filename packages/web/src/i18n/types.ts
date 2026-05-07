@@ -102,6 +102,14 @@ export type TranslationKey =
   | 'npc.quickAsk'
   | 'npc.quickTrade'
   | 'npc.quickLeave'
+  // npc activity (living-world v0.9+)
+  | 'npc.activity.idle'
+  | 'npc.activity.move'
+  | 'npc.activity.work'
+  | 'npc.activity.eat'
+  | 'npc.activity.sleep'
+  | 'npc.activity.trade'
+  | 'npc.activity.patrol'
   // settings
   | 'settings.eyebrow'
   | 'settings.title'

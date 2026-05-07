@@ -56,23 +56,32 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const conversationRef = useRef<HTMLDivElement | null>(null)
 
+  // onClose 從父層每次 render 都是新的 callback；放進 useEffect deps 會導致
+  // 每次世界 SSE 更新時觸發 reset，把 draft 清掉。改成用 ref 持有最新版。
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  // 只看 npc.id：開新 NPC 才重置；同一 NPC 在 SSE 流期間維持輸入框與對話。
+  const npcId = npc?.id ?? null
+  const initialTrust = npc?.relationshipScore ?? 0
   useEffect(() => {
-    if (!npc) return
+    if (!npcId) return
     setTurns([])
     setBusy(false)
     setError(null)
-    setTrust(npc.relationshipScore)
-    setTier(deriveTier(npc.relationshipScore))
+    setTrust(initialTrust)
+    setTier(deriveTier(initialTrust))
     setShowHistory(false)
     setHistory(null)
     setHistoryLoading(false)
     setDraft('')
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [npc, onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [npcId])
 
   useEffect(() => {
     if (conversationRef.current) {

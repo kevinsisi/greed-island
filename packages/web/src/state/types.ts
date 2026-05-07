@@ -22,6 +22,15 @@ export interface EventSummary {
   narration?: string | null
 }
 
+export type NpcActivity =
+  | 'idle'
+  | 'move'
+  | 'work'
+  | 'eat'
+  | 'sleep'
+  | 'trade'
+  | 'patrol'
+
 export interface NpcSummary {
   id: string
   name: string
@@ -30,6 +39,12 @@ export interface NpcSummary {
   relationshipScore: number
   lastActedTick: number
   internalState: Record<string, unknown>
+  /** Living-world fields (server v0.9+, optional for backward compat) */
+  activity?: NpcActivity
+  mood?: number
+  health?: number
+  faction?: string
+  targetTile?: string
 }
 
 export type CardRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
