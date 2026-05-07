@@ -4,6 +4,7 @@ import {
   AREA_CANVAS_HEIGHT,
   AREA_CANVAS_WIDTH,
   AreaScene,
+  type AreaMapDrop,
   type AreaMapNpc,
   type AreaSceneInit
 } from './AreaScene'
@@ -43,9 +44,11 @@ function savePosition(tileId: string, pos: { x: number; y: number }): void {
 export interface AreaPhaserGameProps {
   tileId: DistrictId
   npcs: AreaMapNpc[]
+  drops: AreaMapDrop[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string }
+  hudStrings: { interact: string; pickup: string }
   onNpcInteract: (npcId: string) => void
+  onDropPickup: (dropId: number) => void
 }
 
 /**
@@ -56,15 +59,18 @@ export interface AreaPhaserGameProps {
 export function AreaPhaserGame({
   tileId,
   npcs,
+  drops,
   locale,
   hudStrings,
-  onNpcInteract
+  onNpcInteract,
+  onDropPickup
 }: AreaPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
 
-  const callbacksRef = useRef({ onNpcInteract, tileId })
+  const callbacksRef = useRef({ onNpcInteract, onDropPickup, tileId })
   callbacksRef.current.onNpcInteract = onNpcInteract
+  callbacksRef.current.onDropPickup = onDropPickup
   callbacksRef.current.tileId = tileId
 
   // tileId 變動 → 重建場景以套用新的 startPosition
@@ -99,10 +105,12 @@ export function AreaPhaserGame({
     const init: AreaSceneInit = {
       callbacks: {
         onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id),
+        onDropPickup: (id) => callbacksRef.current.onDropPickup(id),
         onPositionChange: (pos) => savePosition(callbacksRef.current.tileId, pos)
       },
       tileId,
       npcs,
+      drops,
       locale,
       hudStrings,
       startPosition: loadPosition(tileId)
@@ -117,14 +125,14 @@ export function AreaPhaserGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileId])
 
-  // npcs / locale / hud 字串變動 → 通知場景刷新
+  // npcs / drops / locale / hud 字串變動 → 通知場景刷新
   useEffect(() => {
     const game = gameRef.current
     if (!game) return
     const scene = game.scene.getScene(AreaScene.KEY) as AreaScene | null
     if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({ npcs, locale, hudStrings })
-  }, [npcs, locale, hudStrings])
+    scene.applyExternalUpdate({ npcs, drops, locale, hudStrings })
+  }, [npcs, drops, locale, hudStrings])
 
   return (
     <div

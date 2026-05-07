@@ -251,6 +251,64 @@ export type ServerAllianceDto = {
   maxMembers: number
 }
 
+export type ServerCardDrop = {
+  id: number
+  cardId: number
+  tileId: string
+  x: number
+  y: number
+  droppedAtTick: number
+  expiresAtTick: number
+  state: 'available' | 'held' | 'expired' | 'stored'
+  holderAccountId: number | null
+  pickupAtTick: number | null
+  storeDeadlineTick: number | null
+}
+
+export type ServerCardSlotType = 'sequencing' | 'carry'
+
+export type ServerCodexEntry = {
+  id: number
+  cardId: number
+  slotType: ServerCardSlotType
+  slotIndex: number
+  obtainedTick: number
+  obtainedAt: string
+}
+
+export type ServerCodexResponse = {
+  sequencingSlotCount: number
+  carrySlotCount: number
+  entries: ServerCodexEntry[]
+}
+
+export type ServerTradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired'
+
+export type ServerTradeDto = {
+  id: number
+  proposerId: number
+  targetId: number
+  proposerName: string
+  targetName: string
+  offeredCodexId: number
+  offeredCardId: number
+  requestedCardId: number
+  status: ServerTradeStatus
+  createdAt: string
+  resolvedAt: string | null
+}
+
+export type ServerTradeList = {
+  incoming: ServerTradeDto[]
+  outgoing: ServerTradeDto[]
+}
+
+export type ServerCardConfig = {
+  sixtySecondRuleTicks: number
+  sequencingSlotCount: number
+  carrySlotCount: number
+}
+
 export type SocialStreamEvent =
   | { type: 'friend.request'; from: number; requestId: number; occurredAt: string }
   | { type: 'friend.accepted'; from: number; requestId: number; occurredAt: string }
@@ -508,6 +566,75 @@ export const api = {
     jsonFetch<{ ok: true; token: string; account: ServerAccount }>('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ token: resetToken, password })
+    }),
+  // -- card drops / codex / trade ----------------------------------
+  cardConfig: () => jsonFetch<ServerCardConfig>('/cards/config'),
+  cardsActive: (token: string, tileId: string) =>
+    jsonFetch<{ tileId: string; tick: number; drops: ServerCardDrop[] }>(
+      `/cards/active?tileId=${encodeURIComponent(tileId)}`,
+      { headers: authHeaders(token) }
+    ),
+  cardsHeld: (token: string) =>
+    jsonFetch<{ tick: number; drops: ServerCardDrop[] }>('/cards/held', {
+      headers: authHeaders(token)
+    }),
+  cardsPickup: (token: string, dropId: number) =>
+    jsonFetch<{ drop: ServerCardDrop }>('/cards/pickup', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ dropId })
+    }),
+  cardsStore: (
+    token: string,
+    dropId: number,
+    slotType: ServerCardSlotType
+  ) =>
+    jsonFetch<{ drop: ServerCardDrop; codex: ServerCodexEntry }>('/cards/store', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ dropId, slotType })
+    }),
+  cardsRelease: (token: string, dropId: number) =>
+    jsonFetch<{ drop: ServerCardDrop }>('/cards/release', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ dropId })
+    }),
+  codex: (token: string) =>
+    jsonFetch<ServerCodexResponse>('/codex', { headers: authHeaders(token) }),
+  codexMaterialize: (token: string, codexId: number) =>
+    jsonFetch<{ materialized: ServerCodexEntry }>('/codex/materialize', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ codexId })
+    }),
+  tradeList: (token: string) =>
+    jsonFetch<ServerTradeList>('/trade/list', { headers: authHeaders(token) }),
+  tradePropose: (
+    token: string,
+    targetUserId: number,
+    offeredCodexId: number,
+    requestedCardId: number
+  ) =>
+    jsonFetch<{ trade: ServerTradeDto }>('/trade/propose', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ targetUserId, offeredCodexId, requestedCardId })
+    }),
+  tradeAccept: (token: string, tradeId: number) =>
+    jsonFetch<{ trade: ServerTradeDto }>(`/trade/accept/${tradeId}`, {
+      method: 'POST',
+      headers: authHeaders(token)
+    }),
+  tradeReject: (token: string, tradeId: number) =>
+    jsonFetch<{ trade: ServerTradeDto }>(`/trade/reject/${tradeId}`, {
+      method: 'POST',
+      headers: authHeaders(token)
+    }),
+  tradeCancel: (token: string, tradeId: number) =>
+    jsonFetch<{ trade: ServerTradeDto }>(`/trade/cancel/${tradeId}`, {
+      method: 'POST',
+      headers: authHeaders(token)
     })
 }
 

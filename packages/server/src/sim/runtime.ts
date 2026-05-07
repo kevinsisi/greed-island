@@ -95,6 +95,7 @@ export type NarrativeEvent = Readonly<{
 }>
 
 type Listener = (event: NarrativeEvent) => void
+type TickListener = (tick: number) => void
 
 const RECENT_EVENTS_BUFFER = 200
 
@@ -108,6 +109,7 @@ export class SimulationRuntime {
   private readonly npcLastActed = new Map<string, number>()
   private readonly recentEvents: NarrativeEvent[] = []
   private readonly listeners = new Set<Listener>()
+  private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
   private lastSequence = 0
   private eventCount = 0
@@ -136,6 +138,12 @@ export class SimulationRuntime {
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** 額外的 per-tick callback。runs after the tick has incremented. */
+  subscribeTick(listener: TickListener): () => void {
+    this.tickListeners.add(listener)
+    return () => this.tickListeners.delete(listener)
   }
 
   getRecentEvents(limit = 50): NarrativeEvent[] {
@@ -417,6 +425,14 @@ export class SimulationRuntime {
     }
 
     this.currentTick = nextTick
+
+    for (const tl of this.tickListeners) {
+      try {
+        tl(nextTick)
+      } catch (err) {
+        console.error('[sim] tick listener error', err)
+      }
+    }
   }
 
   private factSetDraft(

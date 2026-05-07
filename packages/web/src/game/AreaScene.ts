@@ -27,8 +27,20 @@ export interface AreaMapNpc {
   shortName: string
 }
 
+/** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
+export interface AreaMapDrop {
+  id: number
+  cardId: number
+  rank: string
+  x: number
+  y: number
+  /** 此 drop 在 server 上的剩餘 tick 數，用來決定 sprite 顏色閃爍 */
+  ticksRemaining: number
+}
+
 export interface AreaSceneCallbacks {
   onNpcInteract: (npcId: string) => void
+  onDropPickup: (dropId: number) => void
   onPositionChange: (pos: { x: number; y: number }) => void
 }
 
@@ -36,10 +48,27 @@ export interface AreaSceneInit {
   callbacks: AreaSceneCallbacks
   tileId: DistrictId
   npcs: AreaMapNpc[]
+  drops: AreaMapDrop[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string }
+  hudStrings: { interact: string; pickup: string }
   /** 從 localStorage 讀回的位置；若無則 null。座標必須在 canvas 範圍內。 */
   startPosition: { x: number; y: number } | null
+}
+
+const DROP_SPRITE_SIZE = 22
+const DROP_PICKUP_RADIUS = AREA_TILE_SIZE * 1.4
+
+const RANK_COLOR: Record<string, number> = {
+  SS: 0xffd966,
+  S: 0xffb84d,
+  A: 0xff9966,
+  B: 0xffe066,
+  C: 0xb6e3ff,
+  D: 0x9ee0c7,
+  E: 0xa3c9ff,
+  F: 0xc9b8ff,
+  G: 0xb0b0b0,
+  H: 0x8a8a8a
 }
 
 /**
@@ -55,7 +84,8 @@ export class AreaScene extends Phaser.Scene {
   private callbacks!: AreaSceneCallbacks
   private tileId!: DistrictId
   private npcs: AreaMapNpc[] = []
-  private hudStrings: AreaSceneInit['hudStrings'] = { interact: '' }
+  private drops: AreaMapDrop[] = []
+  private hudStrings: AreaSceneInit['hudStrings'] = { interact: '', pickup: '' }
   private startPosition: { x: number; y: number } | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
@@ -64,9 +94,11 @@ export class AreaScene extends Phaser.Scene {
 
   private pointerTarget: { x: number; y: number } | null = null
   private nearbyNpcId: string | null = null
+  private nearbyDropId: number | null = null
 
   private interactPrompt!: Phaser.GameObjects.Container
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
+  private dropSprites: Map<number, Phaser.GameObjects.Container> = new Map()
 
   private positionSaveTimer = 0
   private lastSavedPosition: { x: number; y: number } = { x: 0, y: 0 }
@@ -79,6 +111,7 @@ export class AreaScene extends Phaser.Scene {
     this.callbacks = data.callbacks
     this.tileId = data.tileId
     this.npcs = data.npcs
+    this.drops = data.drops
     this.hudStrings = data.hudStrings
     this.startPosition = data.startPosition
   }
@@ -88,6 +121,7 @@ export class AreaScene extends Phaser.Scene {
     this.drawBackground()
     this.spawnPlayer()
     this.spawnNpcs()
+    this.spawnDrops()
     this.setupInput()
     this.setupHud()
 
@@ -98,17 +132,27 @@ export class AreaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.flushPositionSave())
   }
 
-  applyExternalUpdate(payload: { npcs?: AreaMapNpc[]; locale?: 'zh' | 'en'; hudStrings?: AreaSceneInit['hudStrings'] }): void {
+  applyExternalUpdate(payload: {
+    npcs?: AreaMapNpc[]
+    drops?: AreaMapDrop[]
+    locale?: 'zh' | 'en'
+    hudStrings?: AreaSceneInit['hudStrings']
+  }): void {
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
     if (payload.npcs) {
       this.npcs = payload.npcs
       this.refreshNpcSprites()
+    }
+    if (payload.drops) {
+      this.drops = payload.drops
+      this.refreshDropSprites()
     }
   }
 
   update(_time: number, delta: number): void {
     this.handleMovement(delta)
     this.checkNpcProximity()
+    this.checkDropProximity()
     this.tickPositionSave(delta)
   }
 
@@ -212,6 +256,108 @@ export class AreaScene extends Phaser.Scene {
     return `area-npc-tex-${npcId}`
   }
 
+  // ---------- 紋卡 drop sprite ----------
+
+  private spawnDrops(): void {
+    this.refreshDropSprites()
+  }
+
+  private refreshDropSprites(): void {
+    const seenIds = new Set<number>()
+    for (const drop of this.drops) {
+      seenIds.add(drop.id)
+      const existing = this.dropSprites.get(drop.id)
+      if (existing) {
+        existing.setPosition(drop.x, drop.y)
+        // 殘餘時間越短，顏色越紅；用 alpha 動畫已經透過 tween 套上，這裡不重建
+        const fillRect = existing.getData('fill') as Phaser.GameObjects.Rectangle | undefined
+        if (fillRect) {
+          fillRect.setFillStyle(this.dropColorForRemaining(drop), 1)
+        }
+        continue
+      }
+      const color = this.dropColorForRemaining(drop)
+      const fill = this.add.rectangle(0, 0, DROP_SPRITE_SIZE, DROP_SPRITE_SIZE, color, 1)
+      fill.setStrokeStyle(2, 0xffffff, 0.9)
+      fill.setOrigin(0.5, 0.5)
+      const halo = this.add.circle(0, 0, DROP_SPRITE_SIZE * 0.95, color, 0.25)
+      halo.setStrokeStyle(1, color, 0.6)
+      const label = this.add.text(0, 0, drop.rank, {
+        fontFamily:
+          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#1a1407',
+        fontStyle: 'bold'
+      })
+      label.setOrigin(0.5, 0.5)
+      const container = this.add.container(drop.x, drop.y, [halo, fill, label])
+      container.setDepth(60)
+      container.setData('dropId', drop.id)
+      container.setData('fill', fill)
+      container.setData('halo', halo)
+      container.setSize(DROP_SPRITE_SIZE + 8, DROP_SPRITE_SIZE + 8)
+      container.setInteractive(
+        new Phaser.Geom.Rectangle(
+          -DROP_SPRITE_SIZE / 2 - 4,
+          -DROP_SPRITE_SIZE / 2 - 4,
+          DROP_SPRITE_SIZE + 8,
+          DROP_SPRITE_SIZE + 8
+        ),
+        Phaser.Geom.Rectangle.Contains
+      )
+      container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.callbacks.onDropPickup(drop.id)
+      })
+      // 閃光 tween：halo 縮放 + alpha
+      this.tweens.add({
+        targets: halo,
+        scale: { from: 0.7, to: 1.4 },
+        alpha: { from: 0.5, to: 0.05 },
+        duration: 1100,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        yoyo: true
+      })
+      this.tweens.add({
+        targets: fill,
+        angle: { from: -8, to: 8 },
+        duration: 900,
+        repeat: -1,
+        yoyo: true,
+        ease: 'Sine.easeInOut'
+      })
+      this.dropSprites.set(drop.id, container)
+    }
+    // 清理消失的 drops
+    for (const [id, container] of this.dropSprites) {
+      if (!seenIds.has(id)) {
+        this.tweens.killTweensOf(container)
+        container.destroy(true)
+        this.dropSprites.delete(id)
+      }
+    }
+  }
+
+  private dropColorForRemaining(drop: AreaMapDrop): number {
+    if (drop.ticksRemaining <= 2) return 0xff5555
+    if (drop.ticksRemaining <= 5) return 0xffa64d
+    return RANK_COLOR[drop.rank] ?? 0xfff5b8
+  }
+
+  private checkDropProximity(): void {
+    let nearestId: number | null = null
+    let nearestDist = DROP_PICKUP_RADIUS
+    for (const drop of this.drops) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, drop.x, drop.y)
+      if (d < nearestDist) {
+        nearestDist = d
+        nearestId = drop.id
+      }
+    }
+    this.nearbyDropId = nearestId
+  }
+
   private makeSquareTexture(
     key: string,
     size: number,
@@ -263,6 +409,11 @@ export class AreaScene extends Phaser.Scene {
   }
 
   private tryInteract(): void {
+    // 紋卡 drop 比 NPC 優先（玩家會踩在 drop 上面，靠近兩者時優先撿卡）
+    if (this.nearbyDropId !== null) {
+      this.callbacks.onDropPickup(this.nearbyDropId)
+      return
+    }
     if (this.nearbyNpcId) {
       this.callbacks.onNpcInteract(this.nearbyNpcId)
     }
@@ -328,11 +479,19 @@ export class AreaScene extends Phaser.Scene {
     }
     this.nearbyNpcId = nearestId
 
-    if (nearestId) {
+    const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
+    const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
+
+    let text: string | null = null
+    if (this.nearbyDropId !== null) {
+      const drop = this.drops.find((d) => d.id === this.nearbyDropId)
+      text = drop ? `${this.hudStrings.pickup}: ${drop.rank}` : this.hudStrings.pickup
+    } else if (nearestId) {
       const npc = this.npcs.find((n) => n.id === nearestId)
-      const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
-      const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
-      const text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
+      text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
+    }
+
+    if (text !== null) {
       promptText.setText(text)
       const w = Math.max(120, promptText.width + 20)
       promptBg.setSize(w, 26)
