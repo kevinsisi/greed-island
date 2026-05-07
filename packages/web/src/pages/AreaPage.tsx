@@ -5,6 +5,7 @@ import { useWorldState } from '../state/WorldStateContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
+import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
 import type { AreaMapNpc } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
@@ -53,7 +54,7 @@ export function AreaPage() {
   )
 
   const hudStrings = useMemo(
-    () => ({ interact: t('hub.interactHint') }),
+    () => ({ interact: t('hub.interactHint'), pickup: t('cards.pickup') }),
     [t]
   )
 
@@ -64,6 +65,8 @@ export function AreaPage() {
     },
     [npcs]
   )
+
+  const cardOverlay = useAreaCards(tileId)
 
   if (!tile) {
     return <Navigate to="/" replace />
@@ -104,14 +107,18 @@ export function AreaPage() {
         <AreaPhaserGame
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
+          drops={cardOverlay.drops}
           locale={locale}
           hudStrings={hudStrings}
           onNpcInteract={handleNpcInteract}
+          onDropPickup={cardOverlay.pickupDrop}
         />
         <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed max-w-[600px] mx-auto w-full">
           {t('area.controlsHint')}
         </div>
       </section>
+
+      {cardOverlay.panel}
 
       <section className="flex flex-col gap-3">
         <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">

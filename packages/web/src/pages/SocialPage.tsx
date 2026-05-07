@@ -8,13 +8,16 @@ import {
   type ServerFriendDto,
   type ServerFriendRequestList,
   type ServerMessageDto,
-  type ServerPublicAccount
+  type ServerPublicAccount,
+  type ServerTradeDto,
+  type ServerTradeList
 } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { useI18n, type TranslationKey } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
+import { useWorldState } from '../state/WorldStateContext'
 
-type Tab = 'friends' | 'requests' | 'messages' | 'alliance'
+type Tab = 'friends' | 'requests' | 'messages' | 'alliance' | 'trade'
 
 export function SocialPage() {
   const { t } = useI18n()
@@ -28,20 +31,23 @@ export function SocialPage() {
   const [error, setError] = useState<string | null>(null)
   const [allianceName, setAllianceName] = useState('')
   const [inviteId, setInviteId] = useState('')
+  const [trades, setTrades] = useState<ServerTradeList>({ incoming: [], outgoing: [] })
 
   const loadAll = useCallback(async () => {
     if (!token) return
     try {
-      const [f, r, c, a] = await Promise.all([
+      const [f, r, c, a, tr] = await Promise.all([
         api.socialFriends(token),
         api.socialFriendRequests(token),
         api.socialConversations(token),
         api.socialAlliance(token),
+        api.tradeList(token),
       ])
       setFriends(f.friends)
       setRequests(r)
       setConversations(c.conversations)
       setAlliance(a.alliance)
+      setTrades(tr)
     } catch (err) {
       surface(err, t, setError)
     }
@@ -113,6 +119,7 @@ export function SocialPage() {
     { id: 'requests', label: 'social.tabs.requests', badge: requests.incoming.length },
     { id: 'messages', label: 'social.tabs.messages', badge: conversations.reduce((n, c) => n + c.unread, 0) },
     { id: 'alliance', label: 'social.tabs.alliance' },
+    { id: 'trade', label: 'social.tabs.trade', badge: trades.incoming.length },
   ]
 
   return (
@@ -197,6 +204,36 @@ export function SocialPage() {
           onSelectPeer={setOpenPeer}
           onAfterChange={loadAll}
           onError={(err) => surface(err, t, setError)}
+        />
+      )}
+
+      {tab === 'trade' && (
+        <TradePanel
+          trades={trades}
+          onAccept={async (id) => {
+            try {
+              await api.tradeAccept(token, id)
+              void loadAll()
+            } catch (err) {
+              surface(err, t, setError)
+            }
+          }}
+          onReject={async (id) => {
+            try {
+              await api.tradeReject(token, id)
+              void loadAll()
+            } catch (err) {
+              surface(err, t, setError)
+            }
+          }}
+          onCancel={async (id) => {
+            try {
+              await api.tradeCancel(token, id)
+              void loadAll()
+            } catch (err) {
+              surface(err, t, setError)
+            }
+          }}
         />
       )}
 
@@ -660,6 +697,131 @@ function AlliancePanel({
         {t('social.alliance.leave')}
       </button>
     </section>
+  )
+}
+
+function TradePanel({
+  trades,
+  onAccept,
+  onReject,
+  onCancel,
+}: {
+  trades: ServerTradeList
+  onAccept: (id: number) => void
+  onReject: (id: number) => void
+  onCancel: (id: number) => void
+}) {
+  const { t } = useI18n()
+  const { cards } = useWorldState()
+  const catalogById = useMemo(() => {
+    const m = new Map<number, { name: string; rank: string }>()
+    for (const c of cards) m.set(c.id, { name: c.name, rank: c.rank })
+    return m
+  }, [cards])
+
+  const renderRow = (
+    tradeRow: ServerTradeDto,
+    side: 'incoming' | 'outgoing'
+  ) => {
+    const offered = catalogById.get(tradeRow.offeredCardId)
+    const requested = catalogById.get(tradeRow.requestedCardId)
+    return (
+      <li key={tradeRow.id} className="gi-panel p-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="font-display uppercase text-[10px] tracking-tightest text-ember-500">
+            #{tradeRow.id}
+          </span>
+          <span className="text-ground-400">
+            {side === 'incoming' ? tradeRow.proposerName : t('social.messages.you')}
+          </span>
+          <span className="text-ground-500">→</span>
+          <span className="text-ground-400">
+            {side === 'incoming' ? t('social.messages.you') : tradeRow.targetName}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="border border-ground-700 rounded-sharp p-2">
+            <div className="text-[10px] uppercase font-display tracking-tightest text-ground-500">
+              {side === 'incoming' ? '對方提供' : t('trade.iOffer')}
+            </div>
+            <div className="text-[14px] text-ground-100 font-display font-extrabold">
+              {offered?.rank ?? '?'} · #{String(tradeRow.offeredCardId).padStart(3, '0')}
+            </div>
+            <div className="text-[11px] text-ground-300">
+              {offered?.name ?? `card ${tradeRow.offeredCardId}`}
+            </div>
+          </div>
+          <div className="border border-ember-700 rounded-sharp p-2">
+            <div className="text-[10px] uppercase font-display tracking-tightest text-ember-400">
+              {side === 'incoming' ? '對方想換' : t('trade.iWant')}
+            </div>
+            <div className="text-[14px] text-ground-100 font-display font-extrabold">
+              {requested?.rank ?? '?'} · #{String(tradeRow.requestedCardId).padStart(3, '0')}
+            </div>
+            <div className="text-[11px] text-ground-300">
+              {requested?.name ?? `card ${tradeRow.requestedCardId}`}
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {side === 'incoming' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onAccept(tradeRow.id)}
+                className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest text-moss-300 border border-moss-700 hover:bg-moss-500/10 rounded-sharp"
+              >
+                {t('trade.accept')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReject(tradeRow.id)}
+                className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest text-rust-300 border border-rust-700 hover:bg-rust-500/10 rounded-sharp"
+              >
+                {t('trade.reject')}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onCancel(tradeRow.id)}
+              className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest text-rust-300 border border-rust-700 hover:bg-rust-500/10 rounded-sharp"
+            >
+              {t('trade.cancel')}
+            </button>
+          )}
+        </div>
+      </li>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="flex flex-col gap-2">
+        <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">
+          {t('trade.incoming')}
+        </h2>
+        {trades.incoming.length === 0 ? (
+          <div className="gi-panel p-4 text-sm text-ground-500 italic">{t('trade.empty')}</div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {trades.incoming.map((row) => renderRow(row, 'incoming'))}
+          </ul>
+        )}
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="font-display text-[11px] uppercase tracking-tightest text-ground-400">
+          {t('trade.outgoing')}
+        </h2>
+        {trades.outgoing.length === 0 ? (
+          <div className="gi-panel p-4 text-sm text-ground-500 italic">{t('trade.empty')}</div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {trades.outgoing.map((row) => renderRow(row, 'outgoing'))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }
 

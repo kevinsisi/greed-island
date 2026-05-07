@@ -8,6 +8,7 @@ import {
 } from '../../api/client'
 import { useAuth } from '../../state/AuthContext'
 import { useI18n } from '../../i18n'
+import { TradeModal } from './TradeModal'
 
 const PRESENCE_REFRESH_MS = 8_000
 
@@ -152,6 +153,7 @@ function PeerCardModal({
   onMessage: () => void
 }) {
   const { t } = useI18n()
+  const [tradeOpen, setTradeOpen] = useState(false)
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -205,9 +207,13 @@ function PeerCardModal({
               {t('social.peerCard.alreadyFriends')}
             </span>
           )}
-          <span className="text-[11px] font-display uppercase tracking-tightest text-ground-500 border border-dashed border-ground-700 rounded-sharp px-3 py-2 text-center">
-            {t('social.peerCard.tradePlaceholder')}
-          </span>
+          <button
+            type="button"
+            onClick={() => setTradeOpen(true)}
+            className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:bg-ember-500/10 rounded-sharp"
+          >
+            {t('social.peerCard.trade')}
+          </button>
         </div>
 
         <button
@@ -218,6 +224,13 @@ function PeerCardModal({
           {t('npc.dialogClose')}
         </button>
       </div>
+      {tradeOpen && (
+        <TradeModal
+          targetUserId={peer.id}
+          targetName={peer.displayName}
+          onClose={() => setTradeOpen(false)}
+        />
+      )}
     </div>
   )
 }

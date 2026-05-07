@@ -1,7 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useI18n, type TranslationKey } from '../i18n'
 import { useAuth } from '../state/AuthContext'
 import { useWorldState } from '../state/WorldStateContext'
+import {
+  api,
+  ApiError,
+  type ServerCodexEntry,
+  type ServerCodexResponse
+} from '../api/client'
 import type { CardCatalogEntry } from '../state/types'
 
 const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -30,28 +36,115 @@ const FILTERS: CardFilter[] = [
   { id: 'missing', labelKey: 'codex.filter.missing' }
 ]
 
-const SEQUENCING_SLOT_COUNT = 5
-const CARRY_SLOT_COUNT = 3
+const DEFAULT_SEQUENCING_SLOT_COUNT = 100
+const DEFAULT_CARRY_SLOT_COUNT = 45
 
 export function CodexPage() {
   const { cards } = useWorldState()
   const { t } = useI18n()
-  const { account } = useAuth()
-  const [selectedId, setSelectedId] = useState<number | null>(cards.find((c) => c.owned)?.id ?? null)
+  const { account, token } = useAuth()
+  const [selectedId, setSelectedId] = useState<number | null>(null)
   const [filterId, setFilterId] = useState<CardFilter['id']>('all')
+  const [codex, setCodex] = useState<ServerCodexResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    if (!token) {
+      setCodex(null)
+      return
+    }
+    try {
+      const r = await api.codex(token)
+      setCodex(r)
+      setError(null)
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message)
+      else if (err instanceof Error) setError(err.message)
+    }
+  }, [token])
+
+  useEffect(() => {
+    void refresh()
+    const id = window.setInterval(refresh, 5000)
+    return () => window.clearInterval(id)
+  }, [refresh])
+
+  const sequencingCount = codex?.sequencingSlotCount ?? DEFAULT_SEQUENCING_SLOT_COUNT
+  const carryCount = codex?.carrySlotCount ?? DEFAULT_CARRY_SLOT_COUNT
+
+  // 把 codex entries 投影到 cards：cardId -> CodexRow，與 catalog 合成 owned 狀態
+  const codexByCardId = useMemo(() => {
+    const m = new Map<number, ServerCodexEntry>()
+    if (!codex) return m
+    for (const e of codex.entries) {
+      // 優先取 sequencing；若同卡有兩張，先顯示 sequencing
+      const existing = m.get(e.cardId)
+      if (!existing || (existing.slotType === 'carry' && e.slotType === 'sequencing')) {
+        m.set(e.cardId, e)
+      }
+    }
+    return m
+  }, [codex])
+
+  const cardsWithOwnership = useMemo<CardCatalogEntry[]>(() => {
+    return cards.map((c) => {
+      const e = codexByCardId.get(c.id)
+      if (!e) return { ...c, owned: false }
+      return { ...c, owned: true, discoveredAtTick: e.obtainedTick }
+    })
+  }, [cards, codexByCardId])
 
   const visible = useMemo(() => {
-    if (filterId === 'owned') return cards.filter((c) => c.owned)
-    if (filterId === 'missing') return cards.filter((c) => !c.owned)
-    return cards
-  }, [cards, filterId])
+    if (filterId === 'owned') return cardsWithOwnership.filter((c) => c.owned)
+    if (filterId === 'missing') return cardsWithOwnership.filter((c) => !c.owned)
+    return cardsWithOwnership
+  }, [cardsWithOwnership, filterId])
 
-  const ownedCards = useMemo(() => cards.filter((c) => c.owned), [cards])
-  const sequencingPicks = ownedCards.slice(0, SEQUENCING_SLOT_COUNT)
-  const carryPicks = ownedCards.slice(SEQUENCING_SLOT_COUNT, SEQUENCING_SLOT_COUNT + CARRY_SLOT_COUNT)
-  const owned = ownedCards.length
-  const completion = cards.length > 0 ? Math.round((owned / cards.length) * 100) : 0
-  const selected = cards.find((c) => c.id === selectedId) ?? null
+  const owned = cardsWithOwnership.filter((c) => c.owned).length
+  const completion = cardsWithOwnership.length > 0 ? Math.round((owned / cardsWithOwnership.length) * 100) : 0
+  const selected = cardsWithOwnership.find((c) => c.id === selectedId) ?? null
+  const selectedCodexEntry = selected ? codexByCardId.get(selected.id) ?? null : null
+
+  const handleMaterialize = useCallback(
+    async (codexId: number) => {
+      if (!token) return
+      const ok = window.confirm(t('codex.materializeConfirm'))
+      if (!ok) return
+      setBusy(true)
+      try {
+        await api.codexMaterialize(token, codexId)
+        await refresh()
+      } catch (err) {
+        if (err instanceof ApiError) setError(err.message)
+        else if (err instanceof Error) setError(err.message)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [token, t, refresh]
+  )
+
+  // Build sequencing slots (1..sequencingCount) — slot_index === card_id
+  const sequencingByIndex = useMemo(() => {
+    const m = new Map<number, ServerCodexEntry>()
+    if (codex) {
+      for (const e of codex.entries) {
+        if (e.slotType === 'sequencing') m.set(e.slotIndex, e)
+      }
+    }
+    return m
+  }, [codex])
+
+  const carryByIndex = useMemo(() => {
+    const m = new Map<number, ServerCodexEntry>()
+    if (codex) {
+      for (const e of codex.entries) {
+        if (e.slotType === 'carry') m.set(e.slotIndex, e)
+      }
+    }
+    return m
+  }, [codex])
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,7 +156,7 @@ export function CodexPage() {
           {t('codex.title')}
         </h1>
         <p className="text-sm text-ground-400 max-w-2xl leading-relaxed">
-          {t('codex.description', { owned, total: cards.length, percent: completion })}
+          {t('codex.description', { owned, total: cardsWithOwnership.length, percent: completion })}
         </p>
       </header>
 
@@ -73,27 +166,41 @@ export function CodexPage() {
         </div>
       )}
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <SlotPanel
-          title={t('codex.sequencingSlots')}
-          hint={t('codex.sequencingSlotsHint')}
-          count={SEQUENCING_SLOT_COUNT}
-          picks={sequencingPicks}
-          emptyLabel={t('codex.slotEmpty')}
-          accent="ember"
-        />
-        <SlotPanel
-          title={t('codex.carrySlots')}
-          hint={t('codex.carrySlotsHint')}
-          count={CARRY_SLOT_COUNT}
-          picks={carryPicks}
-          emptyLabel={t('codex.slotEmpty')}
-          accent="moss"
-        />
-      </section>
+      {error && (
+        <button
+          type="button"
+          onClick={() => setError(null)}
+          className="self-start gi-panel border-rust-700 px-3 py-2 text-[12px] text-rust-300"
+        >
+          {error} ×
+        </button>
+      )}
+
+      <SlotPanel
+        title={t('codex.sequencingSlots')}
+        hint={t('codex.slotSequencingHeader')}
+        count={sequencingCount}
+        slots={sequencingByIndex}
+        catalog={cardsWithOwnership}
+        accent="ember"
+        onSelect={setSelectedId}
+        selectedId={selectedId}
+      />
+
+      <SlotPanel
+        title={t('codex.carrySlots')}
+        hint={t('codex.slotCarryHeader')}
+        count={carryCount}
+        slots={carryByIndex}
+        catalog={cardsWithOwnership}
+        accent="moss"
+        onSelect={setSelectedId}
+        selectedId={selectedId}
+        labelByCardId
+      />
 
       <section className="flex flex-col gap-3">
-        <header className="flex items-baseline justify-between gap-3">
+        <header className="flex items-baseline justify-between gap-3 flex-wrap">
           <div>
             <h2 className="font-display text-[14px] tracking-tightest text-ground-100">
               {t('codex.catalog')}
@@ -123,8 +230,8 @@ export function CodexPage() {
 
         <div className="flex flex-wrap gap-2 items-center">
           {RANK_ORDER.slice(0, 5).map((rank) => {
-            const total = cards.filter((c) => c.rank === rank).length
-            const ownedRank = cards.filter((c) => c.rank === rank && c.owned).length
+            const total = cardsWithOwnership.filter((c) => c.rank === rank).length
+            const ownedRank = cardsWithOwnership.filter((c) => c.rank === rank && c.owned).length
             if (total === 0) return null
             return (
               <span key={rank} className={`gi-tag ${RANK_TONE[rank]}`}>
@@ -187,6 +294,16 @@ export function CodexPage() {
                     </div>
                   </>
                 )}
+                {selected.owned && selectedCodexEntry && (
+                  <button
+                    type="button"
+                    onClick={() => handleMaterialize(selectedCodexEntry.id)}
+                    disabled={busy}
+                    className="gi-touch self-start px-3 text-[11px] font-display uppercase tracking-tightest text-rust-300 border border-rust-700 hover:bg-rust-500/10 rounded-sharp disabled:opacity-60"
+                  >
+                    {busy ? t('codex.materializing') : `${t('codex.materialize')} · ${t('codex.materializeWarning')}`}
+                  </button>
+                )}
                 {!selected.owned && (
                   <>
                     <div className="gi-divider" />
@@ -210,46 +327,78 @@ interface SlotPanelProps {
   title: string
   hint: string
   count: number
-  picks: CardCatalogEntry[]
-  emptyLabel: string
+  slots: Map<number, ServerCodexEntry>
+  catalog: CardCatalogEntry[]
   accent: 'ember' | 'moss'
+  onSelect: (cardId: number) => void
+  selectedId: number | null
+  /** carry: slot 索引顯示 cardId（不是 slotIndex），讓玩家看得出每格放什麼 */
+  labelByCardId?: boolean
 }
 
-function SlotPanel({ title, hint, count, picks, emptyLabel, accent }: SlotPanelProps) {
+function SlotPanel({
+  title,
+  hint,
+  count,
+  slots,
+  catalog,
+  accent,
+  onSelect,
+  selectedId,
+  labelByCardId
+}: SlotPanelProps) {
   const accentBorder = accent === 'ember' ? 'border-ember-700/50' : 'border-moss-600/40'
+  const catalogById = useMemo(() => {
+    const m = new Map<number, CardCatalogEntry>()
+    for (const c of catalog) m.set(c.id, c)
+    return m
+  }, [catalog])
   return (
-    <div className={`gi-panel ${accentBorder} p-5 flex flex-col gap-3`}>
+    <section className={`gi-panel ${accentBorder} p-5 flex flex-col gap-3`}>
       <header>
         <div className={`font-display text-[11px] uppercase tracking-tightest ${accent === 'ember' ? 'text-ember-500' : 'text-moss-400'}`}>
           {title}
         </div>
         <p className="mt-1 text-[11px] text-ground-500 leading-relaxed">{hint}</p>
       </header>
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: count }, (_, index) => {
-          const card = picks[index]
-          if (card) {
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))' }}
+      >
+        {Array.from({ length: count }, (_, i) => {
+          const idx = i + 1
+          const entry = slots.get(idx)
+          const card = entry ? catalogById.get(entry.cardId) : null
+          if (entry && card) {
+            const isSelected = selectedId === card.id
             return (
-              <div
-                key={card.id}
-                className={`w-16 aspect-[3/4] flex flex-col items-center justify-between p-1.5 border rounded-sharp text-[10px] font-display tracking-tightest ${RANK_TONE[card.rank]}`}
+              <button
+                key={idx}
+                type="button"
+                onClick={() => onSelect(card.id)}
+                title={`${card.name} · #${idx}`}
+                className={[
+                  'aspect-[3/4] flex flex-col items-center justify-between p-0.5 border rounded-sharp text-[9px] font-display tracking-tightest',
+                  RANK_TONE[card.rank],
+                  isSelected ? 'ring-2 ring-ember-500 ring-offset-1 ring-offset-ground-900' : ''
+                ].join(' ')}
               >
-                <span>#{String(card.id).padStart(3, '0')}</span>
-                <span className="font-extrabold text-base">{card.rank}</span>
-                <span>●</span>
-              </div>
+                <span className="text-[9px]">{labelByCardId ? `#${entry.cardId}` : `#${idx}`}</span>
+                <span className="font-extrabold text-[12px]">{card.rank}</span>
+              </button>
             )
           }
           return (
-            <div
-              key={`empty-${index}`}
-              className="w-16 aspect-[3/4] flex items-center justify-center border border-dashed border-ground-700 rounded-sharp text-[10px] font-display uppercase tracking-tightest text-ground-600"
+            <span
+              key={idx}
+              title={`#${idx}`}
+              className="aspect-[3/4] flex items-center justify-center border border-dashed border-ground-700 rounded-sharp text-[9px] font-display tracking-tightest text-ground-700"
             >
-              {emptyLabel}
-            </div>
+              {idx}
+            </span>
           )
         })}
       </div>
-    </div>
+    </section>
   )
 }

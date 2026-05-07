@@ -18,6 +18,9 @@ import { PasswordResetStore } from './passwordResets.js'
 import { SocialStore } from './socialStore.js'
 import { SocialBus } from './socialBus.js'
 import { createSocialRouter, createSocialSseRouter } from './social.js'
+import { CardWorldStore } from './cardWorldStore.js'
+import { createCardWorldRouter } from './cardWorldRouter.js'
+import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -57,6 +60,15 @@ export function createHttpApp(options: HttpAppOptions): Express {
   const passwordResetStore = new PasswordResetStore(options.db)
   const socialStore = new SocialStore(options.db)
   const socialBus = new SocialBus()
+  const cardCatalog = options.runtime.getCardCatalog()
+  const cardWorldStore = new CardWorldStore(options.db, cardCatalog)
+  const cardDropEngine = new CardDropEngine(
+    cardWorldStore,
+    cardCatalog,
+    tileIdsFromRuntime(options.runtime)
+  )
+  cardDropEngine.seedInitialDrops(options.runtime.getCurrentTick())
+  options.runtime.subscribeTick((tick) => cardDropEngine.onTick(tick))
 
   // Best-effort: drop reset tokens older than 30 days so the table
   // stays compact across long-running deployments.
@@ -139,6 +151,15 @@ export function createHttpApp(options: HttpAppOptions): Express {
     })
   )
   app.use('/api', createSocialSseRouter({ bus: socialBus, authConfig: options.auth }))
+  app.use(
+    '/api',
+    createCardWorldRouter({
+      store: cardWorldStore,
+      runtime: options.runtime,
+      accounts: accountStore,
+      authConfig: options.auth,
+    })
+  )
   app.use('/api', createSseRouter(options.runtime))
 
   app.use((req: Request, res: Response) => {
