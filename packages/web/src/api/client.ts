@@ -59,6 +59,10 @@ export type ServerNpc = {
   health?: number
   faction?: string
   targetTile?: string
+  // Living-world v0.12+：後端權威的 area canvas 子格座標 + 主色
+  subCol?: number
+  subRow?: number
+  color?: number
 }
 
 export type ServerCardCatalogEntry = {

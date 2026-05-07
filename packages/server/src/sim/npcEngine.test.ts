@@ -137,6 +137,59 @@ describe('NpcEngine', () => {
     expect(visited.size).toBeGreaterThan(1)
   })
 
+  it('initializes deterministic subCol/subRow on construction', () => {
+    const engine = new NpcEngine([makeProfile({ id: 'sub.npc' })])
+    const s = engine.getState('sub.npc')!
+    expect(s.subCol).toBeGreaterThanOrEqual(0)
+    expect(s.subCol).toBeLessThan(15)
+    expect(s.subRow).toBeGreaterThanOrEqual(0)
+    expect(s.subRow).toBeLessThan(10)
+    // 同 id + 同 tile → 永遠一樣的初始位置
+    const engine2 = new NpcEngine([makeProfile({ id: 'sub.npc' })])
+    const s2 = engine2.getState('sub.npc')!
+    expect(s2.subCol).toBe(s.subCol)
+    expect(s2.subRow).toBe(s.subRow)
+  })
+
+  it('moves at most one sub-cell per tick within the same tile', () => {
+    const profile = makeProfile({
+      id: 'wander',
+      defaultLocation: 't_central',
+      routine: [
+        { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'shop' }
+      ]
+    })
+    const engine = new NpcEngine([profile])
+    const before = engine.getState('wander')!
+    engine.tick(1)
+    const after = engine.getState('wander')!
+    // 同 tile：sub 座標各軸最多 +-1
+    expect(Math.abs(after.subCol - before.subCol)).toBeLessThanOrEqual(1)
+    expect(Math.abs(after.subRow - before.subRow)).toBeLessThanOrEqual(1)
+    // 不會跑到外圈或越界
+    expect(after.subCol).toBeGreaterThanOrEqual(0)
+    expect(after.subCol).toBeLessThan(15)
+    expect(after.subRow).toBeGreaterThanOrEqual(0)
+    expect(after.subRow).toBeLessThan(10)
+  })
+
+  it('emits a state change while sub-cell is still moving toward anchor', () => {
+    const profile = makeProfile({
+      id: 'subdrift',
+      defaultLocation: 't_central',
+      routine: [
+        { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'shop' }
+      ]
+    })
+    const engine = new NpcEngine([profile])
+    let sawSubChange = false
+    for (let t = 1; t <= 6; t += 1) {
+      const r = engine.tick(t)
+      if (r.changedStates.length > 0) sawSubChange = true
+    }
+    expect(sawSubChange).toBe(true)
+  })
+
   it('NPCs in transit (activity=move) cannot interact', () => {
     // 兩個 NPC 都從 t_dock 走向 t_mountain — 路上不應產生 interact
     const A = makeProfile({

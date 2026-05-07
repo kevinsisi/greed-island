@@ -99,6 +99,12 @@ export type SimNpcState = Readonly<{
   health: number
   faction: string
   targetTile: string
+  /** Area canvas 子格欄座標（後端權威）— 前端只負責畫 */
+  subCol: number
+  /** Area canvas 子格列座標（後端權威） */
+  subRow: number
+  /** 24-bit 整數色（0xRRGGBB），前端用做 sprite 主色 */
+  color: number
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -307,7 +313,9 @@ export class SimulationRuntime {
           activity: 'idle',
           faction: 'neutral',
           targetTile: profile.defaultLocation,
-          lastActedTick: 0
+          lastActedTick: 0,
+          subCol: 7,
+          subRow: 5
         } as NpcRuntimeState)
       return {
         id: profile.id,
@@ -324,7 +332,10 @@ export class SimulationRuntime {
         mood: Math.round(s.mood),
         health: Math.round(s.health),
         faction: s.faction,
-        targetTile: s.targetTile
+        targetTile: s.targetTile,
+        subCol: s.subCol,
+        subRow: s.subRow,
+        color: deriveNpcColor(profile.id, s.faction)
       }
     })
   }
@@ -1031,6 +1042,74 @@ function stringifyScope(scope: { kind: string; tileIds?: readonly string[] }): s
     return `region:${[...scope.tileIds].sort().join(',')}`
   }
   return scope.kind
+}
+
+// Faction → 基礎 HSL，Hub/Area 上同派系視覺接近、跨派系顏色拉開
+const FACTION_BASE_HSL: Readonly<Record<string, { h: number; s: number; l: number }>> = {
+  tide_hunters: { h: 200, s: 70, l: 60 },
+  free_runners: { h: 130, s: 60, l: 58 },
+  guild: { h: 50, s: 75, l: 60 },
+  civilian: { h: 28, s: 55, l: 65 },
+  exchange: { h: 50, s: 75, l: 60 },
+  monastic: { h: 280, s: 50, l: 62 },
+  tide_tongue: { h: 175, s: 60, l: 58 },
+  underground: { h: 105, s: 45, l: 50 },
+  neutral: { h: 220, s: 15, l: 70 }
+}
+
+function deriveNpcColor(npcId: string, faction: string): number {
+  const base = FACTION_BASE_HSL[faction] ?? FACTION_BASE_HSL.neutral!
+  let h = 5381
+  for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+  const hueJitter = (h % 31) - 15
+  const lightJitter = (((h >>> 8) % 21) - 10)
+  const finalH = ((base.h + hueJitter) % 360 + 360) % 360
+  const finalS = base.s
+  const finalL = clampInt(base.l + lightJitter, 40, 78)
+  return hslToHex(finalH, finalS, finalL)
+}
+
+function hslToHex(h: number, s: number, l: number): number {
+  const sFrac = s / 100
+  const lFrac = l / 100
+  const c = (1 - Math.abs(2 * lFrac - 1)) * sFrac
+  const hp = h / 60
+  const x = c * (1 - Math.abs((hp % 2) - 1))
+  let r = 0
+  let g = 0
+  let b = 0
+  if (hp < 1) {
+    r = c
+    g = x
+  } else if (hp < 2) {
+    r = x
+    g = c
+  } else if (hp < 3) {
+    g = c
+    b = x
+  } else if (hp < 4) {
+    g = x
+    b = c
+  } else if (hp < 5) {
+    r = x
+    b = c
+  } else {
+    r = c
+    b = x
+  }
+  const m = lFrac - c / 2
+  const ir = Math.round((r + m) * 255)
+  const ig = Math.round((g + m) * 255)
+  const ib = Math.round((b + m) * 255)
+  return (ir << 16) | (ig << 8) | ib
+}
+
+function clampInt(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo
+  const r = Math.round(n)
+  if (r < lo) return lo
+  if (r > hi) return hi
+  return r
 }
 
 function buildNpcFactionLean(profiles: readonly NpcProfile[]): Map<string, FactionId> {

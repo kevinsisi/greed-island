@@ -7,7 +7,7 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
-import type { AreaMapBuilding, AreaMapNpc } from '../game/AreaScene'
+import type { AreaMapBuilding, AreaMapNpc, AreaNpcActivity } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
 import type { NpcSummary, NpcActivity } from '../state/types'
 import type { TranslationKey } from '../i18n/types'
@@ -125,10 +125,16 @@ export function AreaPage() {
   const mapNpcs = useMemo<AreaMapNpc[]>(
     () =>
       occupants.map((npc) => {
+        const activity: AreaNpcActivity = npc.activity ?? 'idle'
         const base: AreaMapNpc = {
           id: npc.id,
           name: npc.name,
-          shortName: npc.name.charAt(0)
+          shortName: npc.name.charAt(0),
+          // 後端權威：v0.12 之後 server 一定會帶這些欄位；舊資料缺少時用 sane fallback
+          subCol: typeof npc.subCol === 'number' ? npc.subCol : 7,
+          subRow: typeof npc.subRow === 'number' ? npc.subRow : 5,
+          color: typeof npc.color === 'number' ? npc.color : 0xfff5b8,
+          activity
         }
         if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
         return base

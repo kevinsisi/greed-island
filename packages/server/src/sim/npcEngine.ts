@@ -2,13 +2,16 @@
 //   1. 從 schedule slot 解出 target_tile + 預期 activity
 //   2. 若 current_tile !== target_tile：BFS 走一格
 //   3. 若已在 target_tile：執行該 slot 的 activity（work / eat / sleep / idle）
-//   4. mood / health 隨活動緩慢漂移
-//   5. 同 tile 兩兩 NPC 以 deterministic 機率觸發互動 (chat / argue)
+//   4. 在當前 tile 內，往一個 deterministic 子格錨點走一步（subCol/subRow），
+//      讓區域畫面看到的 NPC 真的在街區裡探索不同 tile 而不是站著抖動
+//   5. mood / health 隨活動緩慢漂移
+//   6. 同 tile 兩兩 NPC 以 deterministic 機率觸發互動 (chat / argue)
 //
 // 所有狀態變化都以 FactSet draft 形式回傳給 SimulationRuntime；engine
 // 本身不直接寫 EventLog，符合 deterministic kernel 的 command-vs-event
 // 分離原則。狀態 key：
-//   npc.state.<id> = { tile, mood, health, activity, faction, targetTile, lastActedTick }
+//   npc.state.<id> = { tile, mood, health, activity, faction,
+//                      targetTile, lastActedTick, subCol, subRow }
 //
 // hydrate：runtime 啟動時把 reducer 算出的 facts 透過 hydrate() 餵回。
 
@@ -18,6 +21,18 @@ import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 
 export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
 
+// 子格網格大小：與 web/src/game/AreaScene.ts 的 AREA_GRID_COLS / ROWS 對齊。
+// 後端決定子格座標、前端純粹照畫，沒有自由 wander 邏輯。
+export const AREA_SUB_COLS = 15
+export const AREA_SUB_ROWS = 10
+// 內圈：保留外圈當建築 / 裝飾用，NPC 預設不踩外緣
+const SUB_INNER_MIN_COL = 1
+const SUB_INNER_MAX_COL = AREA_SUB_COLS - 2 // 13
+const SUB_INNER_MIN_ROW = 1
+const SUB_INNER_MAX_ROW = AREA_SUB_ROWS - 2 // 8
+// 子格錨點刷新節奏：每 12 個 tick (≈1 分鐘) 換一個目標子格
+const SUB_TARGET_REFRESH_TICKS = 12
+
 export type NpcRuntimeState = {
   tile: string
   mood: number
@@ -26,6 +41,10 @@ export type NpcRuntimeState = {
   faction: string
   targetTile: string
   lastActedTick: number
+  /** 0..AREA_SUB_COLS-1：在當前 area canvas 裡的欄座標 */
+  subCol: number
+  /** 0..AREA_SUB_ROWS-1：在當前 area canvas 裡的列座標 */
+  subRow: number
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -110,6 +129,7 @@ export class NpcEngine {
           : 'neutral'
       this.factions.set(profile.id, fac)
       // 初始 state — 等 hydrate 補上正確值
+      const initSub = initialSubTile(profile.id, profile.defaultLocation)
       this.state.set(profile.id, {
         tile: profile.defaultLocation,
         mood: 60,
@@ -117,7 +137,9 @@ export class NpcEngine {
         activity: 'idle',
         faction: fac,
         targetTile: profile.defaultLocation,
-        lastActedTick: 0
+        lastActedTick: 0,
+        subCol: initSub.col,
+        subRow: initSub.row
       })
     }
   }
@@ -129,8 +151,10 @@ export class NpcEngine {
     const fac = this.factions.get(npcId) ?? 'neutral'
     const profile = this.profiles.find((p) => p.id === npcId)
     const fallbackTile = profile?.defaultLocation ?? 't_central'
+    const tile = typeof r.tile === 'string' ? r.tile : fallbackTile
+    const fallbackSub = initialSubTile(npcId, tile)
     const next: NpcRuntimeState = {
-      tile: typeof r.tile === 'string' ? r.tile : fallbackTile,
+      tile,
       mood: clamp(typeof r.mood === 'number' ? r.mood : 60, MOOD_MIN, MOOD_MAX),
       health: clamp(
         typeof r.health === 'number' ? r.health : 80,
@@ -140,7 +164,15 @@ export class NpcEngine {
       activity: isActivity(r.activity) ? r.activity : 'idle',
       faction: typeof r.faction === 'string' ? r.faction : fac,
       targetTile: typeof r.targetTile === 'string' ? r.targetTile : fallbackTile,
-      lastActedTick: typeof r.lastActedTick === 'number' ? r.lastActedTick : 0
+      lastActedTick: typeof r.lastActedTick === 'number' ? r.lastActedTick : 0,
+      subCol:
+        typeof r.subCol === 'number'
+          ? clampInt(r.subCol, 0, AREA_SUB_COLS - 1)
+          : fallbackSub.col,
+      subRow:
+        typeof r.subRow === 'number'
+          ? clampInt(r.subRow, 0, AREA_SUB_ROWS - 1)
+          : fallbackSub.row
     }
     this.state.set(npcId, next)
   }
@@ -186,7 +218,9 @@ export class NpcEngine {
         next.activity !== before.activity ||
         Math.round(next.mood) !== Math.round(before.mood) ||
         Math.round(next.health) !== Math.round(before.health) ||
-        next.targetTile !== before.targetTile
+        next.targetTile !== before.targetTile ||
+        next.subCol !== before.subCol ||
+        next.subRow !== before.subRow
       ) {
         this.state.set(profile.id, next)
         dirty.add(profile.id)
@@ -310,6 +344,21 @@ function decideNextState(
   const mood = clamp(before.mood + drift.mood, MOOD_MIN, MOOD_MAX)
   const health = clamp(before.health + drift.health, HEALTH_MIN, HEALTH_MAX)
 
+  // ---- 子格座標：tile 換了 → 從邊緣進入；同 tile → 一格走向 deterministic 錨點 ----
+  let subCol: number
+  let subRow: number
+  if (nextTile !== before.tile) {
+    const entry = entrySubTile(profile.id, before.tile, nextTile, currentTick)
+    subCol = entry.col
+    subRow = entry.row
+  } else {
+    const anchor = subAnchor(profile.id, nextTile, activity, currentTick)
+    subCol = stepToward(before.subCol, anchor.col)
+    subRow = stepToward(before.subRow, anchor.row)
+    // 子格抖動：x 跟 y 任一達到錨點時，下一個錨點要靠 refreshIdx 換新；
+    // 期間其餘子格只動一軸，避免兩軸同時跳。
+  }
+
   return {
     tile: nextTile,
     targetTile,
@@ -318,10 +367,80 @@ function decideNextState(
     health,
     faction: before.faction,
     lastActedTick:
-      activity === 'idle' && nextTile === before.tile
+      activity === 'idle' &&
+      nextTile === before.tile &&
+      subCol === before.subCol &&
+      subRow === before.subRow
         ? before.lastActedTick
-        : currentTick
+        : currentTick,
+    subCol,
+    subRow
   }
+}
+
+function stepToward(current: number, target: number): number {
+  if (current < target) return current + 1
+  if (current > target) return current - 1
+  return current
+}
+
+/** 進入新 tile 時放在邊緣（看起來像從旁邊街走進來）。 */
+function entrySubTile(
+  npcId: string,
+  fromTile: string,
+  toTile: string,
+  tick: number
+): { col: number; row: number } {
+  const h = hashStr(`${npcId}|${fromTile}|${toTile}|${tick}|entry`)
+  const side = h % 4
+  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1
+  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1
+  if (side === 0) return { col: 0, row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange) }
+  if (side === 1)
+    return { col: AREA_SUB_COLS - 1, row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange) }
+  if (side === 2) return { col: SUB_INNER_MIN_COL + ((h >>> 8) % innerColRange), row: 0 }
+  return { col: SUB_INNER_MIN_COL + ((h >>> 8) % innerColRange), row: AREA_SUB_ROWS - 1 }
+}
+
+/** 在當前 tile 內，依 (npcId, tile, activity, refreshIdx) 決定下一個目標子格。 */
+function subAnchor(
+  npcId: string,
+  tile: string,
+  activity: NpcActivity,
+  tick: number
+): { col: number; row: number } {
+  const refreshIdx = Math.floor(tick / SUB_TARGET_REFRESH_TICKS)
+  const h = hashStr(`${npcId}|${tile}|${activity}|${refreshIdx}`)
+  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1
+  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1
+  return {
+    col: SUB_INNER_MIN_COL + (h % innerColRange),
+    row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange)
+  }
+}
+
+function initialSubTile(npcId: string, tile: string): { col: number; row: number } {
+  const h = hashStr(`${npcId}|${tile}|init`)
+  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1
+  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1
+  return {
+    col: SUB_INNER_MIN_COL + (h % innerColRange),
+    row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange)
+  }
+}
+
+function hashStr(s: string): number {
+  let h = 5381
+  for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+  return h
+}
+
+function clampInt(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo
+  const r = Math.round(n)
+  if (r < lo) return lo
+  if (r > hi) return hi
+  return r
 }
 
 function pickSlot(schedule: readonly ScheduleSlot[], tickOfDay: number): ScheduleSlot | null {
@@ -532,7 +651,9 @@ function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
     a.faction === b.faction &&
     a.lastActedTick === b.lastActedTick &&
     Math.round(a.mood) === Math.round(b.mood) &&
-    Math.round(a.health) === Math.round(b.health)
+    Math.round(a.health) === Math.round(b.health) &&
+    a.subCol === b.subCol &&
+    a.subRow === b.subRow
   )
 }
 

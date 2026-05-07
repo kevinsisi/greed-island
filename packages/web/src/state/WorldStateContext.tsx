@@ -276,7 +276,10 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(typeof npc.mood === 'number' ? { mood: npc.mood } : {}),
     ...(typeof npc.health === 'number' ? { health: npc.health } : {}),
     ...(typeof npc.faction === 'string' ? { faction: npc.faction } : {}),
-    ...(typeof npc.targetTile === 'string' ? { targetTile: npc.targetTile } : {})
+    ...(typeof npc.targetTile === 'string' ? { targetTile: npc.targetTile } : {}),
+    ...(typeof npc.subCol === 'number' ? { subCol: npc.subCol } : {}),
+    ...(typeof npc.subRow === 'number' ? { subRow: npc.subRow } : {}),
+    ...(typeof npc.color === 'number' ? { color: npc.color } : {})
   }
   return summary
 }

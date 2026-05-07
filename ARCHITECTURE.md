@@ -152,10 +152,28 @@ For each tick `N`:
 ## 3. NPC State Is A Projection
 
 NPC tile, activity, mood, health, faction lean, target tile,
-last-acted-tick, and any other state an NPC policy needs MUST be
-derivable from the EventLog. There is no hidden mutable runtime
-memory that survives a process restart without being represented in
-the log.
+last-acted-tick, **area sub-tile (subCol, subRow)**, and any other
+state an NPC policy needs MUST be derivable from the EventLog. There
+is no hidden mutable runtime memory that survives a process restart
+without being represented in the log.
+
+### 3.1 Area sub-tile is server-authoritative
+
+Within an area canvas (15×10 cells), each NPC's position is decided
+by the NPC engine and stored as `subCol` / `subRow` in
+`npc.state.<id>`. The frontend MUST render NPCs at those exact
+coordinates. Frontend-side wander tweens, randomised drift, or any
+visual jitter that does not come from the server are forbidden — they
+break determinism and the "what every player sees" contract.
+Visual smoothing (e.g. tweening between two consecutive
+server-authoritative positions) is permitted as long as the displayed
+position converges to the server's value before the next tick.
+
+NPC sprite display attributes derived from server state:
+- `subCol`, `subRow` → canvas pixel position
+- `faction` + `id` → deterministic 24-bit `color`
+- `activity` enum → activity icon (work / eat / sleep / trade /
+  patrol / move / idle)
 
 The current NPC engine keeps an in-memory `Map<npcId, NpcRuntimeState>`
 for performance. That map is a *cache*. On boot the runtime calls
@@ -295,7 +313,9 @@ Persistent facts (must survive restart, must replay deterministically):
 - Active world events → FACT_SET `world.activeEvents` + typed
   `WORLD_EVENT_SPAWN/END` events
 - NPC state per NPC → FACT_SET `npc.state.<id>` (today; will become
-  typed-event projection later)
+  typed-event projection later). Includes area sub-tile
+  (`subCol`, `subRow`) so the area-canvas rendering is fully
+  determined by the server.
 - Area state per tile (faction control + resources + recent local
   events) → FACT_SET `area.state.<tileId>` + typed `AREA_PRESSURE`
   events
