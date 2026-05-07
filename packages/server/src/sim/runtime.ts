@@ -395,6 +395,49 @@ export class SimulationRuntime {
     return null
   }
 
+  /**
+   * v0.14.0：對外暴露的 player command 提交入口。Player 動作（介入爭執、
+   * 未來的紋卡戰鬥等）必須走這條路：build typed Command → LivingWorldRuleEngine
+   * 驗證 → typed Event 寫進 EventLog → fan out projections + listeners。
+   *
+   * 回傳已 commit 的 event；rule engine 拒絕時回 null（caller 自己處理錯誤）。
+   * 嚴格遵守 ARCHITECTURE.md §1.1 命令-事件分離 + §9 AI read-only：
+   *   - intentClass 必須在進這個 method 之前由 caller 決定（可由 AI 預先分類，
+   *     但 AI 不直接寫 EventLog）
+   *   - Rule Engine 在這層驗證命令格式、產生 deterministic event id
+   */
+  submitLivingWorldCommand(command: LivingWorldCommand): Event | null {
+    const result = this.livingWorldRuleEngine.evaluate(command)
+    if (!result.accepted) {
+      console.warn(
+        `[runtime] rejected ${command.commandType} from ${command.actorId}: ${result.rejection.reason}`
+      )
+      return null
+    }
+    const drafts = result.events as EventDraft[]
+    const committed = this.store.appendEvents(drafts)
+    if (committed.length === 0) return null
+    const last = committed[committed.length - 1]!
+    this.lastSequence = last.sequence
+    this.eventCount += committed.length
+    for (const ev of committed) {
+      if (this.npcMemory) this.npcMemory.project(ev)
+      if (this.npcRelationships) this.npcRelationships.project(ev)
+      const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
+      if (narrativeEvent) {
+        this.pushRecent(narrativeEvent)
+        for (const listener of this.listeners) {
+          try {
+            listener(narrativeEvent)
+          } catch (err) {
+            console.error('[runtime] listener error', err)
+          }
+        }
+      }
+    }
+    return committed[0] ?? null
+  }
+
   private runTickSafely(): void {
     try {
       this.runTick()
@@ -431,7 +474,30 @@ export class SimulationRuntime {
     )
 
     // ---- NPC engine：tile-by-tile 移動、活動、互動 ----
-    const npcResult = this.npcEngine.tick(nextTick)
+    // v0.14.0：傳入 area resources / weather / rare-window 給 NPC personality
+    // nudge 用，讓 archetype 化決策能看到「最危險的鄰居 tile」/「最熱鬧的 tile」
+    const areaSafety = new Map<string, number>()
+    const areaEconomy = new Map<string, number>()
+    for (const a of this.areaEngine.snapshotAll()) {
+      areaSafety.set(a.tileId, a.resources.safety)
+      areaEconomy.set(a.tileId, a.resources.economy)
+    }
+    // v0.14.0：同時把「目前在建築物裡」的 NPC 名單算出來。Phase 2 互動會排除
+    // 這些 NPC，避免事件出現「鏽灣區起爭執」但玩家進到鏽灣區看不到那兩位 NPC
+    // (因為他們其實在某棟建築內)。
+    const npcsInsideBuildings = new Set<string>()
+    for (const view of this.buildingRuntime.snapshotAll()) {
+      for (const occupant of view.occupants) {
+        npcsInsideBuildings.add(occupant.npcId)
+      }
+    }
+    const npcResult = this.npcEngine.tick(nextTick, {
+      areaSafety,
+      areaEconomy,
+      weather: this.weather,
+      rareWindowOpen: this.rareWindowOpen,
+      npcsInsideBuildings
+    })
     for (const event of npcResult.events) {
       const profile = this.profiles.find((p) => p.id === ('npcId' in event ? event.npcId : ''))
       if (event.kind === 'move') {

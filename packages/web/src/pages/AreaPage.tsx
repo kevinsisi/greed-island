@@ -137,6 +137,9 @@ export function AreaPage() {
           activity
         }
         if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
+        // v0.14.0：mood/health 給 AreaScene 視覺化用
+        if (typeof npc.mood === 'number') base.mood = npc.mood
+        if (typeof npc.health === 'number') base.health = npc.health
         return base
       }),
     [occupants, t]

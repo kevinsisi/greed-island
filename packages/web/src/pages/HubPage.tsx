@@ -4,14 +4,15 @@ import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
 import { useAuth } from '../state/AuthContext'
 import { NpcDialog } from '../components/game/NpcDialog'
+import { SinceLastVisitPanel } from '../components/game/SinceLastVisitPanel'
 import { PhaserGame } from '../game/PhaserGame'
-import { api, type ServerSinceLastVisit } from '../api/client'
+import { api, type ServerAreaState } from '../api/client'
 import {
   DISTRICTS,
   type DistrictId,
   isDistrict,
 } from '../game/districts'
-import type { MapNpc } from '../game/MapScene'
+import type { FactionLeanId, MapAreaOverlay, MapNpc } from '../game/MapScene'
 import type { NpcSummary } from '../state/types'
 
 const KNOWN_DISTRICTS = new Set<DistrictId>([
@@ -39,33 +40,49 @@ export function HubPage() {
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [currentDistrict, setCurrentDistrict] = useState<DistrictId | null>(null)
-  const [sinceLastVisit, setSinceLastVisit] = useState<ServerSinceLastVisit | null>(null)
-  const [sinceDismissed, setSinceDismissed] = useState(false)
+  const [showSincePanel, setShowSincePanel] = useState(true)
+  const [areaStates, setAreaStates] = useState<ServerAreaState[]>([])
 
-  // 進入 Hub → 拉一次「不在時掉了什麼」摘要。後端順手把 last_seen_tick
-  // 推到 currentTick，所以下次進來只會看到「自上次進來之後」的數字。
+  // 每 30 秒拉一次 area state 用來上 tile 色（治安/經濟/派系外框）
+  // 5 秒 tick + 區域狀態變化緩慢 → 30 秒 polling 足夠，不會把 server 打爆。
   useEffect(() => {
-    if (!token) return
     let cancelled = false
-    api
-      .cardsSinceLastVisit(token)
-      .then((r) => {
-        if (cancelled) return
-        if (r.dropsSpawned > 0 || r.dropsCollectedByOthers > 0 || r.dropsExpired > 0) {
-          setSinceLastVisit(r)
-        }
-      })
-      .catch(() => {})
+    const fetchAreas = () => {
+      api
+        .areaStates()
+        .then((r) => {
+          if (cancelled) return
+          setAreaStates(r.areas)
+        })
+        .catch(() => {})
+    }
+    fetchAreas()
+    const t = window.setInterval(fetchAreas, 30_000)
     return () => {
       cancelled = true
+      window.clearInterval(t)
     }
-  }, [token])
+  }, [])
 
-  // 把世界狀態裡的 NPC 做成 Phaser 場景需要的形狀。
-  // 後端 v0.12+ 會推每位 NPC 的 color + activity；舊資料缺少時 sprite 走 fallback。
+  const areaOverlays = useMemo<MapAreaOverlay[]>(() => {
+    return areaStates
+      .filter((a) => KNOWN_DISTRICTS.has(a.tileId as DistrictId))
+      .map((a) => ({
+        districtId: a.tileId as DistrictId,
+        safety: a.resources.safety,
+        economy: a.resources.economy,
+        food: a.resources.food,
+        dominantFaction: (a.dominantFaction as FactionLeanId | null) ?? null
+      }))
+  }, [areaStates])
+
+  // 主地圖只顯示「正在跨區移動中」的 NPC。在區域內工作 / 休息 / 聊天的
+  // NPC 只會出現在該區域的 AreaPage scene 裡，避免主地圖被一堆站著的方塊塞滿。
+  // v0.14.0：activity === 'move' 才畫；其它狀態的 NPC 從主地圖隱藏。
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return npcs
       .filter((n) => KNOWN_DISTRICTS.has(n.location as DistrictId))
+      .filter((n) => n.activity === 'move')
       .map((n) => {
         const base: MapNpc = {
           id: n.id,
@@ -78,6 +95,8 @@ export function HubPage() {
         // 後端 sub-tile：MapScene 用來把 NPC 在 district 範圍裡微移動
         if (typeof n.subCol === 'number') base.subCol = n.subCol
         if (typeof n.subRow === 'number') base.subRow = n.subRow
+        if (typeof n.mood === 'number') base.mood = n.mood
+        if (typeof n.health === 'number') base.health = n.health
         return base
       })
   }, [npcs])
@@ -124,6 +143,7 @@ export function HubPage() {
           hudStrings={hudStrings}
           onAreaEnter={handleAreaEnter}
           onNpcInteract={handleNpcInteract}
+          areaOverlays={areaOverlays}
         />
 
         {/* 上方：城市標題 pill */}
@@ -157,25 +177,8 @@ export function HubPage() {
         )}
       </div>
 
-      {sinceLastVisit && !sinceDismissed && (
-        <button
-          type="button"
-          onClick={() => setSinceDismissed(true)}
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[480px] px-4 py-2 rounded-sharp bg-ground-900/95 border border-ember-700 text-ember-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-auto"
-          aria-label="dismiss"
-        >
-          <div className="flex items-baseline gap-2 leading-snug">
-            <span className="text-ember-400 font-extrabold uppercase text-[10px]">
-              不在時
-            </span>
-            <span>
-              世界掉了 <b className="text-ember-300">{sinceLastVisit.dropsSpawned}</b> 張紋卡，
-              其中 <b className="text-rust-300">{sinceLastVisit.dropsCollectedByOthers}</b> 張被別人撿走、
-              <b className="text-ground-400">{sinceLastVisit.dropsExpired}</b> 張已現形消失。
-            </span>
-            <span className="text-ground-500">×</span>
-          </div>
-        </button>
+      {token && showSincePanel && (
+        <SinceLastVisitPanel token={token} onClose={() => setShowSincePanel(false)} />
       )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />

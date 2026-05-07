@@ -34,6 +34,27 @@ export interface MapNpc {
   /** 後端 sub-tile (0..14, 0..9)；用來在 district 內微移，讓世界地圖看得到位置變動 */
   subCol?: number
   subRow?: number
+  /** v0.14.0：mood / health 給跨區移動中的 NPC 顯示視覺暗示用 */
+  mood?: number
+  health?: number
+}
+
+/**
+ * v0.14.0：每 district 一份的 area state overlay。MapScene 用來：
+ * - 治安低 (safety < 40) → 加暗紅色 30% alpha 矩形覆蓋
+ * - 經濟好 (economy > 70) → 加金色 20% alpha 矩形覆蓋
+ * - dominantFaction 不為 null → 加對應派系外框（紫/金/綠/灰）
+ *
+ * districtId 必須對應 DistrictId；不認識的會被忽略。
+ */
+export type FactionLeanId = 'tide_hunters' | 'free_runners' | 'guild' | 'civilian'
+
+export interface MapAreaOverlay {
+  districtId: DistrictId
+  safety: number
+  economy: number
+  food: number
+  dominantFaction: FactionLeanId | null
 }
 
 export interface MapSceneCallbacks {
@@ -52,6 +73,8 @@ export interface MapSceneInit {
   }
   /** 上次離開時的玩家座標，用來在重新進場景時還原位置。 */
   initialPosition?: { x: number; y: number } | null
+  /** v0.14.0：每 district 的派系 / 治安 / 經濟 overlay。 */
+  areaOverlays?: MapAreaOverlay[]
 }
 
 const PLAYER_SPEED = 180 // px/s
@@ -62,6 +85,21 @@ const PLAYER_SPRITE_SIZE = 22
 const NPC_MOVE_TWEEN_MS = 4500
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
 const NPC_SUBTILE_RADIUS = TILE_SIZE * 0.9
+
+/** 派系外框色：v0.14.0 area state overlay 用。 */
+function factionFrameColor(faction: FactionLeanId): number {
+  switch (faction) {
+    case 'tide_hunters':
+      return 0xb55ee0 // 紫
+    case 'guild':
+      return 0xf6c560 // 金
+    case 'free_runners':
+      return 0x4cc370 // 綠
+    case 'civilian':
+    default:
+      return 0xc6c6c6 // 灰
+  }
+}
 
 /**
  * 潮鳴市 Phaser 場景。Prototype 用色塊 + 幾何圖形，先把流程跑通。
@@ -110,7 +148,11 @@ export class MapScene extends Phaser.Scene {
     this.locale = data.locale
     this.hudStrings = data.hudStrings
     this.initialPosition = data.initialPosition ?? null
+    this.areaOverlays = data.areaOverlays ?? []
   }
+
+  private areaOverlays: MapAreaOverlay[] = []
+  private overlayGraphics: Phaser.GameObjects.Graphics | null = null
 
   /** 給外部 (PhaserGame) 在 unmount 前讀出玩家當前座標，以便寫入 localStorage。 */
   getPlayerPosition(): { x: number; y: number } | null {
@@ -123,6 +165,7 @@ export class MapScene extends Phaser.Scene {
 
     this.drawTiles()
     this.drawDecorations()
+    this.refreshAreaOverlay()
     this.drawDistrictLabels()
     this.spawnPlayer()
     this.spawnNpcs()
@@ -144,7 +187,12 @@ export class MapScene extends Phaser.Scene {
    * 公開的 API，讓外面 (React 端) 可以更新 NPC 列表 / locale，不必 re-create
    * 整個 game 物件。
    */
-  applyExternalUpdate(payload: { npcs?: MapNpc[]; locale?: 'zh' | 'en'; hudStrings?: MapSceneInit['hudStrings'] }): void {
+  applyExternalUpdate(payload: {
+    npcs?: MapNpc[]
+    locale?: 'zh' | 'en'
+    hudStrings?: MapSceneInit['hudStrings']
+    areaOverlays?: MapAreaOverlay[]
+  }): void {
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
     if (payload.locale) this.locale = payload.locale
     if (payload.npcs) {
@@ -153,6 +201,10 @@ export class MapScene extends Phaser.Scene {
     } else if (payload.locale) {
       // 只有 locale 變了，刷新 sprite 上的文字
       this.refreshNpcSprites()
+    }
+    if (payload.areaOverlays) {
+      this.areaOverlays = payload.areaOverlays
+      this.refreshAreaOverlay()
     }
     this.redrawDistrictLabels()
   }
@@ -190,6 +242,75 @@ export class MapScene extends Phaser.Scene {
     }
     // 街區外框 — 黃白色高亮，明顯區隔不同街區
     this.drawDistrictBoundaries(g)
+  }
+
+  /**
+   * v0.14.0：依 areaOverlays 把每個 district 加上：
+   * - 治安低 (safety < 40) → 暗紅 30% 矩形覆蓋（讓玩家看到「治安差」）
+   * - 經濟好 (economy > 70) → 金色 20% 矩形覆蓋（讓玩家看到「金光區」）
+   * - dominantFaction → 派系色外框（紫=潮獵會 / 金=公會 / 綠=自由潮感者 / 灰=平民）
+   *
+   * 每次 overlay 變動全部重畫；district 數量只有 8 + road，工作量很小。
+   */
+  private refreshAreaOverlay(): void {
+    if (!this.overlayGraphics) {
+      this.overlayGraphics = this.add.graphics()
+      this.overlayGraphics.setDepth(20)
+    }
+    const g = this.overlayGraphics
+    g.clear()
+    if (this.areaOverlays.length === 0) return
+
+    // 預先把 districtId → 一份 overlay，方便查找。
+    const byId = new Map<DistrictId, MapAreaOverlay>()
+    for (const o of this.areaOverlays) byId.set(o.districtId, o)
+
+    // 對每個 district 算出涵蓋矩形（minCol/Row → maxCol/Row of cells matching id）
+    type DistrictBox = { id: DistrictId; minCol: number; minRow: number; maxCol: number; maxRow: number }
+    const boxes = new Map<DistrictId, DistrictBox>()
+    for (let row = 0; row < GRID_ROWS; row += 1) {
+      for (let col = 0; col < GRID_COLS; col += 1) {
+        const id = DISTRICT_GRID[row]![col]!
+        if (!isDistrict(id)) continue
+        const existing = boxes.get(id)
+        if (!existing) {
+          boxes.set(id, { id, minCol: col, minRow: row, maxCol: col, maxRow: row })
+        } else {
+          if (col < existing.minCol) existing.minCol = col
+          if (col > existing.maxCol) existing.maxCol = col
+          if (row < existing.minRow) existing.minRow = row
+          if (row > existing.maxRow) existing.maxRow = row
+        }
+      }
+    }
+
+    for (const box of boxes.values()) {
+      const overlay = byId.get(box.id)
+      if (!overlay) continue
+      const x = box.minCol * TILE_SIZE
+      const y = box.minRow * TILE_SIZE
+      const w = (box.maxCol - box.minCol + 1) * TILE_SIZE
+      const h = (box.maxRow - box.minRow + 1) * TILE_SIZE
+
+      // Safety < 40 → 暗紅蓋層
+      if (overlay.safety < 40) {
+        const intensity = Math.max(0, Math.min(1, (40 - overlay.safety) / 40))
+        g.fillStyle(0x8a2030, 0.18 + intensity * 0.22)
+        g.fillRect(x, y, w, h)
+      }
+      // Economy > 70 → 金色蓋層
+      if (overlay.economy > 70) {
+        const intensity = Math.max(0, Math.min(1, (overlay.economy - 70) / 30))
+        g.fillStyle(0xf6c560, 0.1 + intensity * 0.12)
+        g.fillRect(x, y, w, h)
+      }
+      // Dominant faction → 外框色
+      if (overlay.dominantFaction) {
+        const factionColor = factionFrameColor(overlay.dominantFaction)
+        g.lineStyle(4, factionColor, 0.9)
+        g.strokeRect(x + 2, y + 2, w - 4, h - 4)
+      }
+    }
   }
 
   /**

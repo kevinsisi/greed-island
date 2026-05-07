@@ -297,6 +297,44 @@ export type ServerSinceLastVisit = {
   currentTick: number
 }
 
+/** v0.14.0：玩家不在時的 living-world 完整摘要（catch-up summary） */
+export type ServerCatchUpSummary = {
+  sinceTick: number
+  untilTick: number
+  totalEvents: number
+  byNpc: Record<string, number>
+  byArea: Record<string, number>
+  worldEvents: Array<{
+    tick: number
+    templateId: string
+    type: string
+    scope: string
+    narration: string
+  }>
+  weatherChanges: Array<{ tick: number; from: string; to: string }>
+  seasonChanges: Array<{ tick: number; from: string; to: string }>
+  pressureMoments: Array<{
+    tick: number
+    tileId: string
+    kind: string
+    narration: string
+  }>
+  interactions: Array<{
+    tick: number
+    tile: string
+    a: string
+    b: string
+    mode: 'chat' | 'argue'
+  }>
+  digest: string
+}
+
+export type ServerWorldSinceLastVisit = {
+  previousLastSeenTick: number
+  latestTick: number
+  summary: ServerCatchUpSummary
+}
+
 export type ServerCardSlotType = 'sequencing' | 'carry'
 
 export type ServerCodexEntry = {
@@ -495,6 +533,27 @@ export const api = {
         body: JSON.stringify(payload)
       }
     ),
+  /** v0.14.0：玩家介入兩位 NPC 的爭執。回傳介入後的好感變化。 */
+  npcIntervene: (
+    token: string,
+    npcA: string,
+    npcB: string,
+    mode: 'mediate' | 'provoke' | 'watch'
+  ) =>
+    jsonFetch<{
+      ok: true
+      mode: 'mediate' | 'provoke' | 'watch'
+      tile: string
+      effects: {
+        npcA: { npcId: string; trust: number; trustDelta: number; moodDelta: number }
+        npcB: { npcId: string; trust: number; trustDelta: number; moodDelta: number }
+      }
+      line: LocalizedLine
+    }>('/npc/intervene', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ npcA, npcB, mode })
+    }),
   npcHistory: (token: string, npcId: string, limit = 20) =>
     jsonFetch<ServerNpcHistory>(
       `/npc/${encodeURIComponent(npcId)}/history?limit=${limit}`,
@@ -703,6 +762,11 @@ export const api = {
     }),
   cardsSinceLastVisit: (token: string) =>
     jsonFetch<ServerSinceLastVisit>('/cards/since-last-visit', {
+      headers: authHeaders(token)
+    }),
+  /** v0.14.0：完整 living-world catch-up（pressure / world events / NPC 互動） */
+  worldSinceLastVisit: (token: string) =>
+    jsonFetch<ServerWorldSinceLastVisit>('/world/since-last-visit', {
       headers: authHeaders(token)
     }),
   codex: (token: string) =>

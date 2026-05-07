@@ -45,6 +45,9 @@ export type NpcRuntimeState = {
   subCol: number
   /** 0..AREA_SUB_ROWS-1：在當前 area canvas 裡的列座標 */
   subRow: number
+  /** v0.14.0：個性 nudge 暫時覆寫 schedule 的 targetTile；到 expiresAtTick
+   *  自動失效，回到 schedule 推導的目標。沒有 nudge 時為 null。 */
+  personalityOverride?: { targetTile: string; expiresAtTick: number; reason: string } | null
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -106,6 +109,31 @@ const ACTIVITY_DRIFT: Readonly<
 const INTERACT_PROBABILITY = 0.18 // 每對同 tile NPC，每 tick 觸發機率
 const INTERACT_COOLDOWN_TICKS = 6
 
+/**
+ * 每位 NPC 每 N tick 評估一次個體化決策（偏離 schedule 的「個性 nudge」）。
+ * 36 tick ≈ 3 分鐘現實時間，等於 NPC 大約每 3 分鐘考慮一次「我現在想做什麼」。
+ * deterministic offset = hash(npcId) % PERSONALITY_DECISION_INTERVAL，
+ * 讓不同 NPC 不會在同一 tick 集體決策。
+ */
+const PERSONALITY_DECISION_INTERVAL = 36
+/** Personality nudge 相對 schedule 的有效持續 tick，過後重新算 */
+const PERSONALITY_OVERRIDE_TICKS = 30
+
+/** Per-tick context from the runtime — area resources / world facts that
+ * personality-based decisioning can read. Optional：舊測試不傳就走 schedule */
+export type NpcTickContext = Readonly<{
+  areaSafety: ReadonlyMap<string, number>
+  areaEconomy: ReadonlyMap<string, number>
+  weather: string
+  rareWindowOpen: boolean
+  /**
+   * v0.14.0：BuildingRuntime 知道哪些 NPC 目前在建築物內。NpcEngine 用這個
+   * Set 在 Phase 2（同 tile 互動）排除這些 NPC，避免「在 X 區起爭執」事件
+   * 的兩位 NPC 其實都在某棟建築內、AreaPage 地圖上根本看不到。
+   */
+  npcsInsideBuildings?: ReadonlySet<string>
+}>
+
 // schedule slot：profile 沒給 schedule 就從 routine 推導
 type ScheduleSlot = {
   fromTickOfDay: number
@@ -139,7 +167,8 @@ export class NpcEngine {
         targetTile: profile.defaultLocation,
         lastActedTick: 0,
         subCol: initSub.col,
-        subRow: initSub.row
+        subRow: initSub.row,
+        personalityOverride: null
       })
     }
   }
@@ -153,6 +182,21 @@ export class NpcEngine {
     const fallbackTile = profile?.defaultLocation ?? 't_central'
     const tile = typeof r.tile === 'string' ? r.tile : fallbackTile
     const fallbackSub = initialSubTile(npcId, tile)
+    let personalityOverride: NpcRuntimeState['personalityOverride'] = null
+    if (r.personalityOverride && typeof r.personalityOverride === 'object') {
+      const po = r.personalityOverride as Partial<{
+        targetTile: string
+        expiresAtTick: number
+        reason: string
+      }>
+      if (typeof po.targetTile === 'string' && typeof po.expiresAtTick === 'number') {
+        personalityOverride = {
+          targetTile: po.targetTile,
+          expiresAtTick: po.expiresAtTick,
+          reason: typeof po.reason === 'string' ? po.reason : 'persisted'
+        }
+      }
+    }
     const next: NpcRuntimeState = {
       tile,
       mood: clamp(typeof r.mood === 'number' ? r.mood : 60, MOOD_MIN, MOOD_MAX),
@@ -172,7 +216,8 @@ export class NpcEngine {
       subRow:
         typeof r.subRow === 'number'
           ? clampInt(r.subRow, 0, AREA_SUB_ROWS - 1)
-          : fallbackSub.row
+          : fallbackSub.row,
+      personalityOverride
     }
     this.state.set(npcId, next)
   }
@@ -182,7 +227,7 @@ export class NpcEngine {
   }
 
   /** 跑一個 tick 的 NPC decisioning，回傳要寫入的事件 + 狀態變更。 */
-  tick(currentTick: number): NpcTickResult {
+  tick(currentTick: number, context?: NpcTickContext): NpcTickResult {
     const events: NpcDecisionEvent[] = []
     // 用 Set 紀錄本 tick 內變動過的 npcId，最後再從 state map 取一份快照，
     // 確保每個 npcId 在 changedStates 中只出現一次（避免重複 FactSet 同 hash）。
@@ -191,11 +236,25 @@ export class NpcEngine {
     const initial = new Map<string, NpcRuntimeState>()
     for (const [id, s] of this.state) initial.set(id, s)
 
+    // 算每 tile 上的 NPC 數量（移動中不算「在場」）給 entertainer 找人用
+    const crowdByTile = new Map<string, number>()
+    for (const [, s] of this.state) {
+      if (s.activity === 'move') continue
+      crowdByTile.set(s.tile, (crowdByTile.get(s.tile) ?? 0) + 1)
+    }
+
     // ---- Phase 1: 每個 NPC 自己的決策 ----
     for (const profile of this.profiles) {
       const before = this.state.get(profile.id)
       if (!before) continue
-      const next = decideNextState(profile, before, this.schedules.get(profile.id) ?? [], currentTick)
+      const next = decideNextState(
+        profile,
+        before,
+        this.schedules.get(profile.id) ?? [],
+        currentTick,
+        context ?? null,
+        crowdByTile
+      )
       if (next.tile !== before.tile) {
         events.push({
           kind: 'move',
@@ -213,6 +272,8 @@ export class NpcEngine {
           to: next.activity
         })
       }
+      const beforeOverrideTarget = before.personalityOverride?.targetTile ?? null
+      const nextOverrideTarget = next.personalityOverride?.targetTile ?? null
       if (
         next.tile !== before.tile ||
         next.activity !== before.activity ||
@@ -220,7 +281,8 @@ export class NpcEngine {
         Math.round(next.health) !== Math.round(before.health) ||
         next.targetTile !== before.targetTile ||
         next.subCol !== before.subCol ||
-        next.subRow !== before.subRow
+        next.subRow !== before.subRow ||
+        beforeOverrideTarget !== nextOverrideTarget
       ) {
         this.state.set(profile.id, next)
         dirty.add(profile.id)
@@ -231,10 +293,14 @@ export class NpcEngine {
     // 規則：
     //   - 必須同一 tile（NPC 必須真的走到對方旁邊，不能隔空）
     //   - 兩位 NPC 都不能正在移動（activity != 'move'）— 路上交錯不算交談
+    //   - v0.14.0：兩位都不能在建築物內 — AreaPage 地圖上要看得到，
+    //     不能說「鏽灣區起爭執」但兩位都關在某棟建築裡玩家找不到
     //   - 每個 tile 每 tick 最多 1 個互動事件，挑 pairRoll 最低的 pair
     const byTile = new Map<string, string[]>()
+    const indoorSet = context?.npcsInsideBuildings ?? null
     for (const [npcId, s] of this.state) {
       if (s.activity === 'move') continue // 路上不算「在場」
+      if (indoorSet && indoorSet.has(npcId)) continue // 在建築內 → 主地圖看不到
       const arr = byTile.get(s.tile) ?? []
       arr.push(npcId)
       byTile.set(s.tile, arr)
@@ -319,11 +385,39 @@ function decideNextState(
   profile: NpcProfile,
   before: NpcRuntimeState,
   schedule: readonly ScheduleSlot[],
-  currentTick: number
+  currentTick: number,
+  context: NpcTickContext | null,
+  crowdByTile: ReadonlyMap<string, number>
 ): NpcRuntimeState {
   const tickOfDay = ((currentTick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
   const slot = pickSlot(schedule, tickOfDay)
-  const targetTile = slot?.location ?? before.targetTile ?? profile.defaultLocation
+  const scheduleTarget = slot?.location ?? before.targetTile ?? profile.defaultLocation
+
+  // ---- 個性 nudge：每 PERSONALITY_DECISION_INTERVAL tick 重算一次 ----
+  // 不同 NPC 在 deterministic 偏移上決策，避免大家同 tick 一起轉向。
+  let personalityOverride = before.personalityOverride ?? null
+  if (personalityOverride && currentTick >= personalityOverride.expiresAtTick) {
+    personalityOverride = null
+  }
+  const decisionPhase = (hashStr(profile.id) % PERSONALITY_DECISION_INTERVAL)
+  if (currentTick % PERSONALITY_DECISION_INTERVAL === decisionPhase) {
+    const nudge = computePersonalityNudge(
+      profile,
+      before,
+      scheduleTarget,
+      context,
+      crowdByTile,
+      currentTick
+    )
+    if (nudge) {
+      personalityOverride = {
+        targetTile: nudge.targetTile,
+        expiresAtTick: currentTick + PERSONALITY_OVERRIDE_TICKS,
+        reason: nudge.reason
+      }
+    }
+  }
+  const targetTile = personalityOverride?.targetTile ?? scheduleTarget
 
   let nextTile = before.tile
   let activity: NpcActivity
@@ -374,8 +468,104 @@ function decideNextState(
         ? before.lastActedTick
         : currentTick,
     subCol,
-    subRow
+    subRow,
+    personalityOverride
   }
+}
+
+/**
+ * 個性 nudge：只對「天生會遊蕩」的 archetype 有效。
+ *
+ * - entertainer + 極高 talkativeness：可能去鄰近 tile 湊熱鬧（且鄰居人多得明顯）
+ * - outsider：高 greed 配低 patience 時往不安全鄰區「找事」
+ *
+ * 商店 / 工匠 / 公務 / mystic / 守衛：永遠回 null — 他們應該守在自己崗位，
+ * 由 schedule 驅動。即便 area 經濟很差他們也不該丟下店去別處。
+ *
+ * 不會把 NPC 拉到 walkable=false 或不存在的 tile（依 MAP_ADJACENCY 限制）。
+ */
+function computePersonalityNudge(
+  profile: NpcProfile,
+  before: NpcRuntimeState,
+  scheduleTarget: string,
+  context: NpcTickContext | null,
+  crowdByTile: ReadonlyMap<string, number>,
+  currentTick: number
+): { targetTile: string; reason: string } | null {
+  const arch = (profile.personality.archetype as string | undefined) ?? ''
+
+  // 只對 entertainer / outsider 啟用 nudge；其它角色嚴格走 schedule。
+  if (arch !== 'entertainer' && arch !== 'outsider') return null
+
+  // 健康 / 心情低落 → 不漂泊，回家 / 留崗。
+  if (before.mood < 30 || before.health < 30) return null
+
+  // 半夜（前 18% / 後 15% 的 day）不漂；NPC 該在睡覺時段休息。
+  const tickOfDay = ((currentTick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
+  const isNight = tickOfDay < TICKS_PER_DAY * 0.18 || tickOfDay > TICKS_PER_DAY * 0.85
+  if (isNight) return null
+
+  if (arch === 'entertainer') {
+    const talkativeness = numOrDefault(profile.personality.talkativeness, 0.5)
+    if (talkativeness < 0.9) return null
+    const target = pickMostCrowdedNeighbor(before.tile, crowdByTile)
+    if (target && target !== scheduleTarget) {
+      return { targetTile: target, reason: 'seek-company' }
+    }
+  }
+
+  if (arch === 'outsider' && context) {
+    const greed = numOrDefault(profile.personality.greed, 0.3)
+    const patience = numOrDefault(profile.personality.patience, 0.6)
+    if (greed >= 0.4 && patience < 0.6) {
+      const target = pickLowestSafetyNeighbor(before.tile, context.areaSafety)
+      if (target && target !== scheduleTarget) {
+        return { targetTile: target, reason: 'risk-seeking' }
+      }
+    }
+  }
+
+  return null
+}
+
+function pickMostCrowdedNeighbor(
+  origin: string,
+  crowdByTile: ReadonlyMap<string, number>
+): string | null {
+  const neighbors = MAP_ADJACENCY[origin] ?? []
+  let best: string | null = null
+  let bestCount = (crowdByTile.get(origin) ?? 0) + 1 // 必須比目前 tile 多至少 1
+  for (const n of neighbors) {
+    const count = crowdByTile.get(n) ?? 0
+    if (count > bestCount) {
+      bestCount = count
+      best = n
+    }
+  }
+  return best
+}
+
+function pickLowestSafetyNeighbor(
+  origin: string,
+  safetyMap: ReadonlyMap<string, number>
+): string | null {
+  const neighbors = MAP_ADJACENCY[origin] ?? []
+  const ownSafety = safetyMap.get(origin) ?? 100
+  let best: string | null = null
+  let bestSafety = ownSafety - 5 // 必須比目前 tile 至少危險 5 點
+  for (const n of neighbors) {
+    const s = safetyMap.get(n)
+    if (typeof s !== 'number') continue
+    if (s < bestSafety) {
+      bestSafety = s
+      best = n
+    }
+  }
+  return best
+}
+
+function numOrDefault(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback
 }
 
 function stepToward(current: number, target: number): number {
@@ -489,6 +679,17 @@ function injectCrossTileWanderIfStuck(
   const home = slots[0]?.location ?? profile.defaultLocation
   const neighbors = MAP_ADJACENCY[home] ?? []
   if (neighbors.length === 0) return slots
+
+  // 跨區意願取決於 archetype + role：商店 / 工匠 / 公務 NPC 大部分時間
+  // 應該待在自己崗位；entertainer / outsider / hunter 才會自然遊蕩。
+  // 同樣是「整天 routine 都在同一 tile」，前者只補一次小幅外出，後者
+  // 才有理由佔掉中段三分之一去鄰區。
+  const arch = (profile.personality.archetype as string | undefined) ?? ''
+  const wanderer = arch === 'entertainer' || arch === 'outsider' || /獵|hunter|流浪|報童/.test(profile.role.zh)
+  if (!wanderer && distinctLocations.size === 1) {
+    // 商店 / 工匠 / 公務：保留原 schedule，不硬塞跨區。讓 profile 自己驅動。
+    return slots
+  }
 
   // deterministic neighbor pick：用 npcId hash mod neighbor count
   let h = 5381
@@ -644,17 +845,24 @@ function isActivity(value: unknown): value is NpcActivity {
 }
 
 function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
-  return (
-    a.tile === b.tile &&
-    a.targetTile === b.targetTile &&
-    a.activity === b.activity &&
-    a.faction === b.faction &&
-    a.lastActedTick === b.lastActedTick &&
-    Math.round(a.mood) === Math.round(b.mood) &&
-    Math.round(a.health) === Math.round(b.health) &&
-    a.subCol === b.subCol &&
-    a.subRow === b.subRow
-  )
+  if (
+    a.tile !== b.tile ||
+    a.targetTile !== b.targetTile ||
+    a.activity !== b.activity ||
+    a.faction !== b.faction ||
+    a.lastActedTick !== b.lastActedTick ||
+    Math.round(a.mood) !== Math.round(b.mood) ||
+    Math.round(a.health) !== Math.round(b.health) ||
+    a.subCol !== b.subCol ||
+    a.subRow !== b.subRow
+  ) {
+    return false
+  }
+  const ao = a.personalityOverride ?? null
+  const bo = b.personalityOverride ?? null
+  if (ao === null && bo === null) return true
+  if (ao === null || bo === null) return false
+  return ao.targetTile === bo.targetTile && ao.expiresAtTick === bo.expiresAtTick
 }
 
 function clamp(value: number, lo: number, hi: number): number {

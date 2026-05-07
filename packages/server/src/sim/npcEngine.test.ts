@@ -113,8 +113,10 @@ describe('NpcEngine', () => {
     expect(s.tile).not.toBe('t_temple')
   })
 
-  it('injects a cross-tile wander slot when all routine slots share one location', () => {
-    // 'stuck' 整天都待 t_central — engine 應該把中段切出去鄰居 tile
+  it('injects a cross-tile wander slot for roaming archetype with all-same routine', () => {
+    // 'stuck' 整天都待 t_central — entertainer / outsider 該自動補一段跨區外出。
+    // v0.14.0 起：商店 / 工匠 / 公務 NPC 的 schedule 不會被硬塞跨區，
+    // 只有 entertainer / outsider / 流浪/獵人 這類自然會走動的角色才會。
     const stuck = makeProfile({
       id: 'stuck',
       defaultLocation: 't_central',
@@ -123,18 +125,49 @@ describe('NpcEngine', () => {
           fromTickOfDay: 0,
           toTickOfDay: TICKS_PER_DAY,
           location: 't_central',
-          label: 'shop counter'
+          label: 'busking circuit'
         }
-      ]
+      ],
+      personality: {
+        archetype: 'entertainer',
+        talkativeness: 0.95,
+        factionLean: 'civilian'
+      }
     })
     const engine = new NpcEngine([stuck])
-    // 跑半天分散的 tick，看是否有 NPC tile 變更（不只 t_central）
     const visited = new Set<string>(['t_central'])
     for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
       engine.tick(t)
       visited.add(engine.getState('stuck')!.tile)
     }
     expect(visited.size).toBeGreaterThan(1)
+  })
+
+  it('does NOT force cross-tile wander on shopkeepers stuck at one location', () => {
+    // v0.14.0 行為：商店 NPC 一整天都在自己店裡 → 維持原 schedule，不亂跑。
+    const shopkeeper = makeProfile({
+      id: 'shop',
+      defaultLocation: 't_central',
+      routine: [
+        {
+          fromTickOfDay: 0,
+          toTickOfDay: TICKS_PER_DAY,
+          location: 't_central',
+          label: 'shop counter'
+        }
+      ],
+      personality: { archetype: 'shopkeeper', greed: 0.5, factionLean: 'civilian' }
+    })
+    const engine = new NpcEngine([shopkeeper])
+    let crossed = false
+    for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
+      engine.tick(t)
+      if (engine.getState('shop')!.tile !== 't_central') {
+        crossed = true
+        break
+      }
+    }
+    expect(crossed).toBe(false)
   })
 
   it('initializes deterministic subCol/subRow on construction', () => {

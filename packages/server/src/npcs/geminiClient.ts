@@ -30,6 +30,12 @@ export type GeminiGenerationOptions = Readonly<{
    * which otherwise blow up the parser when output is truncated.
    */
   responseMimeType?: string
+  /**
+   * 2.5-flash 內部 chain-of-thought 會消耗 maxOutputTokens 的 budget，
+   * 對短-JSON 任務常常導致 thinking 用光全部 token、output 為空白。
+   * 設 0 = 完全停用 thinking；保留 default undefined 讓既有調用者不受影響。
+   */
+  thinkingBudget?: number
 }>
 
 export class GeminiUnavailableError extends Error {
@@ -100,6 +106,9 @@ async function callGemini(
   if (options.responseMimeType) {
     generationConfig.responseMimeType = options.responseMimeType
   }
+  if (typeof options.thinkingBudget === 'number') {
+    generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget }
+  }
   const body = {
     systemInstruction: {
       parts: [{ text: options.systemPrompt }],
@@ -143,16 +152,24 @@ async function callGemini(
     throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`)
   }
 
-  const json = (await response.json()) as RawGeminiResponse
+  const json = (await response.json()) as RawGeminiResponse & {
+    candidates?: Array<RawGeminiCandidate & { finishReason?: string }>
+  }
   if (json.error?.message) {
     throw new Error(`Gemini error: ${json.error.message}`)
   }
   if (json.promptFeedback?.blockReason) {
     throw new Error(`Gemini blocked: ${json.promptFeedback.blockReason}`)
   }
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text
+  const candidate = json.candidates?.[0]
+  const text = candidate?.content?.parts?.[0]?.text
   if (typeof text !== 'string' || text.length === 0) {
-    throw new Error('Gemini returned no text candidate')
+    // 常見成因：finishReason='MAX_TOKENS' 但 thinking 把 budget 用完，
+    // text candidate 直接缺席。把 finishReason 帶出來方便診斷。
+    const reason = (candidate as { finishReason?: string } | undefined)?.finishReason
+    throw new Error(
+      `Gemini returned no text candidate${reason ? ` (finishReason=${reason})` : ''}`
+    )
   }
   return text.trim()
 }

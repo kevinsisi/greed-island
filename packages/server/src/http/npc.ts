@@ -33,6 +33,8 @@ import {
   type RelationshipTier,
 } from '../npcs/dialog.js'
 import { generateAiReply, AiDialogError } from '../npcs/aiDialog.js'
+import { generateWithKeyPool, GeminiUnavailableError } from '../npcs/geminiClient.js'
+import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import type { SettingsStore } from './settings.js'
 import { TICKS_PER_HOUR } from '../config/world.js'
 
@@ -198,6 +200,257 @@ export function createNpcRouter(input: {
     })
   })
 
+  // v0.14.0：玩家介入 NPC 爭執。
+  //
+  // body: {
+  //   npcA, npcB,
+  //   mode?: 'mediate' | 'provoke' | 'watch' | 'threaten'  -- 直接傳 mode 等同罐頭按鈕
+  //   message?: string                                       -- 玩家自由輸入；後端用 AI 分類成 mode
+  // }
+  // 至少要傳 mode 或 message 之一。如果兩個都傳，**message 優先 + AI 分類覆蓋 mode**。
+  //
+  // 嚴格遵守 ARCHITECTURE.md §1.1（命令-事件分離）+ §9（AI read-only）：
+  //   1. 收到 player input
+  //   2. 如果有 message：呼 Gemini 分類意圖（mediate / provoke / watch / threaten）
+  //      → AI 回的 intentClass 只是「決策」進命令 payload，AI 不直接寫 EventLog
+  //   3. Build PLAYER_INTERVENE typed Command
+  //   4. runtime.submitLivingWorldCommand → LivingWorldRuleEngine.evaluate → typed Event 進 EventLog
+  //   5. 對 PlayerStateStore 套 mood / trust 副作用（這部分還沒收進 reducer projection；
+  //      reducer 只記 EventLog 的 macro 事件，per-player 細節仍在 player_npc_relations 表 — 與
+  //      現有 dialog endpoint 行為一致）
+  router.post('/npc/intervene', auth, async (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const body = (req.body ?? {}) as {
+      npcA?: unknown
+      npcB?: unknown
+      mode?: unknown
+      message?: unknown
+    }
+    const npcA = typeof body.npcA === 'string' ? body.npcA : null
+    const npcB = typeof body.npcB === 'string' ? body.npcB : null
+    const explicitMode =
+      body.mode === 'mediate' ||
+      body.mode === 'provoke' ||
+      body.mode === 'watch' ||
+      body.mode === 'threaten'
+        ? body.mode
+        : null
+    const message = typeof body.message === 'string' ? body.message.trim() : ''
+
+    if (!npcA || !npcB || npcA === npcB) {
+      res.status(400).json({
+        error: 'INVALID_INPUT',
+        message: 'npcA / npcB 必填且不同。',
+      })
+      return
+    }
+    if (!explicitMode && message.length === 0) {
+      res.status(400).json({
+        error: 'INVALID_INPUT',
+        message: 'mode 或 message 至少要傳一個。',
+      })
+      return
+    }
+    if (message.length > PLAYER_MESSAGE_MAX_CHARS) {
+      res.status(400).json({
+        error: 'MESSAGE_TOO_LONG',
+        message: `message 不可超過 ${PLAYER_MESSAGE_MAX_CHARS} 字。`,
+      })
+      return
+    }
+
+    const profileA = input.runtime.findProfile(npcA)
+    const profileB = input.runtime.findProfile(npcB)
+    if (!profileA || !profileB) {
+      res.status(404).json({ error: 'NPC_NOT_FOUND' })
+      return
+    }
+    const npcs = input.runtime.getNpcs()
+    const npcAState = npcs.find((n) => n.id === npcA)
+    const npcBState = npcs.find((n) => n.id === npcB)
+    if (!npcAState || !npcBState) {
+      res.status(404).json({ error: 'NPC_NOT_FOUND' })
+      return
+    }
+    if (npcAState.location !== npcBState.location) {
+      res.status(400).json({
+        error: 'NPC_NOT_ON_SAME_TILE',
+        message: '兩位 NPC 不在同一區，玩家無法同時介入。',
+      })
+      return
+    }
+    if (
+      input.runtime.getNpcBuildingId(npcA) !== null ||
+      input.runtime.getNpcBuildingId(npcB) !== null
+    ) {
+      res.status(400).json({
+        error: 'NPC_INSIDE_BUILDING',
+        message: '至少一位 NPC 在建築內，等他們出來再介入。',
+      })
+      return
+    }
+
+    // ---- 步驟 2：意圖分類 ----
+    // message 存在 → 用 AI 分類；沒 message → 直接吃 explicitMode
+    let intentClass: 'mediate' | 'provoke' | 'watch' | 'threaten' = explicitMode ?? 'watch'
+    let aiClassifyError: string | null = null
+    if (message.length > 0 && input.settings.countActive() > 0) {
+      try {
+        intentClass = await classifyInterventionIntent(input.settings, {
+          message,
+          npcAName: profileA.name.zh,
+          npcBName: profileB.name.zh,
+        })
+      } catch (err) {
+        aiClassifyError = err instanceof Error ? err.message : String(err)
+        // AI 失敗 → fallback 到 explicitMode（如果有）或 watch
+        intentClass = explicitMode ?? 'watch'
+        console.warn('[npc] intervene intent classify failed', aiClassifyError)
+      }
+    } else if (message.length > 0 && !explicitMode) {
+      // 有 message 但 AI 沒 key 也沒 explicitMode → 保守當 watch
+      intentClass = 'watch'
+    }
+
+    const tick = input.runtime.getCurrentTick()
+    const tile = npcAState.location
+
+    // 敘事：根據意圖 + 玩家原文寫一行
+    const narration = composeInterventionNarration(
+      intentClass,
+      profileA.name.zh,
+      profileB.name.zh,
+      message
+    )
+
+    // ---- 步驟 3：build PLAYER_INTERVENE Command ----
+    const submittedAt = Date.now()
+    const command = makeLivingWorldCommand(
+      'PLAYER_INTERVENE',
+      String(claims.sub),
+      'player',
+      tick,
+      submittedAt,
+      {
+        playerAccountId: String(claims.sub),
+        npcA,
+        npcB,
+        tile,
+        intentClass,
+        message,
+        narration,
+      }
+    )
+
+    // ---- 步驟 4：Rule Engine 驗證 + 寫 EventLog ----
+    const event = input.runtime.submitLivingWorldCommand(command)
+    if (!event) {
+      res.status(500).json({ error: 'RULE_ENGINE_REJECTED' })
+      return
+    }
+
+    // ---- 步驟 5：套 PlayerStateStore 副作用（trust + personal_event） ----
+    const baseTrust = (profile: { personality: Readonly<Record<string, number | string>> }) =>
+      typeof profile.personality.trustBase === 'number'
+        ? clampTrust(profile.personality.trustBase)
+        : 50
+    const relA = input.store.getRelation(claims.sub, npcA)
+    const relB = input.store.getRelation(claims.sub, npcB)
+    const trustA = relA ? relA.trust : baseTrust(profileA)
+    const trustB = relB ? relB.trust : baseTrust(profileB)
+    const countA = relA ? relA.interactionCount : 0
+    const countB = relB ? relB.interactionCount : 0
+
+    let trustDeltaA = 0
+    let trustDeltaB = 0
+    let moodDelta = 0
+    if (intentClass === 'mediate') {
+      trustDeltaA = 2
+      trustDeltaB = 2
+      moodDelta = 2
+    } else if (intentClass === 'provoke') {
+      const provokedIsA = npcAState.mood <= npcBState.mood
+      trustDeltaA = provokedIsA ? 1 : -3
+      trustDeltaB = provokedIsA ? -3 : 1
+      moodDelta = -3
+    } else if (intentClass === 'threaten') {
+      // 威脅：兩位都 mood -5、trust -4。對未成熟的玩家是「真的會掉好感」的選項
+      trustDeltaA = -4
+      trustDeltaB = -4
+      moodDelta = -5
+    }
+
+    const newTrustA = clampTrust(trustA + trustDeltaA)
+    const newTrustB = clampTrust(trustB + trustDeltaB)
+
+    if (intentClass !== 'watch') {
+      input.store.upsertRelation({
+        accountId: claims.sub,
+        npcId: npcA,
+        trust: newTrustA,
+        interactionCount: countA + 1,
+        lastInteractionTick: tick,
+      })
+      input.store.upsertRelation({
+        accountId: claims.sub,
+        npcId: npcB,
+        trust: newTrustB,
+        interactionCount: countB + 1,
+        lastInteractionTick: tick,
+      })
+    }
+
+    input.store.appendPersonalEvent({
+      accountId: claims.sub,
+      npcId: npcA,
+      intent: 'ask',
+      lineZh: narration,
+      lineEn: narration,
+      tick,
+      trustAfter: newTrustA,
+    })
+    input.store.appendPersonalEvent({
+      accountId: claims.sub,
+      npcId: npcB,
+      intent: 'ask',
+      lineZh: narration,
+      lineEn: narration,
+      tick,
+      trustAfter: newTrustB,
+    })
+
+    res.json({
+      ok: true,
+      intentClass,
+      mode: intentClass,
+      message,
+      tile,
+      eventId: event.eventId,
+      sequence: event.sequence,
+      classifiedByAi: message.length > 0 && aiClassifyError === null && input.settings.countActive() > 0,
+      aiClassifyError,
+      narration,
+      effects: {
+        npcA: {
+          npcId: npcA,
+          trust: newTrustA,
+          trustDelta: trustDeltaA,
+          moodDelta,
+        },
+        npcB: {
+          npcId: npcB,
+          trust: newTrustB,
+          trustDelta: trustDeltaB,
+          moodDelta,
+        },
+      },
+    })
+  })
+
   router.get('/npc/:npcId/history', auth, (req: Request, res: Response) => {
     const claims = req.auth
     if (!claims) {
@@ -305,3 +558,88 @@ function clampInt(raw: unknown, min: number, max: number, fallback: number): num
 }
 
 export const _SUPPORTED_INTENTS = INTERACT_INTENTS
+
+/**
+ * v0.14.0：用 Gemini 把玩家對 NPC 爭執說的一句話分類成四個 intent 類別之一。
+ * AI 回傳必須是純小寫單字 mediate / provoke / watch / threaten。任何其它字
+ * (例如「我不知道」/ Markdown / JSON) 一律視為失敗，由 caller fallback。
+ *
+ * AI read-only：分類結果只進命令 payload，不直接寫 EventLog。
+ */
+async function classifyInterventionIntent(
+  store: SettingsStore,
+  ctx: { message: string; npcAName: string; npcBName: string }
+): Promise<'mediate' | 'provoke' | 'watch' | 'threaten'> {
+  const systemPrompt = [
+    '你是一位場景觀察員。場面：兩位 NPC 正在爭執，玩家此刻插話。',
+    '你的任務是把玩家說的那句話分類成下列四個動作之一：',
+    '- mediate：嘗試調解、勸架、緩和情緒、把雙方拉開',
+    '- provoke：火上加油、煽動、起鬨、選邊站、貶低其中一方',
+    '- threaten：直接威脅暴力 / 報復、命令對方住口、給最後通牒',
+    '- watch：站在旁邊看、純粹評論不選邊、表達中立、沒有實質行動',
+    '',
+    '⚠️ 鐵則：',
+    '1. 你只回一個小寫英文單字：mediate / provoke / watch / threaten。',
+    '2. 不要寫 JSON、不要寫 Markdown、不要寫解釋。',
+    '3. 含糊不清就回 watch。',
+    '4. 玩家用詞激烈但中立（例如只是 commentary）→ watch；玩家威脅 → threaten。',
+  ].join('\n')
+  const userPrompt = [
+    `現場兩位 NPC：${ctx.npcAName} 與 ${ctx.npcBName}（正在爭執）`,
+    `玩家剛剛說：「${ctx.message}」`,
+    '',
+    '玩家的動作分類是？',
+  ].join('\n')
+
+  let raw: string
+  try {
+    raw = await generateWithKeyPool(store, {
+      systemPrompt,
+      userPrompt,
+      temperature: 0.2,
+      maxOutputTokens: 32,
+      // 純分類任務：關 thinking、關 JSON mode
+      thinkingBudget: 0,
+    })
+  } catch (err) {
+    if (err instanceof GeminiUnavailableError) {
+      throw new Error(`AI 不可用：${err.message}`)
+    }
+    throw err
+  }
+  const norm = raw.trim().toLowerCase().replace(/[^a-z]/g, '')
+  if (norm === 'mediate' || norm === 'provoke' || norm === 'watch' || norm === 'threaten') {
+    return norm
+  }
+  // 寬鬆 fallback：raw 包含某個關鍵字
+  if (norm.includes('mediate')) return 'mediate'
+  if (norm.includes('provoke')) return 'provoke'
+  if (norm.includes('threaten')) return 'threaten'
+  if (norm.includes('watch')) return 'watch'
+  throw new Error(`Unrecognized intent class: "${raw.slice(0, 60)}"`)
+}
+
+function composeInterventionNarration(
+  intent: 'mediate' | 'provoke' | 'watch' | 'threaten',
+  npcAName: string,
+  npcBName: string,
+  message: string
+): string {
+  const messageSnippet = message.length > 0 ? `（玩家說：「${trim80(message)}」）` : ''
+  switch (intent) {
+    case 'mediate':
+      return `你站到${npcAName}和${npcBName}中間，把火氣壓下來。${messageSnippet}`
+    case 'provoke':
+      return `你火上加油，雙方更不肯讓步。${messageSnippet}`
+    case 'threaten':
+      return `你發出威脅，${npcAName}和${npcBName}都警戒地看著你。${messageSnippet}`
+    case 'watch':
+    default:
+      return `你站在一旁看著，沒插嘴。${messageSnippet}`
+  }
+}
+
+function trim80(s: string): string {
+  if (s.length <= 80) return s
+  return s.slice(0, 80) + '…'
+}
