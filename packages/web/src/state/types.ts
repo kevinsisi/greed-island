@@ -45,6 +45,11 @@ export interface NpcSummary {
   health?: number
   faction?: string
   targetTile?: string
+  /** Server-driven area canvas 子格座標（v0.12+） */
+  subCol?: number
+  subRow?: number
+  /** 24-bit RGB sprite 主色（v0.12+） */
+  color?: number
 }
 
 export type CardRank = 'SS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'

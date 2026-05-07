@@ -7,7 +7,7 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
-import type { AreaMapBuilding, AreaMapNpc } from '../game/AreaScene'
+import type { AreaMapBuilding, AreaMapNpc, AreaNpcActivity } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
 import type { NpcSummary, NpcActivity } from '../state/types'
 import type { TranslationKey } from '../i18n/types'
@@ -26,55 +26,6 @@ const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   sleep: 'npc.activity.sleep',
   trade: 'npc.activity.trade',
   patrol: 'npc.activity.patrol'
-}
-
-/**
- * 依 NPC role / faction / id 決定 sprite 主色。
- * 順序：先看 role 關鍵字（最直觀），再 fallback 到 faction，再 fallback 到 hash 灰調。
- * 配色搭配：守衛=藍、商人=金、聖職=紫、獵人=綠、主線/公會=橙、流浪者=灰
- */
-function deriveNpcSpriteColor(npc: NpcSummary): { color: number; textColor: string } {
-  const role = npc.role
-  // 守衛 / 警 / 巡：藍
-  if (/守|衛|警|巡|護/.test(role)) {
-    return { color: 0x6fb8d7, textColor: '#0a1622' }
-  }
-  // 商人 / 販 / 兌換：金
-  if (/商|販|兌|店主|匯/.test(role)) {
-    return { color: 0xf6c560, textColor: '#1c1300' }
-  }
-  // 聖職 / 僧 / 道：紫
-  if (/聖|僧|道|教|和尚|長老|住持/.test(role)) {
-    return { color: 0xb89cf0, textColor: '#1a0d2a' }
-  }
-  // 獵人 / 屠夫：暗綠
-  if (/獵|屠|匠/.test(role)) {
-    return { color: 0x7fb87a, textColor: '#0a1a08' }
-  }
-  // 公會長 / 主線：橙
-  if (/公會長|公會|主|首領|大人|盟主/.test(role)) {
-    return { color: 0xff9966, textColor: '#1a0a05' }
-  }
-  // 接待 / 員：青
-  if (/接待|員|船/.test(role)) {
-    return { color: 0xa3c9ff, textColor: '#0a0e22' }
-  }
-  // faction fallback
-  switch (npc.faction) {
-    case 'guild':
-      return { color: 0xff9966, textColor: '#1a0a05' }
-    case 'tide_hunters':
-      return { color: 0x7fb87a, textColor: '#0a1a08' }
-    case 'free_runners':
-      return { color: 0xb89cf0, textColor: '#1a0d2a' }
-    case 'civilian':
-      return { color: 0xc0c0c0, textColor: '#101010' }
-  }
-  // 流浪者 fallback：用 id hash 取灰調，至少各 NPC 不同調
-  let h = 5381
-  for (const ch of npc.id) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
-  const grey = 0x808080 + ((h % 0x40) - 0x20)
-  return { color: grey & 0xffffff, textColor: '#101010' }
 }
 
 type DrawerTab = 'scene' | 'npcs' | 'cards' | 'events' | 'players'
@@ -171,41 +122,25 @@ export function AreaPage() {
       .slice(0, 12)
   }, [events, occupants, tile, tileId])
 
-  const mapNpcs = useMemo<AreaMapNpc[]>(() => {
-    // 計算每個 occupant 的 sprite 屬性。activity / 主色 / 移動方向都用後端資料推導，
-    // 不再用前端 wander tween 假動。
-    const tilesById: Record<string, { x: number; y: number }> = {}
-    for (const tt of map.tiles) tilesById[tt.id] = { x: tt.x, y: tt.y }
-
-    const me = tilesById[tileId]
-    return occupants.map((npc) => {
-      const palette = deriveNpcSpriteColor(npc)
-      const base: AreaMapNpc = {
-        id: npc.id,
-        name: npc.name,
-        shortName: npc.name.charAt(0),
-        spriteColor: palette.color,
-        spriteTextColor: palette.textColor
-      }
-      if (npc.activity) {
-        base.activityLabel = t(ACTIVITY_KEY[npc.activity])
-        base.activity = npc.activity
-      }
-      // 當 NPC 正在 move 且目標 tile 有座標 → 算單位向量讓 sprite 朝那個方向走出 tile
-      if (npc.activity === 'move' && npc.targetTile && me) {
-        const dest = tilesById[npc.targetTile]
-        if (dest) {
-          const dx = dest.x - me.x
-          const dy = dest.y - me.y
-          const len = Math.hypot(dx, dy)
-          if (len > 0) {
-            base.moveDirection = { dx: dx / len, dy: dy / len }
-          }
+  const mapNpcs = useMemo<AreaMapNpc[]>(
+    () =>
+      occupants.map((npc) => {
+        const activity: AreaNpcActivity = npc.activity ?? 'idle'
+        const base: AreaMapNpc = {
+          id: npc.id,
+          name: npc.name,
+          shortName: npc.name.charAt(0),
+          // 後端權威：v0.12 之後 server 一定會帶這些欄位；舊資料缺少時用 sane fallback
+          subCol: typeof npc.subCol === 'number' ? npc.subCol : 7,
+          subRow: typeof npc.subRow === 'number' ? npc.subRow : 5,
+          color: typeof npc.color === 'number' ? npc.color : 0xfff5b8,
+          activity
         }
-      }
-      return base
-    })
-  }, [occupants, map.tiles, tileId, t])
+        if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
+        return base
+      }),
+    [occupants, t]
+  )
 
   const hudStrings = useMemo(
     () => ({

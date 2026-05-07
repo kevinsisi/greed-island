@@ -1,42 +1,6 @@
 import Phaser from 'phaser'
-import {
-  DISTRICTS,
-  NPC_BADGE_COLOR,
-  NPC_BADGE_TEXT,
-  PLAYER_COLOR,
-  PLAYER_OUTLINE,
-  type DistrictId
-} from './districts'
+import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
-
-/** 後端 NPC 的活動，決定 sprite 顯示什麼 emoji 與要不要動 */
-export type AreaNpcActivity =
-  | 'idle'
-  | 'move'
-  | 'work'
-  | 'eat'
-  | 'sleep'
-  | 'trade'
-  | 'patrol'
-
-const ACTIVITY_ICON: Readonly<Partial<Record<AreaNpcActivity, string>>> = {
-  work: '🔨',
-  sleep: '💤',
-  eat: '🍜',
-  trade: '💬'
-  // move / idle / patrol → 不顯示圖示，靠移動或站立區分
-}
-
-/** sprite 的相對速度（決定 tween 時長），單位 px/s */
-const ACTIVITY_SPEED: Readonly<Record<AreaNpcActivity, number>> = {
-  move: 70,
-  patrol: 30,
-  idle: 0,
-  work: 0,
-  eat: 0,
-  sleep: 0,
-  trade: 0
-}
 
 // 區域內地圖：比城市地圖小，給玩家在單一街區裡走動。
 export const AREA_TILE_SIZE = 40
@@ -50,6 +14,41 @@ const NPC_SPRITE_SIZE = 26
 const PLAYER_SPEED = 160 // px/s
 const INTERACT_RADIUS = AREA_TILE_SIZE * 1.6
 const POSITION_SAVE_INTERVAL_MS = 500
+// 後端 tick 為 5 秒；NPC 從上次位置 tween 到新位置花 ≈4.5 秒，剛好接到下個 tick
+const NPC_MOVE_TWEEN_MS = 4500
+
+const ACTIVITY_GLYPH: Readonly<Record<AreaNpcActivity, string>> = {
+  idle: '',
+  move: '👣',
+  work: '🛠️',
+  eat: '🍴',
+  sleep: '💤',
+  trade: '💰',
+  patrol: '👁️'
+}
+
+function activityGlyphFor(a: AreaNpcActivity): string {
+  return ACTIVITY_GLYPH[a] ?? ''
+}
+
+/** 給定 24-bit 背景色，回傳適合在上面顯示文字的顏色（深 / 淺二選一）。 */
+function textColorForBg(color: number): string {
+  const r = (color >> 16) & 0xff
+  const g = (color >> 8) & 0xff
+  const b = color & 0xff
+  // 標準感知亮度
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b
+  return luma > 140 ? '#1a1407' : '#fff5b8'
+}
+
+export type AreaNpcActivity =
+  | 'idle'
+  | 'move'
+  | 'work'
+  | 'eat'
+  | 'sleep'
+  | 'trade'
+  | 'patrol'
 
 export interface AreaMapNpc {
   id: string
@@ -59,18 +58,13 @@ export interface AreaMapNpc {
   shortName: string
   /** 當前活動，用 i18n 字串顯示在名字下方；缺值就不顯示活動行 */
   activityLabel?: string
-  /** 後端 activity，驅動 sprite 的位置與圖示 */
-  activity?: AreaNpcActivity
-  /** sprite 主色（依 role / faction 決定，由 React 層算好傳入） */
-  spriteColor?: number
-  /** sprite badge 內字色 — 配合 spriteColor 對比 */
-  spriteTextColor?: string
-  /**
-   * 當 activity === 'move' 時，朝這個方向走出 tile（unit vector）。
-   * 由 React 層用世界地圖座標 (currentTile → targetTile) 算好傳入。
-   * 缺值 + move 視為原地繞圈
-   */
-  moveDirection?: { dx: number; dy: number }
+  /** 後端權威子格座標（0..14, 0..9）。由 server 決定 NPC 在 area canvas 的位置 */
+  subCol: number
+  subRow: number
+  /** sprite 主色（24-bit RGB，例 0xff8a4a）。後端依 faction + id 決定 */
+  color: number
+  /** 活動 enum，用來顯示活動圖示 emoji */
+  activity: AreaNpcActivity
 }
 
 /** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
@@ -430,10 +424,11 @@ export class AreaScene extends Phaser.Scene {
   }
 
   /**
-   * 把當前 npcs 列表 sync 到場景。
-   * - 位置完全由後端 activity 驅動 (詳見 driveSpriteByActivity)
-   * - sprite 主色由 spriteColor 決定，依 role / faction 由 React 層算好
-   * - sprite 不再有「亂走 wander」假動畫；站著不動代表後端真的說他在工作 / 休息 / 聊天
+   * 把當前 npcs 列表 sync 到場景。位置完全由後端 (subCol, subRow) 驅動：
+   *   - 已存在的 NPC：tween sprite + label 從目前位置 → 後端新位置（≈4500ms 平滑）
+   *   - 新增 NPC：直接放在後端指定子格，建 sprite + 名字 + 活動 emoji
+   *   - 移除 NPC：destroy sprite + 連帶 label / tween
+   * 不再有前端假 wander。
    */
   private refreshNpcSprites(): void {
     const seen = new Set<string>()
@@ -447,45 +442,36 @@ export class AreaScene extends Phaser.Scene {
 
     for (const npc of this.npcs) {
       seen.add(npc.id)
-      const home = this.npcHomeAnchor(npc.id)
+      const target = this.subTileToCanvas(npc.subCol, npc.subRow)
 
       const existing = this.npcSprites.get(npc.id)
       if (existing) {
-        // 既有 sprite — 更新文字、判斷是否要重啟 activity tween
         const nameLabel = existing.getData('nameLabel') as Phaser.GameObjects.Text | undefined
-        const activityLabel = existing.getData('activityLabel') as
-          | Phaser.GameObjects.Text
-          | undefined
         const activityIcon = existing.getData('activityIcon') as
           | Phaser.GameObjects.Text
           | undefined
         if (nameLabel && nameLabel.text !== npc.name) nameLabel.setText(npc.name)
-        if (activityLabel) {
-          const desired = npc.activityLabel ?? ''
-          if (activityLabel.text !== desired) activityLabel.setText(desired)
-          activityLabel.setVisible(desired.length > 0)
-        }
         if (activityIcon) {
-          const icon = npc.activity ? (ACTIVITY_ICON[npc.activity] ?? '') : ''
-          if (activityIcon.text !== icon) activityIcon.setText(icon)
-          activityIcon.setVisible(icon.length > 0)
+          const glyph = activityGlyphFor(npc.activity)
+          if (activityIcon.text !== glyph) activityIcon.setText(glyph)
+          activityIcon.setVisible(glyph.length > 0)
         }
-        existing.setData('anchorX', home.x)
-        existing.setData('anchorY', home.y)
-        this.driveSpriteByActivity(existing, npc, home)
+        // sprite 顏色（faction 變更也跟著換）
+        const currentColor = existing.getData('npcColor') as number | undefined
+        if (currentColor !== npc.color) {
+          this.applyNpcColor(existing, npc.id, npc.color)
+        }
+        // 平滑移動到後端的新位置
+        this.tweenNpcTo(existing, target.x, target.y)
         continue
       }
 
-      // 新增 sprite — 用 spriteColor 生成專屬 texture，避免共用同一塊方塊
-      const color = npc.spriteColor ?? NPC_BADGE_COLOR
-      const tex = this.npcTextureKey(npc.id, color)
-      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, color, 0x1c1300, 2)
-      const sprite = this.physics.add.sprite(home.x, home.y, tex)
+      // 新增 sprite — 直接落在後端指定位置
+      const tex = this.makeNpcTexture(npc.id, npc.color)
+      const sprite = this.physics.add.sprite(target.x, target.y, tex)
       sprite.setDepth(70)
       sprite.setData('npcId', npc.id)
-      sprite.setData('anchorX', home.x)
-      sprite.setData('anchorY', home.y)
-      sprite.setData('spriteColor', color)
+      sprite.setData('npcColor', npc.color)
       sprite.setInteractive({ useHandCursor: true })
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
@@ -504,19 +490,21 @@ export class AreaScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      // sprite 中央的單字 badge
-      const badge = this.add.text(home.x, home.y, npc.shortName, {
+      // sprite 中央的單字 badge — 字色用 sprite 互補色，避免被同色吃掉
+      const badgeColor = textColorForBg(npc.color)
+      const badge = this.add.text(target.x, target.y, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
-        color: npc.spriteTextColor ?? NPC_BADGE_TEXT,
+        color: badgeColor,
         fontStyle: 'bold'
       })
       badge.setOrigin(0.5, 0.5)
       badge.setDepth(71)
       sprite.setData('badge', badge)
 
-      const nameLabel = this.add.text(home.x, home.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
+      // 完整名字
+      const nameLabel = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '11px',
@@ -528,30 +516,12 @@ export class AreaScene extends Phaser.Scene {
       nameLabel.setDepth(72)
       sprite.setData('nameLabel', nameLabel)
 
-      const activityLabel = this.add.text(
-        home.x,
-        home.y + NPC_SPRITE_SIZE * 0.65,
-        npc.activityLabel ?? '',
-        {
-          fontFamily:
-            '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-          fontSize: '10px',
-          color: '#b6e3ff',
-          stroke: '#0a0a0a',
-          strokeThickness: 2
-        }
-      )
-      activityLabel.setOrigin(0.5, 0)
-      activityLabel.setDepth(72)
-      activityLabel.setVisible((npc.activityLabel ?? '').length > 0)
-      sprite.setData('activityLabel', activityLabel)
-
-      // activity 圖示（🔨 / 💤 / 💬 / 🍜）放在名字上方一階
-      const initialIcon = npc.activity ? (ACTIVITY_ICON[npc.activity] ?? '') : ''
+      // sprite 右上角的活動 emoji
+      const glyph = activityGlyphFor(npc.activity)
       const activityIcon = this.add.text(
-        home.x,
-        home.y - NPC_SPRITE_SIZE * 1.45,
-        initialIcon,
+        target.x + NPC_SPRITE_SIZE * 0.55,
+        target.y - NPC_SPRITE_SIZE * 0.55,
+        glyph,
         {
           fontFamily:
             '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
@@ -561,15 +531,15 @@ export class AreaScene extends Phaser.Scene {
           strokeThickness: 2
         }
       )
-      activityIcon.setOrigin(0.5, 1)
-      activityIcon.setDepth(74)
-      activityIcon.setVisible(initialIcon.length > 0)
+      activityIcon.setOrigin(0.5, 0.5)
+      activityIcon.setDepth(73)
+      activityIcon.setVisible(glyph.length > 0)
       sprite.setData('activityIcon', activityIcon)
 
-      // 玩家走進 INTERACT_RADIUS 後，sprite 正上方 (比 activity 圖示再高一階) 浮出 💬
+      // 走進範圍後浮出的 💬
       const chatBubble = this.add.text(
-        home.x,
-        home.y - NPC_SPRITE_SIZE * 2.1,
+        target.x,
+        target.y - NPC_SPRITE_SIZE * 1.6,
         '💬',
         {
           fontFamily:
@@ -581,7 +551,7 @@ export class AreaScene extends Phaser.Scene {
         }
       )
       chatBubble.setOrigin(0.5, 1)
-      chatBubble.setDepth(73)
+      chatBubble.setDepth(74)
       chatBubble.setVisible(false)
       sprite.setData('chatBubble', chatBubble)
       chatBubble.setInteractive({ useHandCursor: true })
@@ -603,203 +573,96 @@ export class AreaScene extends Phaser.Scene {
       })
 
       this.npcSprites.set(npc.id, sprite)
-      this.driveSpriteByActivity(sprite, npc, home)
     }
 
-    // 清掉本 tick 之後不再存在的 NPC
     for (const [id, sprite] of this.npcSprites) {
       if (!seen.has(id)) this.disposeNpcSprite(id, sprite)
     }
   }
 
-  /**
-   * 依後端 activity 決定 sprite 該怎麼動：
-   * - move：朝 moveDirection 走出 home，慢慢漂向 tile 邊緣（直到後端把 location 換了，
-   *   sprite 就會從 occupants 中消失）
-   * - patrol：在 home 附近做 yoyo 小範圍巡邏
-   * - work / eat / sleep / trade / idle：站著不動，sprite 直接歸位 home
-   * 既有的 tween 會被 kill，避免動畫疊加。
-   */
-  private driveSpriteByActivity(
-    sprite: Phaser.Physics.Arcade.Sprite,
-    npc: AreaMapNpc,
-    home: { x: number; y: number }
-  ): void {
-    const activity: AreaNpcActivity = npc.activity ?? 'idle'
-    const prevActivity = sprite.getData('activityState') as AreaNpcActivity | undefined
-    const prevDirKey = sprite.getData('moveDirKey') as string | undefined
-    const dirKey = npc.moveDirection
-      ? `${npc.moveDirection.dx.toFixed(2)},${npc.moveDirection.dy.toFixed(2)}`
-      : ''
-    if (prevActivity === activity && prevDirKey === dirKey) {
-      // activity 沒變、方向也沒變 → tween 已經在跑，不重啟
-      return
-    }
-    sprite.setData('activityState', activity)
-    sprite.setData('moveDirKey', dirKey)
-
-    // 殺掉現有 tween，避免動畫疊加
-    const prev = sprite.getData('positionTween') as Phaser.Tweens.Tween | undefined
-    if (prev) {
-      this.tweens.remove(prev)
-      sprite.setData('positionTween', undefined)
-    }
-
-    if (activity === 'move') {
-      // 朝 moveDirection 走出 home。沒有方向 → 在 home 附近輕微繞一下（fallback）
-      const dir = npc.moveDirection ?? { dx: 0, dy: 0 }
-      const len = Math.hypot(dir.dx, dir.dy) || 1
-      const ux = dir.dx / len
-      const uy = dir.dy / len
-      const exitDist = AREA_TILE_SIZE * 3 // 走 3 tiles 後接近邊緣
-      const targetX = Phaser.Math.Clamp(
-        home.x + ux * exitDist,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_WIDTH - NPC_SPRITE_SIZE
-      )
-      const targetY = Phaser.Math.Clamp(
-        home.y + uy * exitDist,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_HEIGHT - NPC_SPRITE_SIZE
-      )
-      const dist = Math.hypot(targetX - sprite.x, targetY - sprite.y)
-      const duration = Math.max(800, (dist / ACTIVITY_SPEED.move) * 1000)
-      const tween = this.tweens.add({
-        targets: sprite,
-        x: targetX,
-        y: targetY,
-        duration,
-        ease: 'Sine.easeInOut',
-        onUpdate: () => this.repositionNpcLabels(sprite),
-        onComplete: () => this.repositionNpcLabels(sprite)
-      })
-      sprite.setData('positionTween', tween)
-      sprite.setFlipX(ux < 0)
-      return
-    }
-
-    if (activity === 'patrol') {
-      // 在 home 周圍做小範圍 yoyo（30~40 px 半徑）
-      let h = 5381
-      for (const ch of npc.id) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
-      const angle = ((h >>> 4) % 360) * (Math.PI / 180)
-      const radius = 28 + (h % 14)
-      const targetX = Phaser.Math.Clamp(
-        home.x + Math.cos(angle) * radius,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_WIDTH - NPC_SPRITE_SIZE
-      )
-      const targetY = Phaser.Math.Clamp(
-        home.y + Math.sin(angle) * radius,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_HEIGHT - NPC_SPRITE_SIZE
-      )
-      const dist = Math.hypot(targetX - home.x, targetY - home.y)
-      const duration = Math.max(1500, (dist / ACTIVITY_SPEED.patrol) * 1000)
-      const tween = this.tweens.add({
-        targets: sprite,
-        x: { from: home.x, to: targetX },
-        y: { from: home.y, to: targetY },
-        duration,
-        ease: 'Sine.easeInOut',
-        yoyo: true,
-        repeat: -1,
-        onUpdate: () => this.repositionNpcLabels(sprite)
-      })
-      sprite.setData('positionTween', tween)
-      sprite.setFlipX(Math.cos(angle) < 0)
-      return
-    }
-
-    // 站著不動的 activities — sprite 平滑回到 home
-    const dist = Math.hypot(home.x - sprite.x, home.y - sprite.y)
-    if (dist < 1) {
-      sprite.setPosition(home.x, home.y)
-      this.repositionNpcLabels(sprite)
-      return
-    }
-    const tween = this.tweens.add({
-      targets: sprite,
-      x: home.x,
-      y: home.y,
-      duration: Math.min(900, Math.max(200, dist * 6)),
-      ease: 'Sine.easeOut',
-      onUpdate: () => this.repositionNpcLabels(sprite),
-      onComplete: () => this.repositionNpcLabels(sprite)
-    })
-    sprite.setData('positionTween', tween)
-  }
-
-  /** sprite 動的時候，把所有附屬 label 同步搬過去 */
-  private repositionNpcLabels(sprite: Phaser.Physics.Arcade.Sprite): void {
-    const x = sprite.x
-    const y = sprite.y
+  /** 把當前 sprite + 旁邊所有 label 從現在位置 tween 到目標 (x,y)。 */
+  private tweenNpcTo(sprite: Phaser.Physics.Arcade.Sprite, x: number, y: number): void {
+    const prev = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
+    if (prev) prev.stop()
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
-    const activityLabel = sprite.getData('activityLabel') as
-      | Phaser.GameObjects.Text
-      | undefined
-    const activityIcon = sprite.getData('activityIcon') as
-      | Phaser.GameObjects.Text
-      | undefined
-    const chatBubble = sprite.getData('chatBubble') as
-      | Phaser.GameObjects.Text
-      | undefined
-    if (badge) badge.setPosition(x, y)
-    if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
-    if (activityLabel) activityLabel.setPosition(x, y + NPC_SPRITE_SIZE * 0.65)
-    if (activityIcon) activityIcon.setPosition(x, y - NPC_SPRITE_SIZE * 1.45)
-    if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 2.1)
+    const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
+    const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    const startX = sprite.x
+    const distance = Phaser.Math.Distance.Between(startX, sprite.y, x, y)
+    if (distance < 0.5) {
+      sprite.setPosition(x, y)
+      if (badge) badge.setPosition(x, y)
+      if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
+      if (activityIcon)
+        activityIcon.setPosition(x + NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
+      if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
+      return
+    }
+    if (x > startX + 0.5) sprite.setFlipX(false)
+    else if (x < startX - 0.5) sprite.setFlipX(true)
+    const tween = this.tweens.add({
+      targets: { px: startX, py: sprite.y },
+      px: x,
+      py: y,
+      duration: NPC_MOVE_TWEEN_MS,
+      ease: 'Sine.easeInOut',
+      onUpdate: (_t, t: { px: number; py: number }) => {
+        sprite.setPosition(t.px, t.py)
+        if (badge) badge.setPosition(t.px, t.py)
+        if (nameLabel) nameLabel.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 0.85)
+        if (activityIcon)
+          activityIcon.setPosition(t.px + NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
+        if (chatBubble) chatBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.6)
+      }
+    })
+    sprite.setData('moveTween', tween)
   }
 
-  /**
-   * 用 NPC id 算出在 area canvas 上的 home 座標 (穩定、跨 render 不變)。
-   * 圍繞畫布中心 (玩家初始位置) 散佈在半徑 3.2~4.6 tile 的圓上，
-   * 避開玩家正中央。
-   */
-  private npcHomeAnchor(npcId: string): { x: number; y: number } {
-    let h = 5381
-    for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
-    const angle = ((h % 1000) / 1000) * Math.PI * 2 - Math.PI / 2
-    const radiusJitter = ((h >>> 8) % 1000) / 1000
-    const radius = AREA_TILE_SIZE * (3.2 + radiusJitter * 1.4)
-    const cx = AREA_CANVAS_WIDTH / 2
-    const cy = AREA_CANVAS_HEIGHT / 2
+  /** 子格 (col,row) → canvas 中心 (px,py)。 */
+  private subTileToCanvas(col: number, row: number): { x: number; y: number } {
+    const c = Math.max(0, Math.min(AREA_GRID_COLS - 1, col))
+    const r = Math.max(0, Math.min(AREA_GRID_ROWS - 1, row))
     return {
-      x: Phaser.Math.Clamp(
-        cx + Math.cos(angle) * radius,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_WIDTH - NPC_SPRITE_SIZE
-      ),
-      y: Phaser.Math.Clamp(
-        cy + Math.sin(angle) * radius,
-        NPC_SPRITE_SIZE,
-        AREA_CANVAS_HEIGHT - NPC_SPRITE_SIZE
-      )
+      x: c * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
+      y: r * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
     }
+  }
+
+  /** 為 NPC 產 sprite texture：每個 npcId 各自一張 cached texture（顏色不同）。 */
+  private makeNpcTexture(npcId: string, color: number): string {
+    const key = `area-npc-tex-${npcId}-${color.toString(16)}`
+    if (!this.textures.exists(key)) {
+      this.makeSquareTexture(key, NPC_SPRITE_SIZE, color, 0x1c1300, 2)
+    }
+    return key
+  }
+
+  private applyNpcColor(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    npcId: string,
+    color: number
+  ): void {
+    const key = this.makeNpcTexture(npcId, color)
+    sprite.setTexture(key)
+    sprite.setData('npcColor', color)
+    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+    if (badge) badge.setColor(textColorForBg(color))
   }
 
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
-    const tween = sprite.getData('positionTween') as Phaser.Tweens.Tween | undefined
-    if (tween) {
-      this.tweens.remove(tween)
-    }
+    const moveTween = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
+    if (moveTween) this.tweens.remove(moveTween)
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
-    const activityLabel = sprite.getData('activityLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
     if (badge) badge.destroy()
     if (nameLabel) nameLabel.destroy()
-    if (activityLabel) activityLabel.destroy()
     if (activityIcon) activityIcon.destroy()
     if (chatBubble) chatBubble.destroy()
     sprite.destroy()
     this.npcSprites.delete(id)
-  }
-
-  private npcTextureKey(npcId: string, color: number): string {
-    return `area-npc-tex-${npcId}-${color.toString(16)}`
   }
 
   // ---------- 紋卡 drop sprite ----------
