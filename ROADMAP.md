@@ -4,6 +4,30 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.3 ✅ shipped — 2026-05-07
+
+**主題：AI 反幻覺 + 編年史多樣化 + 角色職責綁定 home tile**
+
+- ✅ **Ambient prompt 強化反幻覺**（`packages/server/src/sim/ambientNarrator.ts`）
+  - System prompt 加 ⚠️ 嚴禁虛構 區塊：禁止虛構任何具名 NPC（即使聽似合理的「祭司 / 守衛 / 商人」）、禁止虛構建築結構名（「拱門」「第一層」「鐘樓」）
+  - User prompt 列「在場 NPC」清單時加註「你只能引用這些名字，其它人物用『行人 / 攤主 / 巡邏的人』」
+  - 新增 `presentBuildingNames` 欄位（`runtime.buildAmbientContext` 從 `BuildingRuntime.snapshotForTile` 拉），列出本 tile 可命名建築；空清單時明確指示「不要使用任何具體建築名」
+  - WorldEvent narration prompt 同步加禁構句約束
+  - 修使用者回報 AI 編出「祭司瑟拉守在第一層的拱門前」這種虛構場景
+- ✅ **Role-locked NPC 永遠不跨區**（`npcEngine.deriveSchedule` + `isRoleLockedToHomeTile`）
+  - archetype ∈ {mystic, shopkeeper, craftsman, guard, civic, cleric} → lock
+  - role.zh 含「祭司 / 僧 / 住持 / 主教 / 守衛 / 衛兵 / 店長 / 老闆 / 鑄 / 匠 / 修士 / 醫 / 工坊 / 員工 / 司祭」→ lock
+  - role.en 含 abbot / cleric / priest / guard / shopkeeper / smith → lock
+  - lock 後即使 profile JSON 寫了「council attendance → t_central」這種跨區 slot，整段壓回 defaultLocation
+  - 修使用者回報「祭司的職責在地脈層就應該永遠在地脈層」
+- ✅ **編年史敘事多樣化**（`composeInteractionNarration`）
+  - 句型池從 ~12 句擴充到 50+ 句，依 archetype 組合分支：mystic / shopkeeper / craftsman / guard / civic / outsider / 同派系 / 跨派系 / 預設池
+  - seed 加入 `tick + weather`：同一對 NPC 同一 tile 不同 tick 拿到不同句子，不再「每條都長一樣」
+  - 雨天 / 微風 / 晴 / 陰 各自加情境句（「簷下避雨」「風口聊」「陽光下站著」）
+  - 修使用者回報「編年史太罐頭、每條都是『氣氛緊繃』」
+- ✅ NPC interact 502 — 經查 logs 為 deploy 期間 Caddy 短暫上行；server 沒 crash，handler 已 try/catch AI 失敗 fallback。Gemini key 全部 INVALID_ARGUMENT 是另一回事（需 `/settings` 換 key）
+- ✅ 100 tests pass / web build 1.62 MB
+
 ## v0.15.2 ✅ shipped — 2026-05-07
 
 **主題：AreaPage UI 修整 — 地圖純畫面 + NPC idle 呼吸 + 縮短 polling**

@@ -337,7 +337,14 @@ export class NpcEngine {
       const moodSum = (this.state.get(a)?.mood ?? 50) + (this.state.get(b)?.mood ?? 50)
       // 同派系 + mood 高 → chat；其它情況偏向 argue
       const mode: 'chat' | 'argue' = sameFaction && moodSum > 100 ? 'chat' : 'argue'
-      const narration = composeInteractionNarration(profileA, profileB, mode, tile)
+      const narration = composeInteractionNarration(
+        profileA,
+        profileB,
+        mode,
+        tile,
+        currentTick,
+        context?.weather ?? '晴'
+      )
       events.push({
         kind: 'interact',
         tile,
@@ -663,6 +670,20 @@ function deriveSchedule(profile: NpcProfile): ScheduleSlot[] {
       activity: 'idle'
     })
   }
+  // v0.15.3：role-locked NPC（祭司 / 守衛 / 店主 / 工匠 / 公務）必須留在
+  // 自己 defaultLocation。即使 profile JSON 寫了「council attendance →
+  // t_central」這種跨區行程，也整段壓回 defaultLocation。原因：使用者體感
+  // 「祭司的職責在地脈層就應該永遠在地脈層」；跨區只保留給 entertainer /
+  // outsider / hunter / 流浪 / 報童 等 archetype。
+  const roleLocked = isRoleLockedToHomeTile(profile)
+  if (roleLocked) {
+    for (const slot of out) {
+      if (slot.location !== profile.defaultLocation) {
+        slot.location = profile.defaultLocation
+      }
+    }
+    return out
+  }
   // 若整天行程的所有 location 都相同，注入一段「跨區外出」slot：
   // 取最長的 slot，把它的 location 換成 deterministic 鄰居 tile，
   // 確保 NPC 每天至少跨區一次（大部分 daily-life NPC 原本永遠待原地）。
@@ -763,6 +784,37 @@ function inferActivityFromRole(profile: NpcProfile): NpcActivity {
   return 'idle'
 }
 
+/**
+ * v0.15.3：判斷 NPC 是否「職責綁定在 defaultLocation」— 這類 NPC 整天
+ * 不會跨區，schedule 任何寫到鄰區的 slot 都會被強制壓回 defaultLocation。
+ *
+ * 邏輯：archetype 屬於固定崗位類（mystic / shopkeeper / craftsman / guard /
+ * civic / cleric）→ lock；或 role.zh 含特定崗位字（祭司 / 僧 / 守衛 / 店長 /
+ * 老闆 / 鑄 / 匠 / 修 / 醫 / 工 / 員工 / abbot / cleric / priest / guard /
+ * shopkeeper）→ lock。
+ *
+ * Wanderer archetype（entertainer / outsider）即使 role 含「商」也不 lock。
+ */
+function isRoleLockedToHomeTile(profile: NpcProfile): boolean {
+  const arch = (profile.personality.archetype as string | undefined) ?? ''
+  if (arch === 'entertainer' || arch === 'outsider') return false
+  const lockedArchetypes = new Set([
+    'mystic',
+    'shopkeeper',
+    'craftsman',
+    'guard',
+    'civic',
+    'cleric'
+  ])
+  if (lockedArchetypes.has(arch)) return true
+  const role = (profile.role.zh ?? '').toString()
+  if (/(祭司|僧|住持|主教|守衛|衛兵|店長|老闆|鑄|匠|修士|醫|工坊|員工|司祭)/.test(role)) {
+    return true
+  }
+  if (/(abbot|cleric|priest|guard|shopkeeper|smith)/i.test(role)) return true
+  return false
+}
+
 // 0..1 deterministic：把 (tick, a, b) hash 成數字
 function pairRoll(tick: number, a: string, b: string): number {
   let h = (tick * 2654435761) >>> 0
@@ -774,15 +826,21 @@ function pairRoll(tick: number, a: string, b: string): number {
 }
 
 /**
- * 互動敘事：根據兩位 NPC 的 archetype + role 寫具體場景，而不是模板兩
- * 行字。我們不真的呼 AI（會 burn 太多 quota），而是用 deterministic
- * 句型庫從一組挑句子，並依 archetype / faction 決定語氣。
+ * 互動敘事：根據兩位 NPC 的 archetype + role + faction 從一個大句型池
+ * deterministic 挑一句。v0.15.3 大幅擴充模板量並讓 seed 涵蓋 tick + 天氣，
+ * 解決使用者回報「編年史每條都長一樣」的問題。
+ *
+ * 我們不真的呼 AI（會 burn 太多 quota，且 NPC 互動每 tick 都可能發生）。
+ * 但每個分支至少 6-12 句變體，加上 (a,b,tile,mode,tick,weather) 都進
+ * seed，連續看的時候不會撞到同一句。
  */
 function composeInteractionNarration(
   a: NpcProfile,
   b: NpcProfile,
   mode: 'chat' | 'argue',
-  tile: string
+  tile: string,
+  tick: number,
+  weather: string
 ): string {
   const tileName = TILE_NAME_BY_ID[tile] ?? tile
   const archA = String(a.personality.archetype ?? '')
@@ -790,50 +848,159 @@ function composeInteractionNarration(
   const factionA = String(a.personality.factionLean ?? '')
   const factionB = String(b.personality.factionLean ?? '')
   const sameFaction = factionA && factionA === factionB
+  const archs = new Set([archA, archB])
+  const A = a.name.zh
+  const B = b.name.zh
 
-  // deterministic seed per pair
+  // deterministic seed per pair + tick + weather → 即使同一對 NPC 同一場景，
+  // 不同 tick 拿到的句子會不一樣。tick 本身就讓敘事不會「永遠卡在同一句」。
   let seed = 5381
-  for (const ch of `${a.id}|${b.id}|${tile}|${mode}`) seed = ((seed * 33) ^ ch.charCodeAt(0)) >>> 0
+  for (const ch of `${a.id}|${b.id}|${tile}|${mode}|${weather}`) {
+    seed = ((seed * 33) ^ ch.charCodeAt(0)) >>> 0
+  }
+  seed = (seed ^ (tick * 2654435761)) >>> 0
   const pick = <T>(arr: readonly T[]): T => arr[seed % arr.length]!
 
   if (mode === 'chat') {
+    // 同派系：氣氛親密、共謀感
     if (sameFaction) {
       return pick([
-        `${a.name.zh}和${b.name.zh}在${tileName}互換最近聽到的風聲，腦袋湊得很近。`,
-        `${a.name.zh}遞給${b.name.zh}一張抄寫的字條，兩人在${tileName}的角落低聲對齊細節。`,
-        `${a.name.zh}與${b.name.zh}在${tileName}並肩站著，從口風到肢體都看得出是熟人。`
+        `${A}和${B}在${tileName}互換最近聽到的風聲，腦袋湊得很近。`,
+        `${A}遞給${B}一張抄寫的字條，兩人在${tileName}的角落低聲對齊細節。`,
+        `${A}與${B}在${tileName}並肩站著，從口風到肢體都看得出是熟人。`,
+        `${A}用肘撞了撞${B}，兩人在${tileName}笑著用只有彼此聽得懂的暗語對話。`,
+        `${A}在${tileName}的廊柱旁向${B}比了個手勢，${B}會意地點頭。`,
+        `${A}帶著${B}繞到${tileName}的後巷，把袖中那張紙條塞了過去。`
       ])
     }
-    if (archA === 'shopkeeper' || archB === 'shopkeeper') {
-      return `${a.name.zh}在${tileName}向${b.name.zh}打聽某張紋卡的最新價碼，雙方互相試水溫。`
+    // archetype 組合：祭司 + 任意 → 莊嚴 / 神秘
+    if (archs.has('mystic')) {
+      return pick([
+        `${A}在${tileName}向${B}描述昨夜脈網的紋路，${B}聽得屏住呼吸。`,
+        `${A}在${tileName}用指尖在空中畫了一個微小的符，${B}盯著沒動。`,
+        `${A}和${B}在${tileName}低聲談起鏡面湖水的反光，話裡有玄機。`,
+        `${A}向${B}解釋一段古老術式的吐納節奏，${tileName}的空氣彷彿短暫變慢。`,
+        `${A}在${tileName}遞過一段風乾草藥，${B}聞了一下表情變得嚴肅。`
+      ])
     }
-    if (archA === 'mystic' || archB === 'mystic') {
-      return `${a.name.zh}在${tileName}聽${b.name.zh}解釋一條脈網訊號，眼神凝重。`
+    // 商店主 + 商店主
+    if (archA === 'shopkeeper' && archB === 'shopkeeper') {
+      return pick([
+        `${A}在${tileName}向${B}打聽某張紋卡的最新價碼，雙方互相試水溫。`,
+        `${A}和${B}在${tileName}的攤位之間比劃利潤抽成，沒人先讓步。`,
+        `${A}向${B}抱怨進貨成本，${B}邊抽算盤邊在${tileName}苦笑。`,
+        `${A}從袖子裡抽出小本子和${B}核對昨日帳目，${tileName}的攤車蓋上薄薄一層白灰。`
+      ])
     }
-    if (archA === 'craftsman' || archB === 'craftsman') {
-      return `${a.name.zh}在${tileName}向${b.name.zh}炫耀自己昨日做出來的物件，對方半笑半點頭。`
+    // 工匠
+    if (archs.has('craftsman')) {
+      return pick([
+        `${A}在${tileName}向${B}炫耀自己昨日做出來的物件，對方半笑半點頭。`,
+        `${A}把一塊燒了一半的礦砂遞給${B}，${B}在${tileName}舉到光下端詳。`,
+        `${A}和${B}在${tileName}的工棚門口蹲下來，邊敲邊磨地比對手感。`,
+        `${A}指著一條剛刻好的紋路問${B}意見，${B}在${tileName}皺眉很久才回答。`
+      ])
     }
+    // 守衛 / 巡邏
+    if (archs.has('guard')) {
+      return pick([
+        `${A}在${tileName}和${B}交班，順手把一條警戒線索壓低聲音傳了過去。`,
+        `${A}和${B}在${tileName}巡到同一個轉角，沒多話，只互相點了個頭。`,
+        `${A}向${B}比了個「左前方」的手勢，${tileName}的人群暫時被避開。`
+      ])
+    }
+    // 公務 / 行政
+    if (archs.has('civic')) {
+      return pick([
+        `${A}在${tileName}遞給${B}一張蓋了印的單據，${B}揉了揉眉心。`,
+        `${A}和${B}在${tileName}核對名冊，邊講邊用筆桿戳著紙。`,
+        `${A}向${B}抱怨上面又下了新規矩，${tileName}的午後變得格外漫長。`
+      ])
+    }
+    // 流浪 / 外來客
+    if (archs.has('outsider')) {
+      return pick([
+        `${A}在${tileName}向${B}討一杯熱水，順便講了一段別處的傳聞。`,
+        `${A}和${B}在${tileName}的角落分了一塊乾糧，沒有人問對方從哪裡來。`,
+        `${A}向${B}吹噓他剛從鄰區帶回來的奇聞，${B}半信半疑。`
+      ])
+    }
+    // 預設池：通用閒聊
     return pick([
-      `${a.name.zh}與${b.name.zh}在${tileName}低聲交談了幾句，似乎在交換消息。`,
-      `${a.name.zh}和${b.name.zh}在${tileName}的攤車旁站了一會，話題從天氣岔到最近的紋卡傳聞。`,
-      `${a.name.zh}遇上${b.name.zh}，兩人在${tileName}寒暄三句後又各自轉身離開。`
+      `${A}與${B}在${tileName}低聲交談了幾句，似乎在交換消息。`,
+      `${A}和${B}在${tileName}的攤車旁站了一會，話題從天氣岔到最近的紋卡傳聞。`,
+      `${A}遇上${B}，兩人在${tileName}寒暄三句後又各自轉身離開。`,
+      `${A}在${tileName}認出了${B}，停下腳步講了一段共同認識的人。`,
+      `${A}和${B}在${tileName}的長椅上坐了一會，講起十年前的潮汐。`,
+      `${A}在${tileName}的階梯旁問起${B}家中近況，${B}的笑帶著淡淡疲倦。`,
+      `${A}和${B}在${tileName}的拐角碰見，把手裡的東西交換了一下就分開。`,
+      // 帶天氣：讓敘事感受得到當下世界
+      ...(weather === '驟雨' || weather === '霧雨'
+        ? [
+            `${A}和${B}在${tileName}簷下暫避雨水，趁機交換幾句近日見聞。`,
+            `${A}用披風幫${B}擋了一下雨絲，兩人在${tileName}短暫地並肩站著。`
+          ]
+        : []),
+      ...(weather === '微風'
+        ? [`${A}和${B}在${tileName}的風口聊了幾句，被吹散的紙屑沿著腳邊打轉。`]
+        : []),
+      ...(weather === '晴'
+        ? [`${A}和${B}在${tileName}的陽光下站著對話，影子被拉得很長。`]
+        : [])
     ])
   }
 
-  // argue
+  // ---- argue ----
+
+  // 跨派系：政治火藥味
   if (factionA && factionB && factionA !== factionB) {
     return pick([
-      `${a.name.zh}與${b.name.zh}在${tileName}就派系規矩起了口角，圍觀的人都退了半步。`,
-      `${a.name.zh}指著${b.name.zh}的鼻尖在${tileName}爭吵，兩個派系的氣味在街口僵持。`
+      `${A}與${B}在${tileName}就派系規矩起了口角，圍觀的人都退了半步。`,
+      `${A}指著${B}的鼻尖在${tileName}爭吵，兩個派系的氣味在街口僵持。`,
+      `${A}冷冷把${B}的徽章撥開，在${tileName}的人群裡丟下一句重話就走。`,
+      `${A}和${B}在${tileName}互數派系舊帳，圍觀的攤主都把布幔放下。`,
+      `${A}在${tileName}質問${B}前夜的行徑，${B}沒退一步，雙方僵在原地。`
     ])
   }
+  // 兩商人：撕錢
   if (archA === 'shopkeeper' && archB === 'shopkeeper') {
-    return `${a.name.zh}和${b.name.zh}在${tileName}為了一筆訂金的歸屬撕破臉，攤位之間突然冷清。`
+    return pick([
+      `${A}和${B}在${tileName}為了一筆訂金的歸屬撕破臉，攤位之間突然冷清。`,
+      `${A}把帳本摔在${B}的攤位上，${tileName}的午市暫時靜了下來。`,
+      `${A}指著秤盤，質問${B}砝碼有沒有動過，${tileName}周圍的人都伸長脖子看。`
+    ])
   }
+  // 神秘 + 任意：教派衝突
+  if (archs.has('mystic')) {
+    return pick([
+      `${A}在${tileName}質問${B}是否動過供品的位置，${B}臉色一沉。`,
+      `${A}低聲斥${B}褻瀆了脈網的禮節，${tileName}的紙符一張張捲起。`,
+      `${A}用一句古話刺向${B}，${tileName}的人群屏住呼吸聽不懂卻知道很重。`
+    ])
+  }
+  // 守衛：公權力 vs 任意
+  if (archs.has('guard')) {
+    return pick([
+      `${A}攔下${B}盤問，${tileName}的行人下意識繞了個半圓。`,
+      `${A}用警棍底端輕點${B}的胸口示意停步，${tileName}的氣氛瞬間冷下來。`,
+      `${A}和${B}在${tileName}就一張通行條互不相讓，雙方都不肯先把手放下。`
+    ])
+  }
+  // 預設池：通用爭執
   return pick([
-    `${a.name.zh}與${b.name.zh}在${tileName}起了爭執，氣氛緊繃。`,
-    `${a.name.zh}的話被${b.name.zh}打斷，兩人在${tileName}的牆角僵成一塊。`,
-    `${a.name.zh}冷笑了一聲，${b.name.zh}在${tileName}沒有讓步。`
+    `${A}與${B}在${tileName}就一句話的分歧吵了起來，旁人裝作沒聽見走開。`,
+    `${A}冷笑了一聲，${B}在${tileName}沒有讓步，兩人對視了很久。`,
+    `${A}和${B}在${tileName}各執一詞，圍觀的人不久就散去。`,
+    `${A}重重地把手裡的東西放回攤上，${B}在${tileName}也提高了聲量。`,
+    `${A}和${B}在${tileName}互不相讓地比劃了幾下，最後誰也沒收回那句話。`,
+    `${A}向${B}丟下一句尖刻的話，${tileName}的午後便顯得格外刺耳。`,
+    `${A}皺起眉頭，${B}在${tileName}也不肯先開口認錯。`,
+    ...(weather === '驟雨' || weather === '霧雨'
+      ? [`${A}和${B}在${tileName}的雨棚下吵起來，雨聲反而把火氣壓得更明顯。`]
+      : []),
+    ...(weather === '陰'
+      ? [`${A}和${B}在${tileName}的陰影裡互相讓也不讓，氣氛壓得很低。`]
+      : [])
   ])
 }
 
