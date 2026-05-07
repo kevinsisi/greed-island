@@ -46,6 +46,10 @@ export interface AreaSceneCallbacks {
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
   onPositionChange: (pos: { x: number; y: number }) => void
+  /** 玩家附近 (距離 ≤ INTERACT_RADIUS) 的 NPC ids；set 變動時才 fire。 */
+  onNearbyNpcsChange?: (ids: string[]) => void
+  /** 玩家點了一個太遠的 NPC sprite。React 層可以彈個 toast。 */
+  onInteractTooFar?: (npcId: string) => void
 }
 
 export interface AreaSceneInit {
@@ -54,7 +58,7 @@ export interface AreaSceneInit {
   npcs: AreaMapNpc[]
   drops: AreaMapDrop[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string; pickup: string }
+  hudStrings: { interact: string; pickup: string; tooFar: string }
   /** 從 localStorage 讀回的位置；若無則 null。座標必須在 canvas 範圍內。 */
   startPosition: { x: number; y: number } | null
 }
@@ -89,8 +93,10 @@ export class AreaScene extends Phaser.Scene {
   private tileId!: DistrictId
   private npcs: AreaMapNpc[] = []
   private drops: AreaMapDrop[] = []
-  private hudStrings: AreaSceneInit['hudStrings'] = { interact: '', pickup: '' }
+  private hudStrings: AreaSceneInit['hudStrings'] = { interact: '', pickup: '', tooFar: '' }
   private startPosition: { x: number; y: number } | null = null
+  private nearbyNpcIdsCache = ''
+  private tooFarHintTimer: Phaser.Time.TimerEvent | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -268,6 +274,19 @@ export class AreaScene extends Phaser.Scene {
       sprite.setInteractive({ useHandCursor: true })
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
+        // 距離檢查：玩家必須在 INTERACT_RADIUS 內才能點開對話。
+        // 太遠就閃一段 HUD 提示「走近一點才能交談」並通知 React 層。
+        const d = Phaser.Math.Distance.Between(
+          this.player.x,
+          this.player.y,
+          sprite.x,
+          sprite.y
+        )
+        if (d > INTERACT_RADIUS) {
+          this.flashTooFarHint()
+          this.callbacks.onInteractTooFar?.(npc.id)
+          return
+        }
         this.callbacks.onNpcInteract(npc.id)
       })
 
@@ -588,14 +607,24 @@ export class AreaScene extends Phaser.Scene {
   private checkNpcProximity(): void {
     let nearestId: string | null = null
     let nearestDist = INTERACT_RADIUS
+    const allNearby: string[] = []
     for (const [id, sprite] of this.npcSprites) {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y)
+      if (d < INTERACT_RADIUS) allNearby.push(id)
       if (d < nearestDist) {
         nearestDist = d
         nearestId = id
       }
     }
     this.nearbyNpcId = nearestId
+
+    // 通知 React 層 nearby 集合變動（穩定排序後比字串）
+    allNearby.sort()
+    const key = allNearby.join('|')
+    if (key !== this.nearbyNpcIdsCache) {
+      this.nearbyNpcIdsCache = key
+      this.callbacks.onNearbyNpcsChange?.(allNearby)
+    }
 
     const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
     const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
@@ -609,6 +638,18 @@ export class AreaScene extends Phaser.Scene {
       text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
     }
 
+    // 如果 flashTooFarHint 正在顯示，這 1.2s 內不蓋掉文字
+    const lockedUntil = (this.interactPrompt.getData('lockedUntil') as number | undefined) ?? 0
+    if (lockedUntil > this.time.now) {
+      // 仍在閃示警告中：keep prompt visible at player head position
+      this.interactPrompt.setPosition(
+        this.player.x,
+        this.player.y - PLAYER_SPRITE_SIZE * 1.4
+      )
+      this.interactPrompt.setVisible(true)
+      return
+    }
+
     if (text !== null) {
       promptText.setText(text)
       const w = Math.max(120, promptText.width + 20)
@@ -618,6 +659,37 @@ export class AreaScene extends Phaser.Scene {
     } else {
       this.interactPrompt.setVisible(false)
     }
+  }
+
+  /**
+   * 玩家點了一個太遠的 NPC sprite — 在 player 頭頂 flash 1.2s 警告。
+   * 用既有的 interactPrompt 容器，但暫時鎖內容 + 用紅色，避免 proximity 檢查
+   * 在這 1.2s 內把它蓋掉。
+   */
+  private flashTooFarHint(): void {
+    const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
+    const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
+    const msg = this.hudStrings.tooFar
+    promptText.setText(msg)
+    promptText.setColor('#ffb4a8')
+    const w = Math.max(140, promptText.width + 24)
+    promptBg.setSize(w, 26)
+    promptBg.setStrokeStyle(1, 0xff6b6b, 1)
+    this.interactPrompt.setPosition(
+      this.player.x,
+      this.player.y - PLAYER_SPRITE_SIZE * 1.4
+    )
+    this.interactPrompt.setVisible(true)
+    this.interactPrompt.setData('lockedUntil', this.time.now + 1200)
+    if (this.tooFarHintTimer) {
+      this.tooFarHintTimer.remove(false)
+    }
+    this.tooFarHintTimer = this.time.delayedCall(1200, () => {
+      promptText.setColor('#fff5b8')
+      promptBg.setStrokeStyle(1, 0xfff5b8, 0.9)
+      this.interactPrompt.setData('lockedUntil', 0)
+      this.tooFarHintTimer = null
+    })
   }
 
   private tickPositionSave(delta: number): void {

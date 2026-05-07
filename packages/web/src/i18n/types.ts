@@ -110,6 +110,10 @@ export type TranslationKey =
   | 'npc.activity.sleep'
   | 'npc.activity.trade'
   | 'npc.activity.patrol'
+  // npc proximity gating
+  | 'npc.tooFarHint'
+  | 'npc.tooFarBadge'
+  | 'npc.nearbyHint'
   // settings
   | 'settings.eyebrow'
   | 'settings.title'

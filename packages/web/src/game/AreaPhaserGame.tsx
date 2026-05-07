@@ -46,9 +46,11 @@ export interface AreaPhaserGameProps {
   npcs: AreaMapNpc[]
   drops: AreaMapDrop[]
   locale: 'zh' | 'en'
-  hudStrings: { interact: string; pickup: string }
+  hudStrings: { interact: string; pickup: string; tooFar: string }
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
+  onNearbyNpcsChange?: (ids: string[]) => void
+  onInteractTooFar?: (npcId: string) => void
 }
 
 /**
@@ -63,15 +65,25 @@ export function AreaPhaserGame({
   locale,
   hudStrings,
   onNpcInteract,
-  onDropPickup
+  onDropPickup,
+  onNearbyNpcsChange,
+  onInteractTooFar
 }: AreaPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
 
-  const callbacksRef = useRef({ onNpcInteract, onDropPickup, tileId })
+  const callbacksRef = useRef({
+    onNpcInteract,
+    onDropPickup,
+    tileId,
+    onNearbyNpcsChange,
+    onInteractTooFar
+  })
   callbacksRef.current.onNpcInteract = onNpcInteract
   callbacksRef.current.onDropPickup = onDropPickup
   callbacksRef.current.tileId = tileId
+  callbacksRef.current.onNearbyNpcsChange = onNearbyNpcsChange
+  callbacksRef.current.onInteractTooFar = onInteractTooFar
 
   // tileId 變動 → 重建場景以套用新的 startPosition
   useEffect(() => {
@@ -106,7 +118,9 @@ export function AreaPhaserGame({
       callbacks: {
         onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id),
         onDropPickup: (id) => callbacksRef.current.onDropPickup(id),
-        onPositionChange: (pos) => savePosition(callbacksRef.current.tileId, pos)
+        onPositionChange: (pos) => savePosition(callbacksRef.current.tileId, pos),
+        onNearbyNpcsChange: (ids) => callbacksRef.current.onNearbyNpcsChange?.(ids),
+        onInteractTooFar: (id) => callbacksRef.current.onInteractTooFar?.(id)
       },
       tileId,
       npcs,
