@@ -4,6 +4,16 @@ This repository is a GitHub template. When a new project is generated from it, t
 
 Edit this file freely to add stack-, domain-, or team-specific rules for your project. Keep the Skill Activation section so the bundled `skills/` and `.github/skills/` stay wired in.
 
+## Greed Island — Project Architecture Source of Truth
+
+This codebase is **Greed Island**, an AI-driven living-world game. Three architecture documents are mandatory reading before non-trivial changes:
+
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — kernel-level Command/Event/Rule Engine separation, deterministic replay, AI-as-renderer principle. Every state-changing PR must conform.
+- [`COMBAT_ARCHITECTURE.md`](./COMBAT_ARCHITECTURE.md) — real-time combat sub-runtime準則。戰鬥系統 v0.15+ 開始實作，但所有戰鬥相關 PR (commands / events / 紋卡優先級) 必須遵守此文。
+- [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。v0.14.0 已 ship；v0.15-v0.17 戰鬥系統四階段藍圖；OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
+
+**所有狀態改變必須走 Command → Rule Engine → Event → 投影**。違反這條的 PR（不論是世界模擬、戰鬥、玩家動作）必須被拒絕，並在 PR 描述中註明違反 ARCHITECTURE.md 的哪一條。AI 在系統裡只能做 read-only 旁白與意圖分類；AI 不可下 Command、不可改 hp、不可影響 priority / damage 計算。
+
 ## Global Working Rules
 
 - Read the current code, files, and runtime context before deciding on a change.
