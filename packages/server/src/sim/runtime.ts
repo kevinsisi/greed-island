@@ -15,6 +15,7 @@
 import {
   DEFAULT_RULESET_VERSION,
   KERNEL_EVENT_VERSION,
+  type Event,
   type EventDraft,
   type FactSetPayload
 } from '../kernel/types.js'
@@ -22,6 +23,15 @@ import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import { EVENT_FACT_SET } from '../kernel/ruleEngine.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
 import { reduceEventLog } from '../kernel/reducer.js'
+import {
+  LivingWorldRuleEngine,
+  isLivingWorldCommandType,
+  makeLivingWorldCommand,
+  type LivingWorldCommand,
+  type LivingWorldEventPayload
+} from '../kernel/livingWorldCommands.js'
+import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
+import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import {
   TICK_DURATION_MS,
   TICKS_PER_HOUR,
@@ -127,6 +137,9 @@ export class SimulationRuntime {
   private readonly areaEngine: AreaStateEngine
   private readonly buildingRuntime: BuildingRuntime
   private readonly npcFactionLean: Map<string, FactionId>
+  private readonly livingWorldRuleEngine = new LivingWorldRuleEngine()
+  private npcMemory: SqliteNpcMemoryStore | null = null
+  private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
 
   constructor(
@@ -140,6 +153,39 @@ export class SimulationRuntime {
     this.buildingRuntime = new BuildingRuntime()
     this.npcFactionLean = buildNpcFactionLean(profiles)
     this.hydrateFromEventLog()
+  }
+
+  /**
+   * Wire the NPC memory and NPC relationship projections. Called from
+   * the HTTP boot path after the SQLite tables exist. The runtime
+   * keeps emitting typed living-world events whether or not these are
+   * attached, so existing integrations that don't care about memory
+   * stay decoupled.
+   */
+  attachLivingWorldProjections(input: {
+    memory: SqliteNpcMemoryStore
+    relationships: SqliteNpcRelationshipsStore
+  }): void {
+    this.npcMemory = input.memory
+    this.npcRelationships = input.relationships
+    // First boot or fresh table: replay the entire event log so the
+    // projection matches the source-of-truth EventLog.
+    if (input.memory.countFor('__bootstrap_check__') === 0) {
+      const events = this.store.readEvents()
+      input.memory.rebuildFromEvents(events)
+      input.relationships.rebuildFromEvents(events)
+      console.log(
+        `[boot] living-world projections rebuilt from ${events.length} events`
+      )
+    }
+  }
+
+  getNpcMemory(): SqliteNpcMemoryStore | null {
+    return this.npcMemory
+  }
+
+  getNpcRelationships(): SqliteNpcRelationshipsStore | null {
+    return this.npcRelationships
   }
 
   attachAmbientNarrator(settings: SettingsStore): AmbientNarrator {
@@ -342,20 +388,30 @@ export class SimulationRuntime {
 
   private runTick(): void {
     const nextTick = this.currentTick + 1
-    const drafts: EventDraft[] = []
+    // Two parallel collections per Living Deterministic World law:
+    //   1. stateDrafts — FACT_SET state snapshots (npc state, area
+    //      state, building occupants, weather, season, rare window,
+    //      active events). These drive `hydrateFromEventLog` on
+    //      restart.
+    //   2. commands — typed living-world Commands. Each one passes
+    //      through the Rule Engine to become a typed Event. These
+    //      drive listeners (UI), NPC memory projection, NPC
+    //      relationship projection, and offline catch-up summary.
+    const stateDrafts: EventDraft[] = []
+    const commands: LivingWorldCommand[] = []
+    const submittedAt = Date.now()
 
-    drafts.push(this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick))
-
-    if (nextTick === 1 && this.eventCount === 0) {
-      drafts.push(
-        this.narrativeDraft('world.genesis', nextTick, {
-          eventType: 'WORLD_GENESIS',
-          actorId: SIM_ACTOR_WORLD,
-          payload: { weather: this.weather, season: this.season },
-          narration: '貪婪之島從靜謐中甦醒，第一道刻度開始流動。'
-        })
+    stateDrafts.push(this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick))
+    commands.push(
+      makeLivingWorldCommand(
+        'WORLD_TICK',
+        SIM_ACTOR_WORLD,
+        'system',
+        nextTick,
+        submittedAt,
+        { tick: nextTick }
       )
-    }
+    )
 
     // ---- NPC engine：tile-by-tile 移動、活動、互動 ----
     const npcResult = this.npcEngine.tick(nextTick)
@@ -365,55 +421,69 @@ export class SimulationRuntime {
         const name = profile?.name.zh ?? event.npcId
         const fromName = TILE_NAME_BY_ID[event.from] ?? event.from
         const toName = TILE_NAME_BY_ID[event.to] ?? event.to
-        // 檢查 NPC 是否已到達目的地（next.tile === target_tile）以給更明確的敘事
         const npcState = this.npcEngine.getState(event.npcId)
         const reachedDest = npcState !== null && npcState.tile === npcState.targetTile
         const narration = reachedDest
           ? `${name}抵達了${toName}。`
           : `${name}離開了${fromName}，前往${toName}。`
-        drafts.push(
-          this.narrativeDraft(event.npcId, nextTick, {
-            eventType: 'NPC_MOVE',
-            actorId: event.npcId,
-            payload: {
+        commands.push(
+          makeLivingWorldCommand(
+            'NPC_MOVE',
+            event.npcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              npcId: event.npcId,
               from: event.from,
               to: event.to,
               activity: event.activity,
-              reachedDest
-            },
-            narration
-          })
+              reachedDest,
+              narration
+            }
+          )
         )
       } else if (event.kind === 'activity') {
         const name = profile?.name.zh ?? event.npcId
         const tileName = TILE_NAME_BY_ID[event.tile] ?? event.tile
-        drafts.push(
-          this.narrativeDraft(event.npcId, nextTick, {
-            eventType: 'NPC_ACTIVITY',
-            actorId: event.npcId,
-            payload: { tile: event.tile, from: event.from, to: event.to },
-            narration: `${name}在${tileName}${activityVerb(event.to)}。`
-          })
+        commands.push(
+          makeLivingWorldCommand(
+            'NPC_ACTIVITY_CHANGE',
+            event.npcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              npcId: event.npcId,
+              tile: event.tile,
+              from: event.from,
+              to: event.to,
+              narration: `${name}在${tileName}${activityVerb(event.to)}。`
+            }
+          )
         )
       } else if (event.kind === 'interact') {
         const [a, b] = event.participants
-        drafts.push(
-          this.narrativeDraft(`${a}.${b}`, nextTick, {
-            eventType: 'NPC_INTERACT',
-            actorId: a,
-            payload: {
+        commands.push(
+          makeLivingWorldCommand(
+            'NPC_INTERACT',
+            a,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
               tile: event.tile,
-              with: b,
-              mode: event.mode
-            },
-            narration: event.narration
-          })
+              participants: [a, b],
+              mode: event.mode,
+              narration: event.narration
+            }
+          )
         )
       }
     }
     // 把 NPC state 變更寫回 FACT_SET，讓重啟可 hydrate
     for (const change of npcResult.changedStates) {
-      drafts.push(
+      stateDrafts.push(
         this.factSetDraft(
           `${NPC_STATE_PREFIX}${change.npcId}`,
           { ...change.state },
@@ -432,31 +502,45 @@ export class SimulationRuntime {
       if (delta.to !== null) {
         const def = findBuildingById(delta.to)
         if (def) {
-          drafts.push(
-            this.narrativeDraft(`${delta.npcId}.bld.enter`, nextTick, {
-              eventType: 'NPC_BUILDING_ENTER',
-              actorId: delta.npcId,
-              payload: { buildingId: delta.to, tileId: def.tileId },
-              narration: `${name}走進了${def.nameZh}。`
-            })
+          commands.push(
+            makeLivingWorldCommand(
+              'BUILDING_ENTER',
+              delta.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                npcId: delta.npcId,
+                buildingId: delta.to,
+                tileId: def.tileId,
+                narration: `${name}走進了${def.nameZh}。`
+              }
+            )
           )
         }
       } else if (delta.from !== null) {
         const def = findBuildingById(delta.from)
         if (def) {
-          drafts.push(
-            this.narrativeDraft(`${delta.npcId}.bld.leave`, nextTick, {
-              eventType: 'NPC_BUILDING_LEAVE',
-              actorId: delta.npcId,
-              payload: { buildingId: delta.from, tileId: def.tileId },
-              narration: `${name}從${def.nameZh}走了出來。`
-            })
+          commands.push(
+            makeLivingWorldCommand(
+              'BUILDING_LEAVE',
+              delta.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                npcId: delta.npcId,
+                buildingId: delta.from,
+                tileId: def.tileId,
+                narration: `${name}從${def.nameZh}走了出來。`
+              }
+            )
           )
         }
       }
     }
     if (buildingDeltas.length > 0) {
-      drafts.push(
+      stateDrafts.push(
         this.factSetDraft(
           FACT_BUILDING_OCCUPANTS,
           this.buildingRuntime.toJSON(),
@@ -473,18 +557,25 @@ export class SimulationRuntime {
       npcFactionLean: this.npcFactionLean
     })
     for (const next of areaResult.changed) {
-      drafts.push(
+      stateDrafts.push(
         this.factSetDraft(`${AREA_STATE_PREFIX}${next.tileId}`, next, SIM_ACTOR_WORLD, nextTick)
       )
     }
     for (const pe of areaResult.pressureEvents) {
-      drafts.push(
-        this.narrativeDraft(`area.${pe.tileId}.${pe.kind}`, nextTick, {
-          eventType: 'AREA_PRESSURE',
-          actorId: SIM_ACTOR_WORLD,
-          payload: { tileId: pe.tileId, kind: pe.kind, ...pe.detail },
-          narration: pe.narration
-        })
+      commands.push(
+        makeLivingWorldCommand(
+          'AREA_PRESSURE',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            tileId: pe.tileId,
+            kind: pe.kind,
+            detail: pe.detail,
+            narration: pe.narration
+          }
+        )
       )
     }
 
@@ -493,14 +584,16 @@ export class SimulationRuntime {
       const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
       if (next !== this.weather) {
         const before = this.weather
-        drafts.push(this.factSetDraft(FACT_WEATHER, next, SIM_ACTOR_WORLD, nextTick))
-        drafts.push(
-          this.narrativeDraft('world.weather', nextTick, {
-            eventType: 'WORLD_WEATHER_CHANGED',
-            actorId: SIM_ACTOR_WORLD,
-            payload: { from: before, to: next },
-            narration: `天空從${before}轉為${next}。`
-          })
+        stateDrafts.push(this.factSetDraft(FACT_WEATHER, next, SIM_ACTOR_WORLD, nextTick))
+        commands.push(
+          makeLivingWorldCommand(
+            'WEATHER_CHANGE',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            { from: before, to: next, narration: `天空從${before}轉為${next}。` }
+          )
         )
         this.weather = next
       }
@@ -510,14 +603,20 @@ export class SimulationRuntime {
       const next = pickFromCycle(SEASONS, Math.floor(nextTick / SEASON_CADENCE_TICKS))
       if (next !== this.season) {
         const before = this.season
-        drafts.push(this.factSetDraft(FACT_SEASON, next, SIM_ACTOR_WORLD, nextTick))
-        drafts.push(
-          this.narrativeDraft('world.season', nextTick, {
-            eventType: 'WORLD_SEASON_CHANGED',
-            actorId: SIM_ACTOR_WORLD,
-            payload: { from: before, to: next },
-            narration: `${before}悄然遠去，${next}降臨貪婪之島。`
-          })
+        stateDrafts.push(this.factSetDraft(FACT_SEASON, next, SIM_ACTOR_WORLD, nextTick))
+        commands.push(
+          makeLivingWorldCommand(
+            'SEASON_CHANGE',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              from: before,
+              to: next,
+              narration: `${before}悄然遠去，${next}降臨貪婪之島。`
+            }
+          )
         )
         this.season = next
       }
@@ -527,7 +626,7 @@ export class SimulationRuntime {
     if (phase === 0 && !this.rareWindowOpen) {
       this.rareWindowOpen = true
       this.rareWindowClosesAtTick = nextTick + RARE_WINDOW_OPEN_TICKS
-      drafts.push(
+      stateDrafts.push(
         this.factSetDraft(
           FACT_RARE_WINDOW,
           { open: true, closesAt: this.rareWindowClosesAtTick },
@@ -535,26 +634,37 @@ export class SimulationRuntime {
           nextTick
         )
       )
-      drafts.push(
-        this.narrativeDraft('world.rareWindow', nextTick, {
-          eventType: 'WORLD_RARE_WINDOW_OPENED',
-          actorId: SIM_ACTOR_WORLD,
-          payload: { windowId: 'tide_festival', closesAtTick: this.rareWindowClosesAtTick },
-          narration: '潮汐節的窗口開啟了，浪花區會在二十分鐘內進入慶典。'
-        })
+      commands.push(
+        makeLivingWorldCommand(
+          'RARE_WINDOW_OPEN',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            windowId: 'tide_festival',
+            closesAtTick: this.rareWindowClosesAtTick,
+            narration: '潮汐節的窗口開啟了，浪花區會在二十分鐘內進入慶典。'
+          }
+        )
       )
     } else if (this.rareWindowOpen && nextTick >= this.rareWindowClosesAtTick) {
       this.rareWindowOpen = false
-      drafts.push(
+      stateDrafts.push(
         this.factSetDraft(FACT_RARE_WINDOW, { open: false, closesAt: null }, SIM_ACTOR_WORLD, nextTick)
       )
-      drafts.push(
-        this.narrativeDraft('world.rareWindow', nextTick, {
-          eventType: 'WORLD_RARE_WINDOW_CLOSED',
-          actorId: SIM_ACTOR_WORLD,
-          payload: { windowId: 'tide_festival' },
-          narration: '潮汐節的窗口悄然閉合，浪花區回歸日常喧囂。'
-        })
+      commands.push(
+        makeLivingWorldCommand(
+          'RARE_WINDOW_CLOSE',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            windowId: 'tide_festival',
+            narration: '潮汐節的窗口悄然閉合，浪花區回歸日常喧囂。'
+          }
+        )
       )
     }
 
@@ -563,26 +673,27 @@ export class SimulationRuntime {
       season: this.season
     })
     if (eventDelta.spawned.length > 0 || eventDelta.expired.length > 0) {
-      drafts.push(this.factSetDraft(FACT_ACTIVE_EVENTS, eventDelta.active, SIM_ACTOR_WORLD, nextTick))
+      stateDrafts.push(this.factSetDraft(FACT_ACTIVE_EVENTS, eventDelta.active, SIM_ACTOR_WORLD, nextTick))
       for (const event of eventDelta.spawned) {
-        // 模板敘事先寫入 — 之後若 AI 成功回來，再 broadcast 一個增強版
-        drafts.push(
-          this.narrativeDraft(`world.event.${event.id}`, nextTick, {
-            eventType: 'WORLD_EVENT_SPAWNED',
-            actorId: SIM_ACTOR_WORLD,
-            payload: {
+        commands.push(
+          makeLivingWorldCommand(
+            'WORLD_EVENT_SPAWN',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              worldEventId: event.id,
               templateId: event.templateId,
               type: event.type,
-              scope: event.scope,
+              scope: stringifyScope(event.scope),
               endsAtTick: event.endsAtTick,
-              text: event.text,
-              data: event.payload
-            },
-            narration: event.text.zh
-          })
+              narration: event.text.zh,
+              data: event.payload as Record<string, unknown>
+            }
+          )
         )
-        // 非阻塞：把 AI 增強版本當成 NarrativeEvent 推到 listener（純 in-memory；
-        // 不再寫 EventLog，避免 hash 衝突 + 等待 AI 影響 tick 速度）
+        // 非阻塞：AI 增強敘事仍走 in-memory NarrativeEvent，不寫 EventLog
         const ambient = this.ambientNarrator
         if (ambient) {
           void ambient
@@ -614,33 +725,52 @@ export class SimulationRuntime {
         }
       }
       for (const event of eventDelta.expired) {
-        drafts.push(
-          this.narrativeDraft(`world.event.${event.id}.end`, nextTick, {
-            eventType: 'WORLD_EVENT_ENDED',
-            actorId: SIM_ACTOR_WORLD,
-            payload: { templateId: event.templateId, type: event.type, scope: event.scope },
-            narration: null
-          })
+        commands.push(
+          makeLivingWorldCommand(
+            'WORLD_EVENT_END',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              worldEventId: event.id,
+              templateId: event.templateId,
+              type: event.type,
+              scope: stringifyScope(event.scope)
+            }
+          )
         )
       }
     }
 
-    const committed = this.store.appendEvents(drafts)
+    // ---- Compile commands → typed event drafts via the Rule Engine ----
+    const typedDrafts: EventDraft[] = []
+    for (const cmd of commands) {
+      const result = this.livingWorldRuleEngine.evaluate(cmd)
+      if (result.accepted) {
+        for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+      } else {
+        console.warn(
+          `[sim] rule engine rejected ${result.rejection.commandType} ` +
+            `from ${result.rejection.actorId}: ${result.rejection.reason}`
+        )
+      }
+    }
+
+    // Append both buckets in one transaction. Order: state snapshots
+    // first so the projection on disk is consistent before the typed
+    // events that reference that state.
+    const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts])
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
+      // Fan out: NPC memory + relationships projections, listeners.
       for (const ev of committed) {
-        const narrative = readNarrativePayload(ev.payload)
-        if (narrative) {
-          const narrativeEvent: NarrativeEvent = {
-            sequence: ev.sequence,
-            tick: nextTick,
-            eventType: narrative.eventType,
-            actorId: narrative.actorId,
-            occurredAt: new Date().toISOString(),
-            payload: narrative.payload,
-            narration: narrative.narration
-          }
+        if (this.npcMemory) this.npcMemory.project(ev)
+        if (this.npcRelationships) this.npcRelationships.project(ev)
+
+        const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
+        if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
           for (const listener of this.listeners) {
             try {
@@ -787,17 +917,9 @@ export class SimulationRuntime {
       this.eventEngine.hydrate(restored, this.currentTick)
     }
     for (const event of events.slice(-RECENT_EVENTS_BUFFER * 4)) {
-      const narrative = readNarrativePayload(event.payload)
+      const narrative = readNarrativeFromAnyEvent(event, event.tick ?? 0)
       if (!narrative) continue
-      this.pushRecent({
-        sequence: event.sequence,
-        tick: event.tick ?? 0,
-        eventType: narrative.eventType,
-        actorId: narrative.actorId,
-        occurredAt: new Date(event.occurredAt).toISOString(),
-        payload: narrative.payload,
-        narration: narrative.narration
-      })
+      this.pushRecent(narrative)
     }
   }
 }
@@ -823,6 +945,43 @@ function readNarrativePayload(payload: unknown): NarrativeEventPayload | null {
   }
 }
 
+/**
+ * Build a `NarrativeEvent` from any committed kernel event — either a
+ * legacy `FACT_SET` narrative wrapper or a typed living-world event
+ * produced by the Rule Engine. Typed events carry their data inside a
+ * `LivingWorldEventPayload` { actorType, data, narration } shape.
+ */
+function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEvent | null {
+  const tick = typeof ev.tick === 'number' ? ev.tick : fallbackTick
+
+  if (isLivingWorldCommandType(ev.eventType)) {
+    const lw = ev.payload as LivingWorldEventPayload | undefined
+    if (!lw || typeof lw !== 'object') return null
+    const dataAsRecord = lw.data as unknown as Record<string, unknown>
+    return {
+      sequence: ev.sequence,
+      tick,
+      eventType: ev.eventType,
+      actorId: ev.actorId,
+      occurredAt: new Date(ev.occurredAt).toISOString(),
+      payload: dataAsRecord,
+      narration: lw.narration ?? null
+    }
+  }
+
+  const narrative = readNarrativePayload(ev.payload)
+  if (!narrative) return null
+  return {
+    sequence: ev.sequence,
+    tick,
+    eventType: narrative.eventType,
+    actorId: narrative.actorId,
+    occurredAt: new Date(ev.occurredAt).toISOString(),
+    payload: narrative.payload,
+    narration: narrative.narration
+  }
+}
+
 function activityVerb(activity: NpcActivity): string {
   switch (activity) {
     case 'work':
@@ -840,6 +999,14 @@ function activityVerb(activity: NpcActivity): string {
     case 'move':
       return '正在移動'
   }
+}
+
+function stringifyScope(scope: { kind: string; tileIds?: readonly string[] }): string {
+  if (scope.kind === 'world') return 'world'
+  if (scope.kind === 'region' && Array.isArray(scope.tileIds)) {
+    return `region:${[...scope.tileIds].sort().join(',')}`
+  }
+  return scope.kind
 }
 
 function buildNpcFactionLean(profiles: readonly NpcProfile[]): Map<string, FactionId> {
