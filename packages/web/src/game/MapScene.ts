@@ -113,6 +113,13 @@ export class MapScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
     this.player.setCollideWorldBounds(true)
+
+    // 如果玩家從還原的座標一開始就站在某街區裡，立刻同步給 React 端，
+    // 否則「進入 XXX →」按鈕得等到玩家踏出街區再走回來才會出現。
+    // 不放 banner — banner 是「剛走進」的通知，重整頁面時不該再演一次。
+    if (isDistrict(this.currentDistrict)) {
+      this.callbacks.onAreaEnter(this.currentDistrict)
+    }
   }
 
   /**
