@@ -143,6 +143,7 @@ export const en: Translations = {
   'codex.slotCarryHeader': 'Carry · 45 slots · any card',
   'codex.refreshing': 'Syncing…',
 
+  'cards.tabLabel': 'Cards',
   'cards.dropTitle': 'Cards on the ground here',
   'cards.dropEmpty': 'No cards have dropped in this area. Wait for the next tide.',
   'cards.pickup': 'Pick up',

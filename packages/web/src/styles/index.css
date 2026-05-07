@@ -16,6 +16,18 @@
   body {
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    /* iOS Safari ignores `user-scalable=no`; touch-action: manipulation
+       disables double-tap-to-zoom and other browser-level gestures so the
+       map and overlays do not get accidentally zoomed by two-finger or
+       double-tap interactions. */
+    touch-action: manipulation;
+  }
+
+  canvas {
+    /* Phaser canvas already gets touchAction: none on its container,
+       but apply on canvas itself too as a belt-and-suspenders defense
+       against pinch-zoom on mobile browsers that ignore the parent. */
+    touch-action: none;
   }
 
   ::selection {

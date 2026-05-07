@@ -143,6 +143,7 @@ export const zh: Translations = {
   'codex.slotCarryHeader': '隨攜欄 · 45 格 · 任意卡',
   'codex.refreshing': '同步中…',
 
+  'cards.tabLabel': '紋卡',
   'cards.dropTitle': '此地散落的紋卡',
   'cards.dropEmpty': '此區域目前沒有掉落的紋卡。耐心等下一次潮汐。',
   'cards.pickup': '拾取',

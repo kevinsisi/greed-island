@@ -23,6 +23,13 @@ const KNOWN_DISTRICTS = new Set<DistrictId>([
   't_dock'
 ])
 
+/**
+ * HubPage 採用「地圖佔滿可視區域 + 浮動 overlay」設計：
+ * - 地圖 (PhaserGame) 是主視覺
+ * - 「進入 XXX →」按鈕浮在地圖下方中央 (玩家在街區內時才顯示)
+ * - 城市標題 pill 浮在地圖左上
+ * - 行動裝置不必捲動就能完成所有操作
+ */
 export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs } = useWorldState()
@@ -76,47 +83,45 @@ export function HubPage() {
       : null
 
   return (
-    <div className="flex flex-col gap-5">
-      <header className="flex flex-col gap-2">
-        <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
-          {t('hub.eyebrow')}
-        </div>
-        <h1 className="font-display font-extrabold text-3xl tracking-tightest text-ground-100">
-          {t('hub.title')}
-        </h1>
-        <p className="text-sm text-ground-400 max-w-2xl leading-relaxed">{t('hub.description')}</p>
-      </header>
+    <div className="relative w-full max-w-[800px] mx-auto">
+      <div className="relative w-full">
+        <PhaserGame
+          npcs={mapNpcs}
+          locale={locale}
+          hudStrings={hudStrings}
+          onAreaEnter={handleAreaEnter}
+          onNpcInteract={handleNpcInteract}
+        />
 
-      {currentName && currentDistrict && (
-        <div className="max-w-[800px] mx-auto w-full flex items-center justify-between gap-3 gi-panel p-4">
-          <div className="flex flex-col">
-            <div className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
-              {t('hub.currentArea')}
-            </div>
-            <div className="font-display font-extrabold text-base tracking-tightest text-ground-100">
-              {currentName}
-            </div>
+        {/* 上方：城市標題 pill */}
+        <div className="absolute top-2 left-2 z-10 pointer-events-none">
+          <div className="bg-ground-900/85 backdrop-blur border border-ground-700 rounded-sharp px-3 py-1.5 flex flex-col">
+            <span className="font-display text-[10px] uppercase tracking-tightest text-ember-500 leading-tight">
+              {t('hub.eyebrow')}
+            </span>
+            <span className="font-display font-extrabold text-base tracking-tightest text-ground-100 leading-tight">
+              {t('hub.title')}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={handleOpenCurrentArea}
-            className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors"
-          >
-            {t('hub.openArea', { name: currentName })}
-          </button>
         </div>
-      )}
 
-      <PhaserGame
-        npcs={mapNpcs}
-        locale={locale}
-        hudStrings={hudStrings}
-        onAreaEnter={handleAreaEnter}
-        onNpcInteract={handleNpcInteract}
-      />
-
-      <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500 leading-relaxed max-w-[800px] mx-auto w-full">
-        {t('hub.controlsHint')}
+        {/* 下方：進入街區按鈕 (玩家在街區內時才顯示) */}
+        {currentName && currentDistrict && (
+          <div className="absolute bottom-2 left-2 right-2 z-10 flex justify-center pointer-events-none">
+            <button
+              type="button"
+              onClick={handleOpenCurrentArea}
+              className="pointer-events-auto gi-touch px-5 py-2 inline-flex flex-col items-center gap-0 bg-ember-500/20 backdrop-blur border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/30 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/40"
+            >
+              <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
+                {t('hub.currentArea')}
+              </span>
+              <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
+                {t('hub.openArea', { name: currentName })}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />

@@ -158,6 +158,7 @@ export type TranslationKey =
   | 'codex.slotCarryHeader'
   | 'codex.refreshing'
   // card drop / pickup (在區域地圖上的紋卡)
+  | 'cards.tabLabel'
   | 'cards.dropTitle'
   | 'cards.dropEmpty'
   | 'cards.pickup'
