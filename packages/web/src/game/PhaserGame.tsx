@@ -101,9 +101,9 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
       npcs,
       locale,
       hudStrings,
-      initialPosition: loadPlayerPosition(),
-      areaOverlays: areaOverlays ?? []
+      initialPosition: loadPlayerPosition()
     }
+    if (areaOverlays) init.areaOverlays = areaOverlays
     game.scene.start(MapScene.KEY, init)
 
     // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
@@ -142,7 +142,13 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
     if (!game) return
     const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
     if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({ npcs, locale, hudStrings, areaOverlays })
+    const update: Parameters<MapScene['applyExternalUpdate']>[0] = {
+      npcs,
+      locale,
+      hudStrings
+    }
+    if (areaOverlays) update.areaOverlays = areaOverlays
+    scene.applyExternalUpdate(update)
   }, [npcs, locale, hudStrings, areaOverlays])
 
   return (
