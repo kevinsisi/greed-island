@@ -1405,22 +1405,26 @@ export class AreaScene extends Phaser.Scene {
   }
 
   private drawExitHotspot(): void {
-    const x = AREA_TILE_SIZE * 1.05
-    const y = AREA_TILE_SIZE * 0.8
+    const cell = this.pickExitCell()
+    const x = cell.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+    const y = cell.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
     this.exitPos = { x, y }
-    const plate = this.add.rectangle(0, 0, AREA_TILE_SIZE * 1.55, AREA_TILE_SIZE * 0.8, 0x000000, 0.62)
-    plate.setStrokeStyle(2, 0xfff5b8, 0.85)
-    const icon = this.add.text(-AREA_TILE_SIZE * 0.42, 0, '↩', {
+
+    const tileMark = this.add.rectangle(0, 0, AREA_TILE_SIZE - 6, AREA_TILE_SIZE - 6, 0xfff5b8, 0.08)
+    tileMark.setStrokeStyle(1, 0xfff5b8, 0.4)
+    const sign = this.add.rectangle(0, -4, AREA_TILE_SIZE * 0.82, AREA_TILE_SIZE * 0.55, 0x6b4a23, 0.94)
+    sign.setStrokeStyle(2, 0xfff5b8, 0.9)
+    const icon = this.add.text(-AREA_TILE_SIZE * 0.22, -5, '↩', {
       fontFamily:
         '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-      fontSize: '18px',
+      fontSize: '16px',
       color: '#fff5b8',
       fontStyle: 'bold',
       stroke: '#0a0a0a',
       strokeThickness: 2
     })
     icon.setOrigin(0.5, 0.5)
-    const label = this.add.text(AREA_TILE_SIZE * 0.12, 0, '出口', {
+    const label = this.add.text(AREA_TILE_SIZE * 0.15, -5, '出口', {
       fontFamily:
         '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
       fontSize: '11px',
@@ -1428,33 +1432,53 @@ export class AreaScene extends Phaser.Scene {
       fontStyle: 'bold'
     })
     label.setOrigin(0.5, 0.5)
-    this.exitHotspot = this.add.container(x, y, [plate, icon, label])
-    this.exitHotspot.setDepth(66)
-    this.exitHotspot.setSize(AREA_TILE_SIZE * 1.55, AREA_TILE_SIZE * 0.8)
+    const pole = this.add.rectangle(0, AREA_TILE_SIZE * 0.18, 4, AREA_TILE_SIZE * 0.3, 0x3b2815, 0.95)
+
+    this.exitHotspot = this.add.container(x, y, [tileMark, pole, sign, icon, label])
+    this.exitHotspot.setDepth(46)
+    this.exitHotspot.setSize(AREA_TILE_SIZE, AREA_TILE_SIZE)
     this.exitHotspot.setInteractive(
       new Phaser.Geom.Rectangle(
-        -AREA_TILE_SIZE * 0.775,
-        -AREA_TILE_SIZE * 0.4,
-        AREA_TILE_SIZE * 1.55,
-        AREA_TILE_SIZE * 0.8
+        -AREA_TILE_SIZE / 2,
+        -AREA_TILE_SIZE / 2,
+        AREA_TILE_SIZE,
+        AREA_TILE_SIZE
       ),
       Phaser.Geom.Rectangle.Contains
     )
     this.exitHotspot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation?.()
       this.suppressNextPointerTarget = true
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y)
+      if (d > EXIT_RADIUS) {
+        this.pointerTarget = { x, y }
+        this.suppressNextPointerTarget = false
+        this.flashApproachHint('出口')
+        return
+      }
       this.callbacks.onExit?.()
     })
-    this.exitHotspot.setData('plate', plate)
+    this.exitHotspot.setData('sign', sign)
+  }
+
+  private pickExitCell(): { col: number; row: number } {
+    const roadCells = AREA_DECORATIONS[this.tileId]?.roadCells ?? []
+    const byEdge =
+      roadCells.find((cell) => cell.col === 0) ??
+      roadCells.find((cell) => cell.row === AREA_GRID_ROWS - 1) ??
+      roadCells.find((cell) => cell.row === 0) ??
+      roadCells.find((cell) => cell.col === AREA_GRID_COLS - 1)
+    if (byEdge) return byEdge
+    return { col: 0, row: Math.floor(AREA_GRID_ROWS / 2) }
   }
 
   private checkExitProximity(): void {
     if (!this.exitPos) return
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.exitPos.x, this.exitPos.y)
     this.nearExit = d <= EXIT_RADIUS
-    const plate = this.exitHotspot?.getData('plate') as Phaser.GameObjects.Rectangle | undefined
-    if (plate) {
-      plate.setStrokeStyle(this.nearExit ? 3 : 2, this.nearExit ? 0xffb84d : 0xfff5b8, this.nearExit ? 1 : 0.85)
+    const sign = this.exitHotspot?.getData('sign') as Phaser.GameObjects.Rectangle | undefined
+    if (sign) {
+      sign.setStrokeStyle(this.nearExit ? 3 : 2, this.nearExit ? 0xffb84d : 0xfff5b8, this.nearExit ? 1 : 0.9)
     }
   }
 

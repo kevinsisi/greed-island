@@ -43,6 +43,7 @@ export function BuildingPage() {
   const [view, setView] = useState<ServerBuildingView | null>(null)
   const [wallet, setWallet] = useState<ServerPlayerWallet | null>(null)
   const [jobs, setJobs] = useState<ServerPlayerJob[]>([])
+  const [currentShift, setCurrentShift] = useState<ServerShift | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
@@ -60,11 +61,17 @@ export function BuildingPage() {
   }, [buildingId])
 
   const refreshWallet = useCallback(async () => {
-    if (!token) return
+    if (!token) {
+      setWallet(null)
+      setJobs([])
+      setCurrentShift(null)
+      return
+    }
     try {
       const r = await api.wallet(token)
       setWallet(r.wallet)
       setJobs(r.jobs)
+      setCurrentShift(r.currentShift)
     } catch {
       // ignore
     }
@@ -290,6 +297,8 @@ export function BuildingPage() {
           </div>
           {def.hiring.map((slot) => {
             const myJob = myJobs.find((j) => j.shift === slot.shift)
+            const isCurrentShift = currentShift === slot.shift
+            const workButtonLabel = isCurrentShift ? '打卡' : '非上班時間'
             return (
               <div
                 key={slot.shift}
@@ -307,11 +316,17 @@ export function BuildingPage() {
                     <>
                       <button
                         type="button"
-                        disabled={busy || !token}
+                        disabled={busy || !token || !isCurrentShift}
                         onClick={work}
-                        className="px-2 py-1 text-[11px] rounded-sharp bg-ember-600/30 hover:bg-ember-600/50 border border-ember-500 text-ember-100"
+                        className={[
+                          'px-2 py-1 text-[11px] rounded-sharp border',
+                          isCurrentShift
+                            ? 'bg-ember-600/30 hover:bg-ember-600/50 border-ember-500 text-ember-100'
+                            : 'bg-ground-800 border-ground-700 text-ground-500 cursor-not-allowed'
+                        ].join(' ')}
+                        title={isCurrentShift ? '' : '要等這個班別的上班時間才能打卡。'}
                       >
-                        打卡
+                        {workButtonLabel}
                       </button>
                       <button
                         type="button"

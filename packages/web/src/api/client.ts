@@ -481,6 +481,13 @@ export type ServerPlayerWallet = {
   updatedAt: number
 }
 
+export type ServerWalletResponse = {
+  wallet: ServerPlayerWallet
+  jobs: ServerPlayerJob[]
+  currentTick: number
+  currentShift: ServerShift | null
+}
+
 export type SocialStreamEvent =
   | { type: 'friend.request'; from: number; requestId: number; occurredAt: string }
   | { type: 'friend.accepted'; from: number; requestId: number; occurredAt: string }
@@ -886,7 +893,7 @@ export const api = {
       }
     ),
   wallet: (token: string) =>
-    jsonFetch<{ wallet: ServerPlayerWallet; jobs: ServerPlayerJob[] }>('/wallet', {
+    jsonFetch<ServerWalletResponse>('/wallet', {
       headers: authHeaders(token)
     }),
   // ── Combat (Phase B, v0.15.0) ──

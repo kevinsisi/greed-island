@@ -109,22 +109,23 @@ export function createBuildingsRouter(input: {
     const currentTick = input.runtime.getCurrentTick()
     const currentShift = shiftFor(currentTick)
     if (!currentShift) {
-      res.status(400).json({ error: 'NO_ACTIVE_SHIFT' })
+      res.status(400).json({ error: 'NO_ACTIVE_SHIFT', message: '現在不是可打卡的班別時間。' })
       return
     }
     const slot = def.hiring.find((h) => h.shift === currentShift)
     if (!slot) {
-      res.status(400).json({ error: 'NO_SLOT_THIS_SHIFT' })
+      res.status(400).json({ error: 'NO_SLOT_THIS_SHIFT', message: '這裡目前沒有正在上班的班別。' })
       return
     }
     const job = input.jobs.getJob(accountId, def.id, currentShift)
     if (!job) {
-      res.status(403).json({ error: 'NOT_HIRED' })
+      res.status(403).json({ error: 'NOT_HIRED', message: '你沒有這個時段的工作，不能打卡。' })
       return
     }
     if (currentTick - job.lastShiftTick < DAILY_SHIFT_COOLDOWN_TICKS) {
       res.status(429).json({
         error: 'SHIFT_COOLDOWN',
+        message: '這個班別今天已經打過卡了，請等下一輪班表。',
         nextAvailableAtTick: job.lastShiftTick + DAILY_SHIFT_COOLDOWN_TICKS
       })
       return
@@ -168,9 +169,10 @@ export function createBuildingsRouter(input: {
   })
 
   router.get('/wallet', auth, (req: Request, res: Response) => {
+    const currentTick = input.runtime.getCurrentTick()
     const wallet = input.jobs.getWallet(req.auth!.sub)
     const jobs = input.jobs.listJobs(req.auth!.sub)
-    res.json({ wallet, jobs })
+    res.json({ wallet, jobs, currentTick, currentShift: shiftFor(currentTick) })
   })
 
   router.get('/areas/:tileId', (req: Request, res: Response) => {
