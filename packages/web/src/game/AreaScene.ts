@@ -15,6 +15,7 @@ const PLAYER_SPRITE_SIZE = 22
 const NPC_SPRITE_SIZE = 26
 const PLAYER_SPEED = 160 // px/s
 const INTERACT_RADIUS = AREA_TILE_SIZE * 1.6
+const EXIT_RADIUS = AREA_TILE_SIZE * 1.45
 const POSITION_SAVE_INTERVAL_MS = 500
 // 後端 tick 為 5 秒；NPC 從上次位置 tween 到新位置花 ≈4.5 秒，剛好接到下個 tick
 const NPC_MOVE_TWEEN_MS = 4500
@@ -52,6 +53,8 @@ export interface AreaMapNpc {
   /** 後端權威子格座標（0..14, 0..9）。由 server 決定 NPC 在 area canvas 的位置 */
   subCol: number
   subRow: number
+  /** 高度 / 樓層座標。現在不影響 2D 畫面，但保留給互動規則與未來高低差。 */
+  subZ?: number
   /** sprite 主色（24-bit RGB，例 0xff8a4a）。後端依 faction + id 決定 */
   color: number
   /** 活動 enum，用來顯示活動圖示 emoji */
@@ -60,6 +63,12 @@ export interface AreaMapNpc {
   mood?: number
   /** v0.14.0：health < 30 時 sprite 旁加 🤕 圖示 */
   health?: number
+}
+
+export interface AreaMapPlayer {
+  id: number
+  displayName: string
+  shortName: string
 }
 
 /** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
@@ -85,6 +94,8 @@ export interface AreaSceneCallbacks {
   onBuildingEnter?: (buildingId: string) => void
   /** v0.15.2：玩家最近的可進入建築變動時 fire；React 渲染地圖外面的「進入 X」HTML 按鈕。 */
   onNearbyBuildingChange?: (buildingId: string | null) => void
+  /** 子地圖出口：回到上一層場景。 */
+  onExit?: () => void
 }
 
 export interface AreaMapBuilding {
@@ -102,13 +113,16 @@ export interface AreaSceneInit {
   callbacks: AreaSceneCallbacks
   tileId: DistrictId
   npcs: AreaMapNpc[]
+  players?: AreaMapPlayer[]
   drops: AreaMapDrop[]
   locale: 'zh' | 'en'
+  playerName?: string | null
   hudStrings: {
     interact: string
     pickup: string
     tooFar: string
     enterBuilding?: string
+    exit?: string
   }
   /** 該 tile 上的建築物（從 server catalog 來）。可選。 */
   buildings?: AreaMapBuilding[]
@@ -147,6 +161,8 @@ export class AreaScene extends Phaser.Scene {
   private callbacks!: AreaSceneCallbacks
   private tileId!: DistrictId
   private npcs: AreaMapNpc[] = []
+  private players: AreaMapPlayer[] = []
+  private playerName: string | null = null
   private drops: AreaMapDrop[] = []
   private buildings: AreaMapBuilding[] = []
   private hudStrings: AreaSceneInit['hudStrings'] = {
@@ -173,14 +189,20 @@ export class AreaScene extends Phaser.Scene {
   private nearbyNpcId: string | null = null
   private nearbyDropId: number | null = null
   private nearbyBuildingId: string | null = null
+  private nearExit = false
+  private exitHotspot!: Phaser.GameObjects.Container
+  private exitPos!: { x: number; y: number }
   private buildingSprites: Map<string, Phaser.GameObjects.Container> = new Map()
+  private buildingsSignature = ''
   /** 玩家剛點到 NPC sprite 的時候設成 true，下一個 scene-level pointerdown
    *  就忽略掉 (避免點完 NPC 之後，玩家還繼續走向那個位置)。 */
   private suppressNextPointerTarget = false
 
   private interactPrompt!: Phaser.GameObjects.Container
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
+  private peerSprites: Map<number, Phaser.GameObjects.Container> = new Map()
   private dropSprites: Map<number, Phaser.GameObjects.Container> = new Map()
+  private playerNameLabel: Phaser.GameObjects.Text | null = null
 
   private positionSaveTimer = 0
   private lastSavedPosition: { x: number; y: number } = { x: 0, y: 0 }
@@ -193,6 +215,8 @@ export class AreaScene extends Phaser.Scene {
     this.callbacks = data.callbacks
     this.tileId = data.tileId
     this.npcs = data.npcs
+    this.players = data.players ?? []
+    this.playerName = data.playerName ?? null
     this.drops = data.drops
     this.buildings = data.buildings ?? []
     this.hudStrings = data.hudStrings
@@ -203,7 +227,9 @@ export class AreaScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(0x12141a)
     this.drawBackground()
+    this.drawExitHotspot()
     this.spawnPlayer()
+    this.spawnPeerPlayers()
     this.spawnBuildings()
     this.spawnNpcs()
     this.spawnDrops()
@@ -229,8 +255,11 @@ export class AreaScene extends Phaser.Scene {
   applyExternalUpdate(payload: {
     npcs?: AreaMapNpc[]
     drops?: AreaMapDrop[]
+    players?: AreaMapPlayer[]
+    playerName?: string | null
     locale?: 'zh' | 'en'
     hudStrings?: AreaSceneInit['hudStrings']
+    buildings?: AreaMapBuilding[]
     weather?: AreaWeather
   }): void {
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
@@ -238,9 +267,21 @@ export class AreaScene extends Phaser.Scene {
       this.npcs = payload.npcs
       this.refreshNpcSprites()
     }
+    if (payload.players) {
+      this.players = payload.players
+      this.refreshPeerSprites()
+    }
+    if (payload.playerName !== undefined) {
+      this.playerName = payload.playerName
+      this.refreshPlayerNameLabel()
+    }
     if (payload.drops) {
       this.drops = payload.drops
       this.refreshDropSprites()
+    }
+    if (payload.buildings) {
+      this.buildings = payload.buildings
+      this.refreshBuildingSprites()
     }
     if (payload.weather && payload.weather !== this.weather) {
       this.weather = payload.weather
@@ -250,9 +291,11 @@ export class AreaScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.handleMovement(delta)
-    this.checkNpcProximity()
     this.checkDropProximity()
     this.checkBuildingProximity()
+    this.checkExitProximity()
+    this.checkNpcProximity()
+    this.syncPlayerNameLabel()
     this.tickPositionSave(delta)
   }
 
@@ -665,6 +708,8 @@ export class AreaScene extends Phaser.Scene {
 
   /** 把伺服器送來的 buildings 畫成 interactive sprite。 */
   private spawnBuildings(): void {
+    this.buildingsSignature = this.signatureForBuildings(this.buildings)
+    this.clearBuildingSprites()
     for (const b of this.buildings) {
       const cx = b.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
       const cy = b.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
@@ -737,6 +782,28 @@ export class AreaScene extends Phaser.Scene {
     }
   }
 
+  private refreshBuildingSprites(): void {
+    const nextSignature = this.signatureForBuildings(this.buildings)
+    if (nextSignature === this.buildingsSignature) return
+    this.nearbyBuildingId = null
+    this.callbacks.onNearbyBuildingChange?.(null)
+    this.spawnBuildings()
+  }
+
+  private signatureForBuildings(buildings: readonly AreaMapBuilding[]): string {
+    return buildings
+      .map((b) => `${b.id}:${b.nameZh}:${b.type}:${b.col},${b.row}:${b.glyph}:${b.size}:${b.enterable}`)
+      .sort()
+      .join('|')
+  }
+
+  private clearBuildingSprites(): void {
+    for (const sprite of this.buildingSprites.values()) {
+      sprite.destroy(true)
+    }
+    this.buildingSprites.clear()
+  }
+
   private flashApproachHint(name: string): void {
     const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
     const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
@@ -766,7 +833,112 @@ export class AreaScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(start.x, start.y, tex)
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)
+    this.refreshPlayerNameLabel()
     this.lastSavedPosition = { x: start.x, y: start.y }
+  }
+
+  private refreshPlayerNameLabel(): void {
+    if (!this.player) return
+    const label = this.playerName?.trim()
+    if (!label) {
+      if (this.playerNameLabel) {
+        this.playerNameLabel.destroy()
+        this.playerNameLabel = null
+      }
+      return
+    }
+    if (!this.playerNameLabel) {
+      this.playerNameLabel = this.add.text(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.25, label, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 4
+      })
+      this.playerNameLabel.setOrigin(0.5, 1)
+      this.playerNameLabel.setDepth(84)
+      return
+    }
+    if (this.playerNameLabel.text !== label) this.playerNameLabel.setText(label)
+    this.syncPlayerNameLabel()
+  }
+
+  private syncPlayerNameLabel(): void {
+    if (!this.player || !this.playerNameLabel) return
+    this.playerNameLabel.setPosition(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.25)
+  }
+
+  private spawnPeerPlayers(): void {
+    this.refreshPeerSprites()
+  }
+
+  private refreshPeerSprites(): void {
+    const seen = new Set<number>()
+    const sorted = [...this.players].sort((a, b) => a.id - b.id)
+    for (let i = 0; i < sorted.length; i += 1) {
+      const player = sorted[i]!
+      seen.add(player.id)
+      const target = this.peerTarget(i)
+      const existing = this.peerSprites.get(player.id)
+      if (existing) {
+        existing.setPosition(target.x, target.y)
+        const label = existing.getData('label') as Phaser.GameObjects.Text | undefined
+        const badge = existing.getData('badge') as Phaser.GameObjects.Text | undefined
+        if (label && label.text !== player.displayName) label.setText(player.displayName)
+        if (badge && badge.text !== player.shortName) badge.setText(player.shortName)
+        continue
+      }
+      const body = this.add.rectangle(0, 0, PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, 0x9ee0c7, 1)
+      body.setStrokeStyle(2, 0x1c1300, 1)
+      const badge = this.add.text(0, 0, player.shortName, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '13px',
+        color: '#103226',
+        fontStyle: 'bold'
+      })
+      badge.setOrigin(0.5, 0.5)
+      const label = this.add.text(0, -PLAYER_SPRITE_SIZE * 0.85, player.displayName, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#d9fff0',
+        stroke: '#0a0a0a',
+        strokeThickness: 4
+      })
+      label.setOrigin(0.5, 1)
+      const container = this.add.container(target.x, target.y, [body, badge, label])
+      container.setDepth(78)
+      container.setData('badge', badge)
+      container.setData('label', label)
+      this.peerSprites.set(player.id, container)
+    }
+    for (const [id, sprite] of this.peerSprites) {
+      if (!seen.has(id)) {
+        sprite.destroy(true)
+        this.peerSprites.delete(id)
+      }
+    }
+  }
+
+  private peerTarget(index: number): { x: number; y: number } {
+    const slots = [
+      { col: 1, row: 1 },
+      { col: 13, row: 1 },
+      { col: 1, row: 8 },
+      { col: 13, row: 8 },
+      { col: 7, row: 1 },
+      { col: 2, row: 5 },
+      { col: 12, row: 5 },
+      { col: 7, row: 8 }
+    ]
+    const slot = slots[index % slots.length]!
+    const lap = Math.floor(index / slots.length)
+    return this.clampToCanvas({
+      x: slot.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2 + lap * 12,
+      y: slot.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2 + lap * 10
+    })
   }
 
   private clampToCanvas(p: { x: number; y: number }): { x: number; y: number } {
@@ -1232,6 +1404,60 @@ export class AreaScene extends Phaser.Scene {
     }
   }
 
+  private drawExitHotspot(): void {
+    const x = AREA_TILE_SIZE * 1.05
+    const y = AREA_TILE_SIZE * 0.8
+    this.exitPos = { x, y }
+    const plate = this.add.rectangle(0, 0, AREA_TILE_SIZE * 1.55, AREA_TILE_SIZE * 0.8, 0x000000, 0.62)
+    plate.setStrokeStyle(2, 0xfff5b8, 0.85)
+    const icon = this.add.text(-AREA_TILE_SIZE * 0.42, 0, '↩', {
+      fontFamily:
+        '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+      fontSize: '18px',
+      color: '#fff5b8',
+      fontStyle: 'bold',
+      stroke: '#0a0a0a',
+      strokeThickness: 2
+    })
+    icon.setOrigin(0.5, 0.5)
+    const label = this.add.text(AREA_TILE_SIZE * 0.12, 0, '出口', {
+      fontFamily:
+        '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+      fontSize: '11px',
+      color: '#fff5b8',
+      fontStyle: 'bold'
+    })
+    label.setOrigin(0.5, 0.5)
+    this.exitHotspot = this.add.container(x, y, [plate, icon, label])
+    this.exitHotspot.setDepth(66)
+    this.exitHotspot.setSize(AREA_TILE_SIZE * 1.55, AREA_TILE_SIZE * 0.8)
+    this.exitHotspot.setInteractive(
+      new Phaser.Geom.Rectangle(
+        -AREA_TILE_SIZE * 0.775,
+        -AREA_TILE_SIZE * 0.4,
+        AREA_TILE_SIZE * 1.55,
+        AREA_TILE_SIZE * 0.8
+      ),
+      Phaser.Geom.Rectangle.Contains
+    )
+    this.exitHotspot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation?.()
+      this.suppressNextPointerTarget = true
+      this.callbacks.onExit?.()
+    })
+    this.exitHotspot.setData('plate', plate)
+  }
+
+  private checkExitProximity(): void {
+    if (!this.exitPos) return
+    const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.exitPos.x, this.exitPos.y)
+    this.nearExit = d <= EXIT_RADIUS
+    const plate = this.exitHotspot?.getData('plate') as Phaser.GameObjects.Rectangle | undefined
+    if (plate) {
+      plate.setStrokeStyle(this.nearExit ? 3 : 2, this.nearExit ? 0xffb84d : 0xfff5b8, this.nearExit ? 1 : 0.85)
+    }
+  }
+
   private makeSquareTexture(
     key: string,
     size: number,
@@ -1300,6 +1526,10 @@ export class AreaScene extends Phaser.Scene {
     }
     if (this.nearbyBuildingId && this.callbacks.onBuildingEnter) {
       this.callbacks.onBuildingEnter(this.nearbyBuildingId)
+      return
+    }
+    if (this.nearExit) {
+      this.callbacks.onExit?.()
     }
   }
 
@@ -1389,11 +1619,13 @@ export class AreaScene extends Phaser.Scene {
       text = drop ? `${this.hudStrings.pickup}: ${drop.rank}` : this.hudStrings.pickup
     } else if (nearestId) {
       const npc = this.npcs.find((n) => n.id === nearestId)
-      text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
+      text = npc ? `${this.hudStrings.interact}: ${npc.name}` : this.hudStrings.interact
     } else if (this.nearbyBuildingId) {
       const b = this.buildings.find((bb) => bb.id === this.nearbyBuildingId)
       const enterLabel = this.hudStrings.enterBuilding ?? '進入'
       text = b ? `${enterLabel}：${b.nameZh}` : enterLabel
+    } else if (this.nearExit) {
+      text = this.hudStrings.exit ?? '回上一層'
     }
 
     // 如果 flashTooFarHint 正在顯示，這 1.2s 內不蓋掉文字

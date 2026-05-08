@@ -854,7 +854,7 @@ export class MapScene extends Phaser.Scene {
       const npc = this.npcs.find((n) => n.id === nearestId)
       const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
       const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
-      const text = npc ? `${this.hudStrings.interact}: ${npc.shortName}` : this.hudStrings.interact
+      const text = npc ? `${this.hudStrings.interact}: ${npc.name}` : this.hudStrings.interact
       promptText.setText(text)
       const w = Math.max(120, promptText.width + 20)
       promptBg.setSize(w, 26)

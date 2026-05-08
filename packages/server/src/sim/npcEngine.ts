@@ -4,14 +4,15 @@
 //   3. 若已在 target_tile：執行該 slot 的 activity（work / eat / sleep / idle）
 //   4. 在當前 tile 內，往一個 deterministic 子格錨點走一步（subCol/subRow），
 //      讓區域畫面看到的 NPC 真的在街區裡探索不同 tile 而不是站著抖動
-//   5. mood / health 隨活動緩慢漂移
-//   6. 同 tile 兩兩 NPC 以 deterministic 機率觸發互動 (chat / argue)
+//   5. subZ 保留高度 / 樓層軸；現在預設 0，互動也會檢查高度差
+//   6. mood / health 隨活動緩慢漂移
+//   7. 同 tile、室外、三維座標靠近的 NPC 才以 deterministic 機率觸發互動
 //
 // 所有狀態變化都以 FactSet draft 形式回傳給 SimulationRuntime；engine
 // 本身不直接寫 EventLog，符合 deterministic kernel 的 command-vs-event
 // 分離原則。狀態 key：
 //   npc.state.<id> = { tile, mood, health, activity, faction,
-//                      targetTile, lastActedTick, subCol, subRow }
+//                      targetTile, lastActedTick, subCol, subRow, subZ }
 //
 // hydrate：runtime 啟動時把 reducer 算出的 facts 透過 hydrate() 餵回。
 
@@ -45,6 +46,8 @@ export type NpcRuntimeState = {
   subCol: number
   /** 0..AREA_SUB_ROWS-1：在當前 area canvas 裡的列座標 */
   subRow: number
+  /** 高度 / 樓層座標。現在全為 0；未來可表示橋上、地下層或樓層。 */
+  subZ: number
   /** v0.14.0：個性 nudge 暫時覆寫 schedule 的 targetTile；到 expiresAtTick
    *  自動失效，回到 schedule 推導的目標。沒有 nudge 時為 null。 */
   personalityOverride?: { targetTile: string; expiresAtTick: number; reason: string } | null
@@ -69,6 +72,7 @@ export type NpcDecisionEvent = Readonly<
       kind: 'interact'
       tile: string
       participants: readonly [string, string]
+      positions: Readonly<Record<string, { subCol: number; subRow: number; subZ: number }>>
       mode: 'chat' | 'argue'
       narration: string
     }
@@ -108,6 +112,8 @@ const ACTIVITY_DRIFT: Readonly<
 
 const INTERACT_PROBABILITY = 0.18 // 每對同 tile NPC，每 tick 觸發機率
 const INTERACT_COOLDOWN_TICKS = 6
+const INTERACT_MAX_PLANAR_DISTANCE = 2
+const INTERACT_MAX_Z_DISTANCE = 0
 
 /**
  * 每位 NPC 每 N tick 評估一次個體化決策（偏離 schedule 的「個性 nudge」）。
@@ -168,6 +174,7 @@ export class NpcEngine {
         lastActedTick: 0,
         subCol: initSub.col,
         subRow: initSub.row,
+        subZ: 0,
         personalityOverride: null
       })
     }
@@ -217,6 +224,7 @@ export class NpcEngine {
         typeof r.subRow === 'number'
           ? clampInt(r.subRow, 0, AREA_SUB_ROWS - 1)
           : fallbackSub.row,
+      subZ: typeof r.subZ === 'number' ? clampInt(r.subZ, -10, 50) : 0,
       personalityOverride
     }
     this.state.set(npcId, next)
@@ -282,6 +290,7 @@ export class NpcEngine {
         next.targetTile !== before.targetTile ||
         next.subCol !== before.subCol ||
         next.subRow !== before.subRow ||
+        next.subZ !== before.subZ ||
         beforeOverrideTarget !== nextOverrideTarget
       ) {
         this.state.set(profile.id, next)
@@ -317,6 +326,9 @@ export class NpcEngine {
           const pairKey = `${a}|${b}`
           const last = this.lastInteractTickByPair.get(pairKey) ?? -INTERACT_COOLDOWN_TICKS
           if (currentTick - last < INTERACT_COOLDOWN_TICKS) continue
+          const stateA = this.state.get(a)
+          const stateB = this.state.get(b)
+          if (!stateA || !stateB || !canNpcStatesInteract(stateA, stateB)) continue
           const roll = pairRoll(currentTick, a, b)
           if (roll >= INTERACT_PROBABILITY) continue
           if (!bestPair || roll < bestPair.roll) bestPair = { a, b, roll }
@@ -325,6 +337,8 @@ export class NpcEngine {
       if (!bestPair) continue
 
       const { a, b } = bestPair
+      const stateA = this.state.get(a)!
+      const stateB = this.state.get(b)!
       const pairKey = `${a}|${b}`
       this.lastInteractTickByPair.set(pairKey, currentTick)
 
@@ -349,15 +363,17 @@ export class NpcEngine {
         kind: 'interact',
         tile,
         participants: [a, b],
+        positions: {
+          [a]: { subCol: stateA.subCol, subRow: stateA.subRow, subZ: stateA.subZ },
+          [b]: { subCol: stateB.subCol, subRow: stateB.subRow, subZ: stateB.subZ }
+        },
         mode,
         narration
       })
       // 互動影響 mood（clamp 後寫回 state map；最後 dedupe 統一 emit）
-      const sa = this.state.get(a)!
-      const sb = this.state.get(b)!
       const delta = mode === 'chat' ? +1 : -2
-      const na = { ...sa, mood: clamp(sa.mood + delta, MOOD_MIN, MOOD_MAX) }
-      const nb = { ...sb, mood: clamp(sb.mood + delta, MOOD_MIN, MOOD_MAX) }
+      const na = { ...stateA, mood: clamp(stateA.mood + delta, MOOD_MIN, MOOD_MAX) }
+      const nb = { ...stateB, mood: clamp(stateB.mood + delta, MOOD_MIN, MOOD_MAX) }
       this.state.set(a, na)
       this.state.set(b, nb)
       dirty.add(a)
@@ -476,8 +492,16 @@ function decideNextState(
         : currentTick,
     subCol,
     subRow,
+    subZ: before.subZ,
     personalityOverride
   }
+}
+
+function canNpcStatesInteract(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
+  if (a.tile !== b.tile) return false
+  if (Math.abs(a.subZ - b.subZ) > INTERACT_MAX_Z_DISTANCE) return false
+  const planarDistance = Math.hypot(a.subCol - b.subCol, a.subRow - b.subRow)
+  return planarDistance <= INTERACT_MAX_PLANAR_DISTANCE
 }
 
 /**
@@ -1021,7 +1045,8 @@ function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
     Math.round(a.mood) !== Math.round(b.mood) ||
     Math.round(a.health) !== Math.round(b.health) ||
     a.subCol !== b.subCol ||
-    a.subRow !== b.subRow
+    a.subRow !== b.subRow ||
+    a.subZ !== b.subZ
   ) {
     return false
   }

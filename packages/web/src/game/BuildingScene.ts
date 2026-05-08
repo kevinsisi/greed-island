@@ -9,6 +9,7 @@ export const INTERIOR_CELL = 36
 const PLAYER_SPRITE_SIZE = 20
 const NPC_SPRITE_SIZE = 22
 const PLAYER_SPEED = 130
+const EXIT_RADIUS = INTERIOR_CELL * 1.15
 
 const PLAYER_COLOR = 0xfff5b8
 const PLAYER_OUTLINE = 0x1a1407
@@ -58,6 +59,7 @@ export interface BuildingSceneInit {
   npcs: BuildingSceneNpc[]
   callbacks: {
     onNpcInteract: (npcId: string) => void
+    onExit: () => void
   }
 }
 
@@ -75,6 +77,8 @@ export class BuildingScene extends Phaser.Scene {
   private pointerTarget: { x: number; y: number } | null = null
   private suppressNextPointerTarget = false
   private npcSprites = new Map<string, Phaser.Physics.Arcade.Sprite>()
+  private exitHotspot!: Phaser.GameObjects.Container
+  private exitPos!: { x: number; y: number }
 
   constructor() {
     super({ key: BuildingScene.KEY })
@@ -90,6 +94,7 @@ export class BuildingScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x0a0710)
     this.drawFloor()
     this.drawProps()
+    this.drawExitHotspot()
     this.spawnPlayer()
     this.refreshNpcs()
     this.setupInput()
@@ -180,6 +185,48 @@ export class BuildingScene extends Phaser.Scene {
     const sy = this.canvasHeight() - INTERIOR_CELL * 0.8
     this.player = this.physics.add.sprite(sx, sy, tex)
     this.player.setDepth(80)
+  }
+
+  private drawExitHotspot(): void {
+    const x = INTERIOR_CELL * 1.5
+    const y = this.canvasHeight() - INTERIOR_CELL * 0.8
+    this.exitPos = { x, y }
+    const halo = this.add.rectangle(0, 0, INTERIOR_CELL * 1.35, INTERIOR_CELL * 0.82, 0x000000, 0.62)
+    halo.setStrokeStyle(2, 0xfff5b8, 0.85)
+    const icon = this.add.text(-INTERIOR_CELL * 0.38, 0, '🚪', {
+      fontFamily:
+        '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+      fontSize: '17px',
+      color: '#ffffff',
+      stroke: '#0a0a0a',
+      strokeThickness: 2
+    })
+    icon.setOrigin(0.5, 0.5)
+    const label = this.add.text(5, 0, '離開', {
+      fontFamily:
+        '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+      fontSize: '11px',
+      color: '#fff5b8',
+      fontStyle: 'bold'
+    })
+    label.setOrigin(0.5, 0.5)
+    this.exitHotspot = this.add.container(x, y, [halo, icon, label])
+    this.exitHotspot.setDepth(65)
+    this.exitHotspot.setSize(INTERIOR_CELL * 1.35, INTERIOR_CELL * 0.82)
+    this.exitHotspot.setInteractive(
+      new Phaser.Geom.Rectangle(
+        -INTERIOR_CELL * 0.675,
+        -INTERIOR_CELL * 0.41,
+        INTERIOR_CELL * 1.35,
+        INTERIOR_CELL * 0.82
+      ),
+      Phaser.Geom.Rectangle.Contains
+    )
+    this.exitHotspot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation?.()
+      this.suppressNextPointerTarget = true
+      this.callbacks.onExit()
+    })
   }
 
   private refreshNpcs(): void {
@@ -337,6 +384,8 @@ export class BuildingScene extends Phaser.Scene {
       E: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
       SPACE: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     }
+    this.wasd.E.on('down', () => this.tryExit())
+    this.wasd.SPACE.on('down', () => this.tryExit())
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.suppressNextPointerTarget) {
         this.suppressNextPointerTarget = false
@@ -349,6 +398,17 @@ export class BuildingScene extends Phaser.Scene {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
     })
+  }
+
+  private tryExit(): void {
+    if (!this.player || !this.exitPos) return
+    const distance = Phaser.Math.Distance.Between(
+      this.player.x,
+      this.player.y,
+      this.exitPos.x,
+      this.exitPos.y
+    )
+    if (distance <= EXIT_RADIUS) this.callbacks.onExit()
   }
 
   private handleMovement(): void {

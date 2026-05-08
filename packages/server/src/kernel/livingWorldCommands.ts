@@ -68,6 +68,7 @@ export type NpcActivityChangeCmd = Readonly<{
 export type NpcInteractCmd = Readonly<{
   tile: string
   participants: readonly [string, string]
+  positions?: Readonly<Record<string, { subCol: number; subRow: number; subZ: number }>>
   mode: 'chat' | 'argue'
   narration: string
 }>

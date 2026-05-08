@@ -48,6 +48,10 @@ export interface NpcSummary {
   /** Server-driven area canvas 子格座標（v0.12+） */
   subCol?: number
   subRow?: number
+  /** 高度 / 樓層座標。現在多數為 0，未來用於高低差與室內樓層。 */
+  subZ?: number
+  /** null/undefined = 室外；有值 = 在該建築內，不應同時畫在區域街道上 */
+  buildingId?: string | null
   /** 24-bit RGB sprite 主色（v0.12+） */
   color?: number
   /** Personality-shaped placeholder shown before player types in NpcDialog (v0.14.1+) */

@@ -79,7 +79,7 @@ const FALLBACK: DialogPack = {
     ],
     high: [
       {
-        zh: '「告訴你一個小事——下回潮汐節，浪花區那條巷會開窗口。」',
+        zh: '「告訴你一個小事——下回潮汐節，碼頭區那條巷會開窗口。」',
         en: '"A small tip — at the next tide festival, a window opens in that dock alley."',
       },
       {

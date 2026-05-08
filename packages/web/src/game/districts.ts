@@ -16,7 +16,7 @@ export type DistrictId =
   | 't_desert'   // 潮聲區
   | 't_central'  // 夜潮區
   | 't_ruin'     // 鏽灣區
-  | 't_dock'     // 浪花區
+  | 't_dock'     // 碼頭區
   | 't_road'     // 中性連通帶 (不是「街區」，純粹給玩家走的路)
 
 export interface DistrictDef {
@@ -109,8 +109,8 @@ export const DISTRICTS: Readonly<Record<DistrictId, DistrictDef>> = {
   },
   t_dock: {
     id: 't_dock',
-    nameZh: '浪花區',
-    nameEn: 'Lang-Hua',
+    nameZh: '碼頭區',
+    nameEn: 'Dockside',
     color: 0x6fb8d7,
     shade: 0x559cba,
     border: 0x356a80,
@@ -171,7 +171,7 @@ function districtAt(col: number, row: number): DistrictId {
   if (inRect(col, row, 0, 9, 4, 12)) return 't_desert'     // 潮聲區 左下
   if (inRect(col, row, 6, 9, 12, 12)) return 't_central'   // 夜潮區 中下
   if (inRect(col, row, 14, 9, 19, 12)) return 't_ruin'     // 鏽灣區 右下
-  if (inRect(col, row, 0, 13, 19, 14)) return 't_dock'     // 浪花區 最下
+  if (inRect(col, row, 0, 13, 19, 14)) return 't_dock'     // 碼頭區 最下
   // 其他空隙都是街道
   return 't_road'
 }

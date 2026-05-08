@@ -92,8 +92,8 @@ const LORE: Record<string, LoreEntry> = {
   t_dock: {
     glyph: '⌇',
     scene: {
-      zh: '浪花區。淺藍色的海灘和退潮後的礁石。詩人優娜常坐在木棧道的盡頭，把潮聲寫成短歌。',
-      en: 'Lang-Hua District. Pale-blue beaches and reefs at low tide. Yuna the bard often sits at the end of the boardwalk, turning the surf into short songs.'
+      zh: '碼頭區。淺藍色的海灘和退潮後的礁石。詩人優娜常坐在木棧道的盡頭，把潮聲寫成短歌。',
+      en: 'Dockside District. Pale-blue beaches and reefs at low tide. Yuna the bard often sits at the end of the boardwalk, turning the surf into short songs.'
     },
     whisper: {
       zh: '據說每一張關於航行的紋卡都曾在這片海邊被典開過。',

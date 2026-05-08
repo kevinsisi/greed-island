@@ -51,7 +51,7 @@ const FALLBACK_BY_TILE: Readonly<Record<string, string>> = {
   t_dimai: '地脈層的紫色光從石縫間透出，水滴聲像時鐘。',
   t_desert: '潮聲區的灰公寓鏽斑斑點點，舊收音機還在唸去年的潮汐表。',
   t_ruin: '鏽灣區的斷裂起重機間，乾燥的鐵鏽味隨海風吹進每一條巷子。',
-  t_dock: '浪花區的木棧道上，退潮的礁石像被磨亮的銀器一樣閃。'
+  t_dock: '碼頭區的木棧道上，退潮的礁石像被磨亮的銀器一樣閃。'
 }
 
 const REGEX_FENCE = /```(?:[a-z]+)?\s*([\s\S]*?)```/i

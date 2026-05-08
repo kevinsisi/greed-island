@@ -436,6 +436,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
                           tick {entry.tick} · {t(INTENT_TAG_KEY[entry.intent])} ·{' '}
                           {t('npc.relationship')} {entry.trustAfter}
                         </div>
+                        {entry.playerMessage && (
+                          <div className="mb-1 text-ground-500">
+                            {t('npc.playerSpoke')}：{entry.playerMessage}
+                          </div>
+                        )}
                         <div>{pickLocale(entry.line, locale)}</div>
                       </li>
                     ))}

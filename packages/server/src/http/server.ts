@@ -143,6 +143,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       runtime: options.runtime,
       store: playerStore,
       settings: settingsStore,
+      accounts: accountStore,
       authConfig: options.auth,
     })
   )

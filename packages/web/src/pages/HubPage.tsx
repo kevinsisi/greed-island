@@ -27,11 +27,11 @@ const KNOWN_DISTRICTS = new Set<DistrictId>([
 ])
 
 /**
- * HubPage 採用「地圖佔滿可視區域 + 浮動 overlay」設計：
+ * HubPage 採用「地圖主視覺 + 輕量 overlay」設計：
  * - 地圖 (PhaserGame) 是主視覺
- * - 「進入 XXX →」按鈕浮在地圖下方中央 (玩家在街區內時才顯示)
+ * - 「進入 XXX →」按鈕放在地圖外下方，避免蓋住 NPC 與最下方街區
  * - 城市標題 pill 浮在地圖左上
- * - 行動裝置不必捲動就能完成所有操作
+ * - 行動裝置仍保留 44px 以上觸控目標
  */
 export function HubPage() {
   const { t, locale } = useI18n()
@@ -158,24 +158,25 @@ export function HubPage() {
           </div>
         </div>
 
-        {/* 下方：進入街區按鈕 (玩家在街區內時才顯示) */}
-        {currentName && currentDistrict && (
-          <div className="absolute bottom-2 left-2 right-2 z-10 flex justify-center pointer-events-none">
-            <button
-              type="button"
-              onClick={handleOpenCurrentArea}
-              className="pointer-events-auto gi-touch px-5 py-2 inline-flex flex-col items-center gap-0 bg-ember-500/20 backdrop-blur border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/30 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/40"
-            >
-              <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
-                {t('hub.currentArea')}
-              </span>
-              <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
-                {t('hub.openArea', { name: currentName })}
-              </span>
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* 地圖外：進入街區按鈕 (玩家在街區內時才顯示)，不覆蓋 NPC / 碼頭區 */}
+      {currentName && currentDistrict && (
+        <div className="mt-3 px-2 flex justify-center">
+          <button
+            type="button"
+            onClick={handleOpenCurrentArea}
+            className="gi-touch min-h-[44px] w-full max-w-[360px] px-5 py-2 inline-flex flex-col items-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
+          >
+            <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
+              {t('hub.currentArea')}
+            </span>
+            <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
+              {t('hub.openArea', { name: currentName })}
+            </span>
+          </button>
+        </div>
+      )}
 
       {token && showSincePanel && (
         <SinceLastVisitPanel token={token} onClose={() => setShowSincePanel(false)} />

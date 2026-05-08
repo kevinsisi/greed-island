@@ -104,6 +104,10 @@ export type SimNpcState = Readonly<{
   subCol: number
   /** Area canvas 子格列座標（後端權威） */
   subRow: number
+  /** 高度 / 樓層座標；目前預設 0，未來支援高低差互動。 */
+  subZ: number
+  /** NPC 目前所在建築；null 表示在區域室外。 */
+  buildingId: string | null
   /** 24-bit 整數色（0xRRGGBB），前端用做 sprite 主色 */
   color: number
   /** 玩家剛打開對話框、還沒輸入時顯示的 placeholder line。
@@ -353,8 +357,10 @@ export class SimulationRuntime {
           targetTile: profile.defaultLocation,
           lastActedTick: 0,
           subCol: 7,
-          subRow: 5
+          subRow: 5,
+          subZ: 0
         } as NpcRuntimeState)
+      const buildingId = this.getNpcBuildingId(profile.id)
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
@@ -373,6 +379,8 @@ export class SimulationRuntime {
         targetTile: s.targetTile,
         subCol: s.subCol,
         subRow: s.subRow,
+        subZ: s.subZ,
+        buildingId,
         color: deriveNpcColor(profile.id, s.faction),
         greetLine: derivePersonalityGreetLine(profile),
       }
@@ -596,6 +604,7 @@ export class SimulationRuntime {
             {
               tile: event.tile,
               participants: [a, b],
+              positions: event.positions,
               mode: event.mode,
               narration: event.narration
             }
@@ -766,7 +775,7 @@ export class SimulationRuntime {
           {
             windowId: 'tide_festival',
             closesAtTick: this.rareWindowClosesAtTick,
-            narration: '潮汐節的窗口開啟了，浪花區會在二十分鐘內進入慶典。'
+            narration: '潮汐節的窗口開啟了，碼頭區會在二十分鐘內進入慶典。'
           }
         )
       )
@@ -784,7 +793,7 @@ export class SimulationRuntime {
           submittedAt,
           {
             windowId: 'tide_festival',
-            narration: '潮汐節的窗口悄然閉合，浪花區回歸日常喧囂。'
+            narration: '潮汐節的窗口悄然閉合，碼頭區回歸日常喧囂。'
           }
         )
       )

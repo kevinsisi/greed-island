@@ -403,12 +403,12 @@ const ALL_BUILDINGS: BuildingDef[] = [
     enterable: true,
     restorative: false
   },
-  // ── t_dock 浪花區
+  // ── t_dock 碼頭區
   {
     id: 'b_dock_pier',
     tileId: 't_dock',
     nameZh: '浪花棧橋',
-    nameEn: 'Lang-Hua Pier',
+    nameEn: 'Dockside Pier',
     descriptionZh: '退潮後的礁石和木棧道。詩人優娜常坐在棧道盡頭把潮聲寫成短歌。',
     type: 'landmark',
     placement: { col: 2, row: 3, glyph: '⚓', size: 22 },

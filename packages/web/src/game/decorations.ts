@@ -76,7 +76,7 @@ export const CITY_DECORATIONS: Readonly<Record<DistrictId, readonly CellDecorati
     { col: 17, row: 11, glyph: '🪨', size: 22 },
     { col: 19, row: 12, glyph: '🏚', size: 22 },
   ],
-  // 浪花區 0..19, 13..14 — 碼頭 / 海
+  // 碼頭區 0..19, 13..14 — 碼頭 / 海
   t_dock: [
     { col: 2, row: 13, glyph: '⚓', size: 22 },
     { col: 5, row: 13, glyph: '⛵', size: 22 },
@@ -270,7 +270,7 @@ export const AREA_DECORATIONS: Readonly<Record<DistrictId, AreaDecorationSet>> =
       ...lineCells(7, 0, 7, 9),
     ],
   },
-  // 浪花區 — 碼頭、船、水
+  // 碼頭區 — 碼頭、船、水
   t_dock: {
     props: [
       { col: 1, row: 0, glyph: '⚓', size: 24 },

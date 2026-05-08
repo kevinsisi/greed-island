@@ -23,7 +23,7 @@ const TILE_NAME_ZH: Readonly<Record<string, string>> = {
   t_desert: '潮聲區',
   t_central: '夜潮區',
   t_ruin: '鏽灣區',
-  t_dock: '浪花區'
+  t_dock: '碼頭區'
 }
 
 const PRESSURE_LABEL: Readonly<Record<string, string>> = {

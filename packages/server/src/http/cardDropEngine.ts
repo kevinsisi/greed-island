@@ -80,7 +80,7 @@ const TILE_TYPE_MODIFIERS: Readonly<
     spawnChanceMul: 1.0,
     categoryBoosts: { 深淵系: 1.5, 潮術系: 1.4 },
   },
-  // 浪花區：生靈系
+  // 碼頭區：生靈系
   t_dock: {
     spawnChanceMul: 1.0,
     categoryBoosts: { 生靈系: 1.4 },

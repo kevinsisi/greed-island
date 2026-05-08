@@ -17,7 +17,8 @@
 
 import { Router, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
-import { requireAuth, type AuthConfig } from './auth.js'
+import { requireAuth, toPublicAccount, type AuthConfig } from './auth.js'
+import type { AccountStore } from './accounts.js'
 import {
   RELATIONSHIP_MAX,
   RELATIONSHIP_MIN,
@@ -62,6 +63,7 @@ export function createNpcRouter(input: {
   runtime: SimulationRuntime
   store: PlayerStateStore
   settings: SettingsStore
+  accounts: AccountStore
   authConfig: AuthConfig
 }): Router {
   const router = Router()
@@ -114,6 +116,7 @@ export function createNpcRouter(input: {
 
     const tier: RelationshipTier = tierForRelationship(previousTrust)
     const playerMessage = message ?? fallbackMessageFor(explicitIntent!)
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
 
     let replySource: ReplySource = 'fallback'
     let replyZh = ''
@@ -122,11 +125,17 @@ export function createNpcRouter(input: {
     let aiTrustDelta: number | null = null
     let aiError: string | null = null
 
+    const identityLine = identityReplyFor(profile, playerMessage, player.displayName)
     const hasKeys = input.settings.countActive() > 0
-    if (hasKeys) {
+    if (identityLine) {
+      replyZh = identityLine.zh
+      replyEn = identityLine.en
+      resolvedIntent = 'ask'
+    } else if (hasKeys) {
       try {
         const ai = await generateAiReply(input.settings, {
           profile,
+          player,
           trust: previousTrust,
           tier,
           history,
@@ -144,7 +153,7 @@ export function createNpcRouter(input: {
       }
     }
 
-    if (replySource === 'fallback') {
+    if (!identityLine && replySource === 'fallback') {
       const intent = resolvedIntent
       const rotationSeed = tick + Math.floor(previousTrust) + previousCount
       const line = pickLine(npcId, intent, tier, rotationSeed)
@@ -176,6 +185,7 @@ export function createNpcRouter(input: {
       accountId: claims.sub,
       npcId,
       intent: resolvedIntent,
+      playerMessage,
       lineZh: replyZh,
       lineEn: replyEn,
       tick,
@@ -414,6 +424,7 @@ export function createNpcRouter(input: {
       accountId: claims.sub,
       npcId: npcA,
       intent: 'ask',
+      playerMessage: message,
       lineZh: narration,
       lineEn: narration,
       tick,
@@ -423,6 +434,7 @@ export function createNpcRouter(input: {
       accountId: claims.sub,
       npcId: npcB,
       intent: 'ask',
+      playerMessage: message,
       lineZh: narration,
       lineEn: narration,
       tick,
@@ -540,6 +552,7 @@ export function createNpcRouter(input: {
       events: rows.map((row) => ({
         id: row.id,
         intent: row.intent,
+        playerMessage: row.playerMessage,
         line: { zh: row.lineZh, en: row.lineEn },
         tick: row.tick,
         occurredAt: new Date(row.occurredAt).toISOString(),
@@ -564,6 +577,62 @@ function deriveGreetWithFallback(
     return deriveDynamicGreetLine(profile, ctx)
   } catch {
     return derivePersonalityGreetLine(profile)
+  }
+}
+
+function resolvePlayerIdentity(
+  accounts: AccountStore,
+  accountId: number,
+  email: string
+): { accountId: number; displayName: string; email: string } {
+  const account = accounts.findById(accountId)
+  const displayName = account
+    ? toPublicAccount(account).displayName
+    : email.split('@')[0] ?? `玩家 #${accountId}`
+  return { accountId, displayName, email }
+}
+
+function identityReplyFor(
+  profile: NpcProfile,
+  playerMessage: string,
+  playerDisplayName: string
+): LocalizedLine | null {
+  const normalized = playerMessage.replace(/\s+/g, '')
+  const asksPlayerIdentity =
+    normalized.includes('我是誰') ||
+    normalized.includes('我是谁') ||
+    normalized.includes('我叫什麼') ||
+    normalized.includes('我叫什么') ||
+    normalized.includes('你知道我是誰') ||
+    normalized.includes('你知道我是谁')
+  const asksNpcIdentity =
+    normalized.includes('你是誰') ||
+    normalized.includes('你是谁') ||
+    normalized.includes('你叫什麼') ||
+    normalized.includes('你叫什么')
+
+  if (!asksPlayerIdentity && !asksNpcIdentity) return null
+
+  const npcZh = profile.name.zh
+  const npcEn = profile.name.en
+  const roleZh = profile.role.zh
+  const roleEn = profile.role.en
+
+  if (asksPlayerIdentity && asksNpcIdentity) {
+    return {
+      zh: `「我是${npcZh}，${roleZh}。你是${playerDisplayName}，我記得。」`,
+      en: `"I am ${npcEn}, ${roleEn}. You are ${playerDisplayName}; I remember."`,
+    }
+  }
+  if (asksPlayerIdentity) {
+    return {
+      zh: `「你是${playerDisplayName}。這名字我記著，不用再考我。」`,
+      en: `"You are ${playerDisplayName}. I remember the name; no need to test me again."`,
+    }
+  }
+  return {
+    zh: `「我是${npcZh}，${roleZh}。你要問事就直接問。」`,
+    en: `"I am ${npcEn}, ${roleEn}. Ask plainly if you need something."`,
   }
 }
 

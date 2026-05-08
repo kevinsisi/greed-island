@@ -155,7 +155,7 @@ export const fixtureMap: WorldMap = {
     { id: 't_temple',   name: '霓港區',  x: 7, y: 1, biome: 'water',    npcIds: ['npc_anton'] },
     { id: 't_central',  name: '夜潮區',  x: 4, y: 3, biome: 'grass',    npcIds: ['npc_orin'] },
     { id: 't_ruin',     name: '鏽灣區',  x: 7, y: 4, biome: 'ruin',     npcIds: ['npc_borr'] },
-    { id: 't_dock',     name: '浪花區',  x: 3, y: 5, biome: 'water',    npcIds: ['npc_yuna'] },
+    { id: 't_dock',     name: '碼頭區',  x: 3, y: 5, biome: 'water',    npcIds: ['npc_yuna'] },
     { id: 't_dimai',    name: '地脈層',  x: 4, y: 2, biome: 'ruin',     npcIds: ['npc_sela'] },
   ],
 }

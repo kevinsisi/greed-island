@@ -177,11 +177,52 @@ describe('NpcEngine', () => {
     expect(s.subCol).toBeLessThan(15)
     expect(s.subRow).toBeGreaterThanOrEqual(0)
     expect(s.subRow).toBeLessThan(10)
+    expect(s.subZ).toBe(0)
     // 同 id + 同 tile → 永遠一樣的初始位置
     const engine2 = new NpcEngine([makeProfile({ id: 'sub.npc' })])
     const s2 = engine2.getState('sub.npc')!
     expect(s2.subCol).toBe(s.subCol)
     expect(s2.subRow).toBe(s.subRow)
+    expect(s2.subZ).toBe(s.subZ)
+  })
+
+  it('does not allow same-tile NPCs to interact across different heights', () => {
+    const A = makeProfile({
+      id: 'near.A',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const B = makeProfile({
+      id: 'near.B',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const engine = new NpcEngine([A, B])
+    engine.hydrate('near.A', {
+      tile: 't_central',
+      targetTile: 't_central',
+      activity: 'idle',
+      subCol: 7,
+      subRow: 5,
+      subZ: 0
+    })
+    engine.hydrate('near.B', {
+      tile: 't_central',
+      targetTile: 't_central',
+      activity: 'idle',
+      subCol: 7,
+      subRow: 5,
+      subZ: 1
+    })
+
+    let interactCount = 0
+    for (let t = 1; t <= 120; t += 1) {
+      const r = engine.tick(t)
+      interactCount += r.events.filter((e) => e.kind === 'interact').length
+    }
+    expect(interactCount).toBe(0)
   })
 
   it('moves at most one sub-cell per tick within the same tile', () => {

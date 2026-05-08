@@ -47,6 +47,7 @@ export function BuildingPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [busy, setBusy] = useState(false)
+  const def = view?.def
 
   // refresh helpers
   const refreshBuilding = useCallback(async () => {
@@ -110,6 +111,11 @@ export function BuildingPage() {
     },
     [npcs]
   )
+
+  const handleExit = useCallback(() => {
+    if (!def) return
+    navigate(`/area/${def.tileId}`)
+  }, [navigate, def])
 
   const flashMessage = useCallback((msg: string) => {
     setActionMessage(msg)
@@ -190,11 +196,10 @@ export function BuildingPage() {
     )
   }
 
-  if (!view) {
+  if (!view || !def) {
     return <div className="p-4 text-ground-300">載入中…</div>
   }
 
-  const def = view.def
   if (!def.enterable) {
     return <Navigate to={`/area/${def.tileId}`} replace />
   }
@@ -227,7 +232,12 @@ export function BuildingPage() {
       </p>
 
       {/* 室內小場景 */}
-      <BuildingPhaserGame building={def} npcs={sceneNpcs} onNpcInteract={handleNpcInteract} />
+      <BuildingPhaserGame
+        building={def}
+        npcs={sceneNpcs}
+        onNpcInteract={handleNpcInteract}
+        onExit={handleExit}
+      />
 
       {/* 在場 NPC list */}
       <div className="flex flex-col gap-2 bg-ground-900/85 border border-ground-700 rounded-sharp p-3">

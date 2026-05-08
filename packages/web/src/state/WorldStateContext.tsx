@@ -79,26 +79,34 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     const refreshAll = async () => {
-      try {
-        const [world, npcs, events, cards, map] = await Promise.all([
-          api.world(),
-          api.npcs(tokenRef.current),
-          api.events(RECENT_EVENT_LIMIT),
-          api.cards(),
-          api.map()
-        ])
-        if (cancelled) return
-        setServerWorld(world)
-        setServerNpcs(npcs)
-        setServerEvents(events)
-        setServerCards(cards)
-        setServerMap(map)
-        setLoadError(null)
-      } catch (err) {
-        if (cancelled) return
-        const msg = err instanceof Error ? err.message : 'Failed to load world state.'
-        setLoadError(msg)
-      }
+      const requests = [
+        api.world().then((world) => {
+          if (!cancelled) setServerWorld(world)
+        }),
+        api.npcs(tokenRef.current).then((npcs) => {
+          if (!cancelled) setServerNpcs(npcs)
+        }),
+        api.events(RECENT_EVENT_LIMIT).then((events) => {
+          if (!cancelled) setServerEvents(events)
+        }),
+        api.cards().then((cards) => {
+          if (!cancelled) setServerCards(cards)
+        }),
+        api.map().then((map) => {
+          if (!cancelled) setServerMap(map)
+        })
+      ]
+
+      const results = await Promise.allSettled(requests)
+      if (cancelled) return
+      const failed = results.find((result) => result.status === 'rejected')
+      setLoadError(
+        failed && failed.status === 'rejected'
+          ? failed.reason instanceof Error
+            ? failed.reason.message
+            : 'Failed to load part of world state.'
+          : null
+      )
     }
 
     refreshAll()
@@ -281,6 +289,10 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(typeof npc.targetTile === 'string' ? { targetTile: npc.targetTile } : {}),
     ...(typeof npc.subCol === 'number' ? { subCol: npc.subCol } : {}),
     ...(typeof npc.subRow === 'number' ? { subRow: npc.subRow } : {}),
+    ...(typeof npc.subZ === 'number' ? { subZ: npc.subZ } : {}),
+    ...(typeof npc.buildingId === 'string' || npc.buildingId === null
+      ? { buildingId: npc.buildingId }
+      : {}),
     ...(typeof npc.color === 'number' ? { color: npc.color } : {}),
     ...(npc.greetLine && typeof npc.greetLine.zh === 'string' && typeof npc.greetLine.en === 'string'
       ? { greetLine: { zh: npc.greetLine.zh, en: npc.greetLine.en } }

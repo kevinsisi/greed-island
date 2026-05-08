@@ -7,13 +7,15 @@ export interface BuildingPhaserGameProps {
   building: ServerBuildingDef
   npcs: BuildingSceneNpc[]
   onNpcInteract: (npcId: string) => void
+  onExit: () => void
 }
 
-export function BuildingPhaserGame({ building, npcs, onNpcInteract }: BuildingPhaserGameProps) {
+export function BuildingPhaserGame({ building, npcs, onNpcInteract, onExit }: BuildingPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
-  const callbacksRef = useRef({ onNpcInteract })
+  const callbacksRef = useRef({ onNpcInteract, onExit })
   callbacksRef.current.onNpcInteract = onNpcInteract
+  callbacksRef.current.onExit = onExit
 
   const width = building.interior.cols * INTERIOR_CELL
   const height = building.interior.rows * INTERIOR_CELL
@@ -39,7 +41,10 @@ export function BuildingPhaserGame({ building, npcs, onNpcInteract }: BuildingPh
     const init: BuildingSceneInit = {
       building,
       npcs,
-      callbacks: { onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id) }
+      callbacks: {
+        onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id),
+        onExit: () => callbacksRef.current.onExit()
+      }
     }
     game.scene.start(BuildingScene.KEY, init)
 

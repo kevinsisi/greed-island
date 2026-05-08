@@ -4,6 +4,35 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.4 ✅ shipped — 2026-05-08
+
+**主題：地圖 UI 修整 + NPC 記憶/身份 + 三維位置一致性**
+
+- ✅ **城市與區域 UI 修整**
+  - HubPage「進入 X」CTA 移出 Phaser canvas，避免遮住 NPC / 碼頭區
+  - `t_dock` 可見名稱統一為「碼頭區」
+  - AreaPage tab 列移到內容面板上方，切換資訊不再每次捲過 panel
+- ✅ **NPC 對話記憶與玩家身份**
+  - `personal_events.player_message` 持久化玩家當時說的內容
+  - NPC AI dialog prompt 帶玩家 `displayName/accountId/email` 與雙向歷史
+  - 「我是誰 / 你是誰」走 deterministic identity reply，AI 不參與世界事實判定
+- ✅ **世界資料載入與 Phaser 後載入穩定化**
+  - `WorldStateContext.refreshAll()` 改分段 `Promise.allSettled` 套用，避免單一 API 慢/失敗拖住 NPC/map
+  - Phaser scene 尚未 active 時短暫 retry external update
+  - AreaScene 支援建築後載入並用內容簽章避免 polling 重畫閃爍
+- ✅ **NPC 室內/室外與三維位置一致性**
+  - `NpcRuntimeState` / `/api/npcs` / frontend state 新增 `buildingId`、`subZ`
+  - AreaPage 只渲染 `!npc.buildingId` 的室外 NPC，避免同一 NPC 室內外分身
+  - `NPC_INTERACT` 只允許雙方同 tile、室外、`subCol/subRow/subZ` 足夠接近，payload 保留雙方位置證據
+- ✅ **所有子場景都有場景內出口 hotspot**
+  - AreaScene 新增「出口」hotspot，點擊或靠近後按 `E` / `SPACE` 可回城市總覽
+  - BuildingScene 新增門口/「離開」hotspot，靠近後按 `E` / `SPACE` 或點擊可回建築所屬區域
+- ✅ **驗證**
+  - `npm run build:web` 通過（Vite chunk size warning 既有）
+  - `npm run build:server` 通過
+  - `npm run test -w @greed-island/server`：13 files / 102 tests 通過
+  - `git diff --check` 無 whitespace error；Windows line-ending warning 既有
+
 ## v0.15.3 ✅ shipped — 2026-05-07
 
 **主題：AI 反幻覺 + 編年史多樣化 + 角色職責綁定 home tile**

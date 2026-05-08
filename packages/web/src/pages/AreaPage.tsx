@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
+import { useAuth } from '../state/AuthContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
@@ -11,6 +12,7 @@ import {
   normaliseWeather,
   type AreaMapBuilding,
   type AreaMapNpc,
+  type AreaMapPlayer,
   type AreaNpcActivity
 } from '../game/AreaScene'
 import type { DistrictId } from '../game/districts'
@@ -20,7 +22,8 @@ import {
   api,
   type ServerAmbient,
   type ServerAreaState,
-  type ServerBuildingView
+  type ServerBuildingView,
+  type ServerNearbyPlayer
 } from '../api/client'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
@@ -34,19 +37,21 @@ const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
 }
 
 type DrawerTab = 'scene' | 'npcs' | 'cards' | 'events' | 'players'
+const AREA_PEER_REFRESH_MS = 8_000
 
 /**
  * AreaPage 採用「地圖佔滿可視區域 + 浮動 overlay」設計：
  * - 中央：Phaser 區域地圖 (含紋卡 drop sprite)，玩家點地圖任一點就走過去
  * - 上方：返回鈕 + 區域名稱 pill
- * - 下方：永遠可見的 tab 列；展開的內容區放在地圖上面，半透明浮動
+ * - 下方：永遠可見的 tab 列；展開內容固定在 tab 下方
  *   tabs：場景敘事 / NPC / 紋卡 / 事件 / 鄰近玩家
  *
- * 整個畫面不需要捲動就能完成所有互動，行動裝置上特別重要。
+ * 互動入口必須先於長內容顯示，避免使用者切換 tab 時被 panel 擋住。
  */
 export function AreaPage() {
   const { tileId = '' } = useParams<{ tileId: string }>()
   const { t, locale } = useI18n()
+  const { token, account } = useAuth()
   const { map, npcs, events, world } = useWorldState()
   const weather = useMemo(
     () => normaliseWeather(typeof world.facts['weather'] === 'string' ? (world.facts['weather'] as string) : null),
@@ -61,6 +66,7 @@ export function AreaPage() {
   const [ambient, setAmbient] = useState<ServerAmbient | null>(null)
   const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
   const [nearbyBuildingId, setNearbyBuildingId] = useState<string | null>(null)
+  const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -107,6 +113,30 @@ export function AreaPage() {
   const lore = loreFor(tileId)
   usePresenceTouch(tile ? tileId : null)
 
+  useEffect(() => {
+    if (!token || !tile) {
+      setNearbyPlayers([])
+      return
+    }
+    let cancelled = false
+    const refresh = () => {
+      api
+        .socialNearby(token, tileId)
+        .then((r) => {
+          if (!cancelled) setNearbyPlayers(r.players)
+        })
+        .catch(() => {
+          if (!cancelled) setNearbyPlayers([])
+        })
+    }
+    refresh()
+    const timer = window.setInterval(refresh, AREA_PEER_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [token, tile, tileId])
+
   const tileNameById = useMemo(() => {
     const acc: Record<string, string> = {}
     for (const entry of map.tiles) acc[entry.id] = entry.name
@@ -116,6 +146,10 @@ export function AreaPage() {
   const occupants = useMemo(
     () => npcs.filter((npc) => npc.location === tileId),
     [npcs, tileId]
+  )
+  const outdoorOccupants = useMemo(
+    () => occupants.filter((npc) => !npc.buildingId),
+    [occupants]
   )
 
   const localEvents = useMemo(() => {
@@ -134,7 +168,7 @@ export function AreaPage() {
 
   const mapNpcs = useMemo<AreaMapNpc[]>(
     () =>
-      occupants.map((npc) => {
+      outdoorOccupants.map((npc) => {
         const activity: AreaNpcActivity = npc.activity ?? 'idle'
         const base: AreaMapNpc = {
           id: npc.id,
@@ -143,6 +177,7 @@ export function AreaPage() {
           // 後端權威：v0.12 之後 server 一定會帶這些欄位；舊資料缺少時用 sane fallback
           subCol: typeof npc.subCol === 'number' ? npc.subCol : 7,
           subRow: typeof npc.subRow === 'number' ? npc.subRow : 5,
+          ...(typeof npc.subZ === 'number' ? { subZ: npc.subZ } : {}),
           color: typeof npc.color === 'number' ? npc.color : 0xfff5b8,
           activity
         }
@@ -152,7 +187,17 @@ export function AreaPage() {
         if (typeof npc.health === 'number') base.health = npc.health
         return base
       }),
-    [occupants, t]
+    [outdoorOccupants, t]
+  )
+
+  const mapPlayers = useMemo<AreaMapPlayer[]>(
+    () =>
+      nearbyPlayers.map((player) => ({
+        id: player.id,
+        displayName: player.displayName,
+        shortName: player.displayName.charAt(0).toUpperCase()
+      })),
+    [nearbyPlayers]
   )
 
   const hudStrings = useMemo(
@@ -160,7 +205,8 @@ export function AreaPage() {
       interact: t('hub.interactHint'),
       pickup: t('cards.pickup'),
       tooFar: t('npc.tooFarHint'),
-      enterBuilding: '進入'
+      enterBuilding: '進入',
+      exit: '回上一層'
     }),
     [t]
   )
@@ -186,6 +232,10 @@ export function AreaPage() {
     },
     [navigate]
   )
+
+  const handleExit = useCallback(() => {
+    navigate('/')
+  }, [navigate])
 
   const handleNearbyBuildingChange = useCallback((id: string | null) => {
     setNearbyBuildingId(id)
@@ -256,9 +306,11 @@ export function AreaPage() {
         <AreaPhaserGame
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
+          players={mapPlayers}
           drops={cardOverlay.drops}
           buildings={mapBuildings}
           locale={locale}
+          playerName={account?.displayName ?? null}
           hudStrings={hudStrings}
           weather={weather}
           onNpcInteract={handleNpcInteract}
@@ -266,6 +318,7 @@ export function AreaPage() {
           onNearbyNpcsChange={handleNearbyNpcsChange}
           onInteractTooFar={handleInteractTooFar}
           onBuildingEnter={handleBuildingEnter}
+          onExit={handleExit}
           onNearbyBuildingChange={handleNearbyBuildingChange}
         />
       </div>
@@ -283,6 +336,36 @@ export function AreaPage() {
             <span aria-hidden="true">→</span>
           </button>
         )}
+
+        {/* tab 列放在彈出內容上方，避免使用者每次切換都要先捲過 panel */}
+        <div className="flex items-stretch gap-1 bg-ground-900/85 border border-ground-700 rounded-sharp p-1">
+          <DrawerTabButton
+            label={t('area.scene')}
+            active={drawerTab === 'scene'}
+            onClick={() => toggleTab('scene')}
+          />
+          <DrawerTabButton
+            label={`${t('area.npcs')} ${outdoorOccupants.length}`}
+            active={drawerTab === 'npcs'}
+            onClick={() => toggleTab('npcs')}
+          />
+          <DrawerTabButton
+            label={t('cards.tabLabel')}
+            active={drawerTab === 'cards'}
+            onClick={() => toggleTab('cards')}
+          />
+          <DrawerTabButton
+            label={`${t('area.events')} ${localEvents.length}`}
+            active={drawerTab === 'events'}
+            onClick={() => toggleTab('events')}
+          />
+          <DrawerTabButton
+            label={t('social.peerNearby')}
+            active={drawerTab === 'players'}
+            onClick={() => toggleTab('players')}
+          />
+        </div>
+
         {drawerTab && (
           <div className="bg-ground-900/95 border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">
               {drawerTab === 'scene' && (
@@ -333,11 +416,11 @@ export function AreaPage() {
                       {t('npc.nearbyHint')}
                     </span>
                   </div>
-                  {occupants.length === 0 ? (
+                  {outdoorOccupants.length === 0 ? (
                     <div className="text-[12px] text-ground-500 italic">{t('area.npcsEmpty')}</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {occupants.map((npc) => {
+                      {outdoorOccupants.map((npc) => {
                         const isNearby = nearbyNpcIds.has(npc.id)
                         return (
                           <button
@@ -441,35 +524,6 @@ export function AreaPage() {
             )}
           </div>
         )}
-
-        {/* tab 列（已移到地圖外面） */}
-        <div className="flex items-stretch gap-1 bg-ground-900/85 border border-ground-700 rounded-sharp p-1">
-          <DrawerTabButton
-            label={t('area.scene')}
-            active={drawerTab === 'scene'}
-            onClick={() => toggleTab('scene')}
-          />
-          <DrawerTabButton
-            label={`${t('area.npcs')} ${occupants.length}`}
-            active={drawerTab === 'npcs'}
-            onClick={() => toggleTab('npcs')}
-          />
-          <DrawerTabButton
-            label={t('cards.tabLabel')}
-            active={drawerTab === 'cards'}
-            onClick={() => toggleTab('cards')}
-          />
-          <DrawerTabButton
-            label={`${t('area.events')} ${localEvents.length}`}
-            active={drawerTab === 'events'}
-            onClick={() => toggleTab('events')}
-          />
-          <DrawerTabButton
-            label={t('social.peerNearby')}
-            active={drawerTab === 'players'}
-            onClick={() => toggleTab('players')}
-          />
-        </div>
       </div>
 
       {tooFarFlash && (

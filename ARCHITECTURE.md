@@ -152,7 +152,8 @@ For each tick `N`:
 ## 3. NPC State Is A Projection
 
 NPC tile, activity, mood, health, faction lean, target tile,
-last-acted-tick, **area sub-tile (subCol, subRow)**, and any other
+last-acted-tick, **area sub-tile (subCol, subRow, subZ)**, building
+presence (`buildingId` or outdoor), and any other
 state an NPC policy needs MUST be derivable from the EventLog. There
 is no hidden mutable runtime memory that survives a process restart
 without being represented in the log.
@@ -160,7 +161,7 @@ without being represented in the log.
 ### 3.1 Area sub-tile is server-authoritative
 
 Within an area canvas (15×10 cells), each NPC's position is decided
-by the NPC engine and stored as `subCol` / `subRow` in
+by the NPC engine and stored as `subCol` / `subRow` / `subZ` in
 `npc.state.<id>`. The frontend MUST render NPCs at those exact
 coordinates. Frontend-side wander tweens, randomised drift, or any
 visual jitter that does not come from the server are forbidden — they
@@ -168,12 +169,23 @@ break determinism and the "what every player sees" contract.
 Visual smoothing (e.g. tweening between two consecutive
 server-authoritative positions) is permitted as long as the displayed
 position converges to the server's value before the next tick.
+`subZ` is part of the authoritative position even when the current UI
+renders a flat map; interaction rules MUST still compare it so future
+floors / height differences do not retroactively break event facts.
 
 NPC sprite display attributes derived from server state:
-- `subCol`, `subRow` → canvas pixel position
+- `subCol`, `subRow`, `subZ` → canvas/world position
+- `buildingId` → exclusive indoor/outdoor presence; a single NPC MUST
+  NOT be rendered both inside a building and outdoors
 - `faction` + `id` → deterministic 24-bit `color`
 - `activity` enum → activity icon (work / eat / sleep / trade /
   patrol / move / idle)
+
+NPC-to-NPC world interactions are valid only when both participants are
+outdoors, on the same tile, and within the configured 3D proximity
+threshold. When an `NPC_INTERACT` event is committed, its payload should
+retain both participants' `subCol` / `subRow` / `subZ` at the decision
+tick so the event carries evidence for the observed interaction.
 
 The current NPC engine keeps an in-memory `Map<npcId, NpcRuntimeState>`
 for performance. That map is a *cache*. On boot the runtime calls

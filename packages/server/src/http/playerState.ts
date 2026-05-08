@@ -41,6 +41,7 @@ export type PersonalEventRow = Readonly<{
   account_id: number
   npc_id: string
   intent: string
+  player_message: string
   line_zh: string
   line_en: string
   tick: number
@@ -53,6 +54,7 @@ export type PersonalEventRecord = Readonly<{
   accountId: number
   npcId: string
   intent: string
+  playerMessage: string
   lineZh: string
   lineEn: string
   tick: number
@@ -79,6 +81,7 @@ export function initializePlayerStateSchema(db: DatabaseConnection): void {
       account_id INTEGER NOT NULL,
       npc_id TEXT NOT NULL,
       intent TEXT NOT NULL,
+      player_message TEXT NOT NULL DEFAULT '',
       line_zh TEXT NOT NULL,
       line_en TEXT NOT NULL,
       tick INTEGER NOT NULL,
@@ -89,6 +92,11 @@ export function initializePlayerStateSchema(db: DatabaseConnection): void {
     CREATE INDEX IF NOT EXISTS idx_personal_events_account_npc
       ON personal_events(account_id, npc_id, id);
   `)
+
+  const columns = db.prepare('PRAGMA table_info(personal_events)').all() as Array<{ name: string }>
+  if (!columns.some((column) => column.name === 'player_message')) {
+    db.exec("ALTER TABLE personal_events ADD COLUMN player_message TEXT NOT NULL DEFAULT ''")
+  }
 }
 
 export class PlayerStateStore {
@@ -152,6 +160,7 @@ export class PlayerStateStore {
     accountId: number
     npcId: string
     intent: string
+    playerMessage: string
     lineZh: string
     lineEn: string
     tick: number
@@ -161,13 +170,14 @@ export class PlayerStateStore {
     const result = this.db
       .prepare(
         `INSERT INTO personal_events
-           (account_id, npc_id, intent, line_zh, line_en, tick, occurred_at, trust_after)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+           (account_id, npc_id, intent, player_message, line_zh, line_en, tick, occurred_at, trust_after)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.accountId,
         input.npcId,
         input.intent,
+        input.playerMessage,
         input.lineZh,
         input.lineEn,
         input.tick,
@@ -179,6 +189,7 @@ export class PlayerStateStore {
       accountId: input.accountId,
       npcId: input.npcId,
       intent: input.intent,
+      playerMessage: input.playerMessage,
       lineZh: input.lineZh,
       lineEn: input.lineEn,
       tick: input.tick,
@@ -234,6 +245,7 @@ function toPersonalEventRecord(row: PersonalEventRow): PersonalEventRecord {
     accountId: row.account_id,
     npcId: row.npc_id,
     intent: row.intent,
+    playerMessage: row.player_message,
     lineZh: row.line_zh,
     lineEn: row.line_en,
     tick: row.tick,

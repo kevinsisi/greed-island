@@ -138,17 +138,31 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
 
   // npcs / locale / hud 字串 / area overlay 變動 → 通知場景刷新
   useEffect(() => {
-    const game = gameRef.current
-    if (!game) return
-    const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-    if (!scene || !scene.scene.isActive()) return
+    let retryTimer: number | null = null
+    let attempts = 0
     const update: Parameters<MapScene['applyExternalUpdate']>[0] = {
       npcs,
       locale,
       hudStrings
     }
     if (areaOverlays) update.areaOverlays = areaOverlays
-    scene.applyExternalUpdate(update)
+    const apply = () => {
+      const game = gameRef.current
+      if (!game) return
+      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+      if (!scene || !scene.scene.isActive()) {
+        if (attempts < 10) {
+          attempts += 1
+          retryTimer = window.setTimeout(apply, 16)
+        }
+        return
+      }
+      scene.applyExternalUpdate(update)
+    }
+    apply()
+    return () => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+    }
   }, [npcs, locale, hudStrings, areaOverlays])
 
   return (

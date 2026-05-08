@@ -7,6 +7,7 @@ import {
   type AreaMapBuilding,
   type AreaMapDrop,
   type AreaMapNpc,
+  type AreaMapPlayer,
   type AreaSceneInit,
   type AreaWeather
 } from './AreaScene'
@@ -46,9 +47,11 @@ function savePosition(tileId: string, pos: { x: number; y: number }): void {
 export interface AreaPhaserGameProps {
   tileId: DistrictId
   npcs: AreaMapNpc[]
+  players?: AreaMapPlayer[]
   drops: AreaMapDrop[]
   buildings?: AreaMapBuilding[]
   locale: 'zh' | 'en'
+  playerName?: string | null
   hudStrings: { interact: string; pickup: string; tooFar: string; enterBuilding?: string }
   /** v0.15.1：當前世界天氣（已 normalise）；AreaScene 用來切換 VFX */
   weather?: AreaWeather
@@ -57,6 +60,7 @@ export interface AreaPhaserGameProps {
   onNearbyNpcsChange?: (ids: string[]) => void
   onInteractTooFar?: (npcId: string) => void
   onBuildingEnter?: (buildingId: string) => void
+  onExit?: () => void
   /** v0.15.2：玩家最近的可進入建築變動時 fire；React 渲染地圖外面的「進入 X」按鈕 */
   onNearbyBuildingChange?: (buildingId: string | null) => void
 }
@@ -69,9 +73,11 @@ export interface AreaPhaserGameProps {
 export function AreaPhaserGame({
   tileId,
   npcs,
+  players,
   drops,
   buildings,
   locale,
+  playerName,
   hudStrings,
   weather,
   onNpcInteract,
@@ -79,6 +85,7 @@ export function AreaPhaserGame({
   onNearbyNpcsChange,
   onInteractTooFar,
   onBuildingEnter,
+  onExit,
   onNearbyBuildingChange
 }: AreaPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -91,6 +98,7 @@ export function AreaPhaserGame({
     onNearbyNpcsChange,
     onInteractTooFar,
     onBuildingEnter,
+    onExit,
     onNearbyBuildingChange
   })
   callbacksRef.current.onNpcInteract = onNpcInteract
@@ -99,6 +107,7 @@ export function AreaPhaserGame({
   callbacksRef.current.onNearbyNpcsChange = onNearbyNpcsChange
   callbacksRef.current.onInteractTooFar = onInteractTooFar
   callbacksRef.current.onBuildingEnter = onBuildingEnter
+  callbacksRef.current.onExit = onExit
   callbacksRef.current.onNearbyBuildingChange = onNearbyBuildingChange
 
   // tileId 變動 → 重建場景以套用新的 startPosition
@@ -138,13 +147,16 @@ export function AreaPhaserGame({
         onNearbyNpcsChange: (ids) => callbacksRef.current.onNearbyNpcsChange?.(ids),
         onInteractTooFar: (id) => callbacksRef.current.onInteractTooFar?.(id),
         onBuildingEnter: (id) => callbacksRef.current.onBuildingEnter?.(id),
+        onExit: () => callbacksRef.current.onExit?.(),
         onNearbyBuildingChange: (id) => callbacksRef.current.onNearbyBuildingChange?.(id)
       },
       tileId,
       npcs,
+      ...(players ? { players } : {}),
       drops,
       ...(buildings ? { buildings } : {}),
       locale,
+      ...(playerName !== undefined ? { playerName } : {}),
       hudStrings,
       startPosition: loadPosition(tileId),
       ...(weather ? { weather } : {})
@@ -159,20 +171,38 @@ export function AreaPhaserGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileId])
 
-  // npcs / drops / locale / hud / weather 變動 → 通知場景刷新
+  // npcs / players / drops / buildings / locale / hud / weather 變動 → 通知場景刷新
   useEffect(() => {
-    const game = gameRef.current
-    if (!game) return
-    const scene = game.scene.getScene(AreaScene.KEY) as AreaScene | null
-    if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({
+    let retryTimer: number | null = null
+    let attempts = 0
+    const update: Parameters<AreaScene['applyExternalUpdate']>[0] = {
       npcs,
       drops,
       locale,
       hudStrings,
       ...(weather ? { weather } : {})
-    })
-  }, [npcs, drops, locale, hudStrings, weather])
+    }
+    if (players) update.players = players
+    if (playerName !== undefined) update.playerName = playerName
+    if (buildings) update.buildings = buildings
+    const apply = () => {
+      const game = gameRef.current
+      if (!game) return
+      const scene = game.scene.getScene(AreaScene.KEY) as AreaScene | null
+      if (!scene || !scene.scene.isActive()) {
+        if (attempts < 10) {
+          attempts += 1
+          retryTimer = window.setTimeout(apply, 16)
+        }
+        return
+      }
+      scene.applyExternalUpdate(update)
+    }
+    apply()
+    return () => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+    }
+  }, [npcs, players, playerName, drops, buildings, locale, hudStrings, weather])
 
   return (
     <div

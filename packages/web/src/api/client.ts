@@ -62,6 +62,9 @@ export type ServerNpc = {
   // Living-world v0.12+：後端權威的 area canvas 子格座標 + 主色
   subCol?: number
   subRow?: number
+  subZ?: number
+  // v0.15.3+：null 表示在區域室外；非 null 表示已進建築，區域地圖不可再畫一次
+  buildingId?: string | null
   color?: number
   // v0.14.1+：personality-shaped greet placeholder 顯示在玩家還沒輸入時
   greetLine?: { zh: string; en: string }
@@ -222,6 +225,7 @@ export type ServerSettingsHealth = {
 export type ServerNpcHistoryEvent = {
   id: number
   intent: NpcInteractIntent
+  playerMessage: string
   line: LocalizedLine
   tick: number
   occurredAt: string

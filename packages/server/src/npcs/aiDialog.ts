@@ -31,6 +31,11 @@ export type AiDialogReply = Readonly<{
 
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
+  player: Readonly<{
+    accountId: number
+    displayName: string
+    email: string
+  }>
   trust: number
   tier: RelationshipTier
   history: readonly PersonalEventRecord[]
@@ -95,7 +100,10 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
   const recentLines = ctx.history
     .slice(0, 6)
     .reverse()
-    .map((row) => `  · [tick ${row.tick}] 你之前回覆 (${row.intent}): ${row.lineZh}`)
+    .map((row) => {
+      const playerLine = row.playerMessage.trim().length > 0 ? row.playerMessage : '(玩家使用快速互動)'
+      return `  · [tick ${row.tick}] 玩家說：「${playerLine}」；你回覆 (${row.intent}): ${row.lineZh}`
+    })
     .join('\n')
   const historyBlock = recentLines.length > 0 ? recentLines : '  · (這是你和這位玩家的第一次對話)'
 
@@ -122,9 +130,13 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     styleGuide,
     '',
     `### 玩家目前的狀態`,
+    `- 玩家顯示名稱: ${ctx.player.displayName}`,
+    `- 玩家帳號 id: ${ctx.player.accountId}`,
     `- 對你的信任值: ${trust} / 100 (層級: ${tier})`,
     `- 當前世界刻度: ${worldTick}`,
     `- 對話必須體現信任層級：${describeTier(tier)}`,
+    `- 如果玩家問「我是誰 / 你知道我是誰嗎」，你必須直接回答他是「${ctx.player.displayName}」，不要裝作不知道。`,
+    `- 如果玩家問「你是誰」，你必須直接回答你是「${profile.name.zh}」，角色是「${profile.role.zh}」。`,
     '',
     `### 最近的對話紀錄（你之前回覆過的內容，僅供參考，不要重複）`,
     historyBlock,
