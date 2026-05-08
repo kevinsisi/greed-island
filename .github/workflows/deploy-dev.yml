@@ -29,6 +29,8 @@ name: Deploy Dev
 #   DEPLOY_PATH           Path to the deploy directory on the desktop
 #                         (e.g. /d/GitClone/_HomeProject/greed-island/deploy
 #                         under Git-Bash on Windows)
+# Optional GitHub variables:
+#   DEPLOY_SSH_PORT       SSH port on the desktop host (default: 22)
 
 on:
   push:
@@ -44,6 +46,7 @@ env:
   IMAGE_BASE: ${{ secrets.DOCKERHUB_USERNAME }}
   SERVER_IMAGE: greed-island-server
   WEB_IMAGE: greed-island-web
+  DEPLOY_SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
 
 jobs:
   publish:
@@ -110,6 +113,14 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github-actions
 
+      - name: Check deploy configuration
+        run: |
+          test -n "${{ secrets.DEPLOY_SERVER_IP }}" || (echo "::error::DEPLOY_SERVER_IP secret is not configured" && exit 1)
+          test -n "${{ secrets.DEPLOY_USER }}" || (echo "::error::DEPLOY_USER secret is not configured" && exit 1)
+          test -n "${{ secrets.DEPLOY_SSH_KEY }}" || (echo "::error::DEPLOY_SSH_KEY secret is not configured" && exit 1)
+          test -n "${{ vars.DEPLOY_PATH }}" || (echo "::error::DEPLOY_PATH variable is not configured" && exit 1)
+          echo "Using SSH port ${DEPLOY_SSH_PORT}"
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -119,6 +130,7 @@ jobs:
           Host desktop
               HostName ${{ secrets.DEPLOY_SERVER_IP }}
               User ${{ secrets.DEPLOY_USER }}
+              Port ${{ env.DEPLOY_SSH_PORT }}
               IdentityFile ~/.ssh/id_ed25519
               StrictHostKeyChecking accept-new
               UserKnownHostsFile ~/.ssh/known_hosts
