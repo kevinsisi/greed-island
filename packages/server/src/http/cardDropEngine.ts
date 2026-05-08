@@ -25,6 +25,8 @@ import type {
   CardCatalogEntry,
   CardRank,
 } from '../cards/types.js'
+import { hashCanonicalJson } from '../kernel/canonicalJson.js'
+import { DEFAULT_RULESET_VERSION } from '../kernel/types.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 
 /** 基準 per-tile per-tick spawn 機率 — 比 v0.14 (1.2%) 低 5×。 */
@@ -45,6 +47,8 @@ const SPAWN_X_MIN = 60
 const SPAWN_X_MAX = 540
 const SPAWN_Y_MIN = 60
 const SPAWN_Y_MAX = 340
+const HASH_FRACTION_HEX_LENGTH = 13
+const HASH_FRACTION_DENOMINATOR = 0x10000000000000
 
 const WEATHER_RAINY: ReadonlySet<string> = new Set(['霧雨', '驟雨'])
 const WEATHER_SPAWN_BOOST = 1.3
@@ -86,6 +90,16 @@ const TILE_TYPE_MODIFIERS: Readonly<
     categoryBoosts: { 生靈系: 1.4 },
   },
 }
+
+type RollPhase = 'tick' | 'seed'
+type RollPurpose = 'spawn' | 'rank' | 'entry' | 'fallback-entry' | 'x' | 'y'
+type RollContext = Readonly<{
+  phase: RollPhase
+  tick: number
+  tileId: string
+  weather: string
+  rareOpen: boolean
+}>
 
 export class CardDropEngine {
   /** 池子裡只有 acquisitionMethod === 'random_drop' 的卡。 */
@@ -129,11 +143,18 @@ export class CardDropEngine {
       const tileMod = TILE_TYPE_MODIFIERS[tileId] ?? null
       const tileMul = tileMod?.spawnChanceMul ?? 1
       const chance = BASE_SPAWN_CHANCE * weatherMul * tileMul
-      if (Math.random() >= chance) continue
-      const entry = this.pickRandomEntry({ rainBoost: isRainy, tileMod })
+      const rollContext: RollContext = {
+        phase: 'tick',
+        tick: currentTick,
+        tileId,
+        weather,
+        rareOpen,
+      }
+      if (this.rollFraction(rollContext, 'spawn') >= chance) continue
+      const entry = this.pickRandomEntry(rollContext, { rainBoost: isRainy, tileMod })
       if (!entry) continue
-      const x = this.randInt(SPAWN_X_MIN, SPAWN_X_MAX)
-      const y = this.randInt(SPAWN_Y_MIN, SPAWN_Y_MAX)
+      const x = this.randInt(rollContext, 'x', SPAWN_X_MIN, SPAWN_X_MAX)
+      const y = this.randInt(rollContext, 'y', SPAWN_Y_MIN, SPAWN_Y_MAX)
       this.pipeline.spawnDrop({
         type: 'CARD_DROP_SPAWN',
         actorId: 'system',
@@ -150,13 +171,22 @@ export class CardDropEngine {
   /** 僅供 server.ts boot-time 主動觸發一次（避免新部署沒卡可撿）。 */
   seedInitialDrops(currentTick: number): void {
     if (this.randomEligible.length === 0) return
+    const weather = this.runtime.getCurrentWeather()
+    const rareOpen = this.runtime.isRareWindowOpen()
     for (const tileId of this.tileIds) {
-      if (Math.random() < 0.25) {
+      const rollContext: RollContext = {
+        phase: 'seed',
+        tick: currentTick,
+        tileId,
+        weather,
+        rareOpen,
+      }
+      if (this.rollFraction(rollContext, 'spawn') < 0.25) {
         const tileMod = TILE_TYPE_MODIFIERS[tileId] ?? null
-        const entry = this.pickRandomEntry({ rainBoost: false, tileMod })
+        const entry = this.pickRandomEntry(rollContext, { rainBoost: false, tileMod })
         if (!entry) continue
-        const x = this.randInt(SPAWN_X_MIN, SPAWN_X_MAX)
-        const y = this.randInt(SPAWN_Y_MIN, SPAWN_Y_MAX)
+        const x = this.randInt(rollContext, 'x', SPAWN_X_MIN, SPAWN_X_MAX)
+        const y = this.randInt(rollContext, 'y', SPAWN_Y_MIN, SPAWN_Y_MAX)
         this.pipeline.spawnDrop({
           type: 'CARD_DROP_SPAWN',
           actorId: 'system',
@@ -171,10 +201,13 @@ export class CardDropEngine {
     }
   }
 
-  private pickRandomEntry(opts: {
-    rainBoost: boolean
-    tileMod: { categoryBoosts?: Readonly<Record<string, number>> } | null
-  }): CardCatalogEntry | null {
+  private pickRandomEntry(
+    rollContext: RollContext,
+    opts: {
+      rainBoost: boolean
+      tileMod: { categoryBoosts?: Readonly<Record<string, number>> } | null
+    }
+  ): CardCatalogEntry | null {
     // Step A: pick rank by weights
     const weights: Record<CardRank, number> = { ...RANK_WEIGHT_BASELINE }
     let total = 0
@@ -187,7 +220,7 @@ export class CardDropEngine {
       total += weights[r]
     }
     if (total === 0) return null
-    let roll = Math.random() * total
+    let roll = this.rollFraction(rollContext, 'rank') * total
     let chosenRank: CardRank | null = null
     for (const r of Object.keys(weights) as CardRank[]) {
       const w = weights[r]
@@ -210,8 +243,10 @@ export class CardDropEngine {
       return w
     })
     const sumW = categoryWeights.reduce((a, b) => a + b, 0)
-    if (sumW <= 0) return list[Math.floor(Math.random() * list.length)] ?? null
-    let r = Math.random() * sumW
+    if (sumW <= 0) {
+      return list[this.randInt(rollContext, 'fallback-entry', 0, list.length - 1)] ?? null
+    }
+    let r = this.rollFraction(rollContext, 'entry', { rank: chosenRank }) * sumW
     for (let i = 0; i < list.length; i += 1) {
       r -= categoryWeights[i] ?? 0
       if (r < 0) return list[i] ?? null
@@ -219,8 +254,37 @@ export class CardDropEngine {
     return list[list.length - 1] ?? null
   }
 
-  private randInt(min: number, max: number): number {
-    return Math.floor(Math.random() * (max - min + 1)) + min
+  private randInt(
+    rollContext: RollContext,
+    purpose: Extract<RollPurpose, 'fallback-entry' | 'x' | 'y'>,
+    min: number,
+    max: number
+  ): number {
+    return Math.floor(this.rollFraction(rollContext, purpose) * (max - min + 1)) + min
+  }
+
+  private rollFraction(
+    rollContext: RollContext,
+    purpose: RollPurpose,
+    extra: Readonly<Record<string, string | number | boolean>> = {}
+  ): number {
+    const seed = {
+      engine: 'card-drop',
+      rulesetVersion: DEFAULT_RULESET_VERSION,
+      catalogVersion: this.catalog.version,
+      phase: rollContext.phase,
+      tick: rollContext.tick,
+      tileId: rollContext.tileId,
+      weather: rollContext.weather,
+      rareOpen: rollContext.rareOpen,
+      purpose,
+      ...extra,
+    }
+    const hash = hashCanonicalJson(seed)
+    return (
+      Number.parseInt(hash.slice(0, HASH_FRACTION_HEX_LENGTH), 16) /
+      HASH_FRACTION_DENOMINATOR
+    )
   }
 }
 

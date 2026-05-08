@@ -135,6 +135,8 @@ export class MapScene extends Phaser.Scene {
   private districtBannerTimer: number = 0
 
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
+  private envTweens: Phaser.Tweens.Tween[] = []
+  private envSprites: Phaser.GameObjects.Text[] = []
 
   private initialPosition: { x: number; y: number } | null = null
 
@@ -181,6 +183,9 @@ export class MapScene extends Phaser.Scene {
     if (isDistrict(this.currentDistrict)) {
       this.callbacks.onAreaEnter(this.currentDistrict)
     }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.disposeEnvAnimations())
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.disposeEnvAnimations())
   }
 
   /**
@@ -338,8 +343,101 @@ export class MapScene extends Phaser.Scene {
         )
         text.setOrigin(0.5, 0.5)
         text.setDepth(40)
+        this.attachEnvAnimation(text, deco.glyph, deco.col, deco.row)
       }
     }
+  }
+
+  private attachEnvAnimation(
+    sprite: Phaser.GameObjects.Text,
+    glyph: string,
+    col: number,
+    row: number
+  ): void {
+    this.envSprites.push(sprite)
+    const seed = ((col + 1) * 73856093) ^ ((row + 1) * 19349663) ^ glyph.charCodeAt(0)
+    const delay = Math.abs(seed) % 900
+    const duration = 1400 + (Math.abs(seed) % 700)
+
+    if (glyph === '🌲' || glyph === '🌳' || glyph === '🌵') {
+      this.envTweens.push(
+        this.tweens.add({
+          targets: sprite,
+          angle: { from: -3, to: 3 },
+          duration,
+          delay,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        })
+      )
+      return
+    }
+    if (glyph === '⚓' || glyph === '⛵' || glyph === '🛟' || glyph === '🐚') {
+      this.envTweens.push(
+        this.tweens.add({
+          targets: sprite,
+          y: sprite.y + 3,
+          duration,
+          delay,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        })
+      )
+      return
+    }
+    if (glyph === '✦' || glyph === '✧' || glyph === '◈' || glyph === '❖') {
+      this.envTweens.push(
+        this.tweens.add({
+          targets: sprite,
+          scale: { from: 0.92, to: 1.12 },
+          alpha: { from: 0.65, to: 1 },
+          duration,
+          delay,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        })
+      )
+      return
+    }
+    if (glyph === '🪨' || glyph === '🏚' || glyph === '⛰') {
+      this.envTweens.push(
+        this.tweens.add({
+          targets: sprite,
+          x: sprite.x + 1.5,
+          duration: 120 + (Math.abs(seed) % 80),
+          delay: 1800 + delay,
+          yoyo: true,
+          repeat: -1,
+          repeatDelay: 2200 + (Math.abs(seed) % 900),
+          ease: 'Sine.easeInOut'
+        })
+      )
+      return
+    }
+    this.envTweens.push(
+      this.tweens.add({
+        targets: sprite,
+        alpha: { from: 0.78, to: 1 },
+        duration,
+        delay,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      })
+    )
+  }
+
+  private disposeEnvAnimations(): void {
+    for (const tween of this.envTweens) tween.stop()
+    this.envTweens = []
+    for (const sprite of this.envSprites) {
+      if (!sprite.active) continue
+      this.tweens.killTweensOf(sprite)
+    }
+    this.envSprites = []
   }
 
   private drawDistrictBoundaries(g: Phaser.GameObjects.Graphics): void {
@@ -478,6 +576,7 @@ export class MapScene extends Phaser.Scene {
         }
         const nameLabel = existing.getData('nameLabel') as Phaser.GameObjects.Text | undefined
         if (nameLabel && nameLabel.text !== npc.name) nameLabel.setText(npc.name)
+        this.attachNpcIdleAnimation(existing, npc.id)
         // 活動 emoji 同步
         const iconGlyph = activityGlyphFor(npc.activity)
         const iconText = existing.getData('activityIcon') as Phaser.GameObjects.Text | undefined
@@ -567,6 +666,7 @@ export class MapScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
       sprite.setData('chatBubble', chatBubble)
+      this.attachNpcIdleAnimation(sprite, npc.id)
 
       this.npcSprites.set(npc.id, sprite)
     }
@@ -576,6 +676,23 @@ export class MapScene extends Phaser.Scene {
       if (seen.has(id)) continue
       this.disposeNpcSprite(id, sprite)
     }
+  }
+
+  private attachNpcIdleAnimation(sprite: Phaser.Physics.Arcade.Sprite, npcId: string): void {
+    const existing = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
+    if (existing) return
+    let h = 5381
+    for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+    const tween = this.tweens.add({
+      targets: sprite,
+      scaleY: { from: 0.93, to: 1.06 },
+      duration: 1200 + (h % 400),
+      delay: h % 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    })
+    sprite.setData('idleTween', tween)
   }
 
   /** 計算 NPC 在世界地圖上應該出現的座標：district anchor + sub-tile 微偏移 */
@@ -652,6 +769,8 @@ export class MapScene extends Phaser.Scene {
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
     const moveTween = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (moveTween) this.tweens.remove(moveTween)
+    const idleTween = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
+    if (idleTween) this.tweens.remove(idleTween)
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined

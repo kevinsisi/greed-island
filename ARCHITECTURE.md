@@ -18,6 +18,180 @@ relationships — every time.
 
 ---
 
+## 0. Living Deterministic World Contract
+
+This section is the product contract for the world. It is intentionally
+stronger than the current implementation in a few areas; those gaps are
+listed in [Section 11](#11-current-non-conformance-backlog). Do not
+claim full world-law compliance until every gap is closed.
+
+### 0.1 World Essence
+
+The world MUST be:
+- Autonomous — it advances without player input.
+- Deterministic — equal inputs produce equal outputs.
+- Persistent — committed consequences survive restarts.
+- Event-defined — committed Events are the only world facts.
+- Continuously evolving — pressure and history continue while players
+  are offline.
+
+The world is not for the player. The player is one actor inside the
+world.
+
+### 0.2 Reality Rule
+
+Only a committed Event is real. Anything that has not been validated by
+the Rule Engine and written to EventLog is not a world fact.
+
+### 0.3 Time Rule
+
+World logic MUST use Simulation Tick. Deterministic logic may depend
+only on:
+- `tick`
+- EventLog
+- `rulesetVersion`
+- `WorldConfig`
+
+Deterministic logic MUST NOT depend on:
+- `Date.now()`
+- wall-clock time
+- FPS
+- network latency
+- AI response timing
+- runtime scheduling timing
+
+Wall-clock fields are allowed only as audit metadata outside
+deterministic seeds and rule decisions.
+
+### 0.4 Command Rule
+
+Every input is a Command: intent, not fact, not State, not Reality. A
+Command can succeed, fail, or be rejected. Rejected Commands produce no
+world Events.
+
+### 0.5 Rule Engine Rule
+
+The Rule Engine is the only compiler from intent to world fact:
+
+```text
+Command
+↓
+Rule Engine
+↓
+Event or Rejection
+```
+
+Only the Rule Engine may validate behavior, resolve conflicts, and
+produce Events. No system may bypass it.
+
+### 0.6 Actor Rule
+
+All actors emit Commands only:
+- players
+- NPCs
+- world systems
+- weather systems
+- card systems
+- faction systems
+- combat systems
+
+Runtime components MUST NOT directly mutate WorldState, directly append
+world Events, or bypass EventLog. All world changes flow through:
+
+```text
+Command → Rule Engine → Event
+```
+
+### 0.7 Event Rule
+
+Events MUST be immutable, append-only, globally ordered, replayable,
+and deterministic. EventLog is the only source of world truth.
+
+### 0.8 WorldState And Reducer Rule
+
+`WorldState = Reduce(EventLog)`.
+
+WorldState is a projection: rebuildable, non-authoritative, and not a
+permanent truth store. Reducers MUST be pure deterministic functions
+with no side effects. Reducers may depend only on previous State and
+committed Events. Reducers MUST NOT depend on real time, random values,
+AI output, or network timing.
+
+### 0.9 Tick Atomicity And Causality
+
+Every tick is atomic. During tick execution, no actor or client may see
+intermediate State, partial results, same-tick Events, same-tick
+Commands, or an unfinished tick. Actors observe only `WorldState(t-1)`.
+
+### 0.10 World Evolution And Offline Continuity
+
+The world MUST continue evolving even when there are no players,
+clients, rendering, or AI narration. World pressure systems should keep
+producing changes such as faction expansion, economy shifts, resource
+decay, weather hazards, social instability, and territorial conflict.
+
+Players returning after absence should see historical continuity through
+`lastSeenTick`, world summaries, historical recaps, and persistent map /
+NPC / faction / economy changes.
+
+### 0.11 NPC Rule
+
+NPCs are autonomous deterministic agents. They must have schedules,
+goals, world reactions, and continued participation in world evolution.
+NPCs emit Commands only; they never produce Events directly. NPC state
+must be derived from EventLog and must not live only in hidden mutable
+runtime memory.
+
+### 0.12 Card And Combat Rule
+
+Cards are World Rule Operators. Playing, spawning, storing, trading, or
+materializing a card must produce Commands and resolve deterministically
+through the Rule Engine. Cards must not directly modify State or append
+Events.
+
+Combat is deterministic world interaction, not an isolated minigame.
+Combat actions are Commands; combat results are Events; combat resolves
+through tick/rule evaluation and leaves persistent world history.
+
+### 0.13 AI Boundary Rule
+
+AI is an Observer, Narrator, and Atmosphere Generator. AI may describe
+committed events, generate dialog, summarize history, and render scene
+atmosphere. AI MUST NOT modify State, produce Events, influence rules,
+or affect determinism. AI is never simulation authority.
+
+### 0.14 Replay And Advance Determinism
+
+Replay determinism guarantee:
+- Same EventLog
+- Same tick sequence
+- Same `rulesetVersion`
+- Same `WorldConfig`
+- Therefore exactly the same WorldState
+
+Advance determinism guarantee:
+- Same EventLog
+- Same pending Commands
+- Same tick
+- Same `rulesetVersion`
+- Same `WorldConfig`
+- Therefore exactly the same next Events
+
+### 0.15 Simulation Budget Rule
+
+Simulation MUST be limitable via NPC partitioning, regional activation,
+event density controls, command rate limits, and tick scalability.
+Budget controls are part of correctness: an exploding simulation loop is
+not a living world; it is a failure mode.
+
+### 0.16 Rendering Separation Rule
+
+Rendering is a projection. FPS drops, rendering stalls, and client
+disconnects MUST NOT affect simulation correctness. Graphics never own
+truth.
+
+---
+
 ## 1. Core Laws
 
 These laws are non-negotiable. Any code path that breaks one of them
@@ -394,3 +568,70 @@ When reviewing a runtime / kernel / NPC / world-rule change, verify:
 
 If any box is unchecked, the change does not match this architecture
 and must be revised before merging.
+
+---
+
+## 11. Current Non-Conformance Backlog
+
+Do not claim the current implementation fully guarantees the Living
+Deterministic World Contract until this backlog is empty. These are
+known gaps discovered during the v0.15.4 audit.
+
+### 11.1 Card Drop Randomness — Addressed In v0.15.5
+
+`packages/server/src/http/cardDropEngine.ts` no longer uses
+`Math.random()` for spawn checks, card selection, or spawn coordinates.
+Card-drop rolls are deterministic hash-based rolls seeded by tick, tile
+id, roll purpose, ruleset version, catalog version, weather, rare-window
+state, and engine phase. Replay tests cover normal tick drops and
+boot-time seed drops. This item is no longer a current non-conformance,
+but card state remains transitional under §11.2 until it is unified with
+canonical `event_log` or formally specified as an equivalent sub-log.
+
+### 11.2 Card State Has A Separate Event Log
+
+The card pipeline writes to `card_action_log` and mutates
+`world_card_drops` / codex tables in the same transaction. It is durable
+and command-shaped, but it is not yet unified with the canonical
+simulation `event_log`, so card state is not fully covered by
+`WorldState = Reduce(EventLog)`. Either fold card events into the
+canonical EventLog or explicitly model card_action_log as a replayed
+sub-event-log with equivalent guarantees and tests.
+
+### 11.3 Jobs And Wallet Are Direct Projection Mutations
+
+Building work/rest, technique purchases, and combat defeat energy
+effects mutate `PlayerJobsStore` / wallet rows directly. These are
+currently durable gameplay projections, not committed world Events.
+Player jobs, wages, energy loss/restoration, and purchases must become
+Commands that resolve into Events before the world can claim full
+Reality Rule compliance.
+
+### 11.4 Combat Store Side Effects Are Not Fully Event-Sourced
+
+Combat initiate/action/resolve submit living-world Commands, but the
+combat session/log store and some defeat side effects are still updated
+directly. Combat state and persistent consequences need to be fully
+replayable from committed combat/world Events.
+
+### 11.5 FACT_SET Snapshot Path Is Transitional
+
+The runtime still commits `FACT_SET` state snapshots for NPC state,
+area state, building occupants, weather, season, rare windows, and
+active events. These snapshots are routed through a kernel command and
+are replayable, but the target architecture is typed domain Events with
+pure reducers. New features should prefer typed Events and should not
+add additional long-lived `FACT_SET` domains.
+
+### 11.6 Simulation Budget Is Specified But Not Enforced
+
+Section 7 defines command caps, NPC partitioning, regional activation,
+and event-density controls, but the current runtime does not enforce all
+of them. Full autonomy at larger scale requires bounded per-tick work.
+
+### 11.7 Projection Rebuild Contract Is Incomplete
+
+The architecture requires projections to expose rebuild-from-events
+paths. Some projection-like stores are still operational tables without
+formal rebuild tests. Add rebuild and canonical-hash assertions for each
+world-facing projection before treating it as guaranteed.
