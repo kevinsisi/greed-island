@@ -67,7 +67,7 @@ Rule engine 看到 `cardId` 寫一條 `COMBAT_CARD_IGNORED` warning event，方�
 
 ## Impact
 
-- **Affected specs**：`combat-system/spec.md` 已 ADDED 全部 requirements，這個 release 只滿足其中 *Combat sub-tick is deterministic* 的 replay 子句、*Card play is a typed Command* 的 typed-command 子句。Sub-tick / priority table 等留到 Phase C。
+- **Affected specs**：`combat-system/specs/combat-runtime/spec.md` 已 ADDED 全部 requirements，這個 release 只滿足其中 *Combat sub-tick is deterministic* 的 replay 子句、*Card play is a typed Command* 的 typed-command 子句。Sub-tick / priority table 等留到 Phase C。
 - **Affected code**：新增上面那些檔案，無破壞性 server schema 變化。EventLog 多幾種 event type，reducer 加對應 case；舊客戶端看不懂 `COMBAT_*` event 會被它們忽略（既有 reducer 就是 unknown event = 跳過）。
 - **Risk**：
   - `combat.<id>` snapshot key 累積會吃記憶體 — 加 retention：`COMBAT_RESOLVE` 後 60 秒從 in-memory snapshot 移除，但 EventLog 保留。

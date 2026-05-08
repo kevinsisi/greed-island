@@ -15,7 +15,7 @@
 ### 文件產出
 
 - 新增 `COMBAT_ARCHITECTURE.md` 在 repo 根（與 `ARCHITECTURE.md` 同級），把戰鬥架構準則訂下來。
-- 本 OpenSpec change `combat-system/`：proposal + tasks + spec。
+- 本 OpenSpec change `combat-system/`：proposal + tasks + `specs/combat-runtime/spec.md`。
 
 ### 設計核心
 
@@ -36,7 +36,7 @@
 
 ## Impact
 
-- **Affected specs**：simulation-kernel 不破壞既有要求；新加 `combat-runtime` capability 描述戰鬥的 sub-tick 與 priority 規則（v0.16 的 spec.md 才寫，本 release 只 propose）。
+- **Affected specs**：simulation-kernel 不破壞既有要求；新加 `combat-runtime` capability 描述戰鬥的 sub-tick 與 priority 規則。
 - **Affected code (本 release)**：只新增 markdown — `COMBAT_ARCHITECTURE.md` + 三個 openspec 檔。
 - **Affected code (Phase B+)**：
   - 新檔 `packages/server/src/combat/commands.ts`、`combat/ruleEngine.ts`、`combat/runtime.ts`、`http/combatRouter.ts`。

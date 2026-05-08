@@ -104,11 +104,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
+          tags: tag:github-actions
 
       - name: Configure SSH
         run: |
@@ -123,6 +123,10 @@ jobs:
               StrictHostKeyChecking accept-new
               UserKnownHostsFile ~/.ssh/known_hosts
           EOF
+
+      - name: Verify desktop SSH reachability
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=20 desktop "echo 'desktop ssh ok'"
 
       - name: Pull & restart on desktop
         run: |

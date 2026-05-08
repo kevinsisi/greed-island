@@ -51,12 +51,13 @@ jobs:
           node-version: 22
 
       - name: Install OpenSpec CLI
-        run: npm install -g openspec
+        run: npm install -g @fission-ai/openspec@1.2.0
 
       - name: Validate all active changes
-        # Validates every change directory under openspec/changes/
-        # except the archive/. Strict mode enforces full schema
-        # compliance (required artifacts, scenario formatting, etc.).
+        # Validates every formal delta spec under openspec/changes/
+        # except the archive/. Legacy tracker-only changes without a
+        # specs/ directory are skipped because they do not define deltas.
+        # Strict mode enforces full schema compliance for real deltas.
         run: |
           set -e
           shopt -s nullglob
@@ -64,6 +65,10 @@ jobs:
           for dir in openspec/changes/*/; do
             name=$(basename "$dir")
             [ "$name" = "archive" ] && continue
+            if [ ! -d "$dir/specs" ]; then
+              echo "::notice::skip $name (no formal delta specs)"
+              continue
+            fi
             echo "::group::validate $name"
             if ! openspec validate "$name" --strict; then
               fail=1

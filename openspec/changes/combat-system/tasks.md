@@ -7,7 +7,7 @@
 - [x] 寫 `COMBAT_ARCHITECTURE.md` 在 repo 根
 - [x] 寫 `openspec/changes/combat-system/proposal.md`
 - [x] 寫 `openspec/changes/combat-system/tasks.md`（本檔）
-- [x] 寫 `openspec/changes/combat-system/spec.md`
+- [x] 寫 `openspec/changes/combat-system/specs/combat-runtime/spec.md`
 
 ## Phase B — 單擊判決（v0.15）
 
