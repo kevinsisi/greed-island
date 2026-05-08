@@ -141,9 +141,17 @@ export function createNpcRouter(input: {
           history,
           playerMessage,
           worldTick: tick,
+          worldValidNpcNames: input.runtime.getNpcs().map((npc) => npc.name.zh),
         })
-        replyZh = ai.zh
-        replyEn = ai.en
+        const knownNpcNames = input.runtime.getNpcs().map((npc) => npc.name.zh)
+        const sanitized = sanitizeNpcReplyForUnknownEntities({
+          playerMessage,
+          replyZh: ai.zh,
+          replyEn: ai.en,
+          knownNpcNames,
+        })
+        replyZh = sanitized.zh
+        replyEn = sanitized.en
         resolvedIntent = explicitIntent ?? ai.intent
         aiTrustDelta = ai.trustDelta
         replySource = 'ai'
@@ -578,6 +586,56 @@ function deriveGreetWithFallback(
   } catch {
     return derivePersonalityGreetLine(profile)
   }
+}
+
+export function sanitizeNpcReplyForUnknownEntities(input: {
+  playerMessage: string
+  replyZh: string
+  replyEn: string
+  knownNpcNames: readonly string[]
+}): LocalizedLine {
+  const unknownTerm = extractUnknownEntityTerm(input.playerMessage, input.knownNpcNames)
+  if (!unknownTerm) return { zh: input.replyZh, en: input.replyEn }
+  const compactReply = input.replyZh.replace(/\s+/g, '')
+  const hallucinatedUnknown =
+    compactReply.includes(`哪個${unknownTerm}`) ||
+    compactReply.includes(`哪位${unknownTerm}`) ||
+    compactReply.includes(`幾個${unknownTerm}`) ||
+    compactReply.includes(`幾個「${unknownTerm}」`) ||
+    compactReply.includes(`有幾個「${unknownTerm}」`) ||
+    compactReply.includes(`有幾個${unknownTerm}`) ||
+    compactReply.includes(`知道${unknownTerm}`) ||
+    compactReply.includes(`認識${unknownTerm}`) ||
+    compactReply.includes(`${unknownTerm}是`) ||
+    compactReply.includes(`${unknownTerm}在`) ||
+    compactReply.includes(`${unknownTerm}住`) ||
+    compactReply.includes(`${unknownTerm}屬於`) ||
+    compactReply.includes(`${unknownTerm}跟`)
+  if (!hallucinatedUnknown) return { zh: input.replyZh, en: input.replyEn }
+  return {
+    zh: `「${unknownTerm}？我不認得這個稱呼。你是在說誰，還是在罵人？」`,
+    en: `"${unknownTerm}? I do not recognize that name. Who are you talking about, or are you insulting someone?"`,
+  }
+}
+
+function extractUnknownEntityTerm(message: string, knownNpcNames: readonly string[]): string | null {
+  const normalizedKnown = new Set(knownNpcNames.map((name) => name.trim()).filter(Boolean))
+  const compact = message.replace(/\s+/g, '')
+  const patterns = [
+    /^(.{2,8})就是/,
+    /^(.{2,8})(?:是誰|是谁|在哪|住哪)/,
+    /認識(.{2,8})(?:嗎|吗|\?|？)?$/,
+    /知道(.{2,8})(?:嗎|吗|\?|？)?$/,
+    /「(.{2,8})」/,
+    /『(.{2,8})』/
+  ]
+  for (const pattern of patterns) {
+    const match = compact.match(pattern)
+    const term = match?.[1]?.trim().replace(/[嗎吗?？]+$/u, '')
+    if (!term || normalizedKnown.has(term)) continue
+    if (/^[\p{Script=Han}\p{Letter}\p{Number}_-]{2,8}$/u.test(term)) return term
+  }
+  return null
 }
 
 function resolvePlayerIdentity(

@@ -73,6 +73,7 @@ export const fixtureWorld: WorldSnapshot = {
     economy: { gold: 12048, manaIndex: 0.62 },
     season: '雨之月',
   },
+  worldConfig: { tickDurationMs: 5000, ticksPerDay: 17280, timezone: 'GMT+8', timezoneOffsetMinutes: 480 },
   generatedAt: new Date().toISOString(),
 }
 

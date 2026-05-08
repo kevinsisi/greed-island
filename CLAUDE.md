@@ -6,11 +6,13 @@ Edit this file freely to add stack-, domain-, or team-specific rules for your pr
 
 ## Greed Island — Project Architecture Source of Truth
 
-This codebase is **Greed Island**, an AI-driven living-world game. Three architecture documents are mandatory reading before non-trivial changes:
+This codebase is **Greed Island**, an AI-driven living-world game. The following documents are mandatory reading before non-trivial changes, in this order:
 
+- [`DEVELOPMENT_CONSTITUTION.md`](./DEVELOPMENT_CONSTITUTION.md) — first handoff document for every AI/human developer. Defines the project prime directive, required reading order, civilization evolution constitution, NPC humanity rule, and handoff requirements.
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — kernel-level Command/Event/Rule Engine separation, deterministic replay, AI-as-renderer principle. Every state-changing PR must conform.
 - [`COMBAT_ARCHITECTURE.md`](./COMBAT_ARCHITECTURE.md) — real-time combat sub-runtime準則。**Phase B (v0.15.0) 已 ship**（單擊判決 + Command/Event 管線）；Phase C/D 仍未實作。所有戰鬥相關 PR (commands / events / 紋卡優先級) 必須遵守此文。
-- [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。v0.15.3 已 ship（場景動態化 + AI 反幻覺 + 編年史多樣化 + 角色職責綁定 home tile）；v0.15.0 紋卡系統大重設計 + 戰鬥 Phase B；v0.16-v0.17 戰鬥系統 Phase C/D 藍圖；OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
+- [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
+- [`PROGRESS.md`](./PROGRESS.md) — latest handoff status, local verification, CI/CD state, and active blockers. Update this before ending a coding session.
 
 **所有狀態改變必須走 Command → Rule Engine → Event → 投影**。違反這條的 PR（不論是世界模擬、戰鬥、玩家動作）必須被拒絕，並在 PR 描述中註明違反 ARCHITECTURE.md 的哪一條。AI 在系統裡只能做 read-only 旁白與意圖分類；AI 不可下 Command、不可改 hp、不可影響 priority / damage 計算。
 
@@ -78,6 +80,7 @@ Mirror locations (`.claude/skills/`, `.gemini/skills/`, `.opencode/skills/`, `.g
 - Complex tasks must carry workflow checkpoints in the task list, and major task boundaries must trigger a fresh rule check. Rule home: `skills/execution-style/SKILL.md` and `skills/completion-checklist/SKILL.md`.
 - Any requirement that should govern future implementation must be written into the formal rule sources (this file or a skill), not left only in chat context. Rule home: `skills/execution-style/SKILL.md`.
 - Any non-trivial feature request should first go through an exploration/confirmation step and be captured in OpenSpec before implementation.
+- Every AI handoff must update `PROGRESS.md` with current version, completed work, verification evidence, remaining blockers, and CI/CD/deploy state.
 
 ## When To Remove Or Replace Skills
 

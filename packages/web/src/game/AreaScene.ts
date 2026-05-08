@@ -69,6 +69,9 @@ export interface AreaMapPlayer {
   id: number
   displayName: string
   shortName: string
+  x?: number | null
+  y?: number | null
+  z?: number | null
 }
 
 /** 區域地圖上閃爍的紋卡 drop。x/y 是 canvas 像素座標 (0..AREA_CANVAS_*)。 */
@@ -85,7 +88,7 @@ export interface AreaMapDrop {
 export interface AreaSceneCallbacks {
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
-  onPositionChange: (pos: { x: number; y: number }) => void
+  onPositionChange: (pos: { x: number; y: number; z: number }) => void
   /** 玩家附近 (距離 ≤ INTERACT_RADIUS) 的 NPC ids；set 變動時才 fire。 */
   onNearbyNpcsChange?: (ids: string[]) => void
   /** 玩家點了一個太遠的 NPC sprite。React 層可以彈個 toast。 */
@@ -205,7 +208,7 @@ export class AreaScene extends Phaser.Scene {
   private playerNameLabel: Phaser.GameObjects.Text | null = null
 
   private positionSaveTimer = 0
-  private lastSavedPosition: { x: number; y: number } = { x: 0, y: 0 }
+  private lastSavedPosition: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 }
 
   constructor() {
     super({ key: AreaScene.KEY })
@@ -834,7 +837,7 @@ export class AreaScene extends Phaser.Scene {
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)
     this.refreshPlayerNameLabel()
-    this.lastSavedPosition = { x: start.x, y: start.y }
+    this.lastSavedPosition = { x: start.x, y: start.y, z: 0 }
   }
 
   private refreshPlayerNameLabel(): void {
@@ -879,7 +882,7 @@ export class AreaScene extends Phaser.Scene {
     for (let i = 0; i < sorted.length; i += 1) {
       const player = sorted[i]!
       seen.add(player.id)
-      const target = this.peerTarget(i)
+      const target = this.peerTarget(player, i)
       const existing = this.peerSprites.get(player.id)
       if (existing) {
         existing.setPosition(target.x, target.y)
@@ -922,7 +925,10 @@ export class AreaScene extends Phaser.Scene {
     }
   }
 
-  private peerTarget(index: number): { x: number; y: number } {
+  private peerTarget(player: AreaMapPlayer, index: number): { x: number; y: number } {
+    if (typeof player.x === 'number' && typeof player.y === 'number') {
+      return this.clampToCanvas({ x: player.x, y: player.y })
+    }
     const slots = [
       { col: 1, row: 1 },
       { col: 13, row: 1 },
@@ -1715,7 +1721,7 @@ export class AreaScene extends Phaser.Scene {
 
   private flushPositionSave(): void {
     if (!this.player) return
-    const pos = { x: Math.round(this.player.x), y: Math.round(this.player.y) }
+    const pos = { x: Math.round(this.player.x), y: Math.round(this.player.y), z: 0 }
     if (
       Math.abs(pos.x - this.lastSavedPosition.x) < 1 &&
       Math.abs(pos.y - this.lastSavedPosition.y) < 1

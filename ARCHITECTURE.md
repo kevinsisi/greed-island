@@ -190,6 +190,36 @@ Rendering is a projection. FPS drops, rendering stalls, and client
 disconnects MUST NOT affect simulation correctness. Graphics never own
 truth.
 
+### 0.17 Civilization Evolution Rule
+
+The long-term world target is Autonomous Civilization Evolution. NPCs
+are not decorative residents; they are producers, builders, learners,
+explorers, and social participants. The world MUST be able to evolve
+without developer-placed scripts as the only driver.
+
+Civilization evolution MUST flow through the same kernel law:
+
+```text
+Command → Rule Engine → Civilization Events → WorldState Projection
+```
+
+The world map is a Civilization Projection, not a static scene. Future
+systems MUST model construction, expansion, resource cycles, production,
+settlement growth/decline, faction conflict, culture, skills, and
+emergent history as committed Events and replayable projections.
+
+Persistent world objects such as buildings, roads, bridges, farms,
+markets, defenses, settlements, and cities MUST be buildable,
+upgradeable, damageable, abandonable, repairable, and capturable through
+world Events. Static catalog placement is acceptable only as bootstrap
+world config, not as the sole source of future history.
+
+NPC society MUST eventually include groups, settlements, factions,
+commerce, households, cooperation, rivalry, and remembered relationships.
+NPC skills MUST derive from accumulated work, training, observation,
+exploration, and social interaction history, not from arbitrary mutable
+scalars.
+
 ---
 
 ## 1. Core Laws
@@ -231,6 +261,9 @@ drops its rows and recomputes from the log.
   tick, payload)` for the same reason.
 - Audit fields like `occurredAt` MAY appear on Events but MUST NOT be
   part of the deterministic key.
+- The world's canonical display timezone is `GMT+8`. Timezone labels
+  are presentation/config metadata; deterministic simulation authority
+  remains the integer tick plus EventLog order.
 
 ### 1.4 Causality
 For tick `t`, every actor observes only `WorldState(t-1)`. Actors
@@ -635,3 +668,23 @@ The architecture requires projections to expose rebuild-from-events
 paths. Some projection-like stores are still operational tables without
 formal rebuild tests. Add rebuild and canonical-hash assertions for each
 world-facing projection before treating it as guaranteed.
+
+### 11.8 Civilization Evolution Is Not Implemented Yet
+
+Section 0.17 defines the intended civilization target, but the current
+implementation does not yet have Commands/Events/reducers for
+construction, production chains, resource transport, settlement
+formation, map mutation, faction war, household formation, or skill
+learning. These must be implemented as incremental OpenSpec changes with
+deterministic replay tests before claiming autonomous civilization
+evolution.
+
+### 11.9 NPC Personal Dialog Is Not Fully Grounded In Memory
+
+NPC memory and relationship projections exist for living-world events,
+but private player dialog is still only partially grounded. NPC replies
+do not yet query a full known-person graph, alias memory, household
+state, faction knowledge, or long-term social history before answering.
+Until that grounding exists, AI dialog must be guarded by deterministic
+anti-hallucination checks and must avoid inventing unknown people,
+relationships, or world facts.

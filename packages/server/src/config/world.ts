@@ -14,6 +14,9 @@ export const TICKS_PER_MINUTE = Math.round(60_000 / TICK_DURATION_MS)
 export const TICKS_PER_HOUR = TICKS_PER_MINUTE * 60
 export const TICKS_PER_DAY = TICKS_PER_HOUR * 24
 
+export const WORLD_TIMEZONE = 'GMT+8'
+export const WORLD_TIMEZONE_OFFSET_MINUTES = 8 * 60
+
 export const EVENT_RETENTION_DAYS = 30
 export const EVENT_RETENTION_TICKS = EVENT_RETENTION_DAYS * TICKS_PER_DAY
 
@@ -23,6 +26,8 @@ export const NARRATION_RETENTION_TICKS = EVENT_RETENTION_TICKS
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number
+  timezone: string
+  timezoneOffsetMinutes: number
   eventRetentionTicks: number
   narrationRetentionTicks: number
 }>
@@ -30,6 +35,8 @@ export type WorldConfig = Readonly<{
 export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   tickDurationMs: TICK_DURATION_MS,
   ticksPerDay: TICKS_PER_DAY,
+  timezone: WORLD_TIMEZONE,
+  timezoneOffsetMinutes: WORLD_TIMEZONE_OFFSET_MINUTES,
   eventRetentionTicks: EVENT_RETENTION_TICKS,
   narrationRetentionTicks: NARRATION_RETENTION_TICKS,
 }

@@ -68,6 +68,15 @@ export function createBuildingsRouter(input: {
       res.status(400).json({ error: 'NO_SLOT_FOR_SHIFT' })
       return
     }
+    const existingJob = input.jobs.listJobs(accountId)[0]
+    if (existingJob) {
+      res.status(409).json({
+        error: 'ALREADY_HIRED',
+        message: '你已經有工作了，請先辭職再應徵新的工作。',
+        job: existingJob,
+      })
+      return
+    }
     const employees = input.jobs.listEmployeesOf(def.id, shift as Shift)
     if (employees.length >= slot.capacity && !employees.some((e) => e.accountId === accountId)) {
       res.status(409).json({ error: 'SLOT_FULL' })

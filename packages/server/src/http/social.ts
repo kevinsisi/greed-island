@@ -27,6 +27,10 @@ import type { SocialBus, SocialEvent } from './socialBus.js'
 // is within this window of the current simulation tick. With a 5s tick
 // rate this is roughly 5 minutes of grace.
 const PRESENCE_FRESH_TICKS = 60
+const AREA_PRESENCE_MAX_X = 600
+const AREA_PRESENCE_MAX_Y = 400
+const AREA_PRESENCE_MIN_Z = 0
+const AREA_PRESENCE_MAX_Z = 16
 
 type PublicAccountSummary = Readonly<{
   id: number
@@ -201,19 +205,21 @@ export function createSocialRouter(input: {
     const me = req.auth!.sub
     const tileId = readTileId(req.body)
     if (tileId === null) return sendError(res, new SocialError('INVALID_TILE', 'tileId is required.'))
+    const position = readAreaPosition(req.body)
+    const clientUpdatedAt = readClientUpdatedAt(req.body)
     const tick = input.runtime.getCurrentTick()
     const previous = input.social.getPlayerLocation(me)
-    const updated = input.social.upsertPlayerLocation(me, tileId, tick)
-    if (!previous || previous.tile_id !== tileId) {
+    const updated = input.social.upsertPlayerLocation(me, tileId, tick, position, clientUpdatedAt)
+    if (updated.applied && (!previous || previous.tile_id !== updated.row.tile_id)) {
       // notify other players in the new tile that someone arrived
-      const peers = input.social.listPlayersInTile(tileId, tick - PRESENCE_FRESH_TICKS)
+      const peers = input.social.listPlayersInTile(updated.row.tile_id, tick - PRESENCE_FRESH_TICKS)
       for (const p of peers) {
         if (p.user_id === me) continue
         input.bus.publish({
           type: 'presence.enter',
           to: p.user_id,
           userId: me,
-          tileId,
+          tileId: updated.row.tile_id,
           occurredAt: new Date().toISOString(),
         })
       }
@@ -231,7 +237,7 @@ export function createSocialRouter(input: {
         }
       }
     }
-    res.json({ location: presenceToDto(updated) })
+    res.json({ location: presenceToDto(updated.row) })
   })
 
   router.get('/social/nearby', handleSocial, (req: Request, res: Response) => {
@@ -250,10 +256,17 @@ export function createSocialRouter(input: {
       .map((r) => {
         const acc = input.accounts.findById(r.user_id)
         return acc
-          ? { ...accountToSummary(acc), tileId: r.tile_id, lastSeenTick: r.last_seen_tick }
+          ? {
+              ...accountToSummary(acc),
+              tileId: r.tile_id,
+              lastSeenTick: r.last_seen_tick,
+              x: r.pos_x,
+              y: r.pos_y,
+              z: r.pos_z,
+            }
           : null
       })
-      .filter((p): p is PublicAccountSummary & { tileId: string; lastSeenTick: number } => p !== null)
+      .filter((p): p is PublicAccountSummary & { tileId: string; lastSeenTick: number; x: number | null; y: number | null; z: number | null } => p !== null)
     res.json({ tileId: targetTile, players })
   })
 
@@ -459,6 +472,28 @@ function readTileId(body: unknown): string | null {
   return trimmed
 }
 
+function readAreaPosition(body: unknown): { x: number; y: number; z: number } | null {
+  if (!body || typeof body !== 'object') return null
+  const rawX = (body as { x?: unknown }).x
+  const rawY = (body as { y?: unknown }).y
+  const rawZ = (body as { z?: unknown }).z
+  if (typeof rawX !== 'number' || typeof rawY !== 'number') return null
+  if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return null
+  const z = typeof rawZ === 'number' && Number.isFinite(rawZ) ? rawZ : 0
+  return {
+    x: Math.max(0, Math.min(AREA_PRESENCE_MAX_X, Math.round(rawX))),
+    y: Math.max(0, Math.min(AREA_PRESENCE_MAX_Y, Math.round(rawY))),
+    z: Math.max(AREA_PRESENCE_MIN_Z, Math.min(AREA_PRESENCE_MAX_Z, Math.round(z))),
+  }
+}
+
+function readClientUpdatedAt(body: unknown): number | null {
+  if (!body || typeof body !== 'object') return null
+  const raw = (body as { clientUpdatedAt?: unknown }).clientUpdatedAt
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
+  return Math.max(0, Math.round(raw))
+}
+
 function accountToSummary(account: {
   id: number
   email: string
@@ -561,12 +596,18 @@ function allianceToDto(
 function presenceToDto(row: PlayerLocationRow): {
   userId: number
   tileId: string
+  x: number | null
+  y: number | null
+  z: number | null
   lastSeenTick: number
   updatedAt: string
 } {
   return {
     userId: row.user_id,
     tileId: row.tile_id,
+    x: row.pos_x,
+    y: row.pos_y,
+    z: row.pos_z,
     lastSeenTick: row.last_seen_tick,
     updatedAt: new Date(row.updated_at).toISOString(),
   }

@@ -297,6 +297,7 @@ export function BuildingPage() {
           </div>
           {def.hiring.map((slot) => {
             const myJob = myJobs.find((j) => j.shift === slot.shift)
+            const hasOtherJob = jobs.some((j) => j.buildingId !== def.id || j.shift !== slot.shift)
             const isCurrentShift = currentShift === slot.shift
             const workButtonLabel = isCurrentShift ? '打卡' : '非上班時間'
             return (
@@ -337,6 +338,15 @@ export function BuildingPage() {
                         辭職
                       </button>
                     </>
+                  ) : hasOtherJob ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="px-2 py-1 text-[11px] rounded-sharp bg-ground-800 border border-ground-700 text-ground-500 cursor-not-allowed"
+                      title="同時間只能有一份工作，請先辭去原工作。"
+                    >
+                      已有工作
+                    </button>
                   ) : (
                     <button
                       type="button"

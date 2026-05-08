@@ -67,6 +67,7 @@ export function AreaPage() {
   const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
   const [nearbyBuildingId, setNearbyBuildingId] = useState<string | null>(null)
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
+  const [playerPosition, setPlayerPosition] = useState<{ tileId: string; x: number; y: number; z: number } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -111,7 +112,12 @@ export function AreaPage() {
 
   const tile = map.tiles.find((entry) => entry.id === tileId)
   const lore = loreFor(tileId)
-  usePresenceTouch(tile ? tileId : null)
+
+  useEffect(() => {
+    setPlayerPosition(null)
+  }, [tileId])
+
+  usePresenceTouch(tile ? tileId : null, playerPosition?.tileId === tileId ? playerPosition : null)
 
   useEffect(() => {
     if (!token || !tile) {
@@ -195,7 +201,10 @@ export function AreaPage() {
       nearbyPlayers.map((player) => ({
         id: player.id,
         displayName: player.displayName,
-        shortName: player.displayName.charAt(0).toUpperCase()
+        shortName: player.displayName.charAt(0).toUpperCase(),
+        x: player.x,
+        y: player.y,
+        z: player.z
       })),
     [nearbyPlayers]
   )
@@ -310,6 +319,7 @@ export function AreaPage() {
           drops={cardOverlay.drops}
           buildings={mapBuildings}
           locale={locale}
+          playerId={account?.id ?? null}
           playerName={account?.displayName ?? null}
           hudStrings={hudStrings}
           weather={weather}
@@ -320,22 +330,31 @@ export function AreaPage() {
           onBuildingEnter={handleBuildingEnter}
           onExit={handleExit}
           onNearbyBuildingChange={handleNearbyBuildingChange}
+          onPositionChange={(pos) => setPlayerPosition({ tileId, ...pos })}
         />
       </div>
 
       {/* 下方：建築物進入按鈕 + tab 區 */}
       <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
-        {nearbyBuilding && nearbyBuilding.def.enterable && (
+        <div className="min-h-[44px]">
           <button
             type="button"
-            onClick={() => handleBuildingEnter(nearbyBuilding.def.id)}
-            className="gi-touch w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sharp bg-ember-600 hover:bg-ember-500 text-ground-950 font-display font-extrabold text-sm tracking-tightest transition-colors"
+            disabled={!nearbyBuilding?.def.enterable}
+            onClick={() => {
+              if (nearbyBuilding?.def.enterable) handleBuildingEnter(nearbyBuilding.def.id)
+            }}
+            className={[
+              'gi-touch w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sharp bg-ember-600 hover:bg-ember-500 text-ground-950 font-display font-extrabold text-sm tracking-tightest transition-colors',
+              nearbyBuilding?.def.enterable ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            ].join(' ')}
+            aria-hidden={!nearbyBuilding?.def.enterable}
+            tabIndex={nearbyBuilding?.def.enterable ? 0 : -1}
           >
-            <span aria-hidden="true">{nearbyBuilding.def.placement.glyph}</span>
-            <span>進入 {nearbyBuilding.def.nameZh}</span>
+            <span aria-hidden="true">{nearbyBuilding?.def.placement.glyph ?? '▣'}</span>
+            <span>進入 {nearbyBuilding?.def.nameZh ?? '建築'}</span>
             <span aria-hidden="true">→</span>
           </button>
-        )}
+        </div>
 
         {/* tab 列放在彈出內容上方，避免使用者每次切換都要先捲過 panel */}
         <div className="flex items-stretch gap-1 bg-ground-900/85 border border-ground-700 rounded-sharp p-1">

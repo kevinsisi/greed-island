@@ -52,6 +52,14 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
+const RESOURCE_REFRESH_MS = 15_000
+
+type PlayerResourceSnapshot = Readonly<{
+  gold: number
+  energy: number
+  techniqueCount: number
+}>
+
 function visibleNavItems(account: ServerAccount | null): NavItem[] {
   return NAV_ITEMS.filter((item) => !item.visibleWhen || item.visibleWhen(account))
 }
@@ -96,6 +104,7 @@ function Brandbar() {
         <BrandMark />
         <VersionTag />
         <div className="flex-1" />
+        {account && <PlayerResources />}
         <LanguageToggle />
         <NavLink
           to={account ? '/profile' : '/account'}
@@ -121,6 +130,55 @@ function Brandbar() {
         </NavLink>
       </div>
     </header>
+  )
+}
+
+function PlayerResources() {
+  const { token } = useAuth()
+  const [resources, setResources] = useState<PlayerResourceSnapshot | null>(null)
+
+  useEffect(() => {
+    if (!token) {
+      setResources(null)
+      return
+    }
+    let cancelled = false
+    const refresh = () => {
+      Promise.all([api.wallet(token), api.myTechniques(token)])
+        .then(([walletResponse, techniquesResponse]) => {
+          if (cancelled) return
+          setResources({
+            gold: walletResponse.wallet.gold,
+            energy: walletResponse.wallet.energy,
+            techniqueCount: techniquesResponse.owned.reduce((sum, item) => sum + item.count, 0),
+          })
+        })
+        .catch(() => {
+          if (!cancelled) setResources(null)
+        })
+    }
+    refresh()
+    const timer = window.setInterval(refresh, RESOURCE_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [token])
+
+  if (!resources) return null
+
+  return (
+    <div className="hidden md:inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest">
+      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
+        <span className="text-ember-400">{resources.gold.toLocaleString()}</span> 潮幣
+      </span>
+      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
+        體力 <span className="text-ground-100">{resources.energy}</span>/100
+      </span>
+      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
+        術式 <span className="text-moss-400">{resources.techniqueCount}</span>
+      </span>
+    </div>
   )
 }
 

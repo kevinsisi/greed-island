@@ -192,6 +192,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
           eventCount: serverWorld.eventCount,
           npcCount: serverWorld.npcCount,
           facts: serverWorld.facts,
+          worldConfig: normalizeWorldConfig(serverWorld.worldConfig),
           generatedAt: serverWorld.generatedAt
         }
       : fixtureWorld
@@ -255,6 +256,18 @@ export function useWorldState(): WorldStateValue {
     throw new Error('useWorldState must be used inside <WorldStateProvider>')
   }
   return value
+}
+
+function normalizeWorldConfig(
+  config: ServerWorldSnapshot['worldConfig']
+): WorldSnapshot['worldConfig'] {
+  return {
+    tickDurationMs: config?.tickDurationMs ?? fixtureWorld.worldConfig.tickDurationMs,
+    ticksPerDay: config?.ticksPerDay ?? fixtureWorld.worldConfig.ticksPerDay,
+    timezone: config?.timezone ?? fixtureWorld.worldConfig.timezone,
+    timezoneOffsetMinutes:
+      config?.timezoneOffsetMinutes ?? fixtureWorld.worldConfig.timezoneOffsetMinutes
+  }
 }
 
 function toEventSummary(event: ServerNarrativeEvent): EventSummary {

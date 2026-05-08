@@ -21,6 +21,12 @@ export type ServerWorldSnapshot = {
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldConfig?: {
+    tickDurationMs: number
+    ticksPerDay: number
+    timezone?: string
+    timezoneOffsetMinutes?: number
+  }
   generatedAt: string
 }
 
@@ -287,6 +293,9 @@ export type ServerConversationItem = {
 export type ServerNearbyPlayer = ServerPublicAccount & {
   tileId: string
   lastSeenTick: number
+  x: number | null
+  y: number | null
+  z: number | null
 }
 
 export type ServerAllianceMember = ServerPublicAccount & {
@@ -688,13 +697,25 @@ export const api = {
       { headers: authHeaders(token) }
     ),
   // -- social: presence ----------------------------------------------
-  socialPresence: (token: string, tileId: string) =>
+  socialPresence: (token: string, tileId: string, position?: { x: number; y: number; z: number } | null) =>
     jsonFetch<{
-      location: { userId: number; tileId: string; lastSeenTick: number; updatedAt: string }
+      location: {
+        userId: number
+        tileId: string
+        x: number | null
+        y: number | null
+        z: number | null
+        lastSeenTick: number
+        updatedAt: string
+      }
     }>('/social/presence', {
       method: 'POST',
       headers: authHeaders(token),
-      body: JSON.stringify({ tileId })
+      body: JSON.stringify(
+        position
+          ? { tileId, x: position.x, y: position.y, z: position.z, clientUpdatedAt: Date.now() }
+          : { tileId, clientUpdatedAt: Date.now() }
+      )
     }),
   socialNearby: (token: string, tileId?: string) =>
     jsonFetch<{ tileId: string | null; players: ServerNearbyPlayer[] }>(

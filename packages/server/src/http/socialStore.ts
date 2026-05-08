@@ -62,8 +62,17 @@ export type AllianceMemberRow = Readonly<{
 export type PlayerLocationRow = Readonly<{
   user_id: number
   tile_id: string
+  pos_x: number | null
+  pos_y: number | null
+  pos_z: number | null
+  client_updated_at: number
   last_seen_tick: number
   updated_at: number
+}>
+
+export type PlayerLocationUpsertResult = Readonly<{
+  row: PlayerLocationRow
+  applied: boolean
 }>
 
 export class SocialError extends Error {
@@ -125,12 +134,31 @@ export function initializeSocialSchema(db: DatabaseConnection): void {
     CREATE TABLE IF NOT EXISTS player_locations (
       user_id INTEGER PRIMARY KEY,
       tile_id TEXT NOT NULL,
+      pos_x REAL,
+      pos_y REAL,
+      pos_z REAL,
+      client_updated_at INTEGER NOT NULL DEFAULT 0,
       last_seen_tick INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (user_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_player_locations_tile ON player_locations(tile_id);
   `)
+  ensureColumn(db, 'player_locations', 'pos_x', 'REAL')
+  ensureColumn(db, 'player_locations', 'pos_y', 'REAL')
+  ensureColumn(db, 'player_locations', 'pos_z', 'REAL')
+  ensureColumn(db, 'player_locations', 'client_updated_at', 'INTEGER NOT NULL DEFAULT 0')
+}
+
+function ensureColumn(
+  db: DatabaseConnection,
+  tableName: string,
+  columnName: string,
+  definition: string
+): void {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+  if (rows.some((row) => row.name === columnName)) return
+  db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run()
 }
 
 export class SocialStore {
@@ -460,19 +488,81 @@ export class SocialStore {
 
   // --- Presence -----------------------------------------------------------
 
-  upsertPlayerLocation(userId: number, tileId: string, tick: number): PlayerLocationRow {
+  upsertPlayerLocation(
+    userId: number,
+    tileId: string,
+    tick: number,
+    position: { x: number; y: number; z: number } | null = null,
+    clientUpdatedAt: number | null = null
+  ): PlayerLocationUpsertResult {
     const now = Date.now()
-    this.db
+    const effectiveClientUpdatedAt = clientUpdatedAt ?? now
+    const result = this.db
       .prepare(
-        `INSERT INTO player_locations (user_id, tile_id, last_seen_tick, updated_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO player_locations (
+           user_id,
+           tile_id,
+           pos_x,
+           pos_y,
+           pos_z,
+           client_updated_at,
+           last_seen_tick,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
            tile_id = excluded.tile_id,
+           pos_x = CASE
+             WHEN player_locations.tile_id = excluded.tile_id
+               THEN COALESCE(excluded.pos_x, player_locations.pos_x)
+             ELSE excluded.pos_x
+           END,
+           pos_y = CASE
+             WHEN player_locations.tile_id = excluded.tile_id
+               THEN COALESCE(excluded.pos_y, player_locations.pos_y)
+             ELSE excluded.pos_y
+           END,
+           pos_z = CASE
+             WHEN player_locations.tile_id = excluded.tile_id
+               THEN COALESCE(excluded.pos_z, player_locations.pos_z)
+             ELSE excluded.pos_z
+           END,
            last_seen_tick = excluded.last_seen_tick,
-           updated_at = excluded.updated_at`
+           client_updated_at = CASE
+             WHEN player_locations.tile_id = excluded.tile_id
+              AND excluded.pos_x IS NULL
+              AND excluded.pos_y IS NULL
+              AND excluded.pos_z IS NULL
+               THEN player_locations.client_updated_at
+             ELSE excluded.client_updated_at
+           END,
+           updated_at = excluded.updated_at
+         WHERE excluded.client_updated_at >= player_locations.client_updated_at`
       )
-      .run(userId, tileId, tick, now)
-    return { user_id: userId, tile_id: tileId, last_seen_tick: tick, updated_at: now }
+      .run(
+        userId,
+        tileId,
+        position?.x ?? null,
+        position?.y ?? null,
+        position?.z ?? null,
+        effectiveClientUpdatedAt,
+        tick,
+        now
+      )
+    const fallback = {
+      user_id: userId,
+      tile_id: tileId,
+      pos_x: position?.x ?? null,
+      pos_y: position?.y ?? null,
+      pos_z: position?.z ?? null,
+      client_updated_at: effectiveClientUpdatedAt,
+      last_seen_tick: tick,
+      updated_at: now
+    }
+    return {
+      row: this.getPlayerLocation(userId) ?? fallback,
+      applied: result.changes > 0
+    }
   }
 
   getPlayerLocation(userId: number): PlayerLocationRow | null {

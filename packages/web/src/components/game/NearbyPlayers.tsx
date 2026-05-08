@@ -245,18 +245,18 @@ function peerIdOf(f: ServerFriendDto, myId: number): number | null {
 // Peer presence hook — used by AreaPage to keep the player's last-seen
 // tile fresh and not just on initial mount. Exported here so the page
 // can stay lean.
-export function usePresenceTouch(tileId: string | null): void {
+export function usePresenceTouch(tileId: string | null, position?: { x: number; y: number; z: number } | null): void {
   const { token } = useAuth()
   useEffect(() => {
     if (!token || !tileId) return
-    void api.socialPresence(token, tileId).catch(() => {
+    void api.socialPresence(token, tileId, position).catch(() => {
       // ignore — best effort
     })
     const timer = window.setInterval(() => {
-      void api.socialPresence(token, tileId).catch(() => undefined)
+      void api.socialPresence(token, tileId, position).catch(() => undefined)
     }, PRESENCE_REFRESH_MS)
     return () => window.clearInterval(timer)
-  }, [token, tileId])
+  }, [token, tileId, position?.x, position?.y, position?.z])
 }
 
 // Re-export for type narrowing in tests/devtools.

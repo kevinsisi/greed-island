@@ -9,6 +9,12 @@ export interface WorldSnapshot {
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldConfig: {
+    tickDurationMs: number
+    ticksPerDay: number
+    timezone: string
+    timezoneOffsetMinutes: number
+  }
   generatedAt: string
 }
 

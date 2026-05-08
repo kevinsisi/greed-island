@@ -4,6 +4,33 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.6 🚧 in progress — 2026-05-08
+
+**主題：資源/時間可見性 + 工作規則 + NPC 反幻覺補強 + 開發憲法**
+
+- ✅ AreaPage 靠近可進入建築時不再因 CTA 插入/移除造成 layout 抖動；進入按鈕保留固定 action slot。
+- ✅ AtmosphereBar 顯示目前世界時間（由 simulation tick 派生）。
+- ✅ 登入玩家頂部顯示潮幣、體力、術式持有數。
+- ✅ 後端限制玩家同時間只能有一份工作；重複應徵回 `ALREADY_HIRED`。
+- ✅ BuildingPage 在玩家已有工作時顯示 `已有工作`，不再讓 UI 看起來可以狂應徵。
+- ✅ NPC dialog prompt 加 known NPC names grounding；未知稱呼不可被 AI 當成世界事實。
+- ✅ Server-side sanitizer 擋掉「哪個 X / 有幾個 X」這類未知稱呼幻覺回覆。
+- ✅ `DEVELOPMENT_CONSTITUTION.md` 建立 AI 接手必讀的開發憲法；`PROGRESS.md` 建立手續進度紀錄。
+- ✅ `ARCHITECTURE.md` 新增 Civilization Evolution Rule，並列出文明演化與 NPC 私人對話 grounding 尚未完成的 backlog。
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm run test -w @greed-island/server`（15 files / 106 tests）、`git diff --check` 通過。
+- ⏳ 尚待 commit/push 與 CI/CD 追蹤。
+
+## v0.15.5 ✅ shipped — 2026-05-08
+
+**主題：Deterministic Card Drops + renderer-only 地圖生命感**
+
+- ✅ `CardDropEngine` 移除 `Math.random()`，spawn chance、rank/entry selection、coordinates 改 deterministic hash rolls。
+- ✅ Seed drops 與 normal tick drops 都有 replay tests。
+- ✅ 新增 OpenSpec change：`openspec/changes/deterministic-card-drops/`。
+- ✅ `ARCHITECTURE.md` 標記 card-drop randomness addressed，但保留 `card_action_log` 尚未併入 canonical `event_log` 的 non-conformance。
+- ✅ MapScene 加 renderer-only environment/NPC idle animation，不改 server authority。
+- ✅ Commit `eea3414`；CI run `25538968116` passed；Deploy Dev Docker build/push passed but desktop SSH failed。
+
 ## v0.15.4 ✅ shipped — 2026-05-08
 
 **主題：地圖 UI 修整 + NPC 記憶/身份 + 三維位置一致性**

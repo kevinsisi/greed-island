@@ -48,6 +48,8 @@ describe('world config', () => {
     expect(DEFAULT_WORLD_CONFIG).toStrictEqual({
       tickDurationMs: 5000,
       ticksPerDay: 17_280,
+      timezone: 'GMT+8',
+      timezoneOffsetMinutes: 480,
       eventRetentionTicks: 518_400,
       narrationRetentionTicks: 518_400,
     })

@@ -39,8 +39,11 @@ import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import {
   TICK_DURATION_MS,
+  TICKS_PER_DAY,
   TICKS_PER_HOUR,
-  TICKS_PER_MINUTE
+  TICKS_PER_MINUTE,
+  WORLD_TIMEZONE,
+  WORLD_TIMEZONE_OFFSET_MINUTES
 } from '../config/world.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
@@ -121,6 +124,12 @@ export type WorldSnapshot = Readonly<{
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldConfig: Readonly<{
+    tickDurationMs: number
+    ticksPerDay: number
+    timezone: string
+    timezoneOffsetMinutes: number
+  }>
   generatedAt: string
 }>
 
@@ -291,6 +300,12 @@ export class SimulationRuntime {
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
         activeEvents: this.eventEngine.getActive(),
         areaStates: this.areaEngine.snapshotAll()
+      },
+      worldConfig: {
+        tickDurationMs: this.tickDurationMs,
+        ticksPerDay: TICKS_PER_DAY,
+        timezone: WORLD_TIMEZONE,
+        timezoneOffsetMinutes: WORLD_TIMEZONE_OFFSET_MINUTES,
       },
       generatedAt: new Date().toISOString()
     }

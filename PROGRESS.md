@@ -1,0 +1,88 @@
+# Greed Island Progress Handoff
+
+This file records current development state for the next AI or human
+developer. Keep latest status at the top.
+
+## 2026-05-08 — v0.15.6 Ready For Commit
+
+### Completed Locally
+
+- Fixed AreaPage layout jitter near enterable buildings by reserving a
+  stable action slot instead of conditionally inserting/removing the
+  enter button.
+- Exposed current world time in the atmosphere bar using simulation tick
+  conversion.
+- Exposed player resources in the top bar for signed-in players:
+  tide coins, energy, and owned technique-card count.
+- Added backend job guard: one player can hold only one active job at a
+  time; applying elsewhere returns `ALREADY_HIRED` until they quit.
+- Updated BuildingPage to show `已有工作` instead of allowing repeated
+  applications when the player already has a job.
+- Added NPC dialog anti-hallucination grounding guard for unknown names:
+  AI replies that invent facts like “which X / several X” are replaced
+  with a deterministic clarification line.
+- Added AI dialog prompt grounding: known NPC names are passed to the
+  prompt; unknown names/aliases must not be treated as world facts.
+- Fixed two-player area presence rendering: presence now carries `x/y/z`,
+  peer sprites render from server-returned XYZ, local positions are
+  account-scoped, tile switches cannot save old-scene coordinates under
+  the new tile, and stale/out-of-order presence requests are ignored
+  without publishing false enter/leave events.
+- Added canonical world timezone config: `GMT+8` / offset `480`, exposed
+  through `/world.worldConfig` and applied by the atmosphere bar clock.
+- Hardened transitional `/world.worldConfig` normalization so older server
+  payloads do not white-screen the UI while deployments roll forward.
+- Added `DEVELOPMENT_CONSTITUTION.md` and architecture rules for
+  Autonomous Civilization Evolution.
+- Bumped app version to `0.15.6`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run test -w @greed-island/server` passed: 16 files / 108 tests.
+- `git diff --check` passed, with Windows LF-to-CRLF warnings only.
+- Reviewer pass after final GMT+8 and XYZ presence fixes: No findings.
+
+### Still Open
+
+- Commit/push this v0.15.6 batch.
+- Track CI after push.
+- Live screenshot still showed `v0.15.3`; deployment must show `v0.15.6`
+  before the two-player position fix can be verified on the public site.
+- Deploy Dev is expected to keep failing until desktop SSH is reachable.
+- NPC movement in AreaScene is still driven by server projection updates
+  reaching React/Phaser; SSE currently pushes world snapshots/events but
+  NPC lists still rely primarily on polling. Future fix should push or
+  refresh NPC projection on each authoritative tick.
+- Full NPC humanity remains incomplete: private dialog is not yet fully
+  grounded in long-term memory, aliases, known-person graph, households,
+  faction knowledge, workplace ties, or settlement history.
+
+## 2026-05-08 — v0.15.5 Shipped
+
+### Completed
+
+- Deterministic card drops: `CardDropEngine` no longer uses
+  `Math.random()` for spawn checks, card selection, or coordinates.
+- Added replay tests for normal tick drops and boot-time seed drops.
+- Added `openspec/changes/deterministic-card-drops/` proposal, design,
+  specs, and tasks.
+- Updated `ARCHITECTURE.md` to mark card-drop randomness addressed while
+  keeping `card_action_log` migration as an open non-conformance.
+- Added renderer-only map/environment/NPC idle animation improvements.
+- Bumped app version to `0.15.5`.
+
+### Verification And CI/CD
+
+- Local `npm run build:web`, `npm run build:server`, full server tests,
+  and `git diff --check` passed.
+- Commit: `eea3414 fix(world): harden deterministic continuity`.
+- CI run `25538968116` passed.
+- Deploy Dev run `25538968139` built and pushed Docker images, then
+  failed at desktop SSH reachability.
+
+### Known Deployment Blocker
+
+- Deploy Dev still fails at `Verify desktop SSH reachability` because the
+  desktop target refuses SSH on the configured host/port.

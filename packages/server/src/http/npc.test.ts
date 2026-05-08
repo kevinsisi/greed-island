@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { createNpcRouter } from './npc.js'
+import { createNpcRouter, sanitizeNpcReplyForUnknownEntities } from './npc.js'
 import { AccountStore } from './accounts.js'
 import { PlayerStateStore } from './playerState.js'
 import { SettingsStore } from './settings.js'
@@ -66,6 +66,32 @@ describe('npc router', () => {
       await close(server)
       db.close()
     }
+  })
+
+  it('sanitizes AI replies that invent unknown named entities', () => {
+    const line = sanitizeNpcReplyForUnknownEntities({
+      playerMessage: '腐叔就是個變態',
+      replyZh: '「腐叔？你說的是哪個腐叔？這裡可有幾個『腐叔』呢。」',
+      replyEn: 'Which one?',
+      knownNpcNames: ['雷子', '米特'],
+    })
+
+    expect(line.zh).toContain('不認得這個稱呼')
+    expect(line.zh).not.toContain('哪個腐叔')
+    expect(line.zh).not.toContain('幾個')
+  })
+
+  it('sanitizes direct questions about unknown named entities', () => {
+    const line = sanitizeNpcReplyForUnknownEntities({
+      playerMessage: '你認識腐叔嗎？',
+      replyZh: '「腐叔是住在港邊的人，我認識腐叔。」',
+      replyEn: 'I know him.',
+      knownNpcNames: ['雷子', '米特'],
+    })
+
+    expect(line.zh).toContain('不認得這個稱呼')
+    expect(line.zh).not.toContain('住在港邊')
+    expect(line.zh).not.toContain('認識腐叔')
   })
 })
 
