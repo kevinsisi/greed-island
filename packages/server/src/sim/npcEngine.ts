@@ -555,8 +555,9 @@ function canNpcStatesInteract(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
  * - entertainer + 極高 talkativeness：可能去鄰近 tile 湊熱鬧（且鄰居人多得明顯）
  * - outsider：高 greed 配低 patience 時往不安全鄰區「找事」
  *
- * 商店 / 工匠 / 公務 / mystic / 守衛：永遠回 null — 他們應該守在自己崗位，
- * 由 schedule 驅動。即便 area 經濟很差他們也不該丟下店去別處。
+ * Duty-anchored roles still use schedule windows as the strong source of truth.
+ * They can leave through routine slots or injected off-duty errands, but this
+ * nudge layer does not pull them away from an active duty window.
  *
  * 不會把 NPC 拉到 walkable=false 或不存在的 tile（依 MAP_ADJACENCY 限制）。
  */
@@ -570,7 +571,7 @@ function computePersonalityNudge(
 ): { targetTile: string; reason: string } | null {
   const arch = (profile.personality.archetype as string | undefined) ?? ''
 
-  // 只對 entertainer / outsider 啟用 nudge；其它角色嚴格走 schedule。
+  // 只對 entertainer / outsider 啟用 nudge；其它角色由 duty-weighted schedule 驅動。
   if (arch !== 'entertainer' && arch !== 'outsider') return null
 
   // 健康 / 心情低落 → 不漂泊，回家 / 留崗。
@@ -739,27 +740,12 @@ function deriveSchedule(profile: NpcProfile): ScheduleSlot[] {
       activity: 'idle'
     })
   }
-  // v0.15.3：role-locked NPC（祭司 / 守衛 / 店主 / 工匠 / 公務）必須留在
-  // 自己 defaultLocation。即使 profile JSON 寫了「council attendance →
-  // t_central」這種跨區行程，也整段壓回 defaultLocation。原因：使用者體感
-  // 「祭司的職責在地脈層就應該永遠在地脈層」；跨區只保留給 entertainer /
-  // outsider / hunter / 流浪 / 報童 等 archetype。
-  const roleLocked = isRoleLockedToHomeTile(profile)
-  if (roleLocked) {
-    for (const slot of out) {
-      if (slot.location !== profile.defaultLocation) {
-        slot.location = profile.defaultLocation
-      }
-    }
-    return out
-  }
-  // 若整天行程的所有 location 都相同，注入一段「跨區外出」slot：
-  // 取最長的 slot，把它的 location 換成 deterministic 鄰居 tile，
-  // 確保 NPC 每天至少跨區一次（大部分 daily-life NPC 原本永遠待原地）。
-  return injectCrossTileWanderIfStuck(profile, out)
+  // 若整天行程的所有 location 都相同，注入一段「跨區外出」slot。
+  // 職責型 NPC 只拿較短的 off-duty errand；wanderer 則保留較長遊蕩時段。
+  return injectDutyWeightedTravelIfStuck(profile, out)
 }
 
-function injectCrossTileWanderIfStuck(
+function injectDutyWeightedTravelIfStuck(
   profile: NpcProfile,
   slots: ScheduleSlot[]
 ): ScheduleSlot[] {
@@ -770,16 +756,11 @@ function injectCrossTileWanderIfStuck(
   const neighbors = MAP_ADJACENCY[home] ?? []
   if (neighbors.length === 0) return slots
 
-  // 跨區意願取決於 archetype + role：商店 / 工匠 / 公務 NPC 大部分時間
-  // 應該待在自己崗位；entertainer / outsider / hunter 才會自然遊蕩。
-  // 同樣是「整天 routine 都在同一 tile」，前者只補一次小幅外出，後者
-  // 才有理由佔掉中段三分之一去鄰區。
+  // 跨區意願取決於 archetype + role：職責型 NPC 大部分時間待在崗位，
+  // 但不能永久鎖死；wanderer 才會佔掉中段三分之一去鄰區。
   const arch = (profile.personality.archetype as string | undefined) ?? ''
   const wanderer = arch === 'entertainer' || arch === 'outsider' || /獵|hunter|流浪|報童/.test(profile.role.zh)
-  if (!wanderer && distinctLocations.size === 1) {
-    // 商店 / 工匠 / 公務：保留原 schedule，不硬塞跨區。讓 profile 自己驅動。
-    return slots
-  }
+  const dutyAnchored = isDutyAnchoredProfile(profile)
 
   // deterministic neighbor pick：用 npcId hash mod neighbor count
   let h = 5381
@@ -787,7 +768,7 @@ function injectCrossTileWanderIfStuck(
   const target = neighbors[h % neighbors.length]!
   if (target === home) return slots
 
-  // 找最長的 slot 把它中間 1/3 切成跨區外出
+  // 找最長的 slot 切出跨區外出。職責型只切短窗口，表達 duty weight。
   let longestIdx = 0
   let longestLen = 0
   for (let i = 0; i < slots.length; i += 1) {
@@ -801,8 +782,14 @@ function injectCrossTileWanderIfStuck(
   const span = slot.toTickOfDay - slot.fromTickOfDay
   if (span < 60) return slots // 太短的 slot 不切
 
-  const startCut = slot.fromTickOfDay + Math.floor(span / 3)
-  const endCut = slot.fromTickOfDay + Math.floor((span * 2) / 3)
+  const startCut =
+    dutyAnchored && !wanderer
+      ? slot.fromTickOfDay + Math.floor((span * 2) / 3)
+      : slot.fromTickOfDay + Math.floor(span / 3)
+  const endCut =
+    dutyAnchored && !wanderer
+      ? slot.fromTickOfDay + Math.floor((span * 5) / 6)
+      : slot.fromTickOfDay + Math.floor((span * 2) / 3)
   const outActivity = inferActivityFromLabel('errand', profile)
 
   const out: ScheduleSlot[] = []
@@ -838,6 +825,7 @@ function inferActivityFromLabel(label: string | undefined, profile: NpcProfile):
   const lower = label.toLowerCase()
   if (/(sleep|night|rest|hideout)/.test(lower)) return 'sleep'
   if (/(eat|meal|breakfast|lunch|dinner|tea|kitchen|market.*food)/.test(lower)) return 'eat'
+  if (/(errand|visit|social|walk|off.?duty)/.test(lower)) return 'idle'
   if (/(trade|trading|exchange|sell|sale|stall|counter|clearing)/.test(lower)) return 'trade'
   if (/(patrol|watch|guard|scout|hunt)/.test(lower)) return 'patrol'
   if (/(work|ledger|study|review|prepare|whisper|gossip|intel|brewing|forge|appraisal)/.test(lower))
@@ -854,17 +842,17 @@ function inferActivityFromRole(profile: NpcProfile): NpcActivity {
 }
 
 /**
- * v0.15.3：判斷 NPC 是否「職責綁定在 defaultLocation」— 這類 NPC 整天
- * 不會跨區，schedule 任何寫到鄰區的 slot 都會被強制壓回 defaultLocation。
+ * v0.15.14：判斷 NPC 是否「職責錨定」— 這類 NPC 大部分時間留在
+ * defaultLocation，但職責只是 schedule 權重，不是跨區 hard lock。
  *
  * 邏輯：archetype 屬於固定崗位類（mystic / shopkeeper / craftsman / guard /
- * civic / cleric）→ lock；或 role.zh 含特定崗位字（祭司 / 僧 / 守衛 / 店長 /
+ * civic / cleric）→ anchored；或 role.zh 含特定崗位字（祭司 / 僧 / 守衛 / 店長 /
  * 老闆 / 鑄 / 匠 / 修 / 醫 / 工 / 員工 / abbot / cleric / priest / guard /
- * shopkeeper）→ lock。
+ * shopkeeper）→ anchored。
  *
- * Wanderer archetype（entertainer / outsider）即使 role 含「商」也不 lock。
+ * Wanderer archetype（entertainer / outsider）即使 role 含「商」也不算職責錨定。
  */
-function isRoleLockedToHomeTile(profile: NpcProfile): boolean {
+function isDutyAnchoredProfile(profile: NpcProfile): boolean {
   const arch = (profile.personality.archetype as string | undefined) ?? ''
   if (arch === 'entertainer' || arch === 'outsider') return false
   const lockedArchetypes = new Set([

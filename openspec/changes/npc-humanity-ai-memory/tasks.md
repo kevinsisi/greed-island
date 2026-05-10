@@ -17,12 +17,12 @@
 
 ## 2. Duty-Weighted Free Exploration
 
-- [ ] 2.1 Replace permanent role-locking with duty weights and duty windows.
-- [ ] 2.2 Allow merchants, craftsmen, guards, priests, and civic NPCs to cross
+- [x] 2.1 Replace permanent role-locking with duty weights and duty windows.
+- [x] 2.2 Allow merchants, craftsmen, guards, priests, and civic NPCs to cross
   districts for errands, food, rest, social visits, patrols, and events.
-- [ ] 2.3 Preserve special-duty anchoring only as a strong weight, not a hard
+- [x] 2.3 Preserve special-duty anchoring only as a strong weight, not a hard
   lock, unless a future explicit story rule says otherwise.
-- [ ] 2.4 Add tests proving formerly role-locked NPCs can leave home outside
+- [x] 2.4 Add tests proving formerly role-locked NPCs can leave home outside
   duty-biased windows.
 
 ## 3. Memory-Backed AI Chronicle

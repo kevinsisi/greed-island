@@ -144,8 +144,7 @@ describe('NpcEngine', () => {
 
   it('injects a cross-tile wander slot for roaming archetype with all-same routine', () => {
     // 'stuck' 整天都待 t_central — entertainer / outsider 該自動補一段跨區外出。
-    // v0.14.0 起：商店 / 工匠 / 公務 NPC 的 schedule 不會被硬塞跨區，
-    // 只有 entertainer / outsider / 流浪/獵人 這類自然會走動的角色才會。
+    // Wanderer 會拿到比職責型 NPC 更長的外出時段。
     const stuck = makeProfile({
       id: 'stuck',
       defaultLocation: 't_central',
@@ -172,8 +171,8 @@ describe('NpcEngine', () => {
     expect(visited.size).toBeGreaterThan(1)
   })
 
-  it('does NOT force cross-tile wander on shopkeepers stuck at one location', () => {
-    // v0.14.0 行為：商店 NPC 一整天都在自己店裡 → 維持原 schedule，不亂跑。
+  it('lets duty-anchored shopkeepers leave home during a short off-duty errand', () => {
+    // v0.15.14 行為：商店 NPC 大部分時間仍在店裡，但職責不是永久 hard lock。
     const shopkeeper = makeProfile({
       id: 'shop',
       defaultLocation: 't_central',
@@ -189,14 +188,80 @@ describe('NpcEngine', () => {
     })
     const engine = new NpcEngine([shopkeeper])
     let crossed = false
+    let homeTicks = 0
+    let awayTicks = 0
     for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
       engine.tick(t)
       if (engine.getState('shop')!.tile !== 't_central') {
         crossed = true
-        break
+        awayTicks += 1
+      } else {
+        homeTicks += 1
       }
     }
-    expect(crossed).toBe(false)
+    expect(crossed).toBe(true)
+    expect(homeTicks).toBeGreaterThan(awayTicks)
+  })
+
+  it('honors explicit cross-district routine slots for duty-anchored priests', () => {
+    const priest = makeProfile({
+      id: 'priest',
+      role: { zh: '地脈祭司', en: 'Ley Priest' },
+      defaultLocation: 't_temple',
+      routine: [
+        {
+          fromTickOfDay: 0,
+          toTickOfDay: TICKS_PER_DAY / 2,
+          location: 't_temple',
+          label: 'temple duty'
+        },
+        {
+          fromTickOfDay: TICKS_PER_DAY / 2,
+          toTickOfDay: TICKS_PER_DAY,
+          location: 't_central',
+          label: 'council visit'
+        }
+      ],
+      personality: { archetype: 'cleric', factionLean: 'temple' }
+    })
+    const engine = new NpcEngine([priest])
+
+    for (let t = TICKS_PER_DAY / 2; t <= TICKS_PER_DAY / 2 + 6; t += 1) {
+      engine.tick(t)
+    }
+
+    expect(engine.getState('priest')!.targetTile).toBe('t_central')
+    expect(engine.getState('priest')!.tile).toBe('t_central')
+  })
+
+  it('does not inject extra errands into an already cross-district guard routine', () => {
+    const guard = makeProfile({
+      id: 'guard',
+      role: { zh: '巡邏守衛', en: 'Patrol Guard' },
+      defaultLocation: 't_dock',
+      routine: [
+        {
+          fromTickOfDay: 0,
+          toTickOfDay: TICKS_PER_DAY / 2,
+          location: 't_dock',
+          label: 'dock patrol'
+        },
+        {
+          fromTickOfDay: TICKS_PER_DAY / 2,
+          toTickOfDay: TICKS_PER_DAY,
+          location: 't_central',
+          label: 'central patrol'
+        }
+      ],
+      personality: { archetype: 'guard', factionLean: 'civic' }
+    })
+    const engine = new NpcEngine([guard])
+
+    // If an extra errand were injected into the first slot, this mid-duty tick
+    // would point away from t_dock. Existing cross-district routines stay intact.
+    engine.tick(Math.floor(TICKS_PER_DAY / 3))
+
+    expect(engine.getState('guard')!.targetTile).toBe('t_dock')
   })
 
   it('initializes deterministic subCol/subRow on construction', () => {
