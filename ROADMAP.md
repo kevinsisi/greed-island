@@ -4,6 +4,19 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.16 ✅ shipped — 2026-05-11
+
+**主題：grounded chronicle rendering from events + memory**
+
+- ✅ 新增 `/api/world/chronicle` read-only endpoint，從 recent committed events 與 `npc_memory` snippets 組 grounded chronicle context。
+- ✅ 預設 deterministic fallback；`?ai=1` 可走 Gemini JSON rendering，但 AI 不寫 Event、不改 state、不創造 world facts。
+- ✅ AI cited names 必須落在 grounded allow-list；allow-list 由 actor ids、NPC 顯示名、memory references 組成，不合格輸出自動 fallback。
+- ✅ chronicle context 排除 internal `FACT_SET` state-write noise，只保留 living-world command events。
+- ✅ OpenSpec `3.2` completed：AI chronicle rendering 已接上 committed events + memory snippets。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過；Gemini staged reviewer `No findings`。
+- ✅ Commits `56b0dcf` and `138bd27` pushed to `main`; CI runs `25633472890` / `25633662802` passed; Deploy Dev runs `25633472898` / `25633662804` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.16`; tick advanced from `68184` to `68186`; `/api/world/chronicle?limit=10` returns grounded fallback text without `FACT_SET` noise.
+
 ## v0.15.15 ✅ shipped — 2026-05-10
 
 **主題：NPC memory foundation for player interactions**

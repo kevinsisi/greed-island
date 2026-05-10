@@ -3,6 +3,57 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.16 Shipped
+
+### Completed Locally
+
+- Added grounded chronicle rendering over recent committed EventLog rows and
+  `npc_memory` snippets.
+- Added read-only `/api/world/chronicle` endpoint with deterministic fallback by
+  default and optional `?ai=1` Gemini JSON rendering.
+- Guarded AI chronicle output with an allowed-name list derived from actor ids,
+  NPC display names, and memory references; AI output that cites names outside
+  the grounded context falls back deterministically.
+- Filtered internal `FACT_SET` projection events out of chronicle context so the
+  endpoint renders world-facing events rather than state-write noise.
+- Marked OpenSpec task `3.2` complete for AI chronicle rendering from committed
+  events and memory snippets without granting AI world authority.
+- Bumped app version to `0.15.16`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm test` passed: server 19 files / 127 tests; web 1 file / 2 tests.
+- `git diff --check` passed.
+- `openspec validate npc-humanity-ai-memory --strict` passed.
+- Gemini staged diff reviewer returned `No findings` after adding AI-path,
+  ungrounded-citation, display-name, and event-filter regression tests.
+
+### CI/CD And Runtime Verification
+
+- Commit `56b0dcf feat(world): render grounded chronicles` pushed to `main`.
+- Follow-up commit `138bd27 fix(world): keep chronicle context grounded` pushed
+  to `main`.
+- GitHub Actions CI runs `25633472890` and `25633662802` passed.
+- GitHub Actions Deploy Dev runs `25633472898` and `25633662804` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.16`.
+- Runtime tick progression verified: health tick advanced from `68184` to
+  `68186` over 10 seconds.
+- Runtime chronicle verified:
+  `/api/world/chronicle?limit=10` returns fallback chronicle text, grounded
+  context, NPC display names in `allowedNames`, and no internal `FACT_SET` noise.
+- Runtime logs verified: server booted from latest tick `68181`, opened HTTP,
+  and did not show crash or tick collision errors.
+
+### Still Open
+
+- Follow-up remains: key-pool robustness metadata for chronicle AI calls and
+  stronger anti-hallucination checks beyond cited-name validation.
+- Future boot work should add an indexed/latest-fact projection so large logs can
+  hydrate richer runtime state without blocking HTTP.
+
 ## 2026-05-10 — v0.15.15 Shipped
 
 ### Completed Locally
