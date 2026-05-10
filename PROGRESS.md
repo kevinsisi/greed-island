@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-10 — v0.15.7 Ready For Commit
+## 2026-05-10 — v0.15.8 Ready For Commit
 
 ### Completed Locally
 
@@ -14,7 +14,10 @@ developer. Keep latest status at the top.
   AreaScene on the backend tick cadence.
 - Changed the old 3s full-world polling loop to a 15s fallback for browsers or
   proxies that cannot keep EventSource open.
-- Bumped app version to `0.15.7` for deployment/runtime verification.
+- Fixed the living-world projection bootstrap check so server boot does not
+  rebuild NPC memory/relationship projections on every restart by checking a
+  synthetic NPC id that can never exist.
+- Bumped app version to `0.15.8` for deployment/runtime verification.
 
 ### Local Verification
 
@@ -25,7 +28,10 @@ developer. Keep latest status at the top.
 
 ### Still Open
 
-- Commit/push v0.15.7 and track the deploy workflow to live health.
+- Commit/push v0.15.8 and track the deploy workflow to live health.
+- v0.15.7 deploy run `25629908799` completed, but public health stayed 502
+  because the server container was still rebuilding projections before opening
+  port 3000.
 - Full NPC humanity remains incomplete: private dialog is not yet fully
   grounded in long-term memory, aliases, known-person graph, households,
   faction knowledge, workplace ties, or settlement history.

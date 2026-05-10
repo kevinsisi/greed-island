@@ -115,6 +115,13 @@ export class SqliteNpcRelationshipsStore {
     tx()
   }
 
+  countAll(): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as c FROM npc_relationships')
+      .get() as { c: number }
+    return row.c
+  }
+
   read(npcA: string, npcB: string): RelationshipRow | null {
     const [a, b] = canonicalPair(npcA, npcB)
     const row = this.db

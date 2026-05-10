@@ -197,12 +197,15 @@ export class SimulationRuntime {
   }): void {
     this.npcMemory = input.memory
     this.npcRelationships = input.relationships
-    // First boot or fresh table: replay the entire event log so the
-    // projection matches the source-of-truth EventLog.
-    if (input.memory.countFor('__bootstrap_check__') === 0) {
+    // First boot or fresh tables: replay the entire event log so the
+    // projections match the source-of-truth EventLog. Check table-level
+    // row counts, not a synthetic NPC id, otherwise every boot rebuilds.
+    const memoryRows = input.memory.countAll()
+    const relationshipRows = input.relationships.countAll()
+    if (memoryRows === 0 || relationshipRows === 0) {
       const events = this.store.readEvents()
-      input.memory.rebuildFromEvents(events)
-      input.relationships.rebuildFromEvents(events)
+      if (memoryRows === 0) input.memory.rebuildFromEvents(events)
+      if (relationshipRows === 0) input.relationships.rebuildFromEvents(events)
       console.log(
         `[boot] living-world projections rebuilt from ${events.length} events`
       )

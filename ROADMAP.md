@@ -4,15 +4,24 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.7 ⏳ local — 2026-05-10
+## v0.15.8 ⏳ local — 2026-05-10
 
-**主題：NPC projection SSE tick refresh**
+**主題：NPC projection SSE tick refresh + boot projection guard**
 
 - ✅ `/api/events/stream` 在每個 simulation tick 後推送新的 world `snapshot`，不再只靠 narrative event 才更新 snapshot。
 - ✅ `WorldStateContext` 收到 SSE snapshot 後立即用目前 auth token refresh `/api/npcs`，讓 NPC `subCol/subRow/buildingId` projection 跟著後端 tick cadence 到前端。
 - ✅ 原 3s full polling 改成 15s fallback，保留 EventSource 失效時的恢復路徑。
+- ✅ 修 living-world projection boot guard：改查 projection table row count，不再用永遠不存在的 `__bootstrap_check__` NPC id 導致每次重啟都重建 projection。
 - ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm run test -w @greed-island/server`（16 files / 108 tests）通過。
 - ⏳ 待 commit / push / deploy verification。
+
+## v0.15.7 ⚠️ superseded — 2026-05-10
+
+**主題：NPC projection SSE tick refresh**
+
+- ✅ Commit `7e44bba` pushed SSE tick snapshot + `/npcs` refresh.
+- ✅ CI run `25629908802` passed; Deploy Dev run `25629908799` completed.
+- ⚠️ Superseded before final live verification: public `/healthz` returned 502 because server boot was still rebuilding projections before listening on port 3000.
 
 ## v0.15.6 ✅ shipped — 2026-05-10
 

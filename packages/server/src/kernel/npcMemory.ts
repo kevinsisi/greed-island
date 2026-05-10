@@ -149,6 +149,13 @@ export class SqliteNpcMemoryStore {
     return row.c
   }
 
+  countAll(): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as c FROM npc_memory')
+      .get() as { c: number }
+    return row.c
+  }
+
   /** Deterministic canonical hash of all rows — used by replay tests. */
   canonicalHash(): string {
     const rows = this.db

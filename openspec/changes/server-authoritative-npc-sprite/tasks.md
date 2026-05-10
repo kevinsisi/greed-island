@@ -73,3 +73,5 @@
   an SSE snapshot arrives, keeping NPC positions/building state on tick cadence.
 - [x] 7.3 Keep polling as a slower fallback rather than the primary NPC
   movement delivery path.
+- [x] 7.4 Guard living-world projection bootstrap with table-level row counts
+  so deploy restarts do not rebuild NPC projections on every boot.
