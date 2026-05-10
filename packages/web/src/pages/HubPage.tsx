@@ -76,11 +76,12 @@ export function HubPage() {
       }))
   }, [areaStates])
 
-  // 主地圖顯示所有在地表的 NPC；室內 NPC 只出現在建築內，避免同一人分身。
+  // 主地圖只顯示正在跨區移動的 NPC；區域內 NPC 由 AreaPage 顯示，
+  // 建築內 NPC 由 BuildingPage 顯示，避免同一個人跨場景分身。
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return npcs
       .filter((n) => KNOWN_DISTRICTS.has(n.location as DistrictId))
-      .filter((n) => !n.buildingId)
+      .filter((n) => !n.buildingId && n.activity === 'move')
       .map((n) => {
         const base: MapNpc = {
           id: n.id,
