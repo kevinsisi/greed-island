@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.12 ⏳ local — 2026-05-10
+## v0.15.12 ✅ shipped — 2026-05-10
 
 **主題：NPC worldline route slice**
 
@@ -12,7 +12,9 @@
 - ✅ Hub 只渲染 travel route 上的 NPC，並用 route segment 位置表達「在路上」。
 - ✅ Area/outdoor projection 排除 `activity === 'move'`，避免同一 NPC 同時出現在 Hub 與 sub 場景。
 - ✅ 新增 regression tests：移動 NPC 有 route、抵達後 route 清空、traveling NPC 不算 outdoor occupant；前端 projection 也覆蓋 Hub/Area 去重。
-- ⏳ 待 final review、commit / push / CI/CD / live verification。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過。
+- ✅ Commit `ba9ca97` pushed to `main`; CI run `25631740981` passed; Deploy Dev run `25631740983` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.12`.
 
 ## v0.15.11 ✅ shipped — 2026-05-10
 

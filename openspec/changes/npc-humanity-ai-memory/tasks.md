@@ -43,4 +43,4 @@
 - [x] 4.2 Update `PROGRESS.md`, `ROADMAP.md`, and architecture/spec docs.
 - [x] 4.3 Run concrete build/test/diff-check commands.
 - [x] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.
-- [ ] 4.5 Ship v0.15.12 worldline route slice and record deploy evidence.
+- [x] 4.5 Ship v0.15.12 worldline route slice and record deploy evidence.

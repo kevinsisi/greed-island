@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-10 — v0.15.12 In Progress
+## 2026-05-10 — v0.15.12 Shipped
 
 ### Completed Locally
 
@@ -26,10 +26,19 @@ developer. Keep latest status at the top.
 - `npm run build:web` passed, with existing Vite chunk-size warning.
 - `npm test` passed: server 18 files / 112 tests; web 1 file / 2 tests.
 
+### CI/CD And Runtime Verification
+
+- Commit `ba9ca97 fix(npcs): render travel as worldline routes` pushed to `main`.
+- GitHub Actions CI run `25631740981` passed.
+- GitHub Actions Deploy Dev run `25631740983` passed: Docker images built,
+  pushed, desktop containers restarted, and smoke check passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.12`.
+- Runtime NPC projection verified: `/api/npcs` exposes `travelRoute` for every
+  NPC, currently `null` for NPCs not in transit.
+
 ### Still Open
 
-- Run final `git diff --check` and reviewer gate.
-- Commit/push to `main`, track CI/CD, and verify live `0.15.12`.
 - Follow-up remains: real duty-weighted free exploration and richer intent
   selection beyond schedule/personality nudge.
 
