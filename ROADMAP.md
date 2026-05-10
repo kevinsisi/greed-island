@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.10 ⏳ local — 2026-05-10
+## v0.15.10 ✅ shipped — 2026-05-10
 
 **主題：NPC projection SSE tick refresh + availability-first boot**
 
@@ -14,7 +14,9 @@
 - ✅ 修 living-world projection boot guard：改查 projection table row count，不再用永遠不存在的 `__bootstrap_check__` NPC id 導致每次重啟都重建 projection。
 - ✅ 修 production boot：大型 event log 不再開機前做 full hydrate / latest-fact window query；先用 event metadata 啟動 HTTP，避免 deploy 後 502。
 - ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm run test -w @greed-island/server`（16 files / 108 tests）通過。
-- ⏳ 待 commit / push / deploy verification。
+- ✅ Commit `6b4dcc3`；CI run `25630222017` passed；Deploy Dev run `25630222015` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.10`.
+- ⚠️ Availability-first tradeoff：大型 production event log 目前從 defaults 啟動；後續需要 indexed/latest-fact projection 來恢復非阻塞 state hydration。
 
 ## v0.15.9 ⚠️ superseded — 2026-05-10
 

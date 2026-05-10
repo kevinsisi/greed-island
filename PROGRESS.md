@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-10 — v0.15.10 Ready For Commit
+## 2026-05-10 — v0.15.10 Shipped
 
 ### Completed Locally
 
@@ -28,9 +28,18 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server` passed: 16 files / 108 tests.
 - `git diff --check` passed, with Windows LF-to-CRLF warnings only.
 
+### CI/CD And Runtime Verification
+
+- Commit `6b4dcc3 fix(server): keep boot available on large logs` pushed to
+  `main`.
+- GitHub Actions CI run `25630222017` passed.
+- GitHub Actions Deploy Dev run `25630222015` passed: Docker images built,
+  pushed, and desktop containers restarted.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.10`.
+
 ### Still Open
 
-- Commit/push v0.15.10 and track the deploy workflow to live health.
 - v0.15.7 deploy run `25629908799` completed, but public health stayed 502
   because the server container was still rebuilding projections before opening
   port 3000.
@@ -40,6 +49,9 @@ developer. Keep latest status at the top.
 - v0.15.9 deploy run `25630144174` completed, but public health stayed 502
   because the SQLite latest-fact window query was still too expensive on the
   production event log.
+- v0.15.10 restores availability by booting large event logs from defaults;
+  future work should add an indexed/latest-fact projection so tick/weather/NPC
+  state can hydrate without blocking HTTP.
 - Full NPC humanity remains incomplete: private dialog is not yet fully
   grounded in long-term memory, aliases, known-person graph, households,
   faction knowledge, workplace ties, or settlement history.
