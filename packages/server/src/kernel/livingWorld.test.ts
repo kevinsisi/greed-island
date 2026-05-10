@@ -17,7 +17,9 @@ import { SqliteEventStore } from './eventStore.js'
 import { SqliteNpcMemoryStore } from './npcMemory.js'
 import { SqliteNpcRelationshipsStore } from './npcRelationships.js'
 import { summarizeWindow } from './catchUpSummary.js'
+import { buildChronicleContext, renderChronicle } from './chronicleRenderer.js'
 import { deriveEmotionalSnapshot } from './emotionalSimulation.js'
+import { SettingsStore } from '../http/settings.js'
 import type { EventDraft } from './types.js'
 
 function makeHarness() {
@@ -381,6 +383,52 @@ describe('catch-up summary', () => {
     expect(summary.sinceTick).toBe(2)
     expect(summary.untilTick).toBe(4)
     expect(summary.digest).toBeDefined()
+  })
+})
+
+describe('grounded chronicle renderer', () => {
+  it('builds chronicle context from committed events and memory snippets', () => {
+    const { eventStore, memory, ruleEngine } = makeHarness()
+    submit(
+      makeLivingWorldCommand('NPC_INTERACT', 'npc-a', 'npc', 1, 1, {
+        tile: 't_market',
+        participants: ['npc-a', 'npc-b'],
+        mode: 'argue',
+        narration: 'npc-a 和 npc-b 爭論了碼頭的流言。'
+      }),
+      ruleEngine,
+      eventStore
+    )
+    memory.rebuildFromEvents(eventStore.readEvents())
+
+    const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
+
+    expect(context.events).toHaveLength(1)
+    expect(context.memories.length).toBeGreaterThan(0)
+    expect(context.allowedNames).toContain('npc-a')
+    expect(context.allowedNames).toContain('npc-b')
+  })
+
+  it('renders deterministic fallback without AI keys', async () => {
+    const { db, eventStore, memory, ruleEngine } = makeHarness()
+    const settings = new SettingsStore(db)
+    submit(
+      makeLivingWorldCommand('AREA_PRESSURE', 'system', 'system', 2, 2, {
+        tileId: 't_market',
+        kind: 'pressure.food_shortage',
+        detail: { food: 22 },
+        narration: '市場的食物供給變得緊張。'
+      }),
+      ruleEngine,
+      eventStore
+    )
+    const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
+
+    const chronicle = await renderChronicle({ context, settings, useAi: true })
+
+    expect(chronicle.source).toBe('fallback')
+    expect(chronicle.textZh).toContain('市場的食物供給變得緊張')
+    expect(chronicle.aiError).toBeNull()
   })
 })
 

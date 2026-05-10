@@ -8,16 +8,19 @@ import type Database from 'better-sqlite3'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { summarizeWindow } from '../kernel/catchUpSummary.js'
+import { buildChronicleContext, renderChronicle } from '../kernel/chronicleRenderer.js'
 import { deriveEmotionalSnapshot } from '../kernel/emotionalSimulation.js'
 import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import type { AccountStore } from './accounts.js'
 import { requireAuth, type AuthConfig } from './auth.js'
+import type { SettingsStore } from './settings.js'
 
 export function createLivingWorldRouter(input: {
   runtime: SimulationRuntime
   memory: SqliteNpcMemoryStore
   relationships: SqliteNpcRelationshipsStore
+  settings: SettingsStore
   accounts: AccountStore
   authConfig: AuthConfig
   db: Database.Database
@@ -33,6 +36,15 @@ export function createLivingWorldRouter(input: {
     const events = eventStore.readEvents()
     const summary = summarizeWindow(events, sinceTick, latestTick)
     res.json({ latestTick, summary })
+  })
+
+  router.get('/world/chronicle', async (req: Request, res: Response) => {
+    const limit = clampInt(req.query.limit, 1, 100, 40)
+    const useAi = String(req.query.ai ?? '0') === '1'
+    const events = eventStore.readRecentEvents(limit)
+    const context = buildChronicleContext({ events, memory: input.memory })
+    const chronicle = await renderChronicle({ context, settings: input.settings, useAi })
+    res.json({ latestTick: input.runtime.getCurrentTick(), chronicle })
   })
 
   // v0.11.0 — "while you were gone". Reads the player's last_seen_tick
