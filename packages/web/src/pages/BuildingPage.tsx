@@ -91,25 +91,37 @@ export function BuildingPage() {
     return () => window.clearInterval(id)
   }, [refreshBuilding])
 
-  const sceneNpcs = useMemo<BuildingSceneNpc[]>(() => {
+  const presentNpcs = useMemo(() => {
     if (!view) return []
-    return view.occupants.map((occ) => {
-      const profile = npcs.find((n) => n.id === occ.npcId)
-      const fullName = profile?.name ?? occ.npcId
+    return npcs
+      .filter((npc) => npc.buildingId === view.def.id)
+      .map((npc) => ({
+        npc,
+        occupant: view.occupants.find((occ) => occ.npcId === npc.id) ?? {
+          npcId: npc.id,
+          shift: null,
+          isOwner: false
+        }
+      }))
+  }, [view, npcs])
+
+  const sceneNpcs = useMemo<BuildingSceneNpc[]>(() => {
+    return presentNpcs.map(({ npc, occupant }) => {
+      const fullName = npc?.name ?? occupant.npcId
       const base: BuildingSceneNpc = {
-        id: occ.npcId,
+        id: occupant.npcId,
         name: fullName,
         shortName: fullName.charAt(0),
-        isOwner: occ.isOwner
+        isOwner: occupant.isOwner
       }
-      if (profile?.activity) {
-        base.activity = profile.activity
-        base.activityLabel = profile.activity
+      if (npc?.activity) {
+        base.activity = npc.activity
+        base.activityLabel = npc.activity
       }
-      if (typeof profile?.color === 'number') base.color = profile.color
+      if (typeof npc?.color === 'number') base.color = npc.color
       return base
     })
-  }, [view, npcs])
+  }, [presentNpcs])
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
@@ -249,33 +261,32 @@ export function BuildingPage() {
       {/* 在場 NPC list */}
       <div className="flex flex-col gap-2 bg-ground-900/85 border border-ground-700 rounded-sharp p-3">
         <div className="font-display text-[10px] uppercase tracking-tightest text-ground-400">
-          室內人員 {view.occupants.length}
+          室內人員 {presentNpcs.length}
         </div>
-        {view.occupants.length === 0 ? (
+        {presentNpcs.length === 0 ? (
           <div className="text-[12px] text-ground-500 italic">目前沒有人在這裡。</div>
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {view.occupants.map((occ) => {
-              const profile = npcs.find((n) => n.id === occ.npcId)
-              const name = profile?.name ?? occ.npcId
+            {presentNpcs.map(({ npc, occupant }) => {
+              const name = npc?.name ?? occupant.npcId
               return (
-                <li key={occ.npcId}>
+                <li key={occupant.npcId}>
                   <button
                     type="button"
-                    onClick={() => profile && setActiveNpc(profile)}
+                    onClick={() => npc && setActiveNpc(npc)}
                     className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-sharp border border-ground-700 hover:border-ember-600 transition-colors"
                   >
                     <span
                       className={[
                         'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
-                        occ.isOwner ? 'border-ember-500 text-ember-300' : 'border-ground-700 text-ground-200'
+                        occupant.isOwner ? 'border-ember-500 text-ember-300' : 'border-ground-700 text-ground-200'
                       ].join(' ')}
                     >
                       {name.charAt(0)}
                     </span>
                     <div className="min-w-0 flex flex-col">
                       <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500">
-                        {profile?.role ?? (occ.isOwner ? '老闆' : '室內人員')}
+                        {npc?.role ?? (occupant.isOwner ? '老闆' : '室內人員')}
                       </div>
                       <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                         {name}

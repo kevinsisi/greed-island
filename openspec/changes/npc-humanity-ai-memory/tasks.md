@@ -1,0 +1,39 @@
+## 1. Unique NPC Presence
+
+- [x] 1.1 Define the current authoritative NPC presence tuple and document it.
+- [x] 1.2 Make building occupant views derive from `runtime.getNpcs()` / NPC
+  presence rather than an independently hydrated occupant projection.
+- [x] 1.3 Ensure AreaPage and BuildingPage cannot render the same NPC in two
+  places from divergent projections.
+- [x] 1.4 Add regression coverage for an NPC inside a building not appearing as
+  an outdoor area NPC.
+- [ ] 1.5 Verify live `/api/npcs` and `/api/buildings` consistency after deploy.
+
+## 2. Duty-Weighted Free Exploration
+
+- [ ] 2.1 Replace permanent role-locking with duty weights and duty windows.
+- [ ] 2.2 Allow merchants, craftsmen, guards, priests, and civic NPCs to cross
+  districts for errands, food, rest, social visits, patrols, and events.
+- [ ] 2.3 Preserve special-duty anchoring only as a strong weight, not a hard
+  lock, unless a future explicit story rule says otherwise.
+- [ ] 2.4 Add tests proving formerly role-locked NPCs can leave home outside
+  duty-biased windows.
+
+## 3. Memory-Backed AI Chronicle
+
+- [ ] 3.1 Persist player↔NPC and NPC↔NPC interaction facts required for future
+  memory-grounded behavior.
+- [ ] 3.2 Add AI chronicle rendering from committed events and memory snippets;
+  AI must not create world facts or emit Commands directly.
+- [ ] 3.3 Use key-pool robustness: per-item timeout, retry/backoff for
+  transient failures, JSON MIME when structured output is needed, and observable
+  fallback metadata.
+- [ ] 3.4 Add anti-hallucination grounding so AI chronicle text may only name
+  NPCs, buildings, and locations present in the event snapshot.
+
+## 4. Completion
+
+- [x] 4.1 Bump product version for each shipped implementation slice.
+- [ ] 4.2 Update `PROGRESS.md`, `ROADMAP.md`, and architecture/spec docs.
+- [ ] 4.3 Run concrete build/test/diff-check commands.
+- [ ] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.

@@ -30,20 +30,7 @@ export class BuildingRuntime {
     const events: Array<{ npcId: string; from: string | null; to: string | null }> = []
 
     for (const [npcId, state] of npcStates) {
-      const owner = findOwnerBuilding(npcId)
-      let next: string | null = null
-      if (owner && state.tile === owner.tileId && INDOOR_ACTIVITIES.has(state.activity)) {
-        next = owner.id
-      } else if (state.activity === 'sleep') {
-        const homes = listBuildingsForTile(state.tile).filter(
-          (b) => b.type === 'residential'
-        )
-        if (homes.length > 0) {
-          let h = 5381
-          for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
-          next = homes[h % homes.length]!.id
-        }
-      }
+      const next = this.resolveNpcBuildingId(npcId, state)
       const before = this.npcInside.get(npcId) ?? null
       if (before !== next) {
         events.push({ npcId, from: before, to: next })
@@ -54,14 +41,35 @@ export class BuildingRuntime {
     return events
   }
 
-  isNpcInside(npcId: string, buildingId: string): boolean {
-    return this.npcInside.get(npcId) === buildingId
+  resolveNpcBuildingId(npcId: string, state: NpcRuntimeState): string | null {
+    const owner = findOwnerBuilding(npcId)
+    if (owner && state.tile === owner.tileId && INDOOR_ACTIVITIES.has(state.activity)) {
+      return owner.id
+    }
+    if (state.activity === 'sleep') {
+      const homes = listBuildingsForTile(state.tile).filter(
+        (b) => b.type === 'residential'
+      )
+      if (homes.length > 0) {
+        let h = 5381
+        for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+        return homes[h % homes.length]!.id
+      }
+    }
+    return null
   }
 
-  occupantsOf(buildingId: string): readonly BuildingOccupant[] {
+  isNpcInside(npcId: string, buildingId: string, state: NpcRuntimeState): boolean {
+    return this.resolveNpcBuildingId(npcId, state) === buildingId
+  }
+
+  occupantsOf(
+    buildingId: string,
+    npcStates: ReadonlyMap<string, NpcRuntimeState>
+  ): readonly BuildingOccupant[] {
     const out: BuildingOccupant[] = []
-    for (const [npcId, bId] of this.npcInside) {
-      if (bId !== buildingId) continue
+    for (const [npcId, state] of npcStates) {
+      if (this.resolveNpcBuildingId(npcId, state) !== buildingId) continue
       const owner = findOwnerBuilding(npcId)
       out.push({
         npcId,
@@ -72,24 +80,27 @@ export class BuildingRuntime {
     return out
   }
 
-  snapshotForTile(tileId: string): BuildingRuntimeView[] {
+  snapshotForTile(
+    tileId: string,
+    npcStates: ReadonlyMap<string, NpcRuntimeState>
+  ): BuildingRuntimeView[] {
     return listBuildingsForTile(tileId).map((def) => ({
       def,
-      occupants: this.occupantsOf(def.id)
+      occupants: this.occupantsOf(def.id, npcStates)
     }))
   }
 
-  snapshotAll(): BuildingRuntimeView[] {
+  snapshotAll(npcStates: ReadonlyMap<string, NpcRuntimeState>): BuildingRuntimeView[] {
     return listAllBuildings().map((def) => ({
       def,
-      occupants: this.occupantsOf(def.id)
+      occupants: this.occupantsOf(def.id, npcStates)
     }))
   }
 
   npcsOutsideOnTile(npcStates: ReadonlyMap<string, NpcRuntimeState>): Map<string, string[]> {
     const byTile = new Map<string, string[]>()
     for (const [npcId, state] of npcStates) {
-      if (this.npcInside.get(npcId)) continue
+      if (this.resolveNpcBuildingId(npcId, state)) continue
       const arr = byTile.get(state.tile) ?? []
       arr.push(npcId)
       byTile.set(state.tile, arr)

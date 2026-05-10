@@ -255,7 +255,7 @@ export class SimulationRuntime {
     if (!state) return null
     const presentNpcNames = this.getOutdoorNpcNamesAt(tileId)
     const presentBuildingNames = this.buildingRuntime
-      .snapshotForTile(tileId)
+      .snapshotForTile(tileId, this.npcEngine.snapshotAll())
       .map((b) => b.def.nameZh)
     const recentNarrations = this.getRecentEvents(20)
       .filter((e) => e.narration)
@@ -332,11 +332,11 @@ export class SimulationRuntime {
   }
 
   getBuildingsOnTile(tileId: string): readonly BuildingRuntimeView[] {
-    return this.buildingRuntime.snapshotForTile(tileId)
+    return this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
   }
 
   getAllBuildings(): readonly BuildingRuntimeView[] {
-    return this.buildingRuntime.snapshotAll()
+    return this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())
   }
 
   getCurrentWeather(): string {
@@ -352,7 +352,8 @@ export class SimulationRuntime {
   }
 
   isNpcInsideBuilding(npcId: string, buildingId: string): boolean {
-    return this.buildingRuntime.isNpcInside(npcId, buildingId)
+    const state = this.npcEngine.getState(npcId)
+    return state ? this.buildingRuntime.isNpcInside(npcId, buildingId, state) : false
   }
 
   getOutdoorNpcsAt(tileId: string): string[] {
@@ -447,11 +448,8 @@ export class SimulationRuntime {
 
   /** 此 NPC 是否在某棟建築內？回傳建築 id 或 null。 */
   getNpcBuildingId(npcId: string): string | null {
-    const buildings = this.buildingRuntime.snapshotAll()
-    for (const view of buildings) {
-      if (view.occupants.some((o) => o.npcId === npcId)) return view.def.id
-    }
-    return null
+    const state = this.npcEngine.getState(npcId)
+    return state ? this.buildingRuntime.resolveNpcBuildingId(npcId, state) : null
   }
 
   isRareWindowOpen(): boolean {
@@ -560,7 +558,7 @@ export class SimulationRuntime {
     // 這些 NPC，避免事件出現「鏽灣區起爭執」但玩家進到鏽灣區看不到那兩位 NPC
     // (因為他們其實在某棟建築內)。
     const npcsInsideBuildings = new Set<string>()
-    for (const view of this.buildingRuntime.snapshotAll()) {
+    for (const view of this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())) {
       for (const occupant of view.occupants) {
         npcsInsideBuildings.add(occupant.npcId)
       }

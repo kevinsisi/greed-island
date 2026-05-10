@@ -142,6 +142,17 @@ NPCs emit Commands only; they never produce Events directly. NPC state
 must be derived from EventLog and must not live only in hidden mutable
 runtime memory.
 
+NPC presence is globally unique. At any tick an NPC may have only one
+authoritative visible presence tuple: tile, optional building,
+sub-position, activity, and future intent. Interior building views,
+area scenes, and hub map views must derive from that same tuple; no
+projection may render a second copy of the same NPC in another place.
+
+NPC duty is a movement weight, not a permanent identity prison. Priests,
+merchants, craftsmen, guards, and civic NPCs may cross districts for
+errands, food, rest, patrols, social visits, events, or memory-driven
+intent unless a specific story rule declares that actor immobile.
+
 ### 0.12 Card And Combat Rule
 
 Cards are World Rule Operators. Playing, spawning, storing, trading, or

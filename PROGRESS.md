@@ -3,6 +3,31 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.11 In Progress
+
+### Completed Locally
+
+- Started OpenSpec change `npc-humanity-ai-memory` for NPC unique presence,
+  duty-weighted free exploration, memory-backed behavior, and AI-rendered
+  grounded chronicle text.
+- Replaced the old durable rule that role NPCs cannot cross districts with the
+  new NPC humanity rule: duty is a movement weight, not a permanent hard lock.
+- Made building occupant views derive from current NPC presence state instead
+  of relying only on the independently hydrated `npcInside` map.
+- Updated BuildingPage to use the server NPC projection as the primary source
+  for interior NPCs, preventing stale building detail from rendering a duplicate
+  when `/api/npcs` says that NPC is elsewhere.
+- Added `buildingRuntime` regression coverage for an NPC inside a building not
+  appearing in the outdoor NPC list.
+- Bumped app version to `0.15.11`.
+
+### Still Open
+
+- Run local build/tests/diff-check.
+- Complete reviewer gate, commit/push, CI/CD, and live deploy verification.
+- Follow-up slices remain: duty-weighted cross-district exploration and
+  memory-backed AI chronicle rendering.
+
 ## 2026-05-10 — v0.15.10 Shipped
 
 ### Completed Locally

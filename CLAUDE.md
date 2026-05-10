@@ -20,9 +20,9 @@ This codebase is **Greed Island**, an AI-driven living-world game. The following
 
 AI 旁白（ambient + worldEvent + dialog）只能引用 user prompt 中明確列出的名字 — 不可以虛構任何具名 NPC、建築、結構名。Prompt 必須帶：(a) 此區可命名的 NPC 清單（缺值時明示「無 NPC 在場 → 不可提及任何具名人物」）、(b) 此區可命名建築清單（缺值時明示「不要使用任何具體建築名」）。設計新 AI prompt 時 **必須** 加這個約束區塊；違反者 review 時擋下。
 
-## NPC 跨區規則（v0.15.3+）
+## NPC 跨區與人性規則（v0.15.11+）
 
-職責綁定 NPC（`isRoleLockedToHomeTile` 為 true）整天不離開 `defaultLocation`，即使 profile JSON 寫了跨區 schedule slot 也會被壓回家鄉。lock 條件：archetype ∈ {mystic, shopkeeper, craftsman, guard, civic, cleric}，或 role 含「祭司 / 僧 / 守衛 / 店長 / 老闆 / 鑄 / 匠 / 修 / 醫 / 工 / 員工」/ `abbot|cleric|priest|guard|shopkeeper|smith`。Wanderer archetype（entertainer / outsider / hunter / 流浪 / 報童）才會跨區。
+NPC 是人，不是固定地圖裝飾。商人、工匠、守衛、祭司、公務 NPC 都可以跨區；職責只能是 movement policy 的強權重，不能是永久 hard lock，除非未來有明確 story immobility rule。NPC 同一時間只能有一個權威 presence tuple：`tileId`、`buildingId | null`、`subCol/subRow/subZ`、`activity`、未來 `intent`。Area / Building / Hub 必須從同一份 server-authoritative presence 派生，禁止用不同 projection 讓同一 NPC 在室內與室外分身。
 
 ## Global Working Rules
 

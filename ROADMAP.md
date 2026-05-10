@@ -4,6 +4,17 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.11 ⏳ local — 2026-05-10
+
+**主題：NPC humanity slice 1 — unique presence authority**
+
+- ✅ 新增 OpenSpec change `npc-humanity-ai-memory`：規劃 NPC 唯一 presence、duty-weighted 自由探索、記憶與 AI grounded chronicle。
+- ✅ 將舊的 role-lock durable rule 改為「職責是移動權重，不是永久鎖」。
+- ✅ Building occupants 改由當前 NPC presence 推導，避免室內/室外 projection 漂移。
+- ✅ BuildingPage 以 `/api/npcs` 的 `buildingId` 作為 server 模式室內 NPC 主要來源，避免 stale building detail 造成同名 NPC 分身。
+- ✅ 新增 regression test：建築內 NPC 不會出現在戶外 NPC list。
+- ⏳ 待本機驗證、review、commit / push / deploy verification。
+
 ## v0.15.10 ✅ shipped — 2026-05-10
 
 **主題：NPC projection SSE tick refresh + availability-first boot**
