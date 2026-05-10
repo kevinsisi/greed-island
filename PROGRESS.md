@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-10 — v0.15.11 In Progress
+## 2026-05-10 — v0.15.11 Shipped
 
 ### Completed Locally
 
@@ -19,12 +19,34 @@ developer. Keep latest status at the top.
   when `/api/npcs` says that NPC is elsewhere.
 - Added `buildingRuntime` regression coverage for an NPC inside a building not
   appearing in the outdoor NPC list.
+- Updated HubPage so the main map shows all surface NPCs, not only NPCs whose
+  current activity is `move`; indoor NPCs remain hidden from the hub map to
+  prevent duplicates.
 - Bumped app version to `0.15.11`.
+
+### Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run test -w @greed-island/server` passed: 18 files / 110 tests.
+- `git diff --check` passed, with Windows LF-to-CRLF warnings only.
+- Gemini staged diff reviewer returned `No findings`.
+
+### CI/CD And Runtime Verification
+
+- Commits `b16117f fix(npcs): enforce unique building presence` and
+  `0038ee8 fix(web): show outdoor NPCs on hub map` pushed to `main`.
+- GitHub Actions CI run `25631221366` passed.
+- GitHub Actions Deploy Dev run `25631221360` passed: Docker images built,
+  pushed, desktop containers restarted, and smoke check passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.11`.
+- Runtime NPC projection verified: `/api/npcs` returns surface NPCs with
+  `buildingId: null` across districts, while indoor NPCs retain a concrete
+  `buildingId`.
 
 ### Still Open
 
-- Run local build/tests/diff-check.
-- Complete reviewer gate, commit/push, CI/CD, and live deploy verification.
 - Follow-up slices remain: duty-weighted cross-district exploration and
   memory-backed AI chronicle rendering.
 

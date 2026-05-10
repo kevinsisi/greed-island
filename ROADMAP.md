@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.11 ⏳ local — 2026-05-10
+## v0.15.11 ✅ shipped — 2026-05-10
 
 **主題：NPC humanity slice 1 — unique presence authority**
 
@@ -12,8 +12,11 @@
 - ✅ 將舊的 role-lock durable rule 改為「職責是移動權重，不是永久鎖」。
 - ✅ Building occupants 改由當前 NPC presence 推導，避免室內/室外 projection 漂移。
 - ✅ BuildingPage 以 `/api/npcs` 的 `buildingId` 作為 server 模式室內 NPC 主要來源，避免 stale building detail 造成同名 NPC 分身。
+- ✅ HubPage 主地圖改顯示所有地表 NPC，不再只顯示 `activity === 'move'` 的 NPC；室內 NPC 仍只在建築內顯示避免分身。
 - ✅ 新增 regression test：建築內 NPC 不會出現在戶外 NPC list。
-- ⏳ 待本機驗證、review、commit / push / deploy verification。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm run test -w @greed-island/server`（18 files / 110 tests）、`git diff --check` 通過。
+- ✅ Commit `0038ee8` pushed to `main`; CI run `25631221366` passed; Deploy Dev run `25631221360` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.11`.
 
 ## v0.15.10 ✅ shipped — 2026-05-10
 

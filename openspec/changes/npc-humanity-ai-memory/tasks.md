@@ -7,7 +7,7 @@
   places from divergent projections.
 - [x] 1.4 Add regression coverage for an NPC inside a building not appearing as
   an outdoor area NPC.
-- [ ] 1.5 Verify live `/api/npcs` and `/api/buildings` consistency after deploy.
+- [x] 1.5 Verify live `/api/npcs` and `/api/buildings` consistency after deploy.
 
 ## 2. Duty-Weighted Free Exploration
 
@@ -34,6 +34,6 @@
 ## 4. Completion
 
 - [x] 4.1 Bump product version for each shipped implementation slice.
-- [ ] 4.2 Update `PROGRESS.md`, `ROADMAP.md`, and architecture/spec docs.
-- [ ] 4.3 Run concrete build/test/diff-check commands.
-- [ ] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.
+- [x] 4.2 Update `PROGRESS.md`, `ROADMAP.md`, and architecture/spec docs.
+- [x] 4.3 Run concrete build/test/diff-check commands.
+- [x] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.
