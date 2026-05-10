@@ -76,13 +76,11 @@ export function HubPage() {
       }))
   }, [areaStates])
 
-  // 主地圖只顯示「正在跨區移動中」的 NPC。在區域內工作 / 休息 / 聊天的
-  // NPC 只會出現在該區域的 AreaPage scene 裡，避免主地圖被一堆站著的方塊塞滿。
-  // v0.14.0：activity === 'move' 才畫；其它狀態的 NPC 從主地圖隱藏。
+  // 主地圖顯示所有在地表的 NPC；室內 NPC 只出現在建築內，避免同一人分身。
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return npcs
       .filter((n) => KNOWN_DISTRICTS.has(n.location as DistrictId))
-      .filter((n) => n.activity === 'move')
+      .filter((n) => !n.buildingId)
       .map((n) => {
         const base: MapNpc = {
           id: n.id,
