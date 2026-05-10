@@ -6,7 +6,8 @@
 #
 # Replace <DESKTOP_TAILSCALE_HOST> with the desktop host's Tailscale
 # DNS name (e.g. desktop.tail-scale-name.ts.net) or its Tailscale IP
-# address (e.g. 100.x.y.z). Replace 7100 with whatever HOST_PORT
+# address (e.g. 100.x.y.z). Replace 8100 with whatever
+# GREED_ISLAND_HOST_PORT
 # value the desktop deploy/.env uses.
 #
 # After editing the Caddyfile:
@@ -14,7 +15,7 @@
 
 @hunter host hunter.sisihome.org
 handle @hunter {
-    reverse_proxy <DESKTOP_TAILSCALE_HOST>:7100 {
+    reverse_proxy <DESKTOP_TAILSCALE_HOST>:8100 {
         # SSE pass-through for /api/events/stream and any other
         # streamed responses from the Greed Island server.
         flush_interval -1
@@ -36,5 +37,5 @@ handle @hunter {
 
 # Optional bare-host alias used inside the LAN.
 http://hunter.sisihome {
-    reverse_proxy <DESKTOP_TAILSCALE_HOST>:7100
+    reverse_proxy <DESKTOP_TAILSCALE_HOST>:8100
 }

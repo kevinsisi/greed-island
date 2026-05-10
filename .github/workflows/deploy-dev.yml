@@ -1,14 +1,14 @@
 name: Deploy Dev
 
 # Builds the server and web Docker images, pushes to Docker Hub, then
-# deploys to the Windows desktop host over Tailscale SSH. Mirrors the
-# HomeProject deployment pattern documented in
-# skills/deployment/SKILL.md.
+# deploys on the Windows desktop host through its self-hosted runner.
+# Mirrors the HomeProject deployment pattern documented in
+# skills/deployment/SKILL.md, without inbound SSH.
 #
 # Deploy target (canonical):
 #   - Host: Windows desktop, Tailscale IP 100.83.112.20
 #   - Public hostname: hunter.sisihome.org (TLS terminated by RPi Caddy
-#     which proxies to 100.83.112.20:7100)
+#     which proxies to 100.83.112.20:8100)
 #   - NOT the Manjaro Pi/server. The Manjaro RPi only runs the front
 #     Caddy reverse proxy; greed-island services run on the desktop.
 #
@@ -16,21 +16,14 @@ name: Deploy Dev
 # repo via Settings → Secrets and variables → Actions):
 #   DOCKERHUB_USERNAME    Docker Hub user (e.g. kevin950805)
 #   DOCKERHUB_TOKEN       Docker Hub access token
-#   TS_OAUTH_CLIENT_ID    Tailscale OAuth client id
-#   TS_OAUTH_SECRET       Tailscale OAuth secret
-#   DEPLOY_SSH_KEY        Private SSH key authorized on the desktop
-#                         host's deploy user
-#   DEPLOY_SERVER_IP      Desktop's Tailscale DNS name or IP. MUST be
-#                         the desktop (100.83.112.20 or its MagicDNS
-#                         name), NOT the Manjaro RPi.
-#   DEPLOY_USER           SSH user on the desktop (e.g. kevin)
+#   Self-hosted runner    DESK-KEVINHOME-greed-island-2, labels:
+#                         self-hosted, Windows, X64,
+#                         greed-island-desktop, docker
 #
 # Required GitHub variables (repo-level on this repo):
 #   DEPLOY_PATH           Path to the deploy directory on the desktop
 #                         (e.g. /d/GitClone/_HomeProject/greed-island/deploy
 #                         under Git-Bash on Windows)
-# Optional GitHub variables:
-#   DEPLOY_SSH_PORT       SSH port on the desktop host (default: 22)
 
 on:
   push:
@@ -46,7 +39,6 @@ env:
   IMAGE_BASE: ${{ secrets.DOCKERHUB_USERNAME }}
   SERVER_IMAGE: greed-island-server
   WEB_IMAGE: greed-island-web
-  DEPLOY_SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
 
 jobs:
   publish:
@@ -103,54 +95,49 @@ jobs:
   deploy:
     name: Deploy to desktop
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64, greed-island-desktop, docker]
     timeout-minutes: 15
     steps:
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:github-actions
-
       - name: Check deploy configuration
+        shell: powershell
         run: |
-          test -n "${{ secrets.DEPLOY_SERVER_IP }}" || (echo "::error::DEPLOY_SERVER_IP secret is not configured" && exit 1)
-          test -n "${{ secrets.DEPLOY_USER }}" || (echo "::error::DEPLOY_USER secret is not configured" && exit 1)
-          test -n "${{ secrets.DEPLOY_SSH_KEY }}" || (echo "::error::DEPLOY_SSH_KEY secret is not configured" && exit 1)
-          test -n "${{ vars.DEPLOY_PATH }}" || (echo "::error::DEPLOY_PATH variable is not configured" && exit 1)
-          echo "Using SSH port ${DEPLOY_SSH_PORT}"
-
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          cat >> ~/.ssh/config <<EOF
-          Host desktop
-              HostName ${{ secrets.DEPLOY_SERVER_IP }}
-              User ${{ secrets.DEPLOY_USER }}
-              Port ${{ env.DEPLOY_SSH_PORT }}
-              IdentityFile ~/.ssh/id_ed25519
-              StrictHostKeyChecking accept-new
-              UserKnownHostsFile ~/.ssh/known_hosts
-          EOF
-
-      - name: Verify desktop SSH reachability
-        run: |
-          ssh -o BatchMode=yes -o ConnectTimeout=20 desktop "echo 'desktop ssh ok'"
+          $deployPath = "${{ vars.DEPLOY_PATH }}"
+          if (-not $deployPath) {
+            Write-Error "DEPLOY_PATH variable is not configured"
+          }
+          if ($deployPath -match '^/([a-zA-Z])/(.*)$') {
+            $deployPath = "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')"
+          }
+          if (-not (Test-Path $deployPath)) {
+            Write-Error "DEPLOY_PATH does not exist: $deployPath"
+          }
+          docker version
 
       - name: Pull & restart on desktop
+        shell: powershell
         run: |
-          ssh desktop "set -e; \
-            cd '${{ vars.DEPLOY_PATH }}'; \
-            docker compose pull; \
-            docker compose up -d; \
-            docker compose ps"
+          $deployPath = "${{ vars.DEPLOY_PATH }}"
+          if ($deployPath -match '^/([a-zA-Z])/(.*)$') {
+            $deployPath = "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')"
+          }
+          Set-Location $deployPath
+          git pull --ff-only
+          docker compose pull
+          docker compose up -d
+          docker compose ps
 
       - name: Smoke check
+        shell: powershell
         run: |
-          ssh desktop "set -e; \
-            cd '${{ vars.DEPLOY_PATH }}'; \
-            sleep 3; \
-            curl -fsS http://127.0.0.1:\${HOST_PORT:-7100}/ -o /dev/null && echo 'web ok' || (echo 'web smoke failed' && docker compose logs --tail=80 web && exit 1)"
+          $deployPath = "${{ vars.DEPLOY_PATH }}"
+          if ($deployPath -match '^/([a-zA-Z])/(.*)$') {
+            $deployPath = "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')"
+          }
+          Set-Location $deployPath
+          Start-Sleep -Seconds 3
+          $envFile = Get-Content .env | Where-Object { $_ -match '^TAILSCALE_BIND_ADDR=' } | Select-Object -First 1
+          $bindAddr = $envFile -replace '^TAILSCALE_BIND_ADDR=', ''
+          $hostPortLine = Get-Content .env | Where-Object { $_ -match '^GREED_ISLAND_HOST_PORT=' } | Select-Object -First 1
+          $hostPort = if ($hostPortLine) { $hostPortLine -replace '^GREED_ISLAND_HOST_PORT=', '' } else { '8100' }
+          curl.exe -fsS "http://${bindAddr}:${hostPort}/" -o NUL
+          Write-Host "web ok"

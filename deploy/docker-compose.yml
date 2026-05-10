@@ -3,7 +3,7 @@
 # v1 deployment topology:
 #
 #   Tailnet client → RPi Caddy (TLS, hunter.sisihome.org)
-#                  → desktop tailscale-ip:7100
+#                  → desktop tailscale-ip:8100
 #                  → web container (nginx-style static + /api proxy)
 #                  → server container (Node.js kernel + runtime + AI
 #                                      narration worker, port 3000)
@@ -33,7 +33,7 @@ services:
     build:
       context: ..
       dockerfile: packages/server/Dockerfile
-    image: greed-island/server:dev
+    image: ${GREED_ISLAND_IMAGE_BASE:-kevin950805}/greed-island-server:dev
     container_name: greed-island-server
     restart: unless-stopped
     environment:
@@ -59,7 +59,7 @@ services:
     build:
       context: ..
       dockerfile: packages/web/Dockerfile
-    image: greed-island/web:dev
+    image: ${GREED_ISLAND_IMAGE_BASE:-kevin950805}/greed-island-web:dev
     container_name: greed-island-web
     restart: unless-stopped
     depends_on:
@@ -69,7 +69,9 @@ services:
       # TAILSCALE_BIND_ADDR in deploy/.env (e.g. 100.x.y.z) to keep
       # the service off the public internet. If the var is empty,
       # Docker binds to 0.0.0.0 — DO NOT use that in production.
-      - "${TAILSCALE_BIND_ADDR:-0.0.0.0}:${HOST_PORT:-7100}:80"
+      # Use a project-specific port var so older HOST_PORT=7100 values
+      # do not hit Windows' excluded TCP port range after reboot.
+      - "${TAILSCALE_BIND_ADDR:-0.0.0.0}:${GREED_ISLAND_HOST_PORT:-8100}:80"
     networks:
       - greed-island
 
