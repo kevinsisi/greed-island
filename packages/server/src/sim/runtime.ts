@@ -26,7 +26,7 @@ import {
   KernelRuleEngine
 } from '../kernel/ruleEngine.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
-import { createInitialWorldState, reduceEventLog } from '../kernel/reducer.js'
+import { createInitialWorldState } from '../kernel/reducer.js'
 import type { Command } from '../kernel/types.js'
 import {
   LivingWorldRuleEngine,
@@ -82,6 +82,7 @@ const WEATHER_CADENCE_TICKS = TICKS_PER_MINUTE
 const SEASON_CADENCE_TICKS = TICKS_PER_HOUR
 const RARE_WINDOW_PERIOD_TICKS = TICKS_PER_MINUTE * 10
 const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
+const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -203,6 +204,14 @@ export class SimulationRuntime {
     const memoryRows = input.memory.countAll()
     const relationshipRows = input.relationships.countAll()
     if (memoryRows === 0 || relationshipRows === 0) {
+      const eventCount = this.store.countEvents()
+      if (eventCount > BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
+        console.warn(
+          `[boot] skipped living-world projection rebuild for ${eventCount} events; ` +
+            'projection tables will repopulate from new events'
+        )
+        return
+      }
       const events = this.store.readEvents()
       if (memoryRows === 0) input.memory.rebuildFromEvents(events)
       if (relationshipRows === 0) input.relationships.rebuildFromEvents(events)
@@ -1013,12 +1022,9 @@ export class SimulationRuntime {
   }
 
   private hydrateFromEventLog(): void {
-    const events = this.store.readEvents()
-    this.eventCount = events.length
-    if (events.length > 0) {
-      this.lastSequence = events[events.length - 1]!.sequence
-    }
-    const state = reduceEventLog(events)
+    const state = this.store.readLatestFactSnapshot()
+    this.eventCount = state.eventCount
+    this.lastSequence = state.lastSequence
     const tickFact = state.facts[FACT_TICK]
     if (typeof tickFact === 'number' && Number.isFinite(tickFact)) {
       this.currentTick = tickFact
@@ -1083,7 +1089,7 @@ export class SimulationRuntime {
       }
       this.eventEngine.hydrate(restored, this.currentTick)
     }
-    for (const event of events.slice(-RECENT_EVENTS_BUFFER * 4)) {
+    for (const event of this.store.readRecentEvents(RECENT_EVENTS_BUFFER * 4)) {
       const narrative = readNarrativeFromAnyEvent(event, event.tick ?? 0)
       if (!narrative) continue
       this.pushRecent(narrative)

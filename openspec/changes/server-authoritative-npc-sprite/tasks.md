@@ -75,3 +75,5 @@
   movement delivery path.
 - [x] 7.4 Guard living-world projection bootstrap with table-level row counts
   so deploy restarts do not rebuild NPC projections on every boot.
+- [x] 7.5 Hydrate runtime state from latest FACT_SET rows and recent events
+  instead of reducing the full event log synchronously during production boot.
