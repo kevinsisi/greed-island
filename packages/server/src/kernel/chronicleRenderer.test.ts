@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderChronicle, type ChronicleContext } from './chronicleRenderer.js'
+import { buildChronicleContext, renderChronicle, type ChronicleContext } from './chronicleRenderer.js'
 import { generateWithKeyPool } from '../npcs/geminiClient.js'
 import type { SettingsStore } from '../http/settings.js'
+import type { SqliteNpcMemoryStore } from './npcMemory.js'
+import type { Event } from './types.js'
 
 vi.mock('../npcs/geminiClient.js', () => ({
   generateWithKeyPool: vi.fn()
@@ -28,6 +30,10 @@ function makeContext(): ChronicleContext {
     ],
     memories: []
   }
+}
+
+function makeMemory(): SqliteNpcMemoryStore {
+  return { getImportant: () => [] } as unknown as SqliteNpcMemoryStore
 }
 
 describe('chronicle AI rendering', () => {
@@ -68,5 +74,91 @@ describe('chronicle AI rendering', () => {
 
     expect(rendered.source).toBe('fallback')
     expect(rendered.aiError).toContain('outside grounded context')
+  })
+
+  it('excludes internal FACT_SET events from chronicle context', () => {
+    const events = [
+      {
+        eventType: 'FACT_SET',
+        actorId: 'system',
+        tick: 1,
+        payload: {},
+        eventId: 'fact',
+        sequence: 1,
+        occurredAt: 1
+      },
+      {
+        eventType: 'WORLD_TICK',
+        actorId: 'system',
+        tick: 2,
+        payload: { actorType: 'system', data: { tick: 2 }, narration: null },
+        eventId: 'tick',
+        sequence: 2,
+        occurredAt: 2
+      }
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({ events, memory: makeMemory() })
+
+    expect(context.events).toHaveLength(1)
+    expect(context.events[0]!.eventType).toBe('WORLD_TICK')
+  })
+
+  it('adds actor display names to allowedNames', () => {
+    const events = [
+      {
+        eventType: 'NPC_INTERACT',
+        actorId: 'npc-a',
+        tick: 3,
+        payload: {
+          actorType: 'npc',
+          data: { tile: 't_market', participants: ['npc-a', 'npc-b'], mode: 'chat', narration: '...' },
+          narration: '莊婉容和阿七在市場交換消息。'
+        },
+        eventId: 'interact',
+        sequence: 3,
+        occurredAt: 3
+      }
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({
+      events,
+      memory: makeMemory(),
+      actorNames: { 'npc-a': '莊婉容', 'npc-b': '阿七' }
+    })
+
+    expect(context.allowedNames).toContain('npc-a')
+    expect(context.allowedNames).toContain('莊婉容')
+  })
+
+  it('keeps typed world events in chronicle context', () => {
+    const events = [
+      {
+        eventType: 'WORLD_EVENT_SPAWN',
+        actorId: 'system',
+        tick: 4,
+        payload: {
+          actorType: 'system',
+          data: {
+            worldEventId: 'we-1',
+            templateId: 'weather.tide',
+            type: 'weather',
+            scope: 'world',
+            endsAtTick: 9,
+            narration: '潮汐異兆浮現。',
+            data: {}
+          },
+          narration: '潮汐異兆浮現。'
+        },
+        eventId: 'world-event',
+        sequence: 4,
+        occurredAt: 4
+      }
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({ events, memory: makeMemory() })
+
+    expect(context.events).toHaveLength(1)
+    expect(context.events[0]!.eventType).toBe('WORLD_EVENT_SPAWN')
   })
 })

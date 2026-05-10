@@ -6,7 +6,7 @@ import { generateWithKeyPool } from '../npcs/geminiClient.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { Event } from './types.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
-import type { LivingWorldEventPayload } from './livingWorldCommands.js'
+import { isLivingWorldCommandType, type LivingWorldEventPayload } from './livingWorldCommands.js'
 
 export type ChronicleEvent = Readonly<{
   tick: number
@@ -49,6 +49,7 @@ type AiChronicleResponse = Readonly<{
 export function buildChronicleContext(input: {
   events: readonly Event[]
   memory: SqliteNpcMemoryStore
+  actorNames?: Readonly<Record<string, string>>
   maxMemories?: number
 }): ChronicleContext {
   const normalizedEvents = input.events
@@ -73,7 +74,10 @@ export function buildChronicleContext(input: {
     }
   }
   const memoryNames = memories.flatMap((m) => collectStringFields(m.content, ['withNpc', 'otherNpc', 'playerAccountId']))
-  const allowedNames = [...new Set([...actorIds, ...memoryNames])].sort()
+  const displayNames = [...actorIds, ...memoryNames]
+    .map((id) => input.actorNames?.[id])
+    .filter((name): name is string => typeof name === 'string' && name.length > 0)
+  const allowedNames = [...new Set([...actorIds, ...memoryNames, ...displayNames])].sort()
   return { sinceTick, untilTick, events: normalizedEvents, memories, allowedNames }
 }
 
@@ -114,7 +118,8 @@ export async function renderChronicle(input: {
   }
 }
 
-function eventToChronicleEvent(event: Event): ChronicleEvent {
+function eventToChronicleEvent(event: Event): ChronicleEvent | null {
+  if (!isLivingWorldCommandType(event.eventType)) return null
   const tick = typeof event.tick === 'number' ? event.tick : 0
   const payload = event.payload as LivingWorldEventPayload | undefined
   const narration = payload && typeof payload === 'object' ? payload.narration ?? null : null

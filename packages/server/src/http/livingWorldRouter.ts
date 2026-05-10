@@ -42,7 +42,8 @@ export function createLivingWorldRouter(input: {
     const limit = clampInt(req.query.limit, 1, 100, 40)
     const useAi = String(req.query.ai ?? '0') === '1'
     const events = eventStore.readRecentEvents(limit)
-    const context = buildChronicleContext({ events, memory: input.memory })
+    const actorNames = Object.fromEntries(input.runtime.getNpcs().map((npc) => [npc.id, npc.name.zh]))
+    const context = buildChronicleContext({ events, memory: input.memory, actorNames })
     const chronicle = await renderChronicle({ context, settings: input.settings, useAi })
     res.json({ latestTick: input.runtime.getCurrentTick(), chronicle })
   })
