@@ -25,6 +25,7 @@ import {
   type ServerBuildingView,
   type ServerNearbyPlayer
 } from '../api/client'
+import { areaOutdoorNpcs } from './npcProjection'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle: 'npc.activity.idle',
@@ -153,10 +154,7 @@ export function AreaPage() {
     () => npcs.filter((npc) => npc.location === tileId),
     [npcs, tileId]
   )
-  const outdoorOccupants = useMemo(
-    () => occupants.filter((npc) => !npc.buildingId),
-    [occupants]
-  )
+  const outdoorOccupants = useMemo(() => areaOutdoorNpcs(npcs, tileId), [npcs, tileId])
 
   const localEvents = useMemo(() => {
     if (!tile) return []

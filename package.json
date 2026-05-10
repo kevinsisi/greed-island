@@ -1,6 +1,6 @@
 {
   "name": "greed-island",
-  "version": "0.15.11",
+  "version": "0.15.12",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -11,7 +11,7 @@
     "build:server": "npm run build -w @greed-island/server",
     "build:web": "npm run build -w @greed-island/web",
     "dev:web": "npm run dev -w @greed-island/web",
-    "test": "npm run test -w @greed-island/server",
+    "test": "npm run test -w @greed-island/server && npm run test -w @greed-island/web",
     "check": "npm run build && npm run test"
   },
   "devDependencies": {

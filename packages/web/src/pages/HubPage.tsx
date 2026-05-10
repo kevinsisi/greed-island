@@ -14,6 +14,7 @@ import {
 } from '../game/districts'
 import type { FactionLeanId, MapAreaOverlay, MapNpc } from '../game/MapScene'
 import type { NpcSummary } from '../state/types'
+import { hubTravelNpcs } from './npcProjection'
 
 const KNOWN_DISTRICTS = new Set<DistrictId>([
   't_forest',
@@ -79,25 +80,7 @@ export function HubPage() {
   // 主地圖只顯示正在跨區移動的 NPC；區域內 NPC 由 AreaPage 顯示，
   // 建築內 NPC 由 BuildingPage 顯示，避免同一個人跨場景分身。
   const mapNpcs = useMemo<MapNpc[]>(() => {
-    return npcs
-      .filter((n) => KNOWN_DISTRICTS.has(n.location as DistrictId))
-      .filter((n) => !n.buildingId && n.activity === 'move')
-      .map((n) => {
-        const base: MapNpc = {
-          id: n.id,
-          name: n.name,
-          shortName: n.name.charAt(0),
-          districtId: n.location as DistrictId
-        }
-        if (typeof n.color === 'number') base.color = n.color
-        if (n.activity) base.activity = n.activity
-        // 後端 sub-tile：MapScene 用來把 NPC 在 district 範圍裡微移動
-        if (typeof n.subCol === 'number') base.subCol = n.subCol
-        if (typeof n.subRow === 'number') base.subRow = n.subRow
-        if (typeof n.mood === 'number') base.mood = n.mood
-        if (typeof n.health === 'number') base.health = n.health
-        return base
-      })
+    return hubTravelNpcs(npcs)
   }, [npcs])
 
   const hudStrings = useMemo(

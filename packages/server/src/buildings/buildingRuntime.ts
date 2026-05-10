@@ -100,6 +100,7 @@ export class BuildingRuntime {
   npcsOutsideOnTile(npcStates: ReadonlyMap<string, NpcRuntimeState>): Map<string, string[]> {
     const byTile = new Map<string, string[]>()
     for (const [npcId, state] of npcStates) {
+      if (state.activity === 'move') continue
       if (this.resolveNpcBuildingId(npcId, state)) continue
       const arr = byTile.get(state.tile) ?? []
       arr.push(npcId)

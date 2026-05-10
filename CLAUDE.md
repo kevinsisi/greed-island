@@ -22,7 +22,7 @@ AI 旁白（ambient + worldEvent + dialog）只能引用 user prompt 中明確�
 
 ## NPC 跨區與人性規則（v0.15.11+）
 
-NPC 是人，不是固定地圖裝飾。商人、工匠、守衛、祭司、公務 NPC 都可以跨區；職責只能是 movement policy 的強權重，不能是永久 hard lock，除非未來有明確 story immobility rule。NPC 同一時間只能有一個權威 presence tuple：`tileId`、`buildingId | null`、`subCol/subRow/subZ`、`activity`、未來 `intent`。Area / Building / Hub 必須從同一份 server-authoritative presence 派生，禁止用不同 projection 讓同一 NPC 在室內與室外分身。
+NPC 是人，不是固定地圖裝飾。商人、工匠、守衛、祭司、公務 NPC 都可以跨區；職責只能是 movement policy 的強權重，不能是永久 hard lock，除非未來有明確 story immobility rule。NPC 同一時間只能有一個權威 presence tuple：`tileId`、`buildingId | null`、`subCol/subRow/subZ`、`activity`、`travelRoute | null`、未來 `intent`。Area / Building / Hub 必須從同一份 server-authoritative presence 派生，禁止用不同 projection 讓同一 NPC 在室內與室外分身。`activity = move` 的 NPC 只能由 Hub 依 `travelRoute` 表示在路上，不可同時被 Area 當成本地戶外 NPC 渲染。
 
 ## Global Working Rules
 

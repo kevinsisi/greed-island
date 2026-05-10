@@ -58,6 +58,13 @@ export interface NpcSummary {
   subZ?: number
   /** null/undefined = 室外；有值 = 在該建築內，不應同時畫在區域街道上 */
   buildingId?: string | null
+  /** NPC 正在跨區移動時的單一 worldline segment；非移動時為 null */
+  travelRoute?: {
+    fromTile: string
+    toTile: string
+    targetTile: string
+    startedAtTick: number
+  } | null
   /** 24-bit RGB sprite 主色（v0.12+） */
   color?: number
   /** Personality-shaped placeholder shown before player types in NpcDialog (v0.14.1+) */

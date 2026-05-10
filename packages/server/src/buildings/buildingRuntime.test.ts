@@ -20,6 +20,31 @@ describe('BuildingRuntime', () => {
     )
     expect(outdoor.get('t_central') ?? []).not.toContain('central.exchange.shen_ruo_yun')
   })
+
+  it('does not treat travelling NPCs as outdoor area occupants', () => {
+    const runtime = new BuildingRuntime()
+    const states = new Map<string, NpcRuntimeState>([
+      [
+        'traveller',
+        {
+          ...npcState({ tile: 't_central', activity: 'move' }),
+          targetTile: 't_dock',
+          travelRoute: {
+            fromTile: 't_central',
+            toTile: 't_dock',
+            targetTile: 't_dock',
+            startedAtTick: 42
+          }
+        }
+      ],
+      ['local', npcState({ tile: 't_central', activity: 'idle' })]
+    ])
+
+    const outdoor = runtime.npcsOutsideOnTile(states)
+
+    expect(outdoor.get('t_central') ?? []).toContain('local')
+    expect(outdoor.get('t_central') ?? []).not.toContain('traveller')
+  })
 })
 
 function npcState(input: Pick<NpcRuntimeState, 'tile' | 'activity'>): NpcRuntimeState {
@@ -34,6 +59,7 @@ function npcState(input: Pick<NpcRuntimeState, 'tile' | 'activity'>): NpcRuntime
     subCol: 7,
     subRow: 5,
     subZ: 0,
-    personalityOverride: null
+    personalityOverride: null,
+    travelRoute: null
   }
 }

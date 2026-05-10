@@ -112,6 +112,13 @@ export type SimNpcState = Readonly<{
   subZ: number
   /** NPC 目前所在建築；null 表示在區域室外。 */
   buildingId: string | null
+  /** NPC 正在跨區移動時的 worldline segment；非移動時為 null。 */
+  travelRoute: {
+    fromTile: string
+    toTile: string
+    targetTile: string
+    startedAtTick: number
+  } | null
   /** 24-bit 整數色（0xRRGGBB），前端用做 sprite 主色 */
   color: number
   /** 玩家剛打開對話框、還沒輸入時顯示的 placeholder line。
@@ -409,6 +416,7 @@ export class SimulationRuntime {
         subRow: s.subRow,
         subZ: s.subZ,
         buildingId,
+        travelRoute: s.travelRoute ?? null,
         color: deriveNpcColor(profile.id, s.faction),
         greetLine: derivePersonalityGreetLine(profile),
       }

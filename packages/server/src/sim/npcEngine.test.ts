@@ -84,6 +84,35 @@ describe('NpcEngine', () => {
       expect(ev.from).toBe('t_dock')
       expect(ev.to).toBe('t_central')
     }
+    const state = engine.getState('walker')!
+    expect(state.activity).toBe('move')
+    expect(state.travelRoute).toEqual({
+      fromTile: 't_dock',
+      toTile: 't_central',
+      targetTile: 't_central',
+      startedAtTick: 1
+    })
+  })
+
+  it('clears travelRoute after the NPC arrives and resumes local presence', () => {
+    const profile = makeProfile({
+      id: 'arrival',
+      defaultLocation: 't_dock',
+      routine: [
+        { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }
+      ]
+    })
+    const engine = new NpcEngine([profile])
+
+    engine.tick(1)
+    expect(engine.getState('arrival')!.activity).toBe('move')
+    expect(engine.getState('arrival')!.travelRoute).not.toBeNull()
+
+    engine.tick(2)
+    const state = engine.getState('arrival')!
+    expect(state.tile).toBe('t_central')
+    expect(state.activity).toBe('idle')
+    expect(state.travelRoute).toBeNull()
   })
 
   it('hydrates from prior state', () => {

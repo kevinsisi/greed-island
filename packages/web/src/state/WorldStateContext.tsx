@@ -312,12 +312,28 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(typeof npc.buildingId === 'string' || npc.buildingId === null
       ? { buildingId: npc.buildingId }
       : {}),
+    ...(isTravelRoute(npc.travelRoute)
+      ? { travelRoute: { ...npc.travelRoute } }
+      : npc.travelRoute === null
+        ? { travelRoute: null }
+        : {}),
     ...(typeof npc.color === 'number' ? { color: npc.color } : {}),
     ...(npc.greetLine && typeof npc.greetLine.zh === 'string' && typeof npc.greetLine.en === 'string'
       ? { greetLine: { zh: npc.greetLine.zh, en: npc.greetLine.en } }
       : {})
   }
   return summary
+}
+
+function isTravelRoute(value: unknown): value is NonNullable<NpcSummary['travelRoute']> {
+  if (!value || typeof value !== 'object') return false
+  const route = value as Partial<NonNullable<NpcSummary['travelRoute']>>
+  return (
+    typeof route.fromTile === 'string' &&
+    typeof route.toTile === 'string' &&
+    typeof route.targetTile === 'string' &&
+    typeof route.startedAtTick === 'number'
+  )
 }
 
 function toCardEntry(

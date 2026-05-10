@@ -3,6 +3,36 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.12 In Progress
+
+### Completed Locally
+
+- Added server-authoritative `travelRoute` to NPC runtime state for cross-tile
+  movement: `fromTile`, `toTile`, `targetTile`, and `startedAtTick`.
+- Exposed `travelRoute` through `/api/npcs` and frontend `NpcSummary`.
+- Updated Hub map rendering so moving NPCs are drawn on their route segment
+  instead of being treated as local Area occupants.
+- Updated Area/outdoor projections to exclude `activity = move`, preventing Hub
+  and sub-scene duplicate rendering of the same NPC while in transit.
+- Added regression coverage for moving NPC route creation, route clearing after
+  arrival, and travelling NPCs not appearing in outdoor area occupants.
+- Added frontend projection tests so travel NPCs are mapped to Hub route sprites
+  and excluded from Area outdoor occupants.
+- Bumped app version to `0.15.12`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm test` passed: server 18 files / 112 tests; web 1 file / 2 tests.
+
+### Still Open
+
+- Run final `git diff --check` and reviewer gate.
+- Commit/push to `main`, track CI/CD, and verify live `0.15.12`.
+- Follow-up remains: real duty-weighted free exploration and richer intent
+  selection beyond schedule/personality nudge.
+
 ## 2026-05-10 — v0.15.11 Shipped
 
 ### Completed Locally

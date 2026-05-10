@@ -4,6 +4,16 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.12 ⏳ local — 2026-05-10
+
+**主題：NPC worldline route slice**
+
+- ✅ NPC state 新增 `travelRoute`，跨區移動時公開 from/to/target/start tick。
+- ✅ Hub 只渲染 travel route 上的 NPC，並用 route segment 位置表達「在路上」。
+- ✅ Area/outdoor projection 排除 `activity === 'move'`，避免同一 NPC 同時出現在 Hub 與 sub 場景。
+- ✅ 新增 regression tests：移動 NPC 有 route、抵達後 route 清空、traveling NPC 不算 outdoor occupant；前端 projection 也覆蓋 Hub/Area 去重。
+- ⏳ 待 final review、commit / push / CI/CD / live verification。
+
 ## v0.15.11 ✅ shipped — 2026-05-10
 
 **主題：NPC humanity slice 1 — unique presence authority**

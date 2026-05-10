@@ -71,6 +71,13 @@ export type ServerNpc = {
   subZ?: number
   // v0.15.3+：null 表示在區域室外；非 null 表示已進建築，區域地圖不可再畫一次
   buildingId?: string | null
+  // v0.15.12+：跨區移動中的 worldline segment；非移動時為 null
+  travelRoute?: {
+    fromTile: string
+    toTile: string
+    targetTile: string
+    startedAtTick: number
+  } | null
   color?: number
   // v0.14.1+：personality-shaped greet placeholder 顯示在玩家還沒輸入時
   greetLine?: { zh: string; en: string }

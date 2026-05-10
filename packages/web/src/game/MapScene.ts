@@ -37,6 +37,12 @@ export interface MapNpc {
   /** v0.14.0：mood / health 給跨區移動中的 NPC 顯示視覺暗示用 */
   mood?: number
   health?: number
+  /** v0.15.12：跨區移動時的 worldline segment，Hub 用它畫在路上而不是區域內。 */
+  travelRoute?: {
+    fromDistrictId: DistrictId
+    toDistrictId: DistrictId
+    targetDistrictId: DistrictId
+  }
 }
 
 /**
@@ -701,9 +707,19 @@ export class MapScene extends Phaser.Scene {
     def: DistrictDef,
     seq: number
   ): { x: number; y: number } {
+    if (npc.travelRoute) {
+      const from = DISTRICTS[npc.travelRoute.fromDistrictId]
+      const to = DISTRICTS[npc.travelRoute.toDistrictId]
+      if (from && to) {
+        const a = this.districtCenter(from)
+        const b = this.districtCenter(to)
+        return { x: a.x + (b.x - a.x) * 0.5, y: a.y + (b.y - a.y) * 0.5 }
+      }
+    }
     // 基準：district anchor 中心
-    const baseX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
-    const baseY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+    const center = this.districtCenter(def)
+    const baseX = center.x
+    const baseY = center.y
     // 後端 sub-tile (0..14, 0..9)：把它對應到以 anchor 為中心的小範圍偏移，
     // 用百分比把 0..14 → -1..+1，乘上半徑後加到 anchor 上。這樣同 district
     // 的 NPC 不再擠在一點，且 sub-tile 真的變了 → 世界地圖上就看得到動。
@@ -721,6 +737,13 @@ export class MapScene extends Phaser.Scene {
     return {
       x: baseX + Math.cos(ringAngle) * ringR,
       y: baseY + Math.sin(ringAngle) * ringR
+    }
+  }
+
+  private districtCenter(def: DistrictDef): { x: number; y: number } {
+    return {
+      x: def.anchor.col * TILE_SIZE + TILE_SIZE / 2,
+      y: def.anchor.row * TILE_SIZE + TILE_SIZE / 2
     }
   }
 

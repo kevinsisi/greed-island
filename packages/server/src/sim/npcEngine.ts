@@ -12,7 +12,7 @@
 // 本身不直接寫 EventLog，符合 deterministic kernel 的 command-vs-event
 // 分離原則。狀態 key：
 //   npc.state.<id> = { tile, mood, health, activity, faction,
-//                      targetTile, lastActedTick, subCol, subRow, subZ }
+//                      targetTile, travelRoute, lastActedTick, subCol, subRow, subZ }
 //
 // hydrate：runtime 啟動時把 reducer 算出的 facts 透過 hydrate() 餵回。
 
@@ -51,6 +51,13 @@ export type NpcRuntimeState = {
   /** v0.14.0：個性 nudge 暫時覆寫 schedule 的 targetTile；到 expiresAtTick
    *  自動失效，回到 schedule 推導的目標。沒有 nudge 時為 null。 */
   personalityOverride?: { targetTile: string; expiresAtTick: number; reason: string } | null
+  /** v0.15.12：NPC 正在跨區移動時的單一 worldline segment。非移動時為 null。 */
+  travelRoute?: {
+    fromTile: string
+    toTile: string
+    targetTile: string
+    startedAtTick: number
+  } | null
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -175,7 +182,8 @@ export class NpcEngine {
         subCol: initSub.col,
         subRow: initSub.row,
         subZ: 0,
-        personalityOverride: null
+        personalityOverride: null,
+        travelRoute: null
       })
     }
   }
@@ -204,6 +212,28 @@ export class NpcEngine {
         }
       }
     }
+    let travelRoute: NpcRuntimeState['travelRoute'] = null
+    if (r.travelRoute && typeof r.travelRoute === 'object') {
+      const tr = r.travelRoute as Partial<{
+        fromTile: string
+        toTile: string
+        targetTile: string
+        startedAtTick: number
+      }>
+      if (
+        typeof tr.fromTile === 'string' &&
+        typeof tr.toTile === 'string' &&
+        typeof tr.targetTile === 'string' &&
+        typeof tr.startedAtTick === 'number'
+      ) {
+        travelRoute = {
+          fromTile: tr.fromTile,
+          toTile: tr.toTile,
+          targetTile: tr.targetTile,
+          startedAtTick: tr.startedAtTick
+        }
+      }
+    }
     const next: NpcRuntimeState = {
       tile,
       mood: clamp(typeof r.mood === 'number' ? r.mood : 60, MOOD_MIN, MOOD_MAX),
@@ -225,7 +255,8 @@ export class NpcEngine {
           ? clampInt(r.subRow, 0, AREA_SUB_ROWS - 1)
           : fallbackSub.row,
       subZ: typeof r.subZ === 'number' ? clampInt(r.subZ, -10, 50) : 0,
-      personalityOverride
+      personalityOverride,
+      travelRoute
     }
     this.state.set(npcId, next)
   }
@@ -282,6 +313,8 @@ export class NpcEngine {
       }
       const beforeOverrideTarget = before.personalityOverride?.targetTile ?? null
       const nextOverrideTarget = next.personalityOverride?.targetTile ?? null
+      const beforeRoute = before.travelRoute ?? null
+      const nextRoute = next.travelRoute ?? null
       if (
         next.tile !== before.tile ||
         next.activity !== before.activity ||
@@ -291,7 +324,11 @@ export class NpcEngine {
         next.subCol !== before.subCol ||
         next.subRow !== before.subRow ||
         next.subZ !== before.subZ ||
-        beforeOverrideTarget !== nextOverrideTarget
+        beforeOverrideTarget !== nextOverrideTarget ||
+        beforeRoute?.fromTile !== nextRoute?.fromTile ||
+        beforeRoute?.toTile !== nextRoute?.toTile ||
+        beforeRoute?.targetTile !== nextRoute?.targetTile ||
+        beforeRoute?.startedAtTick !== nextRoute?.startedAtTick
       ) {
         this.state.set(profile.id, next)
         dirty.add(profile.id)
@@ -444,11 +481,18 @@ function decideNextState(
 
   let nextTile = before.tile
   let activity: NpcActivity
+  let travelRoute: NpcRuntimeState['travelRoute'] = null
   if (before.tile !== targetTile) {
     const step = nextStepTowards(before.tile, targetTile)
     if (step) {
       nextTile = step
       activity = 'move'
+      travelRoute = {
+        fromTile: before.tile,
+        toTile: step,
+        targetTile,
+        startedAtTick: currentTick
+      }
     } else {
       // 找不到路（地圖不連通，理論上不發生）— 留在原地
       activity = 'idle'
@@ -493,7 +537,8 @@ function decideNextState(
     subCol,
     subRow,
     subZ: before.subZ,
-    personalityOverride
+    personalityOverride,
+    travelRoute
   }
 }
 
@@ -1052,6 +1097,18 @@ function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
   }
   const ao = a.personalityOverride ?? null
   const bo = b.personalityOverride ?? null
+  const ar = a.travelRoute ?? null
+  const br = b.travelRoute ?? null
+  const routeEqual =
+    ar === null && br === null
+      ? true
+      : ar !== null &&
+        br !== null &&
+        ar.fromTile === br.fromTile &&
+        ar.toTile === br.toTile &&
+        ar.targetTile === br.targetTile &&
+        ar.startedAtTick === br.startedAtTick
+  if (!routeEqual) return false
   if (ao === null && bo === null) return true
   if (ao === null || bo === null) return false
   return ao.targetTile === bo.targetTile && ao.expiresAtTick === bo.expiresAtTick

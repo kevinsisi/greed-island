@@ -19,6 +19,35 @@ authority.
 - **THEN** the occupant list MUST include `n`
 - **AND** no independent occupant projection may contradict that presence
 
+#### Scenario: NPC in transit is not duplicated in a local scene
+- **GIVEN** an NPC presence has `activity = move` and a `travelRoute`
+- **WHEN** Hub, Area, and Building projections render from `/api/npcs`
+- **THEN** Hub MAY show that NPC on the route segment
+- **AND** Area scenes MUST NOT show that NPC as a local outdoor occupant
+- **AND** Building scenes MUST NOT show that NPC unless `buildingId` names that building
+
+### Requirement: NPC travel exposes a worldline segment
+
+The system SHALL expose an NPC's current cross-district movement as a server-
+authoritative `travelRoute` containing the segment origin, segment destination,
+final target tile, and start tick. Renderers MUST use this route for travel
+visualization instead of inventing independent NPC copies per scene.
+
+#### Scenario: Moving NPC has a route segment
+- **GIVEN** an NPC moves from tile `a` toward target tile `c`
+- **WHEN** the next validated step is tile `b`
+- **THEN** `/api/npcs` MUST expose `activity = move`
+- **AND** `travelRoute.fromTile = a`
+- **AND** `travelRoute.toTile = b`
+- **AND** `travelRoute.targetTile = c`
+
+#### Scenario: Arrived NPC resumes local presence
+- **GIVEN** an NPC has reached its target tile
+- **WHEN** the NPC resumes idle, work, trade, eat, sleep, or patrol activity
+- **THEN** `travelRoute` MUST be null
+- **AND** the relevant Area or Building projection MAY show that NPC from the
+  same presence tuple
+
 ### Requirement: NPC movement is duty-weighted, not permanently role-locked
 
 The system SHALL allow merchants, craftsmen, guards, priests, civic NPCs, and

@@ -8,6 +8,12 @@
 - [x] 1.4 Add regression coverage for an NPC inside a building not appearing as
   an outdoor area NPC.
 - [x] 1.5 Verify live `/api/npcs` and `/api/buildings` consistency after deploy.
+- [x] 1.6 Add `travelRoute` to moving NPC presence so Hub renders a route segment,
+  not a duplicate area occupant.
+- [x] 1.7 Exclude `activity=move` NPCs from Area/outdoor projections and cover it
+  with regression tests.
+- [x] 1.8 Add frontend projection tests for Hub route sprites and Area outdoor
+  de-duplication.
 
 ## 2. Duty-Weighted Free Exploration
 
@@ -37,3 +43,4 @@
 - [x] 4.2 Update `PROGRESS.md`, `ROADMAP.md`, and architecture/spec docs.
 - [x] 4.3 Run concrete build/test/diff-check commands.
 - [x] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.
+- [ ] 4.5 Ship v0.15.12 worldline route slice and record deploy evidence.
