@@ -8,6 +8,11 @@ import type { Event } from './types.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
 import { isLivingWorldCommandType, type LivingWorldEventPayload } from './livingWorldCommands.js'
 
+const CHRONICLE_AI_RESPONSE_MIME = 'application/json'
+const CHRONICLE_AI_TIMEOUT_MS = 8_000
+const CHRONICLE_AI_MAX_ATTEMPTS = 2
+const CHRONICLE_AI_BACKOFF_MS = 250
+
 export type ChronicleEvent = Readonly<{
   tick: number
   eventType: string
@@ -31,12 +36,32 @@ export type ChronicleContext = Readonly<{
   allowedNames: readonly string[]
 }>
 
+export type ChronicleAiAttempt = Readonly<{
+  attempt: number
+  timeoutMs: number
+  backoffMs: number
+  responseMimeType: string
+  ok: boolean
+  error: string | null
+}>
+
+export type ChronicleAiMetadata = Readonly<{
+  requested: boolean
+  activeKeys: number
+  maxAttempts: number
+  timeoutMs: number
+  responseMimeType: string
+  fallbackReason: string | null
+  attempts: readonly ChronicleAiAttempt[]
+}>
+
 export type ChronicleRender = Readonly<{
   source: 'ai' | 'fallback'
   textZh: string
   textEn: string
   citedNames: readonly string[]
   aiError: string | null
+  aiMeta: ChronicleAiMetadata
   context: ChronicleContext
 }>
 
@@ -85,25 +110,54 @@ export async function renderChronicle(input: {
   context: ChronicleContext
   settings: SettingsStore
   useAi: boolean
+  aiTimeoutMs?: number
+  aiMaxAttempts?: number
+  aiBackoffMs?: number
 }): Promise<ChronicleRender> {
-  const fallback = renderFallbackChronicle(input.context, null)
-  if (!input.useAi || input.settings.countActive() === 0 || input.context.events.length === 0) {
+  const activeKeys = input.settings.countActive()
+  const timeoutMs = Math.max(1, input.aiTimeoutMs ?? CHRONICLE_AI_TIMEOUT_MS)
+  const maxAttempts = Math.max(1, input.aiMaxAttempts ?? CHRONICLE_AI_MAX_ATTEMPTS)
+  const backoffMs = Math.max(0, input.aiBackoffMs ?? CHRONICLE_AI_BACKOFF_MS)
+  const skipReason = !input.useAi
+    ? null
+    : activeKeys === 0
+      ? 'No active Gemini API keys configured.'
+      : input.context.events.length === 0
+        ? 'No chronicle-ready events to render.'
+        : null
+  const baseAiMeta = makeAiMeta({
+    requested: input.useAi,
+    activeKeys,
+    maxAttempts,
+    timeoutMs,
+    attempts: [],
+    fallbackReason: skipReason
+  })
+  const fallback = renderFallbackChronicle(input.context, null, baseAiMeta)
+  if (!input.useAi || activeKeys === 0 || input.context.events.length === 0) {
     return fallback
   }
 
+  const attempts: ChronicleAiAttempt[] = []
   try {
-    const raw = await generateWithKeyPool(input.settings, {
-      systemPrompt: chronicleSystemPrompt(),
-      userPrompt: chronicleUserPrompt(input.context),
-      temperature: 0.35,
-      maxOutputTokens: 700,
-      responseMimeType: 'application/json',
-      thinkingBudget: 0
+    const raw = await generateChronicleJsonWithRetry(input.settings, input.context, {
+      timeoutMs,
+      maxAttempts,
+      backoffMs,
+      attempts
     })
     const parsed = parseAiChronicle(raw)
     const citedNames = parsed.citedNames.filter((name) => input.context.allowedNames.includes(name))
     if (citedNames.length !== parsed.citedNames.length) {
-      return renderFallbackChronicle(input.context, 'AI cited names outside grounded context.')
+      const reason = 'AI cited names outside grounded context.'
+      return renderFallbackChronicle(input.context, reason, makeAiMeta({
+        requested: true,
+        activeKeys,
+        maxAttempts,
+        timeoutMs,
+        attempts,
+        fallbackReason: reason
+      }))
     }
     return {
       source: 'ai',
@@ -111,11 +165,118 @@ export async function renderChronicle(input: {
       textEn: parsed.en,
       citedNames,
       aiError: null,
+      aiMeta: makeAiMeta({
+        requested: true,
+        activeKeys,
+        maxAttempts,
+        timeoutMs,
+        attempts,
+        fallbackReason: null
+      }),
       context: input.context
     }
   } catch (err) {
-    return renderFallbackChronicle(input.context, err instanceof Error ? err.message : String(err))
+    const reason = err instanceof Error ? err.message : String(err)
+    return renderFallbackChronicle(input.context, reason, makeAiMeta({
+      requested: true,
+      activeKeys,
+      maxAttempts,
+      timeoutMs,
+      attempts,
+      fallbackReason: reason
+    }))
   }
+}
+
+async function generateChronicleJsonWithRetry(
+  settings: SettingsStore,
+  context: ChronicleContext,
+  options: {
+    timeoutMs: number
+    maxAttempts: number
+    backoffMs: number
+    attempts: ChronicleAiAttempt[]
+  }
+): Promise<string> {
+  let lastError: unknown = null
+  for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+    try {
+      const raw = await withTimeout(generateWithKeyPool(settings, {
+        systemPrompt: chronicleSystemPrompt(),
+        userPrompt: chronicleUserPrompt(context),
+        temperature: 0.35,
+        maxOutputTokens: 700,
+        responseMimeType: CHRONICLE_AI_RESPONSE_MIME,
+        thinkingBudget: 0
+      }), options.timeoutMs)
+      options.attempts.push(makeAttempt(attempt, options.timeoutMs, options.backoffMs, true, null))
+      return raw
+    } catch (err) {
+      lastError = err
+      const error = err instanceof Error ? err.message : String(err)
+      options.attempts.push(makeAttempt(attempt, options.timeoutMs, options.backoffMs, false, error))
+      if (attempt < options.maxAttempts && isRetryableChronicleAiError(error)) {
+        await sleep(options.backoffMs)
+        continue
+      }
+      break
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+function makeAttempt(
+  attempt: number,
+  timeoutMs: number,
+  backoffMs: number,
+  ok: boolean,
+  error: string | null
+): ChronicleAiAttempt {
+  return { attempt, timeoutMs, backoffMs, responseMimeType: CHRONICLE_AI_RESPONSE_MIME, ok, error }
+}
+
+function makeAiMeta(input: {
+  requested: boolean
+  activeKeys: number
+  maxAttempts: number
+  timeoutMs: number
+  fallbackReason: string | null
+  attempts: readonly ChronicleAiAttempt[]
+}): ChronicleAiMetadata {
+  return {
+    requested: input.requested,
+    activeKeys: input.activeKeys,
+    maxAttempts: input.maxAttempts,
+    timeoutMs: input.timeoutMs,
+    responseMimeType: CHRONICLE_AI_RESPONSE_MIME,
+    fallbackReason: input.fallbackReason,
+    attempts: input.attempts
+  }
+}
+
+function isRetryableChronicleAiError(error: string): boolean {
+  return /timed out|timeout|HTTP 408|HTTP 409|HTTP 425|HTTP 429|HTTP 5\d\d|GeminiUnavailableError|fetch failed|network/i.test(error)
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Chronicle AI request timed out after ${timeoutMs}ms`)), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function eventToChronicleEvent(event: Event): ChronicleEvent | null {
@@ -131,7 +292,11 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   }
 }
 
-function renderFallbackChronicle(context: ChronicleContext, aiError: string | null): ChronicleRender {
+function renderFallbackChronicle(
+  context: ChronicleContext,
+  aiError: string | null,
+  aiMeta: ChronicleAiMetadata
+): ChronicleRender {
   const last = context.events.slice(-5)
   const zhLines = last.map((event) => {
     const text = event.narration ?? `${event.actorId} 觸發了 ${event.eventType}`
@@ -147,6 +312,7 @@ function renderFallbackChronicle(context: ChronicleContext, aiError: string | nu
     textEn: enLines.length > 0 ? enLines.join('\n') : 'No recent chronicle-ready events.',
     citedNames: context.allowedNames,
     aiError,
+    aiMeta,
     context
   }
 }

@@ -4,6 +4,17 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.17 🚧 in progress — 2026-05-11
+
+**主題：chronicle AI key-pool robustness metadata**
+
+- ✅ `/api/world/chronicle?ai=1` 的 AI rendering 現在有 chronicle 層級 timeout、transient retry/backoff、JSON MIME structured output 與 `thinkingBudget=0`。
+- ✅ 回應新增 `chronicle.aiMeta`，可觀測 requested、active key count、timeout、max attempts、response MIME、每次 attempt 成敗與 fallback reason。
+- ✅ AI 仍是 read-only narrator：AI timeout、retry exhaustion、或 ungrounded citation 都只降級 deterministic fallback，不會改 EventLog 或 world projection。
+- ✅ OpenSpec `3.3` completed：key-pool robustness metadata 已接上 chronicle rendering。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過。
+- ⏳ Commit/push、CI、Deploy Dev、live verification pending。
+
 ## v0.15.16 ✅ shipped — 2026-05-11
 
 **主題：grounded chronicle rendering from events + memory**

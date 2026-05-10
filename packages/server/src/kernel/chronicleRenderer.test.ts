@@ -57,6 +57,113 @@ describe('chronicle AI rendering', () => {
     expect(rendered.source).toBe('ai')
     expect(rendered.textZh).toContain('npc-a')
     expect(rendered.citedNames).toEqual(['npc-a', 'npc-b'])
+    expect(rendered.aiMeta.responseMimeType).toBe('application/json')
+    expect(rendered.aiMeta.attempts).toEqual([
+      expect.objectContaining({ attempt: 1, ok: true, responseMimeType: 'application/json' })
+    ])
+  })
+
+  it('retries transient chronicle AI failures with observable metadata', async () => {
+    mockedGenerate
+      .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))
+      .mockResolvedValueOnce(JSON.stringify({
+        zh: 'npc-a 和 npc-b 的事件在重試後被寫成編年史。',
+        en: 'npc-a and npc-b were chronicled after retry.',
+        citedNames: ['npc-a', 'npc-b']
+      }))
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(),
+      useAi: true,
+      aiBackoffMs: 0
+    })
+
+    expect(rendered.source).toBe('ai')
+    expect(mockedGenerate).toHaveBeenCalledTimes(2)
+    expect(rendered.aiMeta.fallbackReason).toBeNull()
+    expect(rendered.aiMeta.attempts).toEqual([
+      expect.objectContaining({ attempt: 1, ok: false, error: 'HTTP 500: overloaded' }),
+      expect.objectContaining({ attempt: 2, ok: true, error: null })
+    ])
+  })
+
+  it('falls back with timeout metadata when chronicle AI hangs', async () => {
+    mockedGenerate.mockReturnValue(new Promise(() => undefined))
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(),
+      useAi: true,
+      aiTimeoutMs: 1,
+      aiMaxAttempts: 1,
+      aiBackoffMs: 0
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(rendered.aiError).toContain('timed out')
+    expect(rendered.aiMeta.fallbackReason).toContain('timed out')
+    expect(rendered.aiMeta.attempts).toEqual([
+      expect.objectContaining({ attempt: 1, timeoutMs: 1, ok: false })
+    ])
+  })
+
+  it('falls back after retryable failures exhaust max attempts', async () => {
+    mockedGenerate
+      .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))
+      .mockRejectedValueOnce(new Error('HTTP 503: unavailable'))
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(),
+      useAi: true,
+      aiMaxAttempts: 2,
+      aiBackoffMs: 0
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(rendered.aiError).toBe('HTTP 503: unavailable')
+    expect(mockedGenerate).toHaveBeenCalledTimes(2)
+    expect(rendered.aiMeta.attempts).toEqual([
+      expect.objectContaining({ attempt: 1, ok: false, error: 'HTTP 500: overloaded' }),
+      expect.objectContaining({ attempt: 2, ok: false, error: 'HTTP 503: unavailable' })
+    ])
+  })
+
+  it('does not retry non-transient chronicle AI failures', async () => {
+    mockedGenerate.mockRejectedValue(new Error('HTTP 400: bad request'))
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(),
+      useAi: true,
+      aiMaxAttempts: 3,
+      aiBackoffMs: 0
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(rendered.aiError).toBe('HTTP 400: bad request')
+    expect(mockedGenerate).toHaveBeenCalledTimes(1)
+    expect(rendered.aiMeta.attempts).toEqual([
+      expect.objectContaining({ attempt: 1, ok: false, error: 'HTTP 400: bad request' })
+    ])
+  })
+
+  it('skips AI cleanly when no active keys are configured', async () => {
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(0),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(mockedGenerate).not.toHaveBeenCalled()
+    expect(rendered.aiMeta).toEqual(expect.objectContaining({
+      requested: true,
+      activeKeys: 0,
+      fallbackReason: 'No active Gemini API keys configured.',
+      attempts: []
+    }))
   })
 
   it('falls back when AI cites names outside the grounded context', async () => {
@@ -74,6 +181,7 @@ describe('chronicle AI rendering', () => {
 
     expect(rendered.source).toBe('fallback')
     expect(rendered.aiError).toContain('outside grounded context')
+    expect(rendered.aiMeta.fallbackReason).toContain('outside grounded context')
   })
 
   it('excludes internal FACT_SET events from chronicle context', () => {

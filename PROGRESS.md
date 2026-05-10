@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.17 In Progress
+
+### Completed Locally
+
+- Added bounded chronicle AI rendering attempts with a per-render timeout,
+  transient retry/backoff, explicit JSON MIME, and `thinkingBudget=0` structured
+  output settings.
+- Exposed `chronicle.aiMeta` so success and fallback responses include active key
+  count, timeout, max attempts, response MIME, per-attempt status, and fallback
+  reason when degraded.
+- Kept AI read-only and non-authoritative: timeout, retry exhaustion, and
+  ungrounded cited names still return deterministic fallback text without
+  changing committed events or world projection.
+- Marked OpenSpec task `3.3` complete for key-pool robustness metadata.
+- Bumped app version to `0.15.17`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run test -w @greed-island/server` passed: 19 files / 132 tests.
+- `npm test` passed: server 19 files / 132 tests; web 1 file / 2 tests.
+- `git diff --check` passed.
+- `openspec validate npc-humanity-ai-memory --strict` passed.
+
+### CI/CD And Runtime Verification
+
+- Pending commit, push, CI, Deploy Dev, and live runtime checks.
+
+### Still Open
+
+- Follow-up remains: stronger anti-hallucination checks beyond cited-name
+  validation.
+- Future boot work should add an indexed/latest-fact projection so large logs can
+  hydrate richer runtime state without blocking HTTP.
+
 ## 2026-05-11 — v0.15.16 Shipped
 
 ### Completed Locally

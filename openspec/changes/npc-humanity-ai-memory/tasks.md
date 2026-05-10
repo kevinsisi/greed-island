@@ -31,7 +31,7 @@
   memory-grounded behavior.
 - [x] 3.2 Add AI chronicle rendering from committed events and memory snippets;
   AI must not create world facts or emit Commands directly.
-- [ ] 3.3 Use key-pool robustness: per-item timeout, retry/backoff for
+- [x] 3.3 Use key-pool robustness: per-item timeout, retry/backoff for
   transient failures, JSON MIME when structured output is needed, and observable
   fallback metadata.
 - [ ] 3.4 Add anti-hallucination grounding so AI chronicle text may only name

@@ -92,6 +92,13 @@ input.
 - **AND** the response SHOULD expose degraded source metadata instead of silently
   pretending AI succeeded
 
+#### Scenario: AI chronicle rendering uses bounded JSON retries
+- **WHEN** AI chronicle rendering is requested
+- **THEN** the AI call MUST request JSON structured output explicitly
+- **AND** each chronicle render attempt MUST have a timeout
+- **AND** transient failures SHOULD retry with backoff before deterministic fallback
+- **AND** the response SHOULD expose attempt metadata for success and fallback cases
+
 #### Scenario: AI cannot invent named actors
 - **GIVEN** the grounded chronicle input lists allowed NPC, building, and
   location names
