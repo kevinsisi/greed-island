@@ -119,12 +119,20 @@ export class SqliteEventStore {
   readLatestFactSnapshot(): {
     eventCount: number
     lastSequence: number
+    latestTick: number
     facts: Record<string, unknown>
   } {
     const meta = this.db
-      .prepare('SELECT COUNT(*) as eventCount, COALESCE(MAX(sequence), 0) as lastSequence FROM event_log')
-      .get() as { eventCount: number; lastSequence: number }
-    return { eventCount: meta.eventCount, lastSequence: meta.lastSequence, facts: {} }
+      .prepare(
+        'SELECT COUNT(*) as eventCount, COALESCE(MAX(sequence), 0) as lastSequence, COALESCE(MAX(tick), 0) as latestTick FROM event_log'
+      )
+      .get() as { eventCount: number; lastSequence: number; latestTick: number }
+    return {
+      eventCount: meta.eventCount,
+      lastSequence: meta.lastSequence,
+      latestTick: meta.latestTick,
+      facts: {}
+    }
   }
 
   countEvents(): number {

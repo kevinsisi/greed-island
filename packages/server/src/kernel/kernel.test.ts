@@ -63,6 +63,57 @@ describe('simulation kernel', () => {
     expect(after).toEqual(before)
   })
 
+  it('reports latest committed tick without full fact hydration', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      {
+        eventId: 'event-tick-3',
+        eventType: 'FACT_SET',
+        occurredAt: 1,
+        actorId: 'system',
+        payload: { key: 'tick', value: 3 },
+        deterministicKey: 'event-tick-3',
+        version: 1,
+        tick: 3
+      },
+      {
+        eventId: 'event-tick-7',
+        eventType: 'FACT_SET',
+        occurredAt: 2,
+        actorId: 'system',
+        payload: { key: 'tick', value: 7 },
+        deterministicKey: 'event-tick-7',
+        version: 1,
+        tick: 7
+      }
+    ])
+
+    const snapshot = store.readLatestFactSnapshot()
+
+    expect(snapshot.eventCount).toBe(2)
+    expect(snapshot.latestTick).toBe(7)
+  })
+
+  it('reports latest committed tick as zero when no tick exists', () => {
+    const { store } = createKernelHarness()
+
+    expect(store.readLatestFactSnapshot().latestTick).toBe(0)
+
+    store.appendEvents([
+      {
+        eventId: 'event-no-tick',
+        eventType: 'FACT_SET',
+        occurredAt: 1,
+        actorId: 'system',
+        payload: { key: 'weather', value: '晴' },
+        deterministicKey: 'event-no-tick',
+        version: 1
+      }
+    ])
+
+    expect(store.readLatestFactSnapshot().latestTick).toBe(0)
+  })
+
   it('keeps rejected command audit outside world truth', () => {
     const { engine, store } = createKernelHarness()
     const invalidCommand: Command = {

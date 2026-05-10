@@ -1040,6 +1040,10 @@ export class SimulationRuntime {
     const tickFact = state.facts[FACT_TICK]
     if (typeof tickFact === 'number' && Number.isFinite(tickFact)) {
       this.currentTick = tickFact
+    } else if (typeof state.latestTick === 'number' && Number.isFinite(state.latestTick)) {
+      // Availability-first boot may skip full fact hydration; still resume from
+      // the latest committed tick so deterministic event ids do not collide.
+      this.currentTick = state.latestTick
     }
     const weatherFact = state.facts[FACT_WEATHER]
     if (typeof weatherFact === 'string' && (WEATHERS as readonly string[]).includes(weatherFact)) {
