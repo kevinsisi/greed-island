@@ -22,8 +22,10 @@ export function createSseRouter(runtime: SimulationRuntime): Router {
       sendEvent(res, 'event', event)
     }
 
-    const unsubscribe = runtime.subscribe((event: NarrativeEvent) => {
+    const unsubscribeEvents = runtime.subscribe((event: NarrativeEvent) => {
       sendEvent(res, 'event', event)
+    })
+    const unsubscribeTicks = runtime.subscribeTick(() => {
       sendEvent(res, 'snapshot', runtime.getSnapshot())
     })
 
@@ -33,7 +35,8 @@ export function createSseRouter(runtime: SimulationRuntime): Router {
 
     const cleanup = () => {
       clearInterval(keepalive)
-      unsubscribe()
+      unsubscribeEvents()
+      unsubscribeTicks()
       try {
         res.end()
       } catch {

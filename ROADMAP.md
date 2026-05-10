@@ -4,7 +4,17 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.6 🚧 in progress — 2026-05-08
+## v0.15.7 ⏳ local — 2026-05-10
+
+**主題：NPC projection SSE tick refresh**
+
+- ✅ `/api/events/stream` 在每個 simulation tick 後推送新的 world `snapshot`，不再只靠 narrative event 才更新 snapshot。
+- ✅ `WorldStateContext` 收到 SSE snapshot 後立即用目前 auth token refresh `/api/npcs`，讓 NPC `subCol/subRow/buildingId` projection 跟著後端 tick cadence 到前端。
+- ✅ 原 3s full polling 改成 15s fallback，保留 EventSource 失效時的恢復路徑。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm run test -w @greed-island/server`（16 files / 108 tests）通過。
+- ⏳ 待 commit / push / deploy verification。
+
+## v0.15.6 ✅ shipped — 2026-05-10
 
 **主題：資源/時間可見性 + 工作規則 + NPC 反幻覺補強 + 開發憲法**
 
@@ -17,8 +27,10 @@
 - ✅ Server-side sanitizer 擋掉「哪個 X / 有幾個 X」這類未知稱呼幻覺回覆。
 - ✅ `DEVELOPMENT_CONSTITUTION.md` 建立 AI 接手必讀的開發憲法；`PROGRESS.md` 建立手續進度紀錄。
 - ✅ `ARCHITECTURE.md` 新增 Civilization Evolution Rule，並列出文明演化與 NPC 私人對話 grounding 尚未完成的 backlog。
-- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm run test -w @greed-island/server`（15 files / 106 tests）、`git diff --check` 通過。
-- ⏳ 尚待 commit/push 與 CI/CD 追蹤。
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm run test -w @greed-island/server`（16 files / 108 tests）、`git diff --check` 通過。
+- ✅ Commit `2ff81ad` shipped v0.15.6 continuity fixes.
+- ✅ Deploy pipeline restored in commit `eeaebf5`: GitHub Actions builds/pushes Docker Hub images, then deploys on kevinhome via self-hosted runner `DESK-KEVINHOME-greed-island-2`.
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.6`.
 
 ## v0.15.5 ✅ shipped — 2026-05-08
 

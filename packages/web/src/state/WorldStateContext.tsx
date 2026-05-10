@@ -45,9 +45,9 @@ interface WorldStateValue {
 const WorldStateContext = createContext<WorldStateValue | null>(null)
 
 const RECENT_EVENT_LIMIT = 100
-// 後端 tick 5s。短於 tick 的 polling 確保 NPC subCol/subRow 變動最多 ≈3s 後就送到
-// 前端，AreaScene tweenNpcTo 4500ms 就能順暢接上下一輪位置變動。
-const POLL_FALLBACK_MS = 3_000
+// SSE snapshot is emitted after each backend tick; polling remains a slower
+// fallback for browsers or proxies that cannot keep EventSource open.
+const POLL_FALLBACK_MS = 15_000
 const SSE_RECONNECT_MS = 5_000
 const VALID_BIOMES: readonly MapTile['biome'][] = [
   'grass',
@@ -78,14 +78,17 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
 
+    const refreshNpcs = async () => {
+      const npcs = await api.npcs(tokenRef.current)
+      if (!cancelled) setServerNpcs(npcs)
+    }
+
     const refreshAll = async () => {
       const requests = [
         api.world().then((world) => {
           if (!cancelled) setServerWorld(world)
         }),
-        api.npcs(tokenRef.current).then((npcs) => {
-          if (!cancelled) setServerNpcs(npcs)
-        }),
+        refreshNpcs(),
         api.events(RECENT_EVENT_LIMIT).then((events) => {
           if (!cancelled) setServerEvents(events)
         }),
@@ -141,6 +144,9 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
         try {
           const snap = JSON.parse((ev as MessageEvent).data) as ServerWorldSnapshot
           setServerWorld(snap)
+          void refreshNpcs().catch(() => {
+            // surfaced via the periodic poller
+          })
         } catch {
           // ignore malformed snapshot
         }

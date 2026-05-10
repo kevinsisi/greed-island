@@ -64,3 +64,12 @@
   to `main`, push.
 - [ ] 6.4 Rebuild docker image on the desktop host so the Tailscale
   endpoint serves the new payload.
+
+## 7. SSE projection freshness
+
+- [x] 7.1 Emit a world `snapshot` on `/events/stream` after every simulation
+  tick so authoritative projection changes do not depend on narrative events.
+- [x] 7.2 Refresh the authenticated `/npcs` projection from the frontend when
+  an SSE snapshot arrives, keeping NPC positions/building state on tick cadence.
+- [x] 7.3 Keep polling as a slower fallback rather than the primary NPC
+  movement delivery path.

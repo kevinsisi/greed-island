@@ -3,6 +3,70 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.7 Ready For Commit
+
+### Completed Locally
+
+- Fixed NPC projection freshness so `/events/stream` now sends an authoritative
+  `snapshot` after every simulation tick, not only after narrative events.
+- Updated `WorldStateContext` to refresh the authenticated `/npcs` projection
+  whenever an SSE snapshot arrives, so `subCol/subRow/buildingId` changes reach
+  AreaScene on the backend tick cadence.
+- Changed the old 3s full-world polling loop to a 15s fallback for browsers or
+  proxies that cannot keep EventSource open.
+- Bumped app version to `0.15.7` for deployment/runtime verification.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run test -w @greed-island/server` passed: 16 files / 108 tests.
+- `git diff --check` passed, with Windows LF-to-CRLF warnings only.
+
+### Still Open
+
+- Commit/push v0.15.7 and track the deploy workflow to live health.
+- Full NPC humanity remains incomplete: private dialog is not yet fully
+  grounded in long-term memory, aliases, known-person graph, households,
+  faction knowledge, workplace ties, or settlement history.
+
+## 2026-05-10 — v0.15.6 Shipped + CI/CD Restored
+
+### Completed
+
+- Shipped v0.15.6 to `https://hunter.sisihome.org`.
+- Restored deployment by moving Greed Island deploy to the kevinhome
+  Windows self-hosted runner `DESK-KEVINHOME-greed-island-2`.
+- Updated desktop compose to pull Docker Hub images:
+  `kevin950805/greed-island-server:dev` and
+  `kevin950805/greed-island-web:dev`.
+- Moved desktop host port from `7100` to `8100` because Windows excluded
+  TCP port range `7032-7131` can reserve `7100` after reboot.
+- Updated the active RPi Caddy route for `hunter.sisihome.org` to
+  reverse-proxy `100.83.112.20:8100`.
+
+### Verification
+
+- Commit `eeaebf5 fix(deploy): use desktop runner for dev deploy` pushed to
+  `main`.
+- GitHub Actions Deploy Dev run `25629326859` passed:
+  build/push Docker images succeeded and desktop deploy succeeded on the
+  self-hosted runner.
+- Runtime health verified: `https://hunter.sisihome.org/healthz` returns
+  `version: 0.15.6`.
+
+### Still Open
+
+- `homelab-docs` must finish recording the updated Greed Island port and
+  self-hosted runner deployment facts.
+- NPC movement in AreaScene is still driven by server projection updates
+  reaching React/Phaser; SSE currently pushes world snapshots/events but NPC
+  lists still rely primarily on polling. Future fix should push or refresh NPC
+  projection on each authoritative tick.
+- Full NPC humanity remains incomplete: private dialog is not yet fully
+  grounded in long-term memory, aliases, known-person graph, households,
+  faction knowledge, workplace ties, or settlement history.
+
 ## 2026-05-08 — v0.15.6 Ready For Commit
 
 ### Completed Locally
@@ -44,20 +108,10 @@ developer. Keep latest status at the top.
 - `git diff --check` passed, with Windows LF-to-CRLF warnings only.
 - Reviewer pass after final GMT+8 and XYZ presence fixes: No findings.
 
-### Still Open
+### Superseded By 2026-05-10 Handoff
 
-- Commit/push this v0.15.6 batch.
-- Track CI after push.
-- Live screenshot still showed `v0.15.3`; deployment must show `v0.15.6`
-  before the two-player position fix can be verified on the public site.
-- Deploy Dev is expected to keep failing until desktop SSH is reachable.
-- NPC movement in AreaScene is still driven by server projection updates
-  reaching React/Phaser; SSE currently pushes world snapshots/events but
-  NPC lists still rely primarily on polling. Future fix should push or
-  refresh NPC projection on each authoritative tick.
-- Full NPC humanity remains incomplete: private dialog is not yet fully
-  grounded in long-term memory, aliases, known-person graph, households,
-  faction knowledge, workplace ties, or settlement history.
+- Commit/push, CI tracking, and deployment verification are complete.
+- Remaining product backlog moved to the latest section above.
 
 ## 2026-05-08 — v0.15.5 Shipped
 
