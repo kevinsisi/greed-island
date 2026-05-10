@@ -199,6 +199,16 @@ export function createNpcRouter(input: {
       tick,
       trustAfter: relation.trust,
     })
+    input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
+      npcId,
+      playerAccountId: String(claims.sub),
+      intent: resolvedIntent,
+      playerMessage,
+      replyZh,
+      replyEn,
+      tick,
+      trustAfter: relation.trust,
+    })
 
     res.json({
       npcId,

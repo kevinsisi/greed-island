@@ -27,7 +27,7 @@
 
 ## 3. Memory-Backed AI Chronicle
 
-- [ ] 3.1 Persist player↔NPC and NPC↔NPC interaction facts required for future
+- [x] 3.1 Persist player↔NPC and NPC↔NPC interaction facts required for future
   memory-grounded behavior.
 - [ ] 3.2 Add AI chronicle rendering from committed events and memory snippets;
   AI must not create world facts or emit Commands directly.

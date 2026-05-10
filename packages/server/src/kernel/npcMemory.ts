@@ -19,6 +19,7 @@ import type {
   LivingWorldEventPayload,
   NpcInteractCmd,
   NpcMoveCmd,
+  PlayerIntervenecmd,
   SeasonChangeCmd,
   WeatherChangeCmd
 } from './livingWorldCommands.js'
@@ -50,6 +51,17 @@ export type NpcMemoryRecord = Readonly<{
   importance: number
 }>
 
+export type PlayerDialogMemoryInput = Readonly<{
+  npcId: string
+  playerAccountId: string
+  intent: string
+  playerMessage: string
+  replyZh: string
+  replyEn: string
+  tick: number
+  trustAfter: number
+}>
+
 export class SqliteNpcMemoryStore {
   constructor(private readonly db: DatabaseConnection) {
     initializeNpcMemorySchema(db)
@@ -74,22 +86,37 @@ export class SqliteNpcMemoryStore {
     )
 
     const rows = deriveMemoryRows(event.eventType, data, tick, payload.narration ?? null)
-    for (const row of rows) {
-      const contentJson = toCanonicalJson(row.content)
-      const contentHash = hashCanonicalJson({
-        type: row.memoryType,
-        content: row.content,
-        tick
-      })
-      insert.run({
-        npcId: row.npcId,
-        memoryType: row.memoryType,
-        contentJson,
-        contentHash,
-        tick,
-        importance: row.importance
-      })
-    }
+    insertMemoryRows(insert, rows, tick)
+  }
+
+  rememberPlayerDialog(input: PlayerDialogMemoryInput): void {
+    if (!Number.isFinite(input.tick)) return
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO npc_memory
+        (npc_id, memory_type, content_json, content_hash, tick, importance)
+       VALUES (@npcId, @memoryType, @contentJson, @contentHash, @tick, @importance)`
+    )
+    insertMemoryRows(
+      insert,
+      [
+        {
+          npcId: input.npcId,
+          memoryType: 'interaction',
+          content: {
+            kind: 'player.dialog',
+            playerAccountId: input.playerAccountId,
+            intent: input.intent,
+            playerMessage: input.playerMessage,
+            replyZh: input.replyZh,
+            replyEn: input.replyEn,
+            trustAfter: input.trustAfter,
+            tick: input.tick
+          },
+          importance: input.playerMessage.trim().length > 0 ? 6 : 4
+        }
+      ],
+      input.tick
+    )
   }
 
   rebuildFromEvents(events: readonly Event[]): void {
@@ -240,6 +267,37 @@ function deriveMemoryRows(
         }
       ]
     }
+    case 'PLAYER_INTERVENE': {
+      const d = data as PlayerIntervenecmd
+      const importance = d.intentClass === 'threaten' || d.intentClass === 'provoke'
+        ? 7
+        : d.intentClass === 'mediate'
+        ? 6
+        : 3
+      const baseContent = {
+        kind: 'player.intervene',
+        playerAccountId: d.playerAccountId,
+        tile: d.tile,
+        intentClass: d.intentClass,
+        message: d.message,
+        narration,
+        tick
+      } as const
+      return [
+        {
+          npcId: d.npcA,
+          memoryType: 'interaction',
+          content: { ...baseContent, otherNpc: d.npcB },
+          importance
+        },
+        {
+          npcId: d.npcB,
+          memoryType: 'interaction',
+          content: { ...baseContent, otherNpc: d.npcA },
+          importance
+        }
+      ]
+    }
     case 'NPC_MOVE': {
       const d = data as NpcMoveCmd
       // Most moves are low-importance noise; only "reachedDest" is
@@ -325,6 +383,29 @@ function deriveMemoryRows(
     }
     default:
       return []
+  }
+}
+
+function insertMemoryRows(
+  insert: Database.Statement,
+  rows: readonly DerivedMemoryRow[],
+  tick: number
+): void {
+  for (const row of rows) {
+    const contentJson = toCanonicalJson(row.content)
+    const contentHash = hashCanonicalJson({
+      type: row.memoryType,
+      content: row.content,
+      tick
+    })
+    insert.run({
+      npcId: row.npcId,
+      memoryType: row.memoryType,
+      contentJson,
+      contentHash,
+      tick,
+      importance: row.importance
+    })
   }
 }
 

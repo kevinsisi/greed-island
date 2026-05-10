@@ -132,6 +132,87 @@ describe('npc memory projection', () => {
     expect(recentA[0]!.importance).toBe(7) // argue → high
   })
 
+  it('creates one row per affected NPC on PLAYER_INTERVENE', () => {
+    const { eventStore, memory, ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('PLAYER_INTERVENE', 'player-1', 'player', 7, 7, {
+      playerAccountId: 'player-1',
+      npcA: 'npc-a',
+      npcB: 'npc-b',
+      tile: 't_market',
+      intentClass: 'mediate',
+      message: '先別吵，我們一起看證據。',
+      narration: '玩家試著調停兩人的爭執。'
+    })
+    const events = submit(cmd, ruleEngine, eventStore)
+    for (const ev of events) memory.project({ ...ev, sequence: ev.eventId.length })
+
+    expect(memory.countFor('npc-a')).toBe(1)
+    expect(memory.countFor('npc-b')).toBe(1)
+    const recentA = memory.getRecent('npc-a', 5)
+    expect(recentA[0]!.memoryType).toBe('interaction')
+    expect(recentA[0]!.importance).toBe(6)
+    expect(recentA[0]!.content.kind).toBe('player.intervene')
+    expect(recentA[0]!.content.otherNpc).toBe('npc-b')
+  })
+
+  it('persists private player dialog as idempotent NPC memory', () => {
+    const { memory } = makeHarness()
+    const input = {
+      npcId: 'npc-a',
+      playerAccountId: 'player-1',
+      intent: 'ask',
+      playerMessage: '你記得我嗎？',
+      replyZh: '我記得你的聲音。',
+      replyEn: 'I remember your voice.',
+      tick: 9,
+      trustAfter: 54
+    }
+
+    memory.rememberPlayerDialog(input)
+    memory.rememberPlayerDialog(input)
+
+    expect(memory.countFor('npc-a')).toBe(1)
+    const recent = memory.getRecent('npc-a', 5)
+    expect(recent[0]!.content.kind).toBe('player.dialog')
+    expect(recent[0]!.content.playerMessage).toBe('你記得我嗎？')
+    expect(recent[0]!.importance).toBe(6)
+  })
+
+  it('ignores private player dialog memory with non-finite ticks', () => {
+    const { memory } = makeHarness()
+
+    memory.rememberPlayerDialog({
+      npcId: 'npc-a',
+      playerAccountId: 'player-1',
+      intent: 'ask',
+      playerMessage: '這不該被記住。',
+      replyZh: '無效時間。',
+      replyEn: 'Invalid time.',
+      tick: Number.NaN,
+      trustAfter: 50
+    })
+
+    expect(memory.countFor('npc-a')).toBe(0)
+  })
+
+  it('keeps identical memory content at different ticks as distinct rows', () => {
+    const { memory } = makeHarness()
+    const base = {
+      npcId: 'npc-a',
+      playerAccountId: 'player-1',
+      intent: 'ask',
+      playerMessage: '同一句話。',
+      replyZh: '同一個回答。',
+      replyEn: 'Same answer.',
+      trustAfter: 50
+    }
+
+    memory.rememberPlayerDialog({ ...base, tick: 11 })
+    memory.rememberPlayerDialog({ ...base, tick: 12 })
+
+    expect(memory.countFor('npc-a')).toBe(2)
+  })
+
   it('rebuilds identical rows from the same event log', () => {
     const { db, eventStore, ruleEngine } = makeHarness()
     const memory = new SqliteNpcMemoryStore(db)
