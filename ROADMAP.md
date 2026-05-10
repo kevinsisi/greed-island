@@ -4,17 +4,25 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.9 ⏳ local — 2026-05-10
+## v0.15.10 ⏳ local — 2026-05-10
 
-**主題：NPC projection SSE tick refresh + fast boot hydration**
+**主題：NPC projection SSE tick refresh + availability-first boot**
 
 - ✅ `/api/events/stream` 在每個 simulation tick 後推送新的 world `snapshot`，不再只靠 narrative event 才更新 snapshot。
 - ✅ `WorldStateContext` 收到 SSE snapshot 後立即用目前 auth token refresh `/api/npcs`，讓 NPC `subCol/subRow/buildingId` projection 跟著後端 tick cadence 到前端。
 - ✅ 原 3s full polling 改成 15s fallback，保留 EventSource 失效時的恢復路徑。
 - ✅ 修 living-world projection boot guard：改查 projection table row count，不再用永遠不存在的 `__bootstrap_check__` NPC id 導致每次重啟都重建 projection。
-- ✅ 修 production boot hydration：從 SQLite 直接取各 FACT_SET key 的最新值與最近事件，不再開機前把整個 event log reduce 到記憶體。
+- ✅ 修 production boot：大型 event log 不再開機前做 full hydrate / latest-fact window query；先用 event metadata 啟動 HTTP，避免 deploy 後 502。
 - ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm run test -w @greed-island/server`（16 files / 108 tests）通過。
 - ⏳ 待 commit / push / deploy verification。
+
+## v0.15.9 ⚠️ superseded — 2026-05-10
+
+**主題：fast boot hydration attempt**
+
+- ✅ Commit `2780173` pushed SQLite latest-fact hydration.
+- ✅ CI run `25630144184` passed; Deploy Dev run `25630144174` completed.
+- ⚠️ Superseded before final live verification: public `/healthz` still returned 502 because the latest-fact query was too expensive on the production event log.
 
 ## v0.15.8 ⚠️ superseded — 2026-05-10
 

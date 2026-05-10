@@ -77,3 +77,5 @@
   so deploy restarts do not rebuild NPC projections on every boot.
 - [x] 7.5 Hydrate runtime state from latest FACT_SET rows and recent events
   instead of reducing the full event log synchronously during production boot.
+- [x] 7.6 Prefer HTTP availability on large production event logs by skipping
+  expensive boot hydration and allowing new ticks to continue from metadata.

@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-10 — v0.15.9 Ready For Commit
+## 2026-05-10 — v0.15.10 Ready For Commit
 
 ### Completed Locally
 
@@ -17,10 +17,9 @@ developer. Keep latest status at the top.
 - Fixed the living-world projection bootstrap check so server boot does not
   rebuild NPC memory/relationship projections on every restart by checking a
   synthetic NPC id that can never exist.
-- Fixed event-log hydration to restore latest FACT_SET state from SQLite
-  instead of reducing the entire append-only event log in JavaScript before
-  opening the HTTP port.
-- Bumped app version to `0.15.9` for deployment/runtime verification.
+- Changed production boot to skip full runtime hydration for large event logs,
+  preserving HTTP availability while new ticks continue from current metadata.
+- Bumped app version to `0.15.10` for deployment/runtime verification.
 
 ### Local Verification
 
@@ -31,13 +30,16 @@ developer. Keep latest status at the top.
 
 ### Still Open
 
-- Commit/push v0.15.9 and track the deploy workflow to live health.
+- Commit/push v0.15.10 and track the deploy workflow to live health.
 - v0.15.7 deploy run `25629908799` completed, but public health stayed 502
   because the server container was still rebuilding projections before opening
   port 3000.
 - v0.15.8 deploy run `25630060283` completed, but public health stayed 502
   because production event-log hydration was still synchronous and blocked
   before `runtime.start()`.
+- v0.15.9 deploy run `25630144174` completed, but public health stayed 502
+  because the SQLite latest-fact window query was still too expensive on the
+  production event log.
 - Full NPC humanity remains incomplete: private dialog is not yet fully
   grounded in long-term memory, aliases, known-person graph, households,
   faction knowledge, workplace ties, or settlement history.

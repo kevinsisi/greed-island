@@ -124,27 +124,7 @@ export class SqliteEventStore {
     const meta = this.db
       .prepare('SELECT COUNT(*) as eventCount, COALESCE(MAX(sequence), 0) as lastSequence FROM event_log')
       .get() as { eventCount: number; lastSequence: number }
-    const rows = this.db
-      .prepare(
-        `SELECT payload_json as payloadJson
-           FROM (
-             SELECT payload_json,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY json_extract(payload_json, '$.key')
-                      ORDER BY sequence DESC
-                    ) as rn
-               FROM event_log
-              WHERE event_type = 'FACT_SET'
-           )
-          WHERE rn = 1`
-      )
-      .all() as Array<{ payloadJson: string }>
-    const facts: Record<string, unknown> = {}
-    for (const row of rows) {
-      const payload = JSON.parse(row.payloadJson) as { key?: unknown; value?: unknown }
-      if (typeof payload.key === 'string') facts[payload.key] = payload.value
-    }
-    return { eventCount: meta.eventCount, lastSequence: meta.lastSequence, facts }
+    return { eventCount: meta.eventCount, lastSequence: meta.lastSequence, facts: {} }
   }
 
   countEvents(): number {

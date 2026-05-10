@@ -1025,6 +1025,12 @@ export class SimulationRuntime {
     const state = this.store.readLatestFactSnapshot()
     this.eventCount = state.eventCount
     this.lastSequence = state.lastSequence
+    if (state.eventCount > BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
+      console.warn(
+        `[boot] skipped full runtime hydration for ${state.eventCount} events; ` +
+          'booting from defaults to keep HTTP available'
+      )
+    }
     const tickFact = state.facts[FACT_TICK]
     if (typeof tickFact === 'number' && Number.isFinite(tickFact)) {
       this.currentTick = tickFact
