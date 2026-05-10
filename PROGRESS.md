@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.13 Shipped
+
+### Completed Locally
+
+- Fixed production tick recovery after availability-first boot skips full runtime
+  hydration on very large event logs.
+- Added latest committed event-log tick metadata to `readLatestFactSnapshot()` so
+  runtime boot resumes from the latest persisted tick even when no `FACT_TICK`
+  fact is available.
+- Prevented deterministic tick event id collisions that previously caused
+  repeated `SQLITE_CONSTRAINT_UNIQUE` failures after booting from defaults.
+- Added regression coverage for latest tick discovery, empty event logs, and
+  event logs with only null tick values.
+- Bumped app version to `0.15.13`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm test` passed.
+- `git diff --check` passed.
+- Gemini staged diff reviewer returned `No findings` after the null/empty tick
+  regression tests were added.
+
+### CI/CD And Runtime Verification
+
+- Commit `d6b67f1 fix(server): resume ticks from latest event log tick` pushed
+  to `main`.
+- GitHub Actions CI run `25631972227` passed.
+- GitHub Actions Deploy Dev run `25631972239` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.13`.
+- Runtime tick progression verified: health tick advanced from `67308` to
+  `67310` over 10 seconds.
+- Runtime logs verified: `docker logs --tail 120 greed-island-server` shows boot
+  at tick `67294` and no continuing `SQLITE_CONSTRAINT_UNIQUE` tick failures.
+
+### Still Open
+
+- Follow-up remains: real duty-weighted free exploration and richer intent
+  selection beyond schedule/personality nudge.
+- Future boot work should add an indexed/latest-fact projection so large logs can
+  hydrate richer runtime state without blocking HTTP.
+
 ## 2026-05-10 — v0.15.12 Shipped
 
 ### Completed Locally

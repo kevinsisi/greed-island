@@ -44,3 +44,5 @@
 - [x] 4.3 Run concrete build/test/diff-check commands.
 - [x] 4.4 Complete reviewer gate, commit, push, CI, CD, and live health checks.
 - [x] 4.5 Ship v0.15.12 worldline route slice and record deploy evidence.
+- [x] 4.6 Ship v0.15.13 tick recovery fix and record CI/CD plus live tick
+  progression evidence.

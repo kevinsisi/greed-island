@@ -4,6 +4,18 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.13 ✅ shipped — 2026-05-10
+
+**主題：production tick recovery after availability-first boot**
+
+- ✅ `readLatestFactSnapshot()` 會回傳 event log 最新 committed tick，空表或 null tick event log 則安全回 `0`。
+- ✅ Runtime 在大型 production event log 跳過 full hydrate 時，若沒有 `FACT_TICK` fact，會從 latest event-log tick 恢復 `currentTick`。
+- ✅ 修復 deterministic tick event id 重複，避免 boot from defaults 後每 tick 都撞 `event_log.event_id` unique constraint。
+- ✅ 新增 regression tests：latest tick discovery、empty event log、null tick event log。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check` 通過；Gemini staged reviewer `No findings`。
+- ✅ Commit `d6b67f1` pushed to `main`; CI run `25631972227` passed; Deploy Dev run `25631972239` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.13`; tick advanced from `67308` to `67310` over 10 seconds; server logs no longer show continuing `SQLITE_CONSTRAINT_UNIQUE` tick failures.
+
 ## v0.15.12 ✅ shipped — 2026-05-10
 
 **主題：NPC worldline route slice**
