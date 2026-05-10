@@ -3,6 +3,53 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.14 Shipped
+
+### Completed Locally
+
+- Replaced the old permanent role-lock behavior with duty-weighted movement.
+- Duty-anchored NPCs such as merchants, guards, priests, craftsmen, and civic
+  roles now keep duty windows as the strong movement weight instead of a hard
+  identity lock.
+- Explicit cross-district routine slots for duty-anchored NPCs are now honored
+  instead of being rewritten back to `defaultLocation`.
+- NPCs with all-same duty routines receive a short deterministic off-duty errand
+  window, while wanderer archetypes keep a longer travel window.
+- Added regression coverage for shopkeepers leaving during short off-duty
+  errands, priests honoring explicit cross-district routine slots, and guards
+  with existing cross-district routines not receiving extra injected errands.
+- Bumped app version to `0.15.14`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm test` passed: server 18 files / 116 tests; web 1 file / 2 tests.
+- `git diff --check` passed.
+- `openspec validate npc-humanity-ai-memory --strict` passed.
+- Gemini staged diff reviewer returned `No findings` after the helper rename and
+  existing-cross-district-routine regression test were added.
+
+### CI/CD And Runtime Verification
+
+- Commit `5f60ffd fix(npcs): replace role locks with duty-weighted travel`
+  pushed to `main`.
+- GitHub Actions CI run `25632524896` passed.
+- GitHub Actions Deploy Dev run `25632524892` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.14`.
+- Runtime tick progression verified: health tick advanced from `67605` to
+  `67607` over 10 seconds.
+- Runtime logs verified: server booted from latest tick `67603`, opened HTTP,
+  and did not show continuing tick collision or crash errors.
+
+### Still Open
+
+- Follow-up remains: richer NPC intent selection beyond deterministic schedule
+  errands, and memory-backed AI chronicle rendering.
+- Future boot work should add an indexed/latest-fact projection so large logs can
+  hydrate richer runtime state without blocking HTTP.
+
 ## 2026-05-10 — v0.15.13 Shipped
 
 ### Completed Locally

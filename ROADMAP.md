@@ -4,6 +4,17 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.14 ✅ shipped — 2026-05-10
+
+**主題：NPC duty-weighted free exploration slice**
+
+- ✅ 移除 permanent role-lock：祭司、商人、工匠、守衛、公務 NPC 不再因角色身份被永久壓回 `defaultLocation`。
+- ✅ 職責改為強權重：明確跨區 routine 會被尊重；all-same duty routine 只注入短 off-duty errand；wanderer archetype 保留較長 travel window。
+- ✅ 新增 regression tests：shopkeeper 可短暫離開、priest 明確跨區 routine 不被覆寫、已有跨區 guard routine 不會被額外注入 errand。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過；Gemini staged reviewer `No findings`。
+- ✅ Commit `5f60ffd` pushed to `main`; CI run `25632524896` passed; Deploy Dev run `25632524892` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.14`; tick advanced from `67605` to `67607` over 10 seconds; server logs show clean boot at tick `67603`.
+
 ## v0.15.13 ✅ shipped — 2026-05-10
 
 **主題：production tick recovery after availability-first boot**
