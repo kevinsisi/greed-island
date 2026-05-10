@@ -4,6 +4,18 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.15 ✅ shipped — 2026-05-10
+
+**主題：NPC memory foundation for player interactions**
+
+- ✅ `PLAYER_INTERVENE` 事件會投影成兩位受影響 NPC 的 `npc_memory` interaction rows。
+- ✅ 私人 `/api/npc/:npcId/interact` 對話在寫入 `personal_events` 後，也會同步寫入該 NPC 的 memory projection。
+- ✅ 記憶寫入 idempotent；同內容同 tick 不重複，同內容不同 tick 仍保留為不同記憶。
+- ✅ OpenSpec `3.1` completed：player↔NPC 與 NPC↔NPC interaction facts 已可作為後續 memory-grounded behavior 基礎。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過；Gemini staged reviewer `No findings`。
+- ✅ Commit `295f884` pushed to `main`; CI run `25632968113` passed; Deploy Dev run `25632968110` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.15`; tick advanced from `67832` to `67834` over 10 seconds; server logs show clean boot at tick `67826`.
+
 ## v0.15.14 ✅ shipped — 2026-05-10
 
 **主題：NPC duty-weighted free exploration slice**

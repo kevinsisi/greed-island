@@ -3,6 +3,51 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-10 — v0.15.15 Shipped
+
+### Completed Locally
+
+- Extended NPC memory projection so `PLAYER_INTERVENE` events create one
+  memory row for each affected NPC.
+- Added private player dialog memory persistence: `/api/npc/:npcId/interact`
+  now mirrors each saved `personal_events` turn into `npc_memory` when the
+  runtime memory projection is attached.
+- Kept player dialog memory idempotent through canonical content hashing and
+  preserved distinct identical-content memories across different ticks.
+- Marked OpenSpec task `3.1` complete for persisted player↔NPC and NPC↔NPC
+  interaction facts required by future memory-grounded behavior.
+- Bumped app version to `0.15.15`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm test` passed: server 18 files / 120 tests; web 1 file / 2 tests.
+- `git diff --check` passed.
+- `openspec validate npc-humanity-ai-memory --strict` passed.
+- Gemini staged diff reviewer returned `No findings` after adding the
+  identical-content/different-tick memory regression test.
+
+### CI/CD And Runtime Verification
+
+- Commit `295f884 feat(npcs): persist player interaction memories` pushed to
+  `main`.
+- GitHub Actions CI run `25632968113` passed.
+- GitHub Actions Deploy Dev run `25632968110` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.15`.
+- Runtime tick progression verified: health tick advanced from `67832` to
+  `67834` over 10 seconds.
+- Runtime logs verified: server booted from latest tick `67826`, opened HTTP,
+  and did not show crash or tick collision errors.
+
+### Still Open
+
+- Follow-up remains: AI chronicle rendering from committed events and memory
+  snippets, with key-pool robustness and anti-hallucination grounding.
+- Future boot work should add an indexed/latest-fact projection so large logs can
+  hydrate richer runtime state without blocking HTTP.
+
 ## 2026-05-10 — v0.15.14 Shipped
 
 ### Completed Locally
