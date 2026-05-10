@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.17 🚧 in progress — 2026-05-11
+## v0.15.17 ✅ shipped — 2026-05-11
 
 **主題：chronicle AI key-pool robustness metadata**
 
@@ -12,8 +12,9 @@
 - ✅ 回應新增 `chronicle.aiMeta`，可觀測 requested、active key count、timeout、max attempts、response MIME、每次 attempt 成敗與 fallback reason。
 - ✅ AI 仍是 read-only narrator：AI timeout、retry exhaustion、或 ungrounded citation 都只降級 deterministic fallback，不會改 EventLog 或 world projection。
 - ✅ OpenSpec `3.3` completed：key-pool robustness metadata 已接上 chronicle rendering。
-- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過。
-- ⏳ Commit/push、CI、Deploy Dev、live verification pending。
+- ✅ 本機驗證：`npm run build:server`、`npm run build:web`、`npm test`、`git diff --check`、OpenSpec strict validate 通過；Gemini staged reviewer `No findings`。
+- ✅ Commit `3f62645` pushed to `main`; CI run `25635003178` passed; Deploy Dev run `25635003187` passed。
+- ✅ Live verification: `https://hunter.sisihome.org/healthz` returns `version: 0.15.17`; tick advanced from `68948` to `68949`; fallback and AI chronicle endpoints both expose `aiMeta` with 41 active keys, and `?ai=1` succeeded on one attempt.
 
 ## v0.15.16 ✅ shipped — 2026-05-11
 

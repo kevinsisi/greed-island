@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-11 — v0.15.17 In Progress
+## 2026-05-11 — v0.15.17 Shipped
 
 ### Completed Locally
 
@@ -27,10 +27,28 @@ developer. Keep latest status at the top.
 - `npm test` passed: server 19 files / 132 tests; web 1 file / 2 tests.
 - `git diff --check` passed.
 - `openspec validate npc-humanity-ai-memory --strict` passed.
+- Gemini staged diff reviewer returned `No findings` after adding retry
+  exhaustion and non-transient failure regression tests.
 
 ### CI/CD And Runtime Verification
 
-- Pending commit, push, CI, Deploy Dev, and live runtime checks.
+- Commit `3f62645 feat(world): add chronicle AI retry metadata` pushed to
+  `main`.
+- GitHub Actions CI run `25635003178` passed.
+- GitHub Actions Deploy Dev run `25635003187` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.17`.
+- Runtime tick progression verified: health tick advanced from `68948` to
+  `68949` over 10 seconds.
+- Runtime fallback chronicle verified: `/api/world/chronicle?limit=5` returns
+  `source=fallback`, `aiMeta.requested=false`, `activeKeys=41`, and no fallback
+  error.
+- Runtime AI chronicle verified: `/api/world/chronicle?limit=5&ai=1` returns
+  `source=ai`, `aiMeta.requested=true`, `activeKeys=41`, one successful attempt,
+  and `fallbackReason=null`.
+- Runtime logs verified: server booted from latest tick `68946`, opened HTTP,
+  attached ambient narrator with 41 active keys, and did not show crash or tick
+  collision errors.
 
 ### Still Open
 
