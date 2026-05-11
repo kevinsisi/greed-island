@@ -127,6 +127,36 @@ describe('simulation kernel', () => {
     expect(window.events.map((event) => event.eventId)).toEqual(['event-move-2', 'event-interact-3'])
   })
 
+  it('preserves chronological order across interleaved event types', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      createEventDraft('event-move-1', 'NPC_MOVE', 1, { actorType: 'npc', data: { npcId: 'npc-a' } }),
+      createEventDraft('event-pressure-2', 'AREA_PRESSURE', 2, {
+        actorType: 'system',
+        data: { tileId: 't_central' }
+      }),
+      createEventDraft('event-move-3', 'NPC_MOVE', 3, { actorType: 'npc', data: { npcId: 'npc-b' } }),
+      createEventDraft('event-pressure-4', 'AREA_PRESSURE', 4, {
+        actorType: 'system',
+        data: { tileId: 't_dock' }
+      })
+    ])
+
+    const window = store.readEventsByTickWindow({
+      sinceTick: 0,
+      untilTick: 4,
+      eventTypes: ['AREA_PRESSURE', 'NPC_MOVE'],
+      limit: 3
+    })
+
+    expect(window.limited).toBe(true)
+    expect(window.events.map((event) => event.eventId)).toEqual([
+      'event-move-1',
+      'event-pressure-2',
+      'event-move-3'
+    ])
+  })
+
   it('reports latest committed tick as zero when no tick exists', () => {
     const { store } = createKernelHarness()
 

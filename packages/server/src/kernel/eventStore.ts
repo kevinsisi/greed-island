@@ -31,6 +31,8 @@ type RejectionRow = Readonly<{
   payload_json: string
 }>
 
+const MAX_TICK_WINDOW_MERGE_ROWS = 50_000
+
 export type RejectedCommandAuditRecord = Readonly<{
   rejectionId: number
   commandId: string
@@ -132,6 +134,40 @@ export class SqliteEventStore {
     const eventTypes = [...new Set(input.eventTypes.filter((type) => type.length > 0))]
     if (eventTypes.length === 0) return { events: [], limited: false }
     const safeLimit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const requestedMergeRows = eventTypes.length * (safeLimit + 1)
+    if (requestedMergeRows > MAX_TICK_WINDOW_MERGE_ROWS) {
+      return this.readEventsByTickWindowSingleQuery(input, eventTypes, safeLimit)
+    }
+    const rows: EventRow[] = []
+    // Keep this as bounded per-type scans. SQLite can walk the
+    // (event_type, tick, sequence) index for each server-selected type without
+    // building the large cross-type temp sort that blocked production API reads.
+    const statement = this.db
+      .prepare(
+        `SELECT * FROM event_log
+          WHERE event_type = ?
+            AND tick > ?
+            AND tick <= ?
+          ORDER BY tick ASC, sequence ASC
+          LIMIT ?`
+      )
+    for (const eventType of eventTypes) {
+      rows.push(
+        ...(statement.all(eventType, input.sinceTick, input.untilTick, safeLimit + 1) as EventRow[])
+      )
+    }
+    const limited = rows.length > safeLimit
+    const windowRows = rows
+      .sort((a, b) => (a.tick ?? 0) - (b.tick ?? 0) || a.sequence - b.sequence)
+      .slice(0, safeLimit)
+    return { events: windowRows.map(rowToEvent), limited }
+  }
+
+  private readEventsByTickWindowSingleQuery(
+    input: EventTickWindowRead,
+    eventTypes: readonly string[],
+    safeLimit: number
+  ): EventTickWindowResult {
     const placeholders = eventTypes.map(() => '?').join(', ')
     const rows = this.db
       .prepare(
@@ -254,6 +290,7 @@ export function initializeKernelSchema(db: DatabaseConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_event_log_actor ON event_log(actor_id);
     CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
+    CREATE INDEX IF NOT EXISTS idx_event_log_type_tick_sequence ON event_log(event_type, tick, sequence);
     CREATE INDEX IF NOT EXISTS idx_event_log_deterministic_key ON event_log(deterministic_key);
 
     CREATE TRIGGER IF NOT EXISTS event_log_no_update
