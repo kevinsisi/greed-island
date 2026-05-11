@@ -32,9 +32,25 @@ developer. Keep latest status at the top.
 - Gemini staged review found and the code addressed Hub locale selection and
   English district-name issues; final review returned `No findings`.
 
+### CI/CD + Live Verification
+
+- Commit `6e73281` pushed to `main`.
+- GitHub Actions CI run `25668501760` passed.
+- GitHub Actions Deploy Dev run `25668501814` passed.
+- Live `v0.15.28` verification after runtime ticks settled:
+  - `/healthz`: `version=0.15.28`, tick advanced from `81851` to `81858` during
+    the probe window.
+  - `/api/npcs`: `50` rows, all `50` with `internalState.agent` and `intentLine`.
+  - Agent bootstrap tasks: `0`.
+  - English intent district text CJK leakage: `0`.
+  - 35-second movement probe: `49` NPCs changed location/sub-tile/activity keys.
+  - Activity distribution remained daily-life shaped: `work=30`, `trade=10`,
+    `patrol=5`, `idle=5`.
+
 ### Still Open
 
-- Commit, push, CI/CD, and live verification for `v0.15.28` are pending.
+- No active blocker. Next slice can make social/interaction bubbles more visible
+  on the map, or add a compact intent overlay to selected NPC sprites.
 
 ## 2026-05-11 — v0.15.27 NPC Daily-Life Activity Pass
 

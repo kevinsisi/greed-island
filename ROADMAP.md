@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.28 🚧 in progress — 2026-05-11
+## v0.15.28 ✅ shipped — 2026-05-11
 
 **主題：NPC intent text + local motion cadence**
 
@@ -21,7 +21,14 @@
   `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
   passed; web build still has the existing Vite chunk-size warning.
 - ✅ Gemini staged review returned `No findings` after locale fixes.
-- 🚧 Commit, CI/CD, and live verification are pending.
+- ✅ Commit `6e73281` pushed to `main`; CI run `25668501760` and Deploy Dev run
+  `25668501814` passed.
+- ✅ Live verification after runtime ticks settled: `v0.15.28`, `/api/npcs` returns
+  50 rows, all 50 have agent state and intent lines, English intent text has zero
+  CJK district-name leakage, and 49 NPCs changed position/activity keys over a
+  35-second probe.
+- 🚧 Next slice: make social/interaction bubbles more visible on the map, or add a
+  compact intent overlay for selected NPC sprites.
 
 ## v0.15.27 ✅ shipped — 2026-05-11
 
