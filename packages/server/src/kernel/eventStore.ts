@@ -44,6 +44,18 @@ export type RejectedCommandAuditRecord = Readonly<{
   payload: unknown
 }>
 
+export type EventTickWindowRead = Readonly<{
+  sinceTick: number
+  untilTick: number
+  eventTypes: readonly string[]
+  limit: number
+}>
+
+export type EventTickWindowResult = Readonly<{
+  events: Event[]
+  limited: boolean
+}>
+
 export class SqliteEventStore {
   constructor(private readonly db: DatabaseConnection) {
     initializeKernelSchema(db)
@@ -116,21 +128,44 @@ export class SqliteEventStore {
     return rows.reverse().map(rowToEvent)
   }
 
+  readEventsByTickWindow(input: EventTickWindowRead): EventTickWindowResult {
+    const eventTypes = [...new Set(input.eventTypes.filter((type) => type.length > 0))]
+    if (eventTypes.length === 0) return { events: [], limited: false }
+    const safeLimit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const placeholders = eventTypes.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM event_log
+          WHERE event_type IN (${placeholders})
+            AND tick > ?
+            AND tick <= ?
+          ORDER BY tick ASC, sequence ASC
+          LIMIT ?`
+      )
+      .all(...eventTypes, input.sinceTick, input.untilTick, safeLimit + 1) as EventRow[]
+    const limited = rows.length > safeLimit
+    return { events: rows.slice(0, safeLimit).map(rowToEvent), limited }
+  }
+
   readLatestFactSnapshot(): {
     eventCount: number
     lastSequence: number
     latestTick: number
     facts: Record<string, unknown>
   } {
-    const meta = this.db
-      .prepare(
-        'SELECT COUNT(*) as eventCount, COALESCE(MAX(sequence), 0) as lastSequence, COALESCE(MAX(tick), 0) as latestTick FROM event_log'
-      )
-      .get() as { eventCount: number; lastSequence: number; latestTick: number }
+    const countRow = this.db.prepare('SELECT COUNT(*) as eventCount FROM event_log').get() as {
+      eventCount: number
+    }
+    const sequenceRow = this.db
+      .prepare('SELECT sequence FROM event_log ORDER BY sequence DESC LIMIT 1')
+      .get() as { sequence: number } | undefined
+    const tickRow = this.db
+      .prepare('SELECT tick FROM event_log WHERE tick IS NOT NULL ORDER BY sequence DESC LIMIT 1')
+      .get() as { tick: number } | undefined
     return {
-      eventCount: meta.eventCount,
-      lastSequence: meta.lastSequence,
-      latestTick: meta.latestTick,
+      eventCount: countRow.eventCount,
+      lastSequence: sequenceRow?.sequence ?? 0,
+      latestTick: tickRow?.tick ?? 0,
       facts: {}
     }
   }

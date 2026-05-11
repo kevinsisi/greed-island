@@ -94,6 +94,39 @@ describe('simulation kernel', () => {
     expect(snapshot.latestTick).toBe(7)
   })
 
+  it('reports the newest committed tick rather than the maximum historical tick', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      createEventDraft('event-tick-10', 'FACT_SET', 10, { key: 'tick', value: 10 }),
+      createEventDraft('event-tick-8', 'FACT_SET', 8, { key: 'tick', value: 8 })
+    ])
+
+    expect(store.readLatestFactSnapshot().latestTick).toBe(8)
+  })
+
+  it('reads a bounded tick window without hydrating the whole event log', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      createEventDraft('event-fact-1', 'FACT_SET', 1, { key: 'world.tick', value: 1 }),
+      createEventDraft('event-move-2', 'NPC_MOVE', 2, { actorType: 'npc', data: { npcId: 'npc-a' } }),
+      createEventDraft('event-interact-3', 'NPC_INTERACT', 3, {
+        actorType: 'npc',
+        data: { participants: ['npc-a', 'npc-b'] }
+      }),
+      createEventDraft('event-move-4', 'NPC_MOVE', 4, { actorType: 'npc', data: { npcId: 'npc-b' } })
+    ])
+
+    const window = store.readEventsByTickWindow({
+      sinceTick: 1,
+      untilTick: 4,
+      eventTypes: ['NPC_MOVE', 'NPC_INTERACT'],
+      limit: 2
+    })
+
+    expect(window.limited).toBe(true)
+    expect(window.events.map((event) => event.eventId)).toEqual(['event-move-2', 'event-interact-3'])
+  })
+
   it('reports latest committed tick as zero when no tick exists', () => {
     const { store } = createKernelHarness()
 
@@ -250,6 +283,24 @@ function createSetFactCommand(commandId: string, actorId: string, key: string, v
     actorId,
     submittedAt: 1000,
     payload: { key, value }
+  }
+}
+
+function createEventDraft(
+  eventId: string,
+  eventType: string,
+  tick: number,
+  payload: Record<string, unknown>
+): EventDraft {
+  return {
+    eventId,
+    eventType,
+    occurredAt: tick,
+    actorId: 'system',
+    payload,
+    deterministicKey: eventId,
+    version: 1,
+    tick
   }
 }
 

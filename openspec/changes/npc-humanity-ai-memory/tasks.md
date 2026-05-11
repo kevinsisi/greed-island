@@ -53,6 +53,9 @@
   movement while an authenticated player is actively talking to them.
 - [x] 3.7 Prefer AI chronicle summaries when requested by the UI and hide internal
   `WORLD_TICK` rows from public timeline/ticker surfaces.
+- [x] 3.8 Keep living-world catch-up endpoints bounded so returning-player
+  summaries cannot synchronously hydrate the full production EventLog and block
+  unrelated API responses.
 
 ## 4. Completion
 

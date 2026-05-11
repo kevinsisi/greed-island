@@ -16,6 +16,17 @@ import type { AccountStore } from './accounts.js'
 import { requireAuth, type AuthConfig } from './auth.js'
 import type { SettingsStore } from './settings.js'
 
+const CATCH_UP_EVENT_TYPES = [
+  'NPC_INTERACT',
+  'NPC_MOVE',
+  'BUILDING_ENTER',
+  'AREA_PRESSURE',
+  'WEATHER_CHANGE',
+  'SEASON_CHANGE',
+  'WORLD_EVENT_SPAWN'
+] as const
+const CATCH_UP_EVENT_LIMIT = 5_000
+
 export function createLivingWorldRouter(input: {
   runtime: SimulationRuntime
   memory: SqliteNpcMemoryStore
@@ -33,9 +44,14 @@ export function createLivingWorldRouter(input: {
     const sinceTickRaw = Number.parseInt(String(req.query.sinceTick ?? '0'), 10)
     const sinceTick = Number.isFinite(sinceTickRaw) ? Math.max(0, sinceTickRaw) : 0
     const latestTick = input.runtime.getCurrentTick()
-    const events = eventStore.readEvents()
+    const { events, limited } = eventStore.readEventsByTickWindow({
+      sinceTick,
+      untilTick: latestTick,
+      eventTypes: CATCH_UP_EVENT_TYPES,
+      limit: CATCH_UP_EVENT_LIMIT
+    })
     const summary = summarizeWindow(events, sinceTick, latestTick)
-    res.json({ latestTick, summary })
+    res.json({ latestTick, summary, partial: limited })
   })
 
   router.get('/world/chronicle', async (req: Request, res: Response) => {
@@ -61,13 +77,19 @@ export function createLivingWorldRouter(input: {
     const accountId = claims.sub
     const previousLastSeenTick = input.accounts.getLastSeenTick(accountId)
     const latestTick = input.runtime.getCurrentTick()
-    const events = eventStore.readEvents()
+    const { events, limited } = eventStore.readEventsByTickWindow({
+      sinceTick: previousLastSeenTick,
+      untilTick: latestTick,
+      eventTypes: CATCH_UP_EVENT_TYPES,
+      limit: CATCH_UP_EVENT_LIMIT
+    })
     const summary = summarizeWindow(events, previousLastSeenTick, latestTick)
     input.accounts.setLastSeenTick(accountId, latestTick)
     res.json({
       previousLastSeenTick,
       latestTick,
-      summary
+      summary,
+      partial: limited
     })
   })
 
