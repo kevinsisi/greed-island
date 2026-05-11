@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   api,
   streamUrl,
@@ -44,6 +44,7 @@ interface WorldStateValue {
   liveConnected: boolean
   source: 'fixture' | 'server'
   loadError: string | null
+  refreshWorld: () => Promise<void>
 }
 
 const WorldStateContext = createContext<WorldStateValue | null>(null)
@@ -77,11 +78,33 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   const [serverMap, setServerMap] = useState<ServerMap | null>(null)
   const [liveConnected, setLiveConnected] = useState<boolean>(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
   const hasServerWorldRef = useRef(false)
   hasServerWorldRef.current = serverWorld !== null
 
   const eventsRef = useRef<ServerNarrativeEvent[]>([])
   eventsRef.current = serverEvents ?? []
+
+  const refreshWorld = useCallback(async () => {
+    try {
+      const world = await resilientLoad(() => api.world())
+      if (!mountedRef.current) return
+      hasServerWorldRef.current = true
+      setServerWorld(world)
+      setLoadError(null)
+    } catch (error) {
+      if (!mountedRef.current) return
+      setLoadError(error instanceof Error ? error.message : 'Failed to load world state.')
+      throw error
+    }
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -109,12 +132,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     const refreshAll = async () => {
       const generation = refreshGuard.next()
       const requests = [
-        resilientLoad(() => api.world()).then((world) => {
-          // A real server world is always more authoritative than fixture data.
-          // Mobile lifecycle events can start overlapping refreshes; do not let
-          // a later generation discard the only successful world response.
-          acceptServerWorld(world)
-        }),
+        refreshWorld(),
         refreshNpcs(generation),
         resilientLoad(() => api.events(RECENT_EVENT_LIMIT)).then((events) => {
           if (isCurrentRefresh(generation)) setServerEvents(events)
@@ -208,7 +226,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
       if (source) source.close()
     }
-  }, [])
+  }, [refreshWorld])
 
   useEffect(() => {
     let cancelled = false
@@ -286,9 +304,10 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       worldEvents,
       liveConnected,
       source: usingServer ? 'server' : 'fixture',
-      loadError
+      loadError,
+      refreshWorld
     }
-  }, [serverWorld, serverNpcs, serverEvents, serverCards, serverMap, liveConnected, loadError, locale])
+  }, [serverWorld, serverNpcs, serverEvents, serverCards, serverMap, liveConnected, loadError, locale, refreshWorld])
 
   return <WorldStateContext.Provider value={value}>{children}</WorldStateContext.Provider>
 }

@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.25 Mobile Fixture Recovery
+
+### Completed Locally
+
+- Investigated the recurring iPhone fixture-state report on `v0.15.24`.
+- Confirmed live server/API was healthy from desktop probes, and the iPhone loaded
+  fresh HTML plus hashed JS/CSS and successfully called `/api/version`, but the
+  same iPhone access-log window showed no `/api/world` request before the UI
+  remained on fixture data.
+- Exposed `refreshWorld()` through `WorldStateContext`, so world loading is no
+  longer only reachable from the provider mount/poll effect.
+- Added a fixture-state recovery effect in `AtmosphereBar`: while the visible UI
+  source is still `fixture`, it immediately calls `refreshWorld()` and retries
+  every two seconds until a server world lands.
+- Added `visibleFixtureRecovery` unit tests for source-gated startup, immediate
+  retry, interval retry, cancellation, and retry-after-failure behavior.
+- Bumped app version from `0.15.24` to `0.15.25`.
+
+### Local Verification
+
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 141 tests, web 6 files / 15 tests.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Gemini staged review found only the initial missing-test gap; the retry helper
+  tests were added afterward.
+
+### Still Open
+
+- Pending deploy evidence and iPhone/live verification after CI/CD completes.
+
 ## 2026-05-11 — v0.15.24 Docker Local Recovery
 
 ### Completed Locally

@@ -4,6 +4,24 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.25 🚧 in progress — 2026-05-11
+
+**主題：mobile fixture-state recovery hardening**
+
+- ✅ Root cause evidence: iPhone loaded fresh `v0.15.24` HTML/assets and
+  `/api/version`, but the same access-log window had no `/api/world` request, so
+  the visible fixture state could persist even while the live API was healthy.
+- ✅ `WorldStateContext` now exposes an imperative `refreshWorld()` path that
+  accepts any successful authoritative `/api/world` snapshot.
+- ✅ `AtmosphereBar` now treats `source === 'fixture'` as a degraded visible state
+  and retries `refreshWorld()` every two seconds until server world data lands.
+- ✅ Added focused unit coverage for the visible fixture recovery retry helper.
+- ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
+  and `git diff --check` passed; web build still has the existing Vite chunk-size
+  warning.
+- 🚧 Reviewer pass, commit/push, CI/CD, and live iPhone evidence are pending for
+  this hotfix.
+
 ## v0.15.24 🚧 in progress — 2026-05-11
 
 **主題：Docker local recovery + visible version bump**

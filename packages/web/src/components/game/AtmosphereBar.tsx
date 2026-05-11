@@ -1,11 +1,13 @@
+import { useEffect } from 'react'
 import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
+import { startFixtureSourceRecovery } from '../../state/visibleFixtureRecovery'
 
 const WORLD_MINUTES_PER_HOUR = 60
 const WORLD_HOURS_PER_DAY = 24
 
 export function AtmosphereBar() {
-  const { world, liveConnected, source } = useWorldState()
+  const { world, liveConnected, source, refreshWorld } = useWorldState()
   const { t } = useI18n()
   const weather = String(world.facts['weather'] ?? '—')
   const season = String(world.facts['season'] ?? '—')
@@ -13,6 +15,10 @@ export function AtmosphereBar() {
   const rareOpen = Boolean(world.facts['rareWindowOpen'])
   const closesAtTick = Number(world.facts['rareWindowClosesAtTick'] ?? 0)
   const remaining = rareOpen && closesAtTick > world.tick ? closesAtTick - world.tick : 0
+
+  useEffect(() => {
+    return startFixtureSourceRecovery({ source, refreshWorld, windowTarget: window })
+  }, [source, refreshWorld])
 
   return (
     <div className="border-b border-ground-800 bg-gradient-to-b from-ground-900 to-ground-900/40 px-4 sm:px-6 lg:px-10 py-3">
