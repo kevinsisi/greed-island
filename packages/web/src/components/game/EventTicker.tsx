@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
+import { isPublicNarrativeEvent } from '../../state/eventVisibility'
 
 const TICKER_LIMIT = 8
 
@@ -9,7 +10,7 @@ export function EventTicker() {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState(false)
 
-  const visible = events.slice(0, TICKER_LIMIT)
+  const visible = events.filter(isPublicNarrativeEvent).slice(0, TICKER_LIMIT)
 
   return (
     <aside
@@ -32,11 +33,7 @@ export function EventTicker() {
             <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500 mb-0.5">
               tick {event.tick} · #{event.sequence}
             </div>
-            {event.narration ? (
-              <div className="text-ground-100">{event.narration}</div>
-            ) : (
-              <div className="italic text-ground-500">{event.eventType}</div>
-            )}
+            <div className="text-ground-100">{event.narration}</div>
           </article>
         ))}
       </div>
@@ -58,13 +55,13 @@ export function EventTicker() {
 export function EventTickerStrip() {
   const { events } = useWorldState()
   const { t } = useI18n()
-  const head = events[0]
+  const head = events.find(isPublicNarrativeEvent)
   return (
     <div className="lg:hidden fixed bottom-[60px] inset-x-0 z-20 border-t border-b border-ground-800 bg-ground-900/95 backdrop-blur px-4 py-2 text-[12px] font-display tracking-tight text-ground-300">
       <div className="flex items-baseline gap-2">
         <span className="text-[10px] uppercase text-ember-500 shrink-0">{t('ticker.heading')}</span>
         {head ? (
-          <span className="truncate">{head.narration ?? head.eventType}</span>
+          <span className="truncate">{head.narration}</span>
         ) : (
           <span className="italic text-ground-500">{t('ticker.empty')}</span>
         )}

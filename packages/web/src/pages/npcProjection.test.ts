@@ -36,7 +36,7 @@ describe('NPC scene projections', () => {
     expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local'])
   })
 
-  it('maps surface NPCs to hub overview sprites and keeps travel routes', () => {
+  it('maps only cross-district travellers to the hub overview', () => {
     const people = [
       npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
       npc({
@@ -55,13 +55,21 @@ describe('NPC scene projections', () => {
 
     const hub = hubMapNpcs(people)
 
-    expect(hub.map((p) => p.id)).toEqual(['local', 'traveller'])
-    expect(hub[0]?.intentLine).toBe('在中央待命')
-    expect(hubMapNpcs(people, 'en')[0]?.intentLine).toBe('Standing by')
-    expect(hub[1]?.travelRoute).toEqual({
+    expect(hub.map((p) => p.id)).toEqual(['traveller'])
+    expect(hubMapNpcs(people, 'en').map((p) => p.id)).toEqual(['traveller'])
+    expect(hub[0]?.travelRoute).toEqual({
       fromDistrictId: 't_central',
       toDistrictId: 't_dock',
       targetDistrictId: 't_dock'
     })
+  })
+
+  it('keeps local outdoor NPCs on the area map only', () => {
+    const people = [
+      npc({ id: 'local', activity: 'trade', buildingId: null, location: 't_central' })
+    ]
+
+    expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local'])
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
   })
 })

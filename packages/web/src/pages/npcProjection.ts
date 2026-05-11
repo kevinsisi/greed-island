@@ -23,6 +23,7 @@ export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'z
   return npcs
     .filter((npc) => isKnownDistrictId(npc.location))
     .filter((npc) => !npc.buildingId)
+    .filter((npc) => npc.activity === 'move' && normalizeTravelRoute(npc.travelRoute) !== null)
     .map((npc) => {
       const route = normalizeTravelRoute(npc.travelRoute)
       const base: MapNpc = {

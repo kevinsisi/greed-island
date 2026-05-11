@@ -4,6 +4,23 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.29 🚧 in progress — 2026-05-11
+
+**主題：NPC layer uniqueness + chronicle cleanup**
+
+- ✅ Fix Hub projection so parent map no longer renders every area-local NPC.
+- ✅ Preserve unique NPC rendering by layer: Hub only shows cross-district
+  travellers with `travelRoute`; Area maps show local outdoor NPCs; Building maps
+  show building occupants.
+- ✅ Timeline/desktop/mobile event tickers now hide internal `WORLD_TICK` and
+  no-narration rows instead of presenting them as public story.
+- ✅ Timeline chronicle summary now requests AI rendering when available instead
+  of forcing deterministic fallback.
+- ✅ Focused verification: `npm run test -w @greed-island/web -- npcProjection
+  eventVisibility` and `npm run build:web` passed; web build still has the
+  existing Vite chunk-size warning.
+- 🚧 Full verification, review, CI/CD, and live checks are pending.
+
 ## v0.15.28 ✅ shipped — 2026-05-11
 
 **主題：NPC intent text + local motion cadence**

@@ -32,6 +32,8 @@
   runtime-agent task so the UI can show what the NPC is doing.
 - [x] 2.8 Increase local area waypoint refresh cadence to keep outdoor NPC motion
   visibly active without changing the authoritative presence tuple.
+- [x] 2.9 Keep area-local NPCs off the Hub overview so each NPC renders on only
+  one map layer at a time; Hub only shows cross-district travel routes.
 
 ## 3. Memory-Backed AI Chronicle
 
@@ -49,6 +51,8 @@
   interaction state.
 - [x] 3.6 Add bounded player-dialog hold so an NPC does not leave due to schedule
   movement while an authenticated player is actively talking to them.
+- [x] 3.7 Prefer AI chronicle summaries when requested by the UI and hide internal
+  `WORLD_TICK` rows from public timeline/ticker surfaces.
 
 ## 4. Completion
 

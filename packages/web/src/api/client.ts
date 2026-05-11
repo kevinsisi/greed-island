@@ -588,7 +588,7 @@ export const api = {
   map: () => jsonFetch<ServerMap>('/map'),
   dashboard: () => jsonFetch<ServerDashboard>('/dashboard'),
   worldEvents: () => jsonFetch<{ active: ServerActiveWorldEvent[] }>('/world-events'),
-  worldChronicle: (limit = 40, useAi = false) =>
+  worldChronicle: (limit = 40, useAi = true) =>
     jsonFetch<ServerChronicleResponse>(`/world/chronicle?limit=${limit}&ai=${useAi ? '1' : '0'}`),
   register: (email: string, password: string) =>
     jsonFetch<{ token: string; account: ServerAccount }>('/auth/register', {

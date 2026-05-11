@@ -3,6 +3,7 @@ import { useWorldState } from '../state/WorldStateContext'
 import { useI18n, type TranslationKey, type Translator } from '../i18n'
 import type { EventSummary } from '../state/types'
 import { api, type ServerChronicleResponse } from '../api/client'
+import { isPublicNarrativeEvent } from '../state/eventVisibility'
 
 interface EventFilter {
   id: 'all' | 'cards' | 'npc' | 'world'
@@ -27,7 +28,7 @@ export function TimelinePage() {
   useEffect(() => {
     let cancelled = false
     api
-      .worldChronicle(40, false)
+      .worldChronicle(40, true)
       .then((res) => {
         if (cancelled) return
         setChronicle(res)
@@ -42,7 +43,10 @@ export function TimelinePage() {
   }, [events.length])
 
   const filter = FILTERS.find((f) => f.id === filterId) ?? FILTERS[0]!
-  const visible = useMemo(() => events.filter((e) => filter.match(e.eventType)), [events, filter])
+  const visible = useMemo(
+    () => events.filter((e) => isPublicNarrativeEvent(e) && filter.match(e.eventType)),
+    [events, filter]
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,11 +133,7 @@ function TimelineRow({ event, t }: { event: EventSummary; t: Translator }) {
           {formatRelative(occurredAt, t)}
         </span>
       </header>
-      {event.narration ? (
-        <p className="text-sm text-ground-200 leading-relaxed">{event.narration}</p>
-      ) : (
-        <p className="text-sm text-ground-500 italic">{t('timeline.noNarration')}</p>
-      )}
+      <p className="text-sm text-ground-200 leading-relaxed">{event.narration}</p>
       <details className="text-[11px] font-display text-ground-500">
         <summary className="cursor-pointer hover:text-ground-300 transition-colors">
           {t('timeline.payload')}

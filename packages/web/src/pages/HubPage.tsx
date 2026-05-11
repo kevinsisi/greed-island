@@ -83,8 +83,8 @@ export function HubPage() {
       }))
   }, [areaStates])
 
-  // 主地圖是世界總覽：顯示各區戶外 NPC；建築內 NPC 由 BuildingPage 顯示。
-  // 正在跨區移動的 NPC 仍以 travelRoute 呈現在世界線上。
+  // 主地圖是世界總覽：只顯示跨區移動中的 NPC route。
+  // 已落在某個區域或建築內的 NPC 只在該子層地圖渲染，避免同一 NPC 分身。
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return hubMapNpcs(npcs, locale)
   }, [locale, npcs])

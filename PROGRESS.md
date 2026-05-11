@@ -3,6 +3,30 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.29 NPC Layer Uniqueness + Chronicle Cleanup
+
+### Completed Locally
+
+- Fixed a regression from the Hub visibility recovery: Hub no longer renders every
+  area-local outdoor NPC as an individual sprite.
+- Restored the one-NPC-one-map-layer rule: Area-local NPCs render in AreaPage,
+  building occupants render in BuildingPage, and Hub only renders NPCs that are
+  actually crossing districts via `travelRoute`.
+- Added projection regression coverage proving local outdoor NPCs stay off Hub.
+- Changed Timeline chronicle summary requests to allow AI rendering instead of
+  forcing deterministic fallback with `ai=0`.
+- Hid internal `WORLD_TICK` / `FACT_SET` rows and no-narration rows from public
+  Timeline and mobile/desktop event ticker surfaces, so the UI no longer shows
+  `WORLD_TICK` or `尚未生成敘事` as public story content.
+- Bumped app version from `0.15.28` to `0.15.29`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/web -- npcProjection eventVisibility` passed: 2
+  files / 5 tests.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- Full verification, review, commit, push, CI/CD, and live checks are pending.
+
 ## 2026-05-11 — v0.15.28 NPC Intent Text + Local Motion Cadence
 
 ### Completed Locally
