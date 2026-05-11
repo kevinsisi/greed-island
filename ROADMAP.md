@@ -4,6 +4,19 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.18 🚧 in progress — 2026-05-11
+
+**主題：mobile stale-client and weak-network refresh fix**
+
+- ✅ 修正 web bundled `APP_VERSION` 長期停在 `0.15.6`，避免手機 `/api/version` 短暫失敗時顯示舊版本。
+- ✅ Internal Caddy 對 `/` 與 `/index.html` 加 `Cache-Control: no-store`，hashed `/assets/*` 保持 immutable cache。
+- ✅ WorldState 初始載入新增 timeout + retry/backoff，並在手機回前景、pageshow、online 時主動 refresh，降低弱網直接掉到「示意資料」的機率。
+- ✅ 新增 `resilientLoad` unit tests，覆蓋 retry success、retry exhaustion 與 timeout。
+- ✅ 新增 mobile refresh trigger unit tests，覆蓋 online、pageshow、visibilitychange 與 cleanup。
+- ✅ 新增 refresh generation guard test，避免舊 refresh 慢回來覆蓋較新的 world state。
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm test`、Caddyfile validate、`git diff --check` 通過。
+- ⏳ Commit/push、CI、Deploy Dev、live verification pending。
+
 ## v0.15.17 ✅ shipped — 2026-05-11
 
 **主題：chronicle AI key-pool robustness metadata**

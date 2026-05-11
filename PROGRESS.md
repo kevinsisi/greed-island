@@ -3,6 +3,40 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.18 In Progress
+
+### Completed Locally
+
+- Fixed a mobile stale-client/offline-looking failure mode where the bundled web
+  `APP_VERSION` still reported `0.15.6` when `/api/version` was temporarily
+  unreachable.
+- Added internal Caddy cache headers so `/` and `/index.html` are `no-store`,
+  while hashed `/assets/*` remain long-lived immutable assets.
+- Hardened initial world-state loading for mobile/weak networks with per-request
+  timeout, retry/backoff, and refresh on `online`, `pageshow`, and return-to-
+  foreground visibility events.
+- Bumped app version to `0.15.18`.
+
+### Local Verification
+
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm run test -w @greed-island/web` passed: 4 files / 9 tests.
+- `npm test` passed: server 19 files / 132 tests; web 4 files / 9 tests.
+- `docker run --rm -v ... caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile`
+  passed for `packages/web/Caddyfile.internal`.
+- `git diff --check` passed.
+
+### CI/CD And Runtime Verification
+
+- Pending commit, push, CI, Deploy Dev, and live runtime/cache-header checks.
+
+### Still Open
+
+- If Safari still shows stale UI after this deploy, manually closing/reopening the
+  tab once may be required to evict the already-loaded old JS runtime; subsequent
+  loads should receive fresh HTML due to `no-store`.
+
 ## 2026-05-11 — v0.15.17 Shipped
 
 ### Completed Locally

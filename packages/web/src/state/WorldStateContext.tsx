@@ -28,6 +28,9 @@ import type {
 } from './types'
 import { useI18n, type Locale } from '../i18n'
 import { useAuth } from './AuthContext'
+import { installMobileRefreshTriggers } from './mobileRefreshTriggers'
+import { createRefreshGenerationGuard } from './refreshGeneration'
+import { resilientLoad } from './resilientLoad'
 
 interface WorldStateValue {
   world: WorldSnapshot
@@ -61,6 +64,8 @@ const VALID_BIOMES: readonly MapTile['biome'][] = [
 export function WorldStateProvider({ children }: { children: ReactNode }) {
   const { locale } = useI18n()
   const { token } = useAuth()
+  // Long-lived poll/SSE handlers read the latest token without recreating
+  // connections on login/logout.
   const tokenRef = useRef<string | null>(token)
   tokenRef.current = token
 
@@ -77,31 +82,35 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
+    const refreshGuard = createRefreshGenerationGuard()
 
-    const refreshNpcs = async () => {
-      const npcs = await api.npcs(tokenRef.current)
-      if (!cancelled) setServerNpcs(npcs)
+    const isCurrentRefresh = (generation: number) => !cancelled && refreshGuard.isCurrent(generation)
+
+    const refreshNpcs = async (generation?: number) => {
+      const npcs = await resilientLoad(() => api.npcs(tokenRef.current))
+      if (!cancelled && (generation === undefined || isCurrentRefresh(generation))) setServerNpcs(npcs)
     }
 
     const refreshAll = async () => {
+      const generation = refreshGuard.next()
       const requests = [
-        api.world().then((world) => {
-          if (!cancelled) setServerWorld(world)
+        resilientLoad(() => api.world()).then((world) => {
+          if (isCurrentRefresh(generation)) setServerWorld(world)
         }),
-        refreshNpcs(),
-        api.events(RECENT_EVENT_LIMIT).then((events) => {
-          if (!cancelled) setServerEvents(events)
+        refreshNpcs(generation),
+        resilientLoad(() => api.events(RECENT_EVENT_LIMIT)).then((events) => {
+          if (isCurrentRefresh(generation)) setServerEvents(events)
         }),
-        api.cards().then((cards) => {
-          if (!cancelled) setServerCards(cards)
+        resilientLoad(() => api.cards()).then((cards) => {
+          if (isCurrentRefresh(generation)) setServerCards(cards)
         }),
-        api.map().then((map) => {
-          if (!cancelled) setServerMap(map)
+        resilientLoad(() => api.map()).then((map) => {
+          if (isCurrentRefresh(generation)) setServerMap(map)
         })
       ]
 
       const results = await Promise.allSettled(requests)
-      if (cancelled) return
+      if (!isCurrentRefresh(generation)) return
       const failed = results.find((result) => result.status === 'rejected')
       setLoadError(
         failed && failed.status === 'rejected'
@@ -114,6 +123,12 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
 
     refreshAll()
     const pollTimer = window.setInterval(refreshAll, POLL_FALLBACK_MS)
+    const cleanupMobileRefreshTriggers = installMobileRefreshTriggers({
+      windowTarget: window,
+      documentTarget: document,
+      getVisibilityState: () => document.visibilityState,
+      refresh: () => void refreshAll()
+    })
 
     let source: EventSource | null = null
     let reconnectTimer: number | null = null
@@ -143,8 +158,9 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       source.addEventListener('snapshot', (ev) => {
         try {
           const snap = JSON.parse((ev as MessageEvent).data) as ServerWorldSnapshot
+          const generation = refreshGuard.next()
           setServerWorld(snap)
-          void refreshNpcs().catch(() => {
+          void refreshNpcs(generation).catch(() => {
             // surfaced via the periodic poller
           })
         } catch {
@@ -168,6 +184,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       cancelled = true
       stopped = true
       window.clearInterval(pollTimer)
+      cleanupMobileRefreshTriggers()
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
       if (source) source.close()
     }
