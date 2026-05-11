@@ -4,6 +4,14 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.22 🚧 in progress — 2026-05-11
+
+**主題：always accept successful authoritative world snapshots**
+
+- ✅ v0.15.21 後確認 iPhone `/api/world` 已經 `200`、uncompressed、no-store，但 UI 仍停在 fixture。
+- ✅ 修正 `WorldStateContext`：任何成功 `/api/world` 都必須覆蓋 fixture，不再被 overlapping mobile refresh generation guard 丟棄。
+- ⏳ 本機驗證、Gemini review、commit/push、CI、Deploy Dev、live iPhone verification pending。
+
 ## v0.15.21 🚧 in progress — 2026-05-11
 
 **主題：disable API compression for mobile Safari world fetch**

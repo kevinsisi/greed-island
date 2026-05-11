@@ -3,6 +3,26 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.22 In Progress
+
+### Completed Locally
+
+- Confirmed after v0.15.21 that iPhone `/api/world` completed successfully with
+  `200`, `Content-Length`, no `Content-Encoding`, and `Cache-Control: no-store`,
+  but the UI still showed fixture data.
+- Identified the remaining likely frontend state bug: overlapping mobile refresh
+  generations can discard an earlier successful `/api/world` response, leaving
+  fixture as the displayed world.
+- Changed `WorldStateContext` so any successful authoritative `/api/world`
+  response always replaces fixture state. Generation guarding remains useful for
+  secondary data, but cannot block the first real world snapshot.
+- Bumped app version to `0.15.22`.
+
+### Local Verification
+
+- Pending build, tests, Gemini review, commit, push, CI/CD, and live iPhone
+  verification.
+
 ## 2026-05-11 — v0.15.21 In Progress
 
 ### Completed Locally

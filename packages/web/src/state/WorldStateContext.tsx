@@ -95,6 +95,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     const isCurrentRefresh = (generation: number) => !cancelled && refreshGuard.isCurrent(generation)
 
     const acceptServerWorld = (world: ServerWorldSnapshot) => {
+      if (cancelled) return
       hasServerWorldRef.current = true
       fixtureRecovery.cancel()
       setServerWorld(world)
@@ -109,7 +110,10 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       const generation = refreshGuard.next()
       const requests = [
         resilientLoad(() => api.world()).then((world) => {
-          if (isCurrentRefresh(generation)) acceptServerWorld(world)
+          // A real server world is always more authoritative than fixture data.
+          // Mobile lifecycle events can start overlapping refreshes; do not let
+          // a later generation discard the only successful world response.
+          acceptServerWorld(world)
         }),
         refreshNpcs(generation),
         resilientLoad(() => api.events(RECENT_EVENT_LIMIT)).then((events) => {
