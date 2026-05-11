@@ -4,6 +4,34 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.30 ✅ shipped — 2026-05-11
+
+**主題：bounded catch-up availability fix**
+
+- ✅ Root cause: returning-player living-world catch-up paths could synchronously
+  scan/sort the large production EventLog, blocking the Node event loop and making
+  unrelated `/api/*` requests look offline to mobile clients.
+- ✅ `/api/world/catch-up` and authenticated `/api/world/since-last-visit` now use
+  a bounded tick-window read instead of full EventLog hydration.
+- ✅ EventLog latest boot metadata now avoids `MAX(tick)` scans, and catch-up reads
+  use a composite `(event_type, tick, sequence)` index with a bounded fallback for
+  large event-type sets.
+- ✅ Regression coverage added for bounded tick-window reads and chronological
+  ordering across interleaved event types.
+- ✅ Local verification: `npm run build:server`, `npm run build:web`, `npm test`,
+  `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
+  passed; web build still has the existing Vite chunk-size warning.
+- ✅ Gemini staged review returned `No findings` after the bounded fallback and
+  interleaved ordering coverage were added.
+- ✅ Commits `a18c9cf` and `7c4a542` pushed to `main`; CI run `25674841411` and
+  Deploy Dev run `25674841366` passed.
+- ✅ Live verification: `v0.15.30`, normal API endpoints returned in `9–123ms`,
+  worst-case `/api/world/catch-up?sinceTick=0` returned in `2403ms`, and a
+  concurrent `/healthz` during catch-up still completed in `2365ms`, under the
+  5-second client timeout.
+- 🚧 Optional follow-up: lower `CATCH_UP_EVENT_LIMIT` or add a background summary
+  projection if returning-player summaries need sub-second behavior.
+
 ## v0.15.29 ✅ shipped — 2026-05-11
 
 **主題：NPC layer uniqueness + chronicle cleanup**

@@ -3,6 +3,67 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.30 Bounded Catch-Up Availability Fix
+
+### Completed Locally
+
+- Investigated the post-`v0.15.29` mobile fallback report and confirmed the
+  frontend was serving static HTML quickly while `/healthz` and `/api/*` could
+  hang past a 5-second client timeout.
+- Identified the root cause: returning-player living-world catch-up endpoints
+  synchronously hydrated or sorted across the production EventLog, so one large
+  catch-up request could block the Node event loop and make unrelated API calls
+  appear offline.
+- Changed `/api/world/catch-up` and `/api/world/since-last-visit` to use a
+  bounded EventLog tick-window read instead of `readEvents()`.
+- Added an index-aware `(event_type, tick, sequence)` EventLog path and kept a
+  single-query fallback for unusually large event-type sets, avoiding the
+  production `idx_event_log_type` + temp-sort plan that measured about `27.8s`.
+- Updated latest boot snapshot lookup to avoid `MAX(tick)` scans on large logs.
+- Added regression coverage for latest tick lookup, bounded tick-window reads,
+  and chronological ordering across interleaved event types.
+- Bumped app version from `0.15.29` to `0.15.30`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm test` passed after the final query fix: server 20 files / 151 tests, web 7
+  files / 18 tests.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Gemini staged review initially flagged the per-type query memory/order edge;
+  after adding a bounded fallback and interleaved ordering coverage, final review
+  returned `No findings`.
+
+### CI/CD + Live Verification
+
+- Code commits `a18c9cf` and `7c4a542` pushed to `main`.
+- Latest GitHub Actions CI run `25674841411` passed.
+- Latest GitHub Actions Deploy Dev run `25674841366` passed.
+- First `v0.15.30` deploy created the new composite EventLog index before HTTP
+  listen; that one-time migration caused short `502` restart-window responses but
+  did not expose a slow listening API.
+- Live `v0.15.30` verification after boot:
+  - `/healthz`: `200`, `version=0.15.30`, `123ms`.
+  - `/api/version`: `200`, `23ms`, `Cache-Control: no-store`.
+  - `/api/world`: `200`, `12ms`, `Cache-Control: no-store`, `eventCount=1457931`.
+  - `/api/npcs`: `200`, `24ms`, `Cache-Control: no-store`.
+  - `/api/cards`: `200`, `27ms`, `Cache-Control: no-store`.
+  - `/api/map`: `200`, `9ms`, `Cache-Control: no-store`.
+  - `/api/events?limit=5`: `200`, `13ms`, `Cache-Control: no-store`.
+  - `/api/world/catch-up?sinceTick=0`: `200`, `2403ms`, `Cache-Control: no-store`,
+    `totalEvents=5000` partial bounded summary.
+  - Parallel stress probe while catch-up was running: catch-up `2393ms`, delayed
+    `/healthz` `2365ms`, both under the 5-second client timeout.
+
+### Still Open
+
+- If returning-player summary latency needs to be even lower, reduce
+  `CATCH_UP_EVENT_LIMIT` from `5000` or move catch-up reduction to a background
+  projection; current live behavior is under the mobile timeout and no longer
+  forces fixture fallback.
+
 ## 2026-05-11 — v0.15.29 NPC Layer Uniqueness + Chronicle Cleanup
 
 ### Completed Locally
