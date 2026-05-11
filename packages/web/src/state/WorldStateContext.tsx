@@ -28,6 +28,7 @@ import type {
 } from './types'
 import { useI18n, type Locale } from '../i18n'
 import { useAuth } from './AuthContext'
+import { createFixtureRecoveryScheduler } from './fixtureRecoveryRetry'
 import { installMobileRefreshTriggers } from './mobileRefreshTriggers'
 import { createRefreshGenerationGuard } from './refreshGeneration'
 import { resilientLoad } from './resilientLoad'
@@ -76,6 +77,8 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   const [serverMap, setServerMap] = useState<ServerMap | null>(null)
   const [liveConnected, setLiveConnected] = useState<boolean>(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const hasServerWorldRef = useRef(false)
+  hasServerWorldRef.current = serverWorld !== null
 
   const eventsRef = useRef<ServerNarrativeEvent[]>([])
   eventsRef.current = serverEvents ?? []
@@ -83,8 +86,19 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     const refreshGuard = createRefreshGenerationGuard()
+    const fixtureRecovery = createFixtureRecoveryScheduler({
+      hasServerWorld: () => hasServerWorldRef.current,
+      refresh: () => void refreshAll(),
+      windowTarget: window
+    })
 
     const isCurrentRefresh = (generation: number) => !cancelled && refreshGuard.isCurrent(generation)
+
+    const acceptServerWorld = (world: ServerWorldSnapshot) => {
+      hasServerWorldRef.current = true
+      fixtureRecovery.cancel()
+      setServerWorld(world)
+    }
 
     const refreshNpcs = async (generation?: number) => {
       const npcs = await resilientLoad(() => api.npcs(tokenRef.current))
@@ -95,7 +109,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       const generation = refreshGuard.next()
       const requests = [
         resilientLoad(() => api.world()).then((world) => {
-          if (isCurrentRefresh(generation)) setServerWorld(world)
+          if (isCurrentRefresh(generation)) acceptServerWorld(world)
         }),
         refreshNpcs(generation),
         resilientLoad(() => api.events(RECENT_EVENT_LIMIT)).then((events) => {
@@ -119,6 +133,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
             : 'Failed to load part of world state.'
           : null
       )
+      if (failed) fixtureRecovery.schedule()
     }
 
     refreshAll()
@@ -159,7 +174,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
         try {
           const snap = JSON.parse((ev as MessageEvent).data) as ServerWorldSnapshot
           const generation = refreshGuard.next()
-          setServerWorld(snap)
+          acceptServerWorld(snap)
           void refreshNpcs(generation).catch(() => {
             // surfaced via the periodic poller
           })
@@ -184,6 +199,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       cancelled = true
       stopped = true
       window.clearInterval(pollTimer)
+      fixtureRecovery.cancel()
       cleanupMobileRefreshTriggers()
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
       if (source) source.close()

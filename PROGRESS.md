@@ -3,7 +3,36 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-11 — v0.15.19 In Progress
+## 2026-05-11 — v0.15.20 In Progress
+
+### Completed Locally
+
+- Investigated why an iPhone could show the v0.15.19 bundle while still seeing
+  fixture/demo world data.
+- Confirmed latest proxy evidence showed `/api/world` and `/api/cards` returning
+  transient `502` during a server restart window, not stale HTML/JS caching.
+- Added a fixture-only recovery retry scheduler so the web app retries quickly
+  while no authoritative server world has landed yet; successful `/api/world` or
+  SSE snapshots cancel the retry.
+- Added focused tests for the recovery scheduler: retry while fixture-only, no
+  retry once server data arrives, and cancellation/deduplication.
+- Bumped app version to `0.15.20`.
+
+### Local Verification
+
+- `npm --workspace @greed-island/web test -- fixtureRecoveryRetry resilientLoad mobileRefreshTriggers refreshGeneration` passed: 4 files / 10 tests.
+- `npm --workspace @greed-island/web run build` passed, with existing Vite chunk-size warning.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 132 tests; web 5 files / 12 tests.
+- `git diff --check` passed.
+
+### CI/CD And Runtime Verification
+
+- Pending Gemini review, commit, push, CI, Deploy Dev, and live iPhone-style
+  recovery checks.
+
+## 2026-05-11 — v0.15.19 Shipped
 
 ### Completed Locally
 
@@ -28,7 +57,14 @@ developer. Keep latest status at the top.
 
 ### CI/CD And Runtime Verification
 
-- Pending commit, push, CI, Deploy Dev, and live iPhone-style API cache checks.
+- Commit `194385f` pushed to `main`.
+- GitHub Actions CI run `25644893980` passed.
+- GitHub Actions Deploy Dev run `25644893975` passed.
+- Runtime health verified: `/healthz` returned `version: 0.15.19`.
+- Runtime tick progression verified: tick advanced from `74372` to `74374`.
+- Runtime API verified: `/api/world` returned live server data with tick `74372`,
+  `eventCount=1266257`, and `npcCount=50`.
+- Runtime cache headers verified: `/api/world` returned `Cache-Control: no-store`.
 
 ## 2026-05-11 — v0.15.18 Shipped
 
