@@ -66,8 +66,8 @@ const SUB_INNER_MIN_COL = 1
 const SUB_INNER_MAX_COL = AREA_SUB_COLS - 2 // 13
 const SUB_INNER_MIN_ROW = 1
 const SUB_INNER_MAX_ROW = AREA_SUB_ROWS - 2 // 8
-// 子格錨點刷新節奏：每 12 個 tick (≈1 分鐘) 換一個目標子格
-const SUB_TARGET_REFRESH_TICKS = 12
+// 子格錨點刷新節奏：每 6 個 tick (≈30 秒) 換一個目標子格。
+export const NPC_LOCAL_WAYPOINT_REFRESH_TICKS = 6
 
 export type NpcRuntimeState = {
   tile: string
@@ -1002,7 +1002,7 @@ function subAnchor(
   activity: NpcActivity,
   tick: number
 ): { col: number; row: number } {
-  const refreshIdx = Math.floor(tick / SUB_TARGET_REFRESH_TICKS)
+  const refreshIdx = Math.floor(tick / NPC_LOCAL_WAYPOINT_REFRESH_TICKS)
   const h = hashStr(`${npcId}|${tile}|${activity}|${refreshIdx}`)
   const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1
   const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1

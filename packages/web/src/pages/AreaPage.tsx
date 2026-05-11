@@ -189,9 +189,10 @@ export function AreaPage() {
         // v0.14.0：mood/health 給 AreaScene 視覺化用
         if (typeof npc.mood === 'number') base.mood = npc.mood
         if (typeof npc.health === 'number') base.health = npc.health
+        if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
         return base
       }),
-    [outdoorOccupants, t]
+    [locale, outdoorOccupants, t]
   )
 
   const mapPlayers = useMemo<AreaMapPlayer[]>(
@@ -481,6 +482,11 @@ export function AreaPage() {
                               <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                                 {npc.name}
                               </div>
+                              {npc.intentLine && (
+                                <div className="text-[11px] text-ember-300 truncate">
+                                  {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
+                                </div>
+                              )}
                               <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
                                 {t('npc.relationship')}{' '}
                                 <span className="text-ground-200">{npc.relationshipScore}</span>

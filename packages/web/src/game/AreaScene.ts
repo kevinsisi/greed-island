@@ -65,6 +65,8 @@ export interface AreaMapNpc {
   mood?: number
   /** v0.14.0：health < 30 時 sprite 旁加 🤕 圖示 */
   health?: number
+  /** Short deterministic task text from the server projection. */
+  intentLine?: string
 }
 
 export interface AreaMapPlayer {

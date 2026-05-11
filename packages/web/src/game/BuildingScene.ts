@@ -52,6 +52,8 @@ export interface BuildingSceneNpc {
   color?: number
   /** 後端 activity → sprite 上方 emoji icon */
   activity?: NpcActivity
+  /** Short deterministic task text from the server projection. */
+  intentLine?: string
 }
 
 export interface BuildingSceneInit {

@@ -19,7 +19,7 @@ export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): Np
   )
 }
 
-export function hubMapNpcs(npcs: readonly NpcSummary[]): MapNpc[] {
+export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'zh'): MapNpc[] {
   return npcs
     .filter((npc) => isKnownDistrictId(npc.location))
     .filter((npc) => !npc.buildingId)
@@ -38,6 +38,7 @@ export function hubMapNpcs(npcs: readonly NpcSummary[]): MapNpc[] {
       if (typeof npc.subRow === 'number') base.subRow = npc.subRow
       if (typeof npc.mood === 'number') base.mood = npc.mood
       if (typeof npc.health === 'number') base.health = npc.health
+      if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
       return base
     })
 }

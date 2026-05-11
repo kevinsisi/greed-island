@@ -18,7 +18,7 @@ function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
 describe('NPC scene projections', () => {
   it('excludes travelling NPCs from area outdoor occupants', () => {
     const people = [
-      npc({ id: 'local', activity: 'idle', buildingId: null }),
+      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
       npc({
         id: 'traveller',
         activity: 'move',
@@ -38,7 +38,7 @@ describe('NPC scene projections', () => {
 
   it('maps surface NPCs to hub overview sprites and keeps travel routes', () => {
     const people = [
-      npc({ id: 'local', activity: 'idle', buildingId: null }),
+      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
       npc({
         id: 'traveller',
         activity: 'move',
@@ -56,6 +56,8 @@ describe('NPC scene projections', () => {
     const hub = hubMapNpcs(people)
 
     expect(hub.map((p) => p.id)).toEqual(['local', 'traveller'])
+    expect(hub[0]?.intentLine).toBe('在中央待命')
+    expect(hubMapNpcs(people, 'en')[0]?.intentLine).toBe('Standing by')
     expect(hub[1]?.travelRoute).toEqual({
       fromDistrictId: 't_central',
       toDistrictId: 't_dock',

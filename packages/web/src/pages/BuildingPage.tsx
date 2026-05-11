@@ -35,7 +35,7 @@ const TYPE_LABEL_ZH: Record<string, string> = {
 
 export function BuildingPage() {
   const { buildingId = '' } = useParams<{ buildingId: string }>()
-  const { t: _t } = useI18n()
+  const { t: _t, locale } = useI18n()
   const { token } = useAuth()
   const navigate = useNavigate()
   const { npcs } = useWorldState()
@@ -118,10 +118,11 @@ export function BuildingPage() {
         base.activity = npc.activity
         base.activityLabel = npc.activity
       }
+      if (npc?.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
       if (typeof npc?.color === 'number') base.color = npc.color
       return base
     })
-  }, [presentNpcs])
+  }, [locale, presentNpcs])
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
@@ -300,6 +301,11 @@ export function BuildingPage() {
                       <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                         {name}
                       </div>
+                      {npc?.intentLine && (
+                        <div className="text-[11px] text-ember-300 truncate">
+                          {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
+                        </div>
+                      )}
                     </div>
                   </button>
                 </li>

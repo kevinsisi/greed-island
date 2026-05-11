@@ -28,6 +28,10 @@
   (`work`, `trade`, `patrol`, `eat`) so NPCs do not collapse into idle props.
 - [x] 2.6 Shape injected off-duty errands by NPC role/archetype instead of making
   every errand an idle slot.
+- [x] 2.7 Expose a deterministic localized `intentLine` for each NPC's current
+  runtime-agent task so the UI can show what the NPC is doing.
+- [x] 2.8 Increase local area waypoint refresh cadence to keep outdoor NPC motion
+  visibly active without changing the authoritative presence tuple.
 
 ## 3. Memory-Backed AI Chronicle
 

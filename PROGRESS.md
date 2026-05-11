@@ -3,6 +3,39 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.28 NPC Intent Text + Local Motion Cadence
+
+### Completed Locally
+
+- Continued the NPC daily-life slice after `v0.15.27` by exposing each NPC's
+  deterministic runtime-agent task as a public `intentLine` projection.
+- Added server-side localized intent summaries for travel, social interaction,
+  player dialog holds, personality nudges, and daily-life activities.
+- Threaded `intentLine` through `/api/npcs`, web API/state types, Hub projection,
+  Area NPC lists, Building NPC lists, and `NpcDialog` headers.
+- Made Hub projection locale-aware so English clients use the English intent text.
+- Increased local area waypoint refresh cadence from 12 ticks to 6 ticks, making
+  outdoor NPC sub-tile motion refresh about every 30 seconds instead of about
+  every minute without changing the authoritative presence tuple.
+- Bumped app version from `0.15.27` to `0.15.28`.
+
+### Local Verification
+
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm run test -w @greed-island/server -- npcIntent npcEngine` passed: 2 files /
+  28 tests.
+- `npm run test -w @greed-island/web -- npcProjection` passed: 1 file / 2 tests.
+- Final `npm test` passed: server 20 files / 148 tests, web 6 files / 15 tests.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed.
+- Gemini staged review found and the code addressed Hub locale selection and
+  English district-name issues; final review returned `No findings`.
+
+### Still Open
+
+- Commit, push, CI/CD, and live verification for `v0.15.28` are pending.
+
 ## 2026-05-11 — v0.15.27 NPC Daily-Life Activity Pass
 
 ### Completed Locally

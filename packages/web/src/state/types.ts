@@ -69,6 +69,8 @@ export interface NpcSummary {
   color?: number
   /** Personality-shaped placeholder shown before player types in NpcDialog (v0.14.1+) */
   greetLine?: { zh: string; en: string }
+  /** Server-authoritative short summary of current deterministic NPC task (v0.15.28+) */
+  intentLine?: { zh: string; en: string }
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'

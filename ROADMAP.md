@@ -4,6 +4,25 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.28 🚧 in progress — 2026-05-11
+
+**主題：NPC intent text + local motion cadence**
+
+- ✅ Expose deterministic `intentLine` text for current runtime-agent tasks so the
+  UI can show what each NPC is doing without AI mutating world state.
+- ✅ Thread `intentLine` through `/api/npcs`, frontend state, Area/Building NPC
+  lists, and `NpcDialog` headers.
+- ✅ Keep Hub intent projection locale-aware so English clients receive English
+  task text.
+- ✅ Add explicit English district names for server-side intent lines.
+- ✅ Increase server-driven local waypoint refresh cadence from 12 ticks to 6
+  ticks to make outdoor NPC motion visibly update about every 30 seconds.
+- ✅ Local verification: `npm run build:server`, `npm run build:web`, `npm test`,
+  `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
+  passed; web build still has the existing Vite chunk-size warning.
+- ✅ Gemini staged review returned `No findings` after locale fixes.
+- 🚧 Commit, CI/CD, and live verification are pending.
+
 ## v0.15.27 ✅ shipped — 2026-05-11
 
 **主題：NPC daily-life activity pass**

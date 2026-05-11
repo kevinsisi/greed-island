@@ -376,6 +376,9 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(typeof npc.color === 'number' ? { color: npc.color } : {}),
     ...(npc.greetLine && typeof npc.greetLine.zh === 'string' && typeof npc.greetLine.en === 'string'
       ? { greetLine: { zh: npc.greetLine.zh, en: npc.greetLine.en } }
+      : {}),
+    ...(npc.intentLine && typeof npc.intentLine.zh === 'string' && typeof npc.intentLine.en === 'string'
+      ? { intentLine: { zh: npc.intentLine.zh, en: npc.intentLine.en } }
       : {})
   }
   return summary

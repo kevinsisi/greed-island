@@ -292,6 +292,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
             <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
               {npc.role}
             </div>
+            {npc.intentLine && (
+              <div className="mt-1 text-[12px] leading-snug text-ember-300">
+                {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
+              </div>
+            )}
             <h2 className="font-display font-extrabold text-2xl tracking-tightest text-ground-100">
               {npc.name}
             </h2>

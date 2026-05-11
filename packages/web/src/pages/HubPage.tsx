@@ -86,8 +86,8 @@ export function HubPage() {
   // 主地圖是世界總覽：顯示各區戶外 NPC；建築內 NPC 由 BuildingPage 顯示。
   // 正在跨區移動的 NPC 仍以 travelRoute 呈現在世界線上。
   const mapNpcs = useMemo<MapNpc[]>(() => {
-    return hubMapNpcs(npcs)
-  }, [npcs])
+    return hubMapNpcs(npcs, locale)
+  }, [locale, npcs])
 
   const mapPlayers = useMemo<MapPlayer[]>(() => {
     return nearbyPlayers.map((player) => ({

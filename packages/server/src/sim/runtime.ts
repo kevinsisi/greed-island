@@ -57,6 +57,7 @@ import {
   type NpcActivity,
   type NpcRuntimeState
 } from './npcEngine.js'
+import { deriveNpcIntentLine, type NpcIntentLine } from './npcIntent.js'
 import {
   AreaStateEngine,
   type AreaState,
@@ -129,6 +130,8 @@ export type SimNpcState = Readonly<{
   /** 玩家剛打開對話框、還沒輸入時顯示的 placeholder line。
    *  根據 personality 派生（純函式），同一 NPC 永遠回同一句。 */
   greetLine: { zh: string; en: string }
+  /** Deterministic public summary of the NPC's current task/intent. */
+  intentLine: NpcIntentLine
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -425,6 +428,7 @@ export class SimulationRuntime {
         travelRoute: s.travelRoute ?? null,
         color: deriveNpcColor(profile.id, s.faction),
         greetLine: derivePersonalityGreetLine(profile),
+        intentLine: deriveNpcIntentLine(s),
       }
     })
   }

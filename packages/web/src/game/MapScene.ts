@@ -43,6 +43,8 @@ export interface MapNpc {
     toDistrictId: DistrictId
     targetDistrictId: DistrictId
   }
+  /** Short deterministic task text from the server projection. */
+  intentLine?: string
 }
 
 /**

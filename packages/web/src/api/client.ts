@@ -81,6 +81,8 @@ export type ServerNpc = {
   color?: number
   // v0.14.1+：personality-shaped greet placeholder 顯示在玩家還沒輸入時
   greetLine?: { zh: string; en: string }
+  // v0.15.28+：server-authoritative short summary of the current NPC task
+  intentLine?: { zh: string; en: string }
 }
 
 export type ServerCardCategory =

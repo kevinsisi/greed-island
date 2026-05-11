@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { NpcEngine, NPC_PLAYER_DIALOG_HOLD_TICKS, type NpcRuntimeState } from './npcEngine.js'
+import {
+  NpcEngine,
+  NPC_LOCAL_WAYPOINT_REFRESH_TICKS,
+  NPC_PLAYER_DIALOG_HOLD_TICKS,
+  type NpcRuntimeState
+} from './npcEngine.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY } from '../config/world.js'
 
@@ -529,6 +534,10 @@ describe('NpcEngine', () => {
 
     expect(engine.getState('stable.agent')!.agent.activeTask.kind).toBe('local-activity')
     expect(engine.getState('stable.agent')!.agent.activeTask.startedAtTick).toBe(startedAt)
+  })
+
+  it('refreshes local area waypoints on a visible half-minute cadence', () => {
+    expect(NPC_LOCAL_WAYPOINT_REFRESH_TICKS).toBe(6)
   })
 
   it('marks NPC interaction participants with bounded social agent tasks', () => {
