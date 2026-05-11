@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.27 🚧 in progress — 2026-05-11
+## v0.15.27 ✅ shipped — 2026-05-11
 
 **主題：NPC daily-life activity pass**
 
@@ -20,7 +20,15 @@
 - ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
   `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
   passed; web build still has the existing Vite chunk-size warning.
-- 🚧 Review, CI/CD, and live activity-distribution evidence are pending.
+- ✅ Gemini staged review returned `No findings` after archetype coverage and
+  named label patterns were added.
+- ✅ Commit `d0c8fe7` pushed to `main`; CI run `25667528150` and Deploy Dev run
+  `25667528128` passed.
+- ✅ Live verification after runtime ticks settled: `v0.15.27`, `/api/npcs` returns
+  50 rows, all 50 have agent state, bootstrap tasks are gone, and activity
+  distribution improved to `work=30`, `trade=10`, `patrol=5`, `idle=5`.
+- 🚧 Next slice: increase visible movement frequency and expose short task/intent
+  text in the UI.
 
 ## v0.15.26 ✅ shipped — 2026-05-11
 

@@ -33,11 +33,31 @@ developer. Keep latest status at the top.
   follow-up: 1 file / 24 tests.
 - `npx openspec validate npc-humanity-ai-memory --strict` passed.
 - `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
-- Pending: Gemini review.
+- Gemini staged review found test coverage/maintainability issues on first pass;
+  after adding archetype coverage and named label patterns, final review returned
+  `No findings`.
+- Commit `d0c8fe7` pushed to `main`.
+- GitHub Actions CI run `25667528150` passed.
+- GitHub Actions Deploy Dev run `25667528128` passed.
+
+### Live Verification
+
+- Initial deploy probe at 23 seconds caught bootstrap/default state (`idle=50`),
+  which is expected during availability-first startup before runtime ticks settle.
+- After runtime ticks advanced, live `v0.15.27` returned:
+  - `/healthz`: `version=0.15.27`, `tick=81612`.
+  - `/api/world`: `tick=81612`, `npcCount=50`.
+  - `/api/npcs`: `50` rows, all `50` with `internalState.agent`.
+  - Agent bootstrap tasks: `0`.
+  - Activity distribution: `work=30`, `trade=10`, `patrol=5`, `idle=5`.
+- Server logs show availability-first boot from defaults due the large event log,
+  then runtime start at `tick=81602`; the new activity projection appears after
+  ticks settle.
 
 ### Still Open
 
-- Pending commit, push, CI/CD, and live activity-distribution evidence.
+- Next daily-life slice should improve visible movement frequency and expose
+  short task/intent text in the UI; this slice focused on activity diversity.
 
 ## 2026-05-11 — v0.15.26 Hub NPC Overview Recovery
 
