@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.24 Docker Local Recovery
+
+### Completed Locally
+
+- Bumped app version from `0.15.23` to `0.15.24` after the Hub HUD/dialog-hold
+  fixes, so the running UI/API no longer reports the same version as the prior
+  batch.
+- Recovered the intended Docker local path instead of the temporary Node/Vite
+  shell path. `docker compose -f deploy/docker-compose.yml up -d --build` now
+  builds and starts `greed-island-server` and `greed-island-web`.
+- Worked around workstation Docker TLS/build issues:
+  - BuildKit path still fails on Docker Hub frontend pull with `x509: certificate
+    signed by unknown authority` for `docker/dockerfile:1.7`.
+  - Legacy builder path works with `DOCKER_BUILDKIT=0` /
+    `COMPOSE_DOCKER_CLI_BUILD=0`.
+  - Node 22's bundled npm failed in legacy Docker builder with `Exit handler
+    never called`; both Dockerfiles now pin npm to `10.9.2` inside the builder.
+  - npm registry TLS in the builder hit `SELF_SIGNED_CERT_IN_CHAIN`; Dockerfiles
+    set npm `strict-ssl=false` before installing npm so this workstation can
+    build behind the current TLS interception.
+
+### Local Verification
+
+- Docker compose status: `greed-island-server` up and `greed-island-web` up /
+  healthy.
+- Docker web endpoint: `http://127.0.0.1:8100/api/version` returned
+  `{"version":"0.15.24"}`.
+
+### Still Open
+
+- The Docker TLS trust problem should be fixed at Docker/host trust-store level
+  later; the current Dockerfile npm `strict-ssl=false` is a local build recovery
+  workaround, not a security-hardening endpoint.
+- Browser/Phaser E2E coverage is still missing for two-player Hub presence and
+  active-dialog visual hold.
+
 ## 2026-05-11 — v0.15.23 In Progress
 
 ### Completed Locally

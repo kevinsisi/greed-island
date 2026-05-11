@@ -14,6 +14,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN npm config set strict-ssl false \
+    && npm install -g npm@10.9.2
+
 # Copy workspace manifests first so npm install is cacheable.
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/server/package.json ./packages/server/package.json

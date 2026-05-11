@@ -4,6 +4,21 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.24 🚧 in progress — 2026-05-11
+
+**主題：Docker local recovery + visible version bump**
+
+- ✅ Version bumped to `0.15.24` after the Hub HUD/dialog-hold batch so local UI
+  and API can distinguish the latest build from `0.15.23`.
+- ✅ Docker local stack now builds with the legacy Docker builder path because
+  BuildKit still fails on this workstation when pulling `docker/dockerfile:1.7`
+  from Docker Hub due to TLS trust (`x509: certificate signed by unknown
+  authority`).
+- ✅ Dockerfiles pin builder npm to `10.9.2` and disable npm strict SSL inside the
+  build stage to work around the local TLS interception / Node 22 npm failure.
+- ✅ Docker compose is up: `greed-island-server` running, `greed-island-web`
+  healthy, `http://127.0.0.1:8100/api/version` returns `0.15.24`.
+
 ## v0.15.23 🚧 in progress — 2026-05-11
 
 **主題：presence/read-only/chronicle local visibility fixes**
