@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-11 — v0.15.18 In Progress
+## 2026-05-11 — v0.15.18 Shipped
 
 ### Completed Locally
 
@@ -29,13 +29,27 @@ developer. Keep latest status at the top.
 
 ### CI/CD And Runtime Verification
 
-- Pending commit, push, CI, Deploy Dev, and live runtime/cache-header checks.
+- Commit `017f563 fix(web): harden mobile world refresh` pushed to `main`.
+- GitHub Actions CI run `25643825872` passed.
+- GitHub Actions Deploy Dev run `25643825850` passed.
+- Runtime health verified:
+  `https://hunter.sisihome.org/healthz` returns `version: 0.15.18`.
+- Runtime tick progression verified: health tick advanced from `73900` to
+  `73902` over 10 seconds.
+- Runtime API verified: `/api/version` returns `0.15.18`; `/api/world` returns
+  tick `73900`, `eventCount=1256975`, and `npcCount=50`.
+- Runtime cache headers verified: `/` returns `Cache-Control: no-store`, and the
+  current hashed JS asset returns `Cache-Control: public, max-age=31536000,
+  immutable`.
+- Runtime logs verified: server booted from latest tick `73898`, opened HTTP,
+  attached ambient narrator with 41 active keys, and did not show crash or tick
+  collision errors.
 
 ### Still Open
 
-- If Safari still shows stale UI after this deploy, manually closing/reopening the
-  tab once may be required to evict the already-loaded old JS runtime; subsequent
-  loads should receive fresh HTML due to `no-store`.
+- If Safari still shows stale UI immediately after this deploy, manually
+  closing/reopening the tab once may be required to evict the already-loaded old
+  JS runtime; subsequent loads should receive fresh HTML due to `no-store`.
 
 ## 2026-05-11 — v0.15.17 Shipped
 
