@@ -264,6 +264,116 @@ describe('NpcEngine', () => {
     expect(engine.getState('guard')!.targetTile).toBe('t_dock')
   })
 
+  it('interprets daily-life routine labels as visible non-idle activities', () => {
+    const profiles = [
+      makeProfile({
+        id: 'office.worker',
+        role: { zh: '通勤上班族', en: 'Office Worker' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'office tower' }]
+      }),
+      makeProfile({
+        id: 'market.vendor',
+        role: { zh: '攤販', en: 'Vendor' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'night-market stall' }]
+      }),
+      makeProfile({
+        id: 'city.runner',
+        role: { zh: '報童', en: 'Paperboy' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'running edition to the docks' }]
+      }),
+      makeProfile({
+        id: 'noodle.stop',
+        role: { zh: '通勤上班族', en: 'Office Worker' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'late-night noodle stop' }]
+      })
+    ]
+    const engine = new NpcEngine(profiles)
+
+    engine.tick(1)
+
+    expect(engine.getState('office.worker')!.activity).toBe('work')
+    expect(engine.getState('market.vendor')!.activity).toBe('trade')
+    expect(engine.getState('city.runner')!.activity).toBe('patrol')
+    expect(engine.getState('noodle.stop')!.activity).toBe('eat')
+  })
+
+  it('turns injected off-duty errands into role-shaped activity instead of idle', () => {
+    const shopkeeper = makeProfile({
+      id: 'errand.shop',
+      defaultLocation: 't_central',
+      routine: [
+        {
+          fromTickOfDay: 0,
+          toTickOfDay: TICKS_PER_DAY,
+          location: 't_central',
+          label: 'shop counter'
+        }
+      ],
+      personality: { archetype: 'shopkeeper', greed: 0.5, factionLean: 'civilian' }
+    })
+    const engine = new NpcEngine([shopkeeper])
+
+    for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
+      engine.tick(t)
+      const state = engine.getState('errand.shop')!
+      if (state.tile !== 't_central' && state.activity !== 'move') {
+        expect(state.activity).toBe('trade')
+        return
+      }
+    }
+
+    throw new Error('expected injected shopkeeper errand to arrive at another tile')
+  })
+
+  it('shapes injected errands for common archetypes without falling back to idle', () => {
+    const cases: Array<{
+      archetype: string
+      roleZh: string
+      expected?: NpcRuntimeState['activity']
+    }> = [
+      { archetype: 'guard', roleZh: '巡邏守衛', expected: 'patrol' },
+      { archetype: 'outsider', roleZh: '外地旅人', expected: 'patrol' },
+      { archetype: 'craftsman', roleZh: '修補匠', expected: 'work' },
+      { archetype: 'civic', roleZh: '公會行政員', expected: 'work' },
+      { archetype: 'cleric', roleZh: '地脈祭司', expected: 'work' },
+      { archetype: 'mystic', roleZh: '占星師', expected: 'work' },
+      { archetype: 'wanderer', roleZh: '旅人' }
+    ]
+
+    for (const item of cases) {
+      const profile = makeProfile({
+        id: `errand.${item.archetype}`,
+        role: { zh: item.roleZh, en: item.archetype },
+        defaultLocation: 't_central',
+        routine: [
+          {
+            fromTickOfDay: 0,
+            toTickOfDay: TICKS_PER_DAY,
+            location: 't_central',
+            label: 'home duty'
+          }
+        ],
+        personality: { archetype: item.archetype, factionLean: 'civilian' }
+      })
+      const engine = new NpcEngine([profile])
+      let settledAwayActivity: NpcRuntimeState['activity'] | null = null
+
+      for (let t = 1; t <= TICKS_PER_DAY; t += 60) {
+        engine.tick(t)
+        const state = engine.getState(profile.id)!
+        if (state.tile !== 't_central' && state.activity !== 'move') {
+          settledAwayActivity = state.activity
+          break
+        }
+      }
+
+      expect(settledAwayActivity).not.toBeNull()
+      expect(settledAwayActivity).not.toBe('idle')
+      if (item.expected) expect(settledAwayActivity).toBe(item.expected)
+      else expect(['eat', 'trade', 'patrol', 'work']).toContain(settledAwayActivity)
+    }
+  })
+
   it('initializes deterministic subCol/subRow on construction', () => {
     const engine = new NpcEngine([makeProfile({ id: 'sub.npc' })])
     const s = engine.getState('sub.npc')!

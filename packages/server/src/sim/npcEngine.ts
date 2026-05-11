@@ -170,6 +170,13 @@ const PERSONALITY_DECISION_INTERVAL = 36
 /** Personality nudge 相對 schedule 的有效持續 tick，過後重新算 */
 const PERSONALITY_OVERRIDE_TICKS = 30
 
+const LABEL_SLEEP_PATTERN = /(sleep|bedtime|hideout|back room sleep|broken arch)/
+const LABEL_EAT_PATTERN = /(eat|meal|breakfast|lunch|dinner|supper|tea|stew|noodle|food|kitchen)/
+const LABEL_ERRAND_PATTERN = /(errand|visit|social|walk|off.?duty|after-work)/
+const LABEL_TRADE_PATTERN = /(trade|trading|exchange|sell|selling|sale|stall|counter|market|customers|booth|fencing|café|cafe|tavern)/
+const LABEL_PATROL_PATTERN = /(patrol|watch|guard|scout|hunt|rounds|commute|running|runs|dash|loops|circling|exploring|delivering|delivery)/
+const LABEL_WORK_PATTERN = /(work|ledger|study|review|prepare|whisper|gossip|intel|brewing|forge|appraisal|stock|desk|office|tower|class|lecture|lectures|library|shelving|rehearsal|busking|gig|gigs|opening|stitch|fitting|prep|rush|dispatch|prayer|prayers|hall|courtyard|sweeping|washing|chart|divination|gathering|foraging|training|timber|carving|drying|grinding|consultation|supervising|swinging|loading|cargo|rigging|mending|bookkeeping|tally|seam|shaft|pick|bell|tuning|catalogue|inscription|rubble|handoff|headline)/
+
 /** Per-tick context from the runtime — area resources / world facts that
  * personality-based decisioning can read. Optional：舊測試不傳就走 schedule */
 export type NpcTickContext = Readonly<{
@@ -1142,14 +1149,24 @@ function injectDutyWeightedTravelIfStuck(
 function inferActivityFromLabel(label: string | undefined, profile: NpcProfile): NpcActivity {
   if (!label) return inferActivityFromRole(profile)
   const lower = label.toLowerCase()
-  if (/(sleep|night|rest|hideout)/.test(lower)) return 'sleep'
-  if (/(eat|meal|breakfast|lunch|dinner|tea|kitchen|market.*food)/.test(lower)) return 'eat'
-  if (/(errand|visit|social|walk|off.?duty)/.test(lower)) return 'idle'
-  if (/(trade|trading|exchange|sell|sale|stall|counter|clearing)/.test(lower)) return 'trade'
-  if (/(patrol|watch|guard|scout|hunt)/.test(lower)) return 'patrol'
-  if (/(work|ledger|study|review|prepare|whisper|gossip|intel|brewing|forge|appraisal)/.test(lower))
-    return 'work'
+  if (LABEL_SLEEP_PATTERN.test(lower)) return 'sleep'
+  if (LABEL_EAT_PATTERN.test(lower)) return 'eat'
+  if (LABEL_ERRAND_PATTERN.test(lower)) return inferErrandActivityFromProfile(profile)
+  if (LABEL_TRADE_PATTERN.test(lower)) return 'trade'
+  if (LABEL_PATROL_PATTERN.test(lower)) return 'patrol'
+  if (LABEL_WORK_PATTERN.test(lower)) return 'work'
   return inferActivityFromRole(profile)
+}
+
+function inferErrandActivityFromProfile(profile: NpcProfile): NpcActivity {
+  const roleActivity = inferActivityFromRole(profile)
+  if (roleActivity === 'trade' || roleActivity === 'patrol') return roleActivity
+  const arch = String(profile.personality.archetype ?? '')
+  if (arch === 'shopkeeper') return 'trade'
+  if (arch === 'guard' || arch === 'outsider') return 'patrol'
+  if (arch === 'craftsman' || arch === 'civic' || arch === 'cleric' || arch === 'mystic') return 'work'
+  const roll = hashStr(`${profile.id}|errand-activity`) % 4
+  return roll === 0 ? 'eat' : roll === 1 ? 'trade' : roll === 2 ? 'patrol' : 'work'
 }
 
 function inferActivityFromRole(profile: NpcProfile): NpcActivity {

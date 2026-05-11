@@ -24,6 +24,10 @@
   lock, unless a future explicit story rule says otherwise.
 - [x] 2.4 Add tests proving formerly role-locked NPCs can leave home outside
   duty-biased windows.
+- [x] 2.5 Interpret daily-life routine labels into visible non-idle activities
+  (`work`, `trade`, `patrol`, `eat`) so NPCs do not collapse into idle props.
+- [x] 2.6 Shape injected off-duty errands by NPC role/archetype instead of making
+  every errand an idle slot.
 
 ## 3. Memory-Backed AI Chronicle
 

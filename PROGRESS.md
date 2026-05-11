@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.27 NPC Daily-Life Activity Pass
+
+### Completed Locally
+
+- Started the first `NPC Daily Life Pass` to make deterministic runtime agents
+  look less like idle props.
+- Confirmed live `v0.15.26` had all `50` NPCs with agent state, but activity
+  distribution was still idle-heavy: `idle=40`, `patrol=4`, `trade=3`, `work=2`,
+  `move=1`.
+- Identified the immediate root cause: many profile routine labels (`office
+  tower`, `night-market stall`, `running edition`, `late-night noodle stop`,
+  etc.) fell through the label interpreter and became `idle`.
+- Expanded deterministic routine-label interpretation into visible daily-life
+  activities: `work`, `trade`, `patrol`, and `eat`.
+- Changed injected off-duty errand slots to use role/archetype-shaped activity
+  instead of always becoming `idle`.
+- Added focused `NpcEngine` tests for daily-life label interpretation and
+  injected errand activity shaping across common archetypes.
+- Bumped app version from `0.15.26` to `0.15.27`.
+
+### Local Verification
+
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed after the review follow-up: server 19 files / 144 tests, web
+  6 files / 15 tests.
+- `npm run test -w @greed-island/server -- npcEngine` passed after the review
+  follow-up: 1 file / 24 tests.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Pending: Gemini review.
+
+### Still Open
+
+- Pending commit, push, CI/CD, and live activity-distribution evidence.
+
 ## 2026-05-11 — v0.15.26 Hub NPC Overview Recovery
 
 ### Completed Locally

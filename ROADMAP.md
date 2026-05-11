@@ -4,6 +4,24 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.27 🚧 in progress — 2026-05-11
+
+**主題：NPC daily-life activity pass**
+
+- ✅ Root cause: live `v0.15.26` NPC data was complete and agent-backed, but many
+  routine labels fell through the deterministic label interpreter and became
+  `idle`, producing an idle-heavy world.
+- ✅ Expanded routine-label interpretation so ordinary daily-life phrases map to
+  visible `work`, `trade`, `patrol`, and `eat` activities.
+- ✅ Injected off-duty errands now use role/archetype-shaped activities instead of
+  becoming generic idle slots.
+- ✅ Added focused `NpcEngine` coverage for label interpretation and errand
+  activity shaping across common archetypes.
+- ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
+  `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
+  passed; web build still has the existing Vite chunk-size warning.
+- 🚧 Review, CI/CD, and live activity-distribution evidence are pending.
+
 ## v0.15.26 ✅ shipped — 2026-05-11
 
 **主題：Hub NPC overview visibility recovery**
