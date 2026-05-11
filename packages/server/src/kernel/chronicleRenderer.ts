@@ -281,6 +281,7 @@ function sleep(ms: number): Promise<void> {
 
 function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
+  if (event.eventType === 'WORLD_TICK') return null
   const tick = typeof event.tick === 'number' ? event.tick : 0
   const payload = event.payload as LivingWorldEventPayload | undefined
   const narration = payload && typeof payload === 'object' ? payload.narration ?? null : null
@@ -297,24 +298,104 @@ function renderFallbackChronicle(
   aiError: string | null,
   aiMeta: ChronicleAiMetadata
 ): ChronicleRender {
-  const last = context.events.slice(-5)
-  const zhLines = last.map((event) => {
-    const text = event.narration ?? `${event.actorId} 觸發了 ${event.eventType}`
-    return `第 ${event.tick} tick：${text}`
-  })
-  const enLines = last.map((event) => {
-    const text = event.narration ?? `${event.actorId} triggered ${event.eventType}`
-    return `Tick ${event.tick}: ${text}`
-  })
+  const storyEvents = context.events
+    .filter((event) => event.eventType !== 'WORLD_TICK')
+    .filter((event) => event.narration !== null || event.eventType !== 'NPC_ACTIVITY_CHANGE')
+    .slice(-8)
   return {
     source: 'fallback',
-    textZh: zhLines.length > 0 ? zhLines.join('\n') : '最近沒有可編年史化的事件。',
-    textEn: enLines.length > 0 ? enLines.join('\n') : 'No recent chronicle-ready events.',
+    textZh: renderFallbackParagraphZh(storyEvents, context.memories),
+    textEn: renderFallbackParagraphEn(storyEvents),
     citedNames: context.allowedNames,
     aiError,
     aiMeta,
     context
   }
+}
+
+function renderFallbackParagraphZh(
+  events: readonly ChronicleEvent[],
+  memories: readonly ChronicleMemorySnippet[]
+): string {
+  if (events.length === 0) {
+    return '最近沒有足以寫入編年史的公開事件；城市仍在自行運轉，只是沒有留下醒目的痕跡。'
+  }
+  const sentences = dedupeSentences(events.map((event, index) => chronicleSentenceZh(event, index))).slice(-5)
+  const memoryTail = memoryHintZh(memories)
+  return `${sentences.join('')}${memoryTail ?? ''}`
+}
+
+function renderFallbackParagraphEn(events: readonly ChronicleEvent[]): string {
+  if (events.length === 0) {
+    return 'No public event was sharp enough to enter the chronicle, though the city kept moving on its own.'
+  }
+  return dedupeSentences(events.map((event, index) => chronicleSentenceEn(event, index))).slice(-5).join('')
+}
+
+function chronicleSentenceZh(event: ChronicleEvent, index: number): string {
+  const prefix = index === 0 ? '' : index % 3 === 1 ? '接著，' : index % 3 === 2 ? '稍晚，' : '同一段時間裡，'
+  if (event.narration) return `${prefix}${ensureZhSentence(event.narration.trim())}`
+  switch (event.eventType) {
+    case 'AREA_PRESSURE':
+      return `${prefix}某個街區的資源壓力改變了人群的步調。`
+    case 'WORLD_EVENT_SPAWN':
+      return `${prefix}一場新的異兆開始影響潮鳴市。`
+    case 'WORLD_EVENT_END':
+      return `${prefix}先前的異兆退去，街面重新回到日常的噪音裡。`
+    case 'WEATHER_CHANGE':
+      return `${prefix}天氣轉向，連街上的聲音也跟著換了質地。`
+    case 'SEASON_CHANGE':
+      return `${prefix}季節邊界滑過城市，舊氣味被慢慢推開。`
+    default:
+      return `${prefix}${event.actorId}留下了一件尚未被完整解讀的事。`
+  }
+}
+
+function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
+  const prefix = index === 0 ? '' : index % 3 === 1 ? 'Then, ' : index % 3 === 2 ? 'Later, ' : 'Meanwhile, '
+  switch (event.eventType) {
+    case 'NPC_INTERACT':
+      return `${prefix}two lives crossed closely enough to leave a public trace.`
+    case 'NPC_MOVE':
+      return `${prefix}someone's route through the city changed the shape of the day.`
+    case 'BUILDING_ENTER':
+      return `${prefix}a doorway took someone out of the street's sight.`
+    case 'BUILDING_LEAVE':
+      return `${prefix}someone returned from indoors to the city's open noise.`
+    case 'AREA_PRESSURE':
+      return `${prefix}pressure in one district altered the crowd's rhythm.`
+    case 'WORLD_EVENT_SPAWN':
+      return `${prefix}a new omen began to bend the city around it.`
+    case 'WORLD_EVENT_END':
+      return `${prefix}an omen faded, and daily noise filled the gap again.`
+    case 'WEATHER_CHANGE':
+      return `${prefix}the weather shifted, changing the texture of the streets.`
+    case 'SEASON_CHANGE':
+      return `${prefix}the season crossed a quiet boundary.`
+    default:
+      return `${prefix}one more event settled into the city's record.`
+  }
+}
+
+function ensureZhSentence(text: string): string {
+  return /[。！？]$/.test(text) ? text : `${text}。`
+}
+
+function dedupeSentences(sentences: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const sentence of sentences) {
+    if (seen.has(sentence)) continue
+    seen.add(sentence)
+    out.push(sentence)
+  }
+  return out
+}
+
+function memoryHintZh(memories: readonly ChronicleMemorySnippet[]): string | null {
+  const important = [...memories].sort((a, b) => b.importance - a.importance)[0]
+  if (!important) return null
+  return `這件事也讓 ${important.npcId} 的記憶被再次翻動。`
 }
 
 function chronicleSystemPrompt(): string {

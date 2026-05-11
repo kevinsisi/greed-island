@@ -60,6 +60,18 @@ function npcState(input: Pick<NpcRuntimeState, 'tile' | 'activity'>): NpcRuntime
     subRow: 5,
     subZ: 0,
     personalityOverride: null,
-    travelRoute: null
+    travelRoute: null,
+    agent: {
+      profileId: 'test',
+      permissions: ['move.local_area', 'interact.social'],
+      activeTask: {
+        kind: 'bootstrap',
+        reason: 'test-fixture',
+        targetTile: input.tile,
+        startedAtTick: 0,
+        expiresAtTick: null
+      },
+      lastDecision: { tick: 0, source: 'bootstrap', reason: 'test-fixture' }
+    }
   }
 }

@@ -36,6 +36,11 @@
   fallback metadata.
 - [ ] 3.4 Add anti-hallucination grounding so AI chronicle text may only name
   NPCs, buildings, and locations present in the event snapshot.
+- [x] 3.5 Expose deterministic NPC agent state: profile id, permissions, active
+  task, and last decision metadata derived from schedule/nudge/movement/social
+  interaction state.
+- [x] 3.6 Add bounded player-dialog hold so an NPC does not leave due to schedule
+  movement while an authenticated player is actively talking to them.
 
 ## 4. Completion
 

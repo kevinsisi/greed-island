@@ -27,6 +27,8 @@ const TIER_KEY: Readonly<Record<'low' | 'mid' | 'high', TranslationKey>> = {
   high: 'npc.tier.high'
 }
 
+const DIALOG_HOLD_REFRESH_MS = 20_000
+
 interface DialogTurn {
   id: string
   intent: NpcInteractIntent
@@ -93,6 +95,24 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
       conversationRef.current.scrollTop = conversationRef.current.scrollHeight
     }
   }, [turns.length])
+
+  useEffect(() => {
+    if (!npcId || !token) return
+    let cancelled = false
+    const refreshHold = () => {
+      api.npcDialogHold(token, npcId).catch(() => {
+        if (!cancelled) {
+          // Private dialog can continue, but world-presence hold may expire.
+        }
+      })
+    }
+    refreshHold()
+    const timer = window.setInterval(refreshHold, DIALOG_HOLD_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [npcId, token])
 
   const refreshHistory = useCallback(async () => {
     if (!npc || !token) return

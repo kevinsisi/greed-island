@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useWorldState } from '../state/WorldStateContext'
 import { useI18n, type TranslationKey, type Translator } from '../i18n'
 import type { EventSummary } from '../state/types'
+import { api, type ServerChronicleResponse } from '../api/client'
 
 interface EventFilter {
   id: 'all' | 'cards' | 'npc' | 'world'
@@ -18,8 +19,27 @@ const FILTERS: EventFilter[] = [
 
 export function TimelinePage() {
   const { events, liveConnected } = useWorldState()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [filterId, setFilterId] = useState<EventFilter['id']>('all')
+  const [chronicle, setChronicle] = useState<ServerChronicleResponse | null>(null)
+  const [chronicleError, setChronicleError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .worldChronicle(40, false)
+      .then((res) => {
+        if (cancelled) return
+        setChronicle(res)
+        setChronicleError(null)
+      })
+      .catch((err) => {
+        if (!cancelled) setChronicleError(err instanceof Error ? err.message : 'failed to load chronicle')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [events.length])
 
   const filter = FILTERS.find((f) => f.id === filterId) ?? FILTERS[0]!
   const visible = useMemo(() => events.filter((e) => filter.match(e.eventType)), [events, filter])
@@ -58,6 +78,26 @@ export function TimelinePage() {
           </button>
         ))}
       </div>
+
+      <section className="gi-panel border-ember-700/50 p-5 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
+            編年摘要
+          </div>
+          {chronicle && (
+            <span className="gi-tag">{chronicle.chronicle.source} · tick {chronicle.latestTick}</span>
+          )}
+        </div>
+        {chronicle ? (
+          <p className="text-sm text-ground-100 leading-relaxed whitespace-pre-line">
+            {locale === 'zh' ? chronicle.chronicle.textZh : chronicle.chronicle.textEn}
+          </p>
+        ) : chronicleError ? (
+          <p className="text-sm text-rust-300 leading-relaxed">{chronicleError}</p>
+        ) : (
+          <p className="text-sm text-ground-500 italic">載入編年摘要…</p>
+        )}
+      </section>
 
       <div className="flex flex-col gap-3">
         {visible.map((event) => (

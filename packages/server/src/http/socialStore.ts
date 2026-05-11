@@ -13,8 +13,11 @@
 //                       receiver side via `read_at`.
 //   alliances         — named guild/coalition (max 5 members).
 //   alliance_members  — alliance membership join table.
-//   player_locations  — most recent area each player visited so the
-//                       map can render same-area players in real time.
+//   player_locations  — most recent area each player visited so area-bound
+//                       systems and same-area players can read it.
+//   player_hub_locations — main-map social/UI presence projection. This is
+//                       intentionally separate from player_locations so Hub
+//                       rendering never overwrites area-bound gameplay checks.
 
 import type Database from 'better-sqlite3'
 
@@ -143,11 +146,28 @@ export function initializeSocialSchema(db: DatabaseConnection): void {
       FOREIGN KEY (user_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_player_locations_tile ON player_locations(tile_id);
+
+    CREATE TABLE IF NOT EXISTS player_hub_locations (
+      user_id INTEGER PRIMARY KEY,
+      tile_id TEXT NOT NULL DEFAULT 'hub',
+      pos_x REAL,
+      pos_y REAL,
+      pos_z REAL,
+      client_updated_at INTEGER NOT NULL DEFAULT 0,
+      last_seen_tick INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_player_hub_locations_tick ON player_hub_locations(last_seen_tick);
   `)
   ensureColumn(db, 'player_locations', 'pos_x', 'REAL')
   ensureColumn(db, 'player_locations', 'pos_y', 'REAL')
   ensureColumn(db, 'player_locations', 'pos_z', 'REAL')
   ensureColumn(db, 'player_locations', 'client_updated_at', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'player_hub_locations', 'pos_x', 'REAL')
+  ensureColumn(db, 'player_hub_locations', 'pos_y', 'REAL')
+  ensureColumn(db, 'player_hub_locations', 'pos_z', 'REAL')
+  ensureColumn(db, 'player_hub_locations', 'client_updated_at', 'INTEGER NOT NULL DEFAULT 0')
 }
 
 function ensureColumn(
@@ -495,11 +515,31 @@ export class SocialStore {
     position: { x: number; y: number; z: number } | null = null,
     clientUpdatedAt: number | null = null
   ): PlayerLocationUpsertResult {
+    return this.upsertLocation('player_locations', userId, tileId, tick, position, clientUpdatedAt)
+  }
+
+  upsertHubLocation(
+    userId: number,
+    tick: number,
+    position: { x: number; y: number; z: number } | null = null,
+    clientUpdatedAt: number | null = null
+  ): PlayerLocationUpsertResult {
+    return this.upsertLocation('player_hub_locations', userId, 'hub', tick, position, clientUpdatedAt)
+  }
+
+  private upsertLocation(
+    tableName: 'player_locations' | 'player_hub_locations',
+    userId: number,
+    tileId: string,
+    tick: number,
+    position: { x: number; y: number; z: number } | null,
+    clientUpdatedAt: number | null
+  ): PlayerLocationUpsertResult {
     const now = Date.now()
     const effectiveClientUpdatedAt = clientUpdatedAt ?? now
     const result = this.db
       .prepare(
-        `INSERT INTO player_locations (
+        `INSERT INTO ${tableName} (
            user_id,
            tile_id,
            pos_x,
@@ -508,36 +548,36 @@ export class SocialStore {
            client_updated_at,
            last_seen_tick,
            updated_at
-         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           tile_id = excluded.tile_id,
-           pos_x = CASE
-             WHEN player_locations.tile_id = excluded.tile_id
-               THEN COALESCE(excluded.pos_x, player_locations.pos_x)
-             ELSE excluded.pos_x
-           END,
-           pos_y = CASE
-             WHEN player_locations.tile_id = excluded.tile_id
-               THEN COALESCE(excluded.pos_y, player_locations.pos_y)
-             ELSE excluded.pos_y
-           END,
-           pos_z = CASE
-             WHEN player_locations.tile_id = excluded.tile_id
-               THEN COALESCE(excluded.pos_z, player_locations.pos_z)
-             ELSE excluded.pos_z
-           END,
-           last_seen_tick = excluded.last_seen_tick,
-           client_updated_at = CASE
-             WHEN player_locations.tile_id = excluded.tile_id
-              AND excluded.pos_x IS NULL
-              AND excluded.pos_y IS NULL
-              AND excluded.pos_z IS NULL
-               THEN player_locations.client_updated_at
-             ELSE excluded.client_updated_at
-           END,
-           updated_at = excluded.updated_at
-         WHERE excluded.client_updated_at >= player_locations.client_updated_at`
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id) DO UPDATE SET
+            tile_id = excluded.tile_id,
+            pos_x = CASE
+              WHEN ${tableName}.tile_id = excluded.tile_id
+                THEN COALESCE(excluded.pos_x, ${tableName}.pos_x)
+              ELSE excluded.pos_x
+            END,
+            pos_y = CASE
+              WHEN ${tableName}.tile_id = excluded.tile_id
+                THEN COALESCE(excluded.pos_y, ${tableName}.pos_y)
+              ELSE excluded.pos_y
+            END,
+            pos_z = CASE
+              WHEN ${tableName}.tile_id = excluded.tile_id
+                THEN COALESCE(excluded.pos_z, ${tableName}.pos_z)
+              ELSE excluded.pos_z
+            END,
+            last_seen_tick = excluded.last_seen_tick,
+            client_updated_at = CASE
+              WHEN ${tableName}.tile_id = excluded.tile_id
+               AND excluded.pos_x IS NULL
+               AND excluded.pos_y IS NULL
+               AND excluded.pos_z IS NULL
+                THEN ${tableName}.client_updated_at
+              ELSE excluded.client_updated_at
+            END,
+            updated_at = excluded.updated_at
+          WHERE excluded.client_updated_at >= ${tableName}.client_updated_at`
       )
       .run(
         userId,
@@ -560,14 +600,21 @@ export class SocialStore {
       updated_at: now
     }
     return {
-      row: this.getPlayerLocation(userId) ?? fallback,
+      row: this.getLocation(tableName, userId) ?? fallback,
       applied: result.changes > 0
     }
   }
 
   getPlayerLocation(userId: number): PlayerLocationRow | null {
+    return this.getLocation('player_locations', userId)
+  }
+
+  private getLocation(
+    tableName: 'player_locations' | 'player_hub_locations',
+    userId: number
+  ): PlayerLocationRow | null {
     const row = this.db
-      .prepare('SELECT * FROM player_locations WHERE user_id = ?')
+      .prepare(`SELECT * FROM ${tableName} WHERE user_id = ?`)
       .get(userId) as PlayerLocationRow | undefined
     return row ?? null
   }
@@ -580,5 +627,15 @@ export class SocialStore {
          ORDER BY updated_at DESC`
       )
       .all(tileId, freshTick) as PlayerLocationRow[]
+  }
+
+  listHubPlayers(freshTick: number): PlayerLocationRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM player_hub_locations
+         WHERE tile_id = 'hub' AND last_seen_tick >= ?
+         ORDER BY updated_at DESC`
+      )
+      .all(freshTick) as PlayerLocationRow[]
   }
 }

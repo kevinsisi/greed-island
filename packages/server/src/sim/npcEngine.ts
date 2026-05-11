@@ -17,10 +17,45 @@
 // hydrate：runtime 啟動時把 reducer 算出的 facts 透過 hydrate() 餵回。
 
 import type { NpcProfile } from '../npcs/types.js'
-import { TICKS_PER_DAY, TICKS_PER_HOUR } from '../config/world.js'
+import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 
 export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
+export type NpcAgentPermission =
+  | 'move.cross_tile'
+  | 'move.local_area'
+  | 'act.work'
+  | 'act.trade'
+  | 'act.patrol'
+  | 'act.rest'
+  | 'interact.social'
+export type NpcAgentTaskKind =
+  | 'bootstrap'
+  | 'scheduled-duty'
+  | 'personality-nudge'
+  | 'travel'
+  | 'local-activity'
+  | 'social-interaction'
+  | 'player-dialog'
+
+export type NpcAgentTask = Readonly<{
+  kind: NpcAgentTaskKind
+  reason: string
+  targetTile: string
+  startedAtTick: number
+  expiresAtTick: number | null
+}>
+
+export type NpcAgentState = Readonly<{
+  profileId: string
+  permissions: readonly NpcAgentPermission[]
+  activeTask: NpcAgentTask
+  lastDecision: Readonly<{
+    tick: number
+    source: 'bootstrap' | 'schedule' | 'personality' | 'movement' | 'social' | 'player'
+    reason: string
+  }>
+}>
 
 // 子格網格大小：與 web/src/game/AreaScene.ts 的 AREA_GRID_COLS / ROWS 對齊。
 // 後端決定子格座標、前端純粹照畫，沒有自由 wander 邏輯。
@@ -58,6 +93,8 @@ export type NpcRuntimeState = {
     targetTile: string
     startedAtTick: number
   } | null
+  /** v0.15.23：deterministic runtime-agent projection for this NPC. */
+  agent: NpcAgentState
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -121,6 +158,7 @@ const INTERACT_PROBABILITY = 0.18 // 每對同 tile NPC，每 tick 觸發機率
 const INTERACT_COOLDOWN_TICKS = 6
 const INTERACT_MAX_PLANAR_DISTANCE = 2
 const INTERACT_MAX_Z_DISTANCE = 0
+const PLAYER_DIALOG_HOLD_TICKS = TICKS_PER_MINUTE
 
 /**
  * 每位 NPC 每 N tick 評估一次個體化決策（偏離 schedule 的「個性 nudge」）。
@@ -171,6 +209,7 @@ export class NpcEngine {
       this.factions.set(profile.id, fac)
       // 初始 state — 等 hydrate 補上正確值
       const initSub = initialSubTile(profile.id, profile.defaultLocation)
+      const agent = initialAgentState(profile)
       this.state.set(profile.id, {
         tile: profile.defaultLocation,
         mood: 60,
@@ -183,7 +222,8 @@ export class NpcEngine {
         subRow: initSub.row,
         subZ: 0,
         personalityOverride: null,
-        travelRoute: null
+        travelRoute: null,
+        agent
       })
     }
   }
@@ -256,7 +296,8 @@ export class NpcEngine {
           : fallbackSub.row,
       subZ: typeof r.subZ === 'number' ? clampInt(r.subZ, -10, 50) : 0,
       personalityOverride,
-      travelRoute
+      travelRoute,
+      agent: readAgentState(profile ?? null, r.agent, tile)
     }
     this.state.set(npcId, next)
   }
@@ -328,7 +369,8 @@ export class NpcEngine {
         beforeRoute?.fromTile !== nextRoute?.fromTile ||
         beforeRoute?.toTile !== nextRoute?.toTile ||
         beforeRoute?.targetTile !== nextRoute?.targetTile ||
-        beforeRoute?.startedAtTick !== nextRoute?.startedAtTick
+        beforeRoute?.startedAtTick !== nextRoute?.startedAtTick ||
+        !agentStatesEqual(before.agent, next.agent)
       ) {
         this.state.set(profile.id, next)
         dirty.add(profile.id)
@@ -439,6 +481,58 @@ export class NpcEngine {
     }
     return out
   }
+
+  /**
+   * Called by SimulationRuntime only after an NPC_INTERACT command has passed
+   * Rule Engine validation. This keeps social active-task state derived from an
+   * accepted world event candidate rather than an unvalidated renderer/runtime hint.
+   */
+  commitSocialInteractionTask(
+    participants: readonly [string, string],
+    tile: string,
+    mode: 'chat' | 'argue',
+    currentTick: number
+  ): NpcStateChange[] {
+    const changes: NpcStateChange[] = []
+    for (const npcId of participants) {
+      const before = this.state.get(npcId)
+      if (!before) continue
+      const next = {
+        ...before,
+        agent: withSocialAgentTask(before.agent, tile, mode, currentTick)
+      }
+      this.state.set(npcId, next)
+      changes.push({ npcId, state: next })
+    }
+    return changes
+  }
+
+  /**
+   * A player-opened dialog is a deterministic agent task, not a renderer-only
+   * illusion. Runtime calls this from an authenticated POST endpoint and then
+   * persists the returned state as a FACT_SET event.
+   */
+  commitPlayerDialogHoldTask(
+    npcId: string,
+    currentTick: number
+  ): NpcStateChange | null {
+    const before = this.state.get(npcId)
+    if (!before) return null
+    const expiresAtTick = currentTick + PLAYER_DIALOG_HOLD_TICKS
+    if (
+      before.agent.activeTask.kind === 'player-dialog' &&
+      typeof before.agent.activeTask.expiresAtTick === 'number' &&
+      before.agent.activeTask.expiresAtTick >= expiresAtTick
+    ) {
+      return null
+    }
+    const next = {
+      ...before,
+      agent: withPlayerDialogTask(before.agent, before.tile, currentTick, expiresAtTick)
+    }
+    this.state.set(npcId, next)
+    return { npcId, state: next }
+  }
 }
 
 function decideNextState(
@@ -449,6 +543,20 @@ function decideNextState(
   context: NpcTickContext | null,
   crowdByTile: ReadonlyMap<string, number>
 ): NpcRuntimeState {
+  if (
+    before.agent.activeTask.kind === 'player-dialog' &&
+    typeof before.agent.activeTask.expiresAtTick === 'number' &&
+    currentTick < before.agent.activeTask.expiresAtTick
+  ) {
+    return {
+      ...before,
+      agent: {
+        ...before.agent,
+        permissions: deriveAgentPermissions(profile)
+      }
+    }
+  }
+
   const tickOfDay = ((currentTick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
   const slot = pickSlot(schedule, tickOfDay)
   const scheduleTarget = slot?.location ?? before.targetTile ?? profile.defaultLocation
@@ -538,8 +646,219 @@ function decideNextState(
     subRow,
     subZ: before.subZ,
     personalityOverride,
-    travelRoute
+    travelRoute,
+    agent: buildNextAgentState({
+      profile,
+      previous: before.agent,
+      activity,
+      targetTile,
+      scheduleTarget,
+      personalityOverride,
+      currentTick,
+      isTraveling: before.tile !== targetTile && nextTile !== before.tile
+    })
   }
+}
+
+function initialAgentState(profile: NpcProfile): NpcAgentState {
+  return {
+    profileId: profile.id,
+    permissions: deriveAgentPermissions(profile),
+    activeTask: {
+      kind: 'bootstrap',
+      reason: 'profile-loaded',
+      targetTile: profile.defaultLocation,
+      startedAtTick: 0,
+      expiresAtTick: null
+    },
+    lastDecision: { tick: 0, source: 'bootstrap', reason: 'profile-loaded' }
+  }
+}
+
+function readAgentState(
+  profile: NpcProfile | null,
+  raw: unknown,
+  fallbackTile: string
+): NpcAgentState {
+  const fallback = fallbackAgentState(profile, fallbackTile)
+  if (!raw || typeof raw !== 'object') return fallback
+  const r = raw as Partial<NpcAgentState>
+  const activeTask = readAgentTask(r.activeTask, fallback.activeTask)
+  const lastDecisionRaw = r.lastDecision as Partial<NpcAgentState['lastDecision']> | undefined
+  const lastDecision =
+    lastDecisionRaw &&
+    typeof lastDecisionRaw.tick === 'number' &&
+    isDecisionSource(lastDecisionRaw.source) &&
+    typeof lastDecisionRaw.reason === 'string'
+      ? {
+          tick: lastDecisionRaw.tick,
+          source: lastDecisionRaw.source,
+          reason: lastDecisionRaw.reason
+        }
+      : fallback.lastDecision
+  return {
+    profileId: profile?.id ?? (typeof r.profileId === 'string' ? r.profileId : fallback.profileId),
+    permissions: profile ? deriveAgentPermissions(profile) : fallback.permissions,
+    activeTask,
+    lastDecision
+  }
+}
+
+function fallbackAgentState(profile: NpcProfile | null, fallbackTile: string): NpcAgentState {
+  return {
+    profileId: profile?.id ?? 'unknown',
+    permissions: profile ? deriveAgentPermissions(profile) : ['move.local_area', 'interact.social'],
+    activeTask: {
+      kind: 'bootstrap',
+      reason: 'hydrate-fallback',
+      targetTile: fallbackTile,
+      startedAtTick: 0,
+      expiresAtTick: null
+    },
+    lastDecision: { tick: 0, source: 'bootstrap', reason: 'hydrate-fallback' }
+  }
+}
+
+function readAgentTask(raw: unknown, fallback: NpcAgentTask): NpcAgentTask {
+  if (!raw || typeof raw !== 'object') return fallback
+  const r = raw as Partial<NpcAgentTask>
+  if (
+    !isAgentTaskKind(r.kind) ||
+    typeof r.reason !== 'string' ||
+    typeof r.targetTile !== 'string' ||
+    typeof r.startedAtTick !== 'number'
+  ) {
+    return fallback
+  }
+  const expiresAtTick =
+    typeof r.expiresAtTick === 'number' && Number.isFinite(r.expiresAtTick)
+      ? r.expiresAtTick
+      : null
+  return {
+    kind: r.kind,
+    reason: r.reason,
+    targetTile: r.targetTile,
+    startedAtTick: r.startedAtTick,
+    expiresAtTick
+  }
+}
+
+function buildNextAgentState(input: {
+  profile: NpcProfile
+  previous: NpcAgentState
+  activity: NpcActivity
+  targetTile: string
+  scheduleTarget: string
+  personalityOverride: NpcRuntimeState['personalityOverride']
+  currentTick: number
+  isTraveling: boolean
+}): NpcAgentState {
+  const previousActiveTask = input.previous.activeTask
+  if (
+    previousActiveTask.kind === 'social-interaction' &&
+    typeof previousActiveTask.expiresAtTick === 'number' &&
+    input.currentTick < previousActiveTask.expiresAtTick
+  ) {
+    return { ...input.previous, permissions: deriveAgentPermissions(input.profile) }
+  }
+  if (
+    previousActiveTask.kind === 'player-dialog' &&
+    typeof previousActiveTask.expiresAtTick === 'number' &&
+    input.currentTick < previousActiveTask.expiresAtTick
+  ) {
+    return { ...input.previous, permissions: deriveAgentPermissions(input.profile) }
+  }
+  const nudgeReason = input.personalityOverride?.reason ?? null
+  const isNudged = input.personalityOverride?.targetTile === input.targetTile && input.targetTile !== input.scheduleTarget
+  const source = input.isTraveling ? 'movement' : isNudged ? 'personality' : 'schedule'
+  const reason = input.isTraveling
+    ? nudgeReason ?? 'scheduled-travel'
+    : isNudged
+      ? nudgeReason ?? 'personality-nudge'
+      : `schedule:${input.activity}`
+  const kind: NpcAgentTaskKind = input.isTraveling
+    ? 'travel'
+    : isNudged
+      ? 'personality-nudge'
+      : input.activity === 'idle'
+        ? 'local-activity'
+        : 'scheduled-duty'
+  const expiresAtTick = isNudged ? input.personalityOverride?.expiresAtTick ?? null : null
+  const previousTask = input.previous.activeTask
+  const sameTask =
+    previousTask.kind === kind &&
+    previousTask.reason === reason &&
+    previousTask.targetTile === input.targetTile &&
+    previousTask.expiresAtTick === expiresAtTick
+  const activeTask: NpcAgentTask = {
+    kind,
+    reason,
+    targetTile: input.targetTile,
+    startedAtTick: sameTask ? previousTask.startedAtTick : input.currentTick,
+    expiresAtTick
+  }
+  return {
+    profileId: input.profile.id,
+    permissions: deriveAgentPermissions(input.profile),
+    activeTask,
+    lastDecision: sameTask
+      ? input.previous.lastDecision
+      : { tick: input.currentTick, source, reason }
+  }
+}
+
+function withSocialAgentTask(
+  previous: NpcAgentState,
+  tile: string,
+  mode: 'chat' | 'argue',
+  currentTick: number
+): NpcAgentState {
+  const reason = `npc-${mode}`
+  return {
+    ...previous,
+    activeTask: {
+      kind: 'social-interaction',
+      reason,
+      targetTile: tile,
+      startedAtTick: currentTick,
+      expiresAtTick: currentTick + INTERACT_COOLDOWN_TICKS
+    },
+    lastDecision: { tick: currentTick, source: 'social', reason }
+  }
+}
+
+function withPlayerDialogTask(
+  previous: NpcAgentState,
+  tile: string,
+  currentTick: number,
+  expiresAtTick: number
+): NpcAgentState {
+  const reason = 'player-dialog'
+  return {
+    ...previous,
+    activeTask: {
+      kind: 'player-dialog',
+      reason,
+      targetTile: tile,
+      startedAtTick: currentTick,
+      expiresAtTick
+    },
+    lastDecision: { tick: currentTick, source: 'player', reason }
+  }
+}
+
+function deriveAgentPermissions(profile: NpcProfile): readonly NpcAgentPermission[] {
+  const activity = inferActivityFromRole(profile)
+  const permissions = new Set<NpcAgentPermission>([
+    'move.cross_tile',
+    'move.local_area',
+    'interact.social'
+  ])
+  if (activity === 'trade') permissions.add('act.trade')
+  else if (activity === 'patrol') permissions.add('act.patrol')
+  else if (activity === 'sleep' || activity === 'eat') permissions.add('act.rest')
+  else permissions.add('act.work')
+  return [...permissions].sort()
 }
 
 function canNpcStatesInteract(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
@@ -1068,6 +1387,28 @@ function isActivity(value: unknown): value is NpcActivity {
   )
 }
 
+function isAgentTaskKind(value: unknown): value is NpcAgentTaskKind {
+  return (
+    typeof value === 'string' &&
+    [
+      'bootstrap',
+      'scheduled-duty',
+      'personality-nudge',
+      'travel',
+      'local-activity',
+      'social-interaction',
+      'player-dialog'
+    ].includes(value)
+  )
+}
+
+function isDecisionSource(value: unknown): value is NpcAgentState['lastDecision']['source'] {
+  return (
+    typeof value === 'string' &&
+    ['bootstrap', 'schedule', 'personality', 'movement', 'social', 'player'].includes(value)
+  )
+}
+
 function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
   if (
     a.tile !== b.tile ||
@@ -1097,9 +1438,34 @@ function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
         ar.targetTile === br.targetTile &&
         ar.startedAtTick === br.startedAtTick
   if (!routeEqual) return false
+  if (!agentStatesEqual(a.agent, b.agent)) return false
   if (ao === null && bo === null) return true
   if (ao === null || bo === null) return false
   return ao.targetTile === bo.targetTile && ao.expiresAtTick === bo.expiresAtTick
+}
+
+function agentStatesEqual(a: NpcAgentState, b: NpcAgentState): boolean {
+  if (a.profileId !== b.profileId) return false
+  if (a.permissions.length !== b.permissions.length) return false
+  for (let i = 0; i < a.permissions.length; i += 1) {
+    if (a.permissions[i] !== b.permissions[i]) return false
+  }
+  const at = a.activeTask
+  const bt = b.activeTask
+  if (
+    at.kind !== bt.kind ||
+    at.reason !== bt.reason ||
+    at.targetTile !== bt.targetTile ||
+    at.startedAtTick !== bt.startedAtTick ||
+    at.expiresAtTick !== bt.expiresAtTick
+  ) {
+    return false
+  }
+  return (
+    a.lastDecision.tick === b.lastDecision.tick &&
+    a.lastDecision.source === b.lastDecision.source &&
+    a.lastDecision.reason === b.lastDecision.reason
+  )
 }
 
 function clamp(value: number, lo: number, hi: number): number {
@@ -1111,4 +1477,5 @@ function clamp(value: number, lo: number, hi: number): number {
 
 // 給 runtime / 測試用：每 hour 約多少 tick → 用來標示 cooldown
 export const NPC_INTERACT_COOLDOWN_TICKS = INTERACT_COOLDOWN_TICKS
+export const NPC_PLAYER_DIALOG_HOLD_TICKS = PLAYER_DIALOG_HOLD_TICKS
 export const _TICKS_PER_HOUR = TICKS_PER_HOUR

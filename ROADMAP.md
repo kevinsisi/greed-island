@@ -4,6 +4,55 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.23 🚧 in progress — 2026-05-11
+
+**主題：presence/read-only/chronicle local visibility fixes**
+
+- ✅ Root cause：`AreaScene.refreshPeerSprites()` 對既有 peer player 直接
+  `setPosition()`，因此 nearby-player refresh 一到就瞬移。
+- ✅ 修正 peer player rendering：既有 peer container 從目前畫面座標 tween 到
+  最新 server presence target；新增/消失玩家仍直接 spawn/destroy。
+- ✅ 保持 rendering 非 simulation authority：presence `x/y/z` 仍只是 server
+  state 的 UI projection input，前端 tween 不回寫世界狀態。
+- ✅ Guest read-only mode：server mutation routes already required auth, but Hub /
+  Area / Building Phaser scenes now also disable movement and interaction input
+  while logged out, with visible read-only notices.
+- ✅ Chronicle fallback / Timeline：`WORLD_TICK` internal noise no longer appears
+  in deterministic fallback summaries; `/timeline` shows the grounded chronicle
+  card backed by `/api/world/chronicle`.
+- ✅ Hub main-map presence：local player name now renders on the main map; logged-in
+  Hub players post/poll social presence using `tileId='hub'` and render nearby
+  player names/positions in `MapScene`.
+- ✅ Presence separation：Hub social/UI presence is stored in
+  `player_hub_locations`, so it does not overwrite area-bound
+  `player_locations` used by combat/shop location checks.
+- ✅ Hub coordinate contract：social presence keeps `hub` coordinates across the
+  full 800x600 main-map canvas while preserving the existing 600x400 area canvas
+  contract for normal districts.
+- ✅ NPC deterministic agent slice：每個 NPC 現在有 server-side `agent` projection
+  (`profileId`、permissions、activeTask、lastDecision)，由 schedule / nudge /
+  movement / social interaction deterministic 推導，並透過 `internalState.agent`
+  暴露給讀取端；AI 仍不能決策或改 state。`social-interaction` task 只在
+  `NPC_INTERACT` 通過 Rule Engine 後 commit，且會保留到 deterministic expiry。
+- ✅ Hub visual smoothing：Hub main-map peer player refresh now tweens existing
+  player containers instead of snapping; Hub peer/NPC spawn and disappearance use
+  fade transitions so travel-route NPCs no longer hard flash in/out.
+- ✅ Hub HUD：城市標題列移到地圖外上方，避免左上角說明遮住主地圖/NPC。
+- ✅ Player dialog hold：authenticated dialog open now posts a bounded
+  `NPC_DIALOG_HOLD` living-world command, then commits a bounded
+  `player-dialog` NPC agent task and refreshes it while the dialog stays open;
+  schedule movement cannot move that NPC until the deterministic hold expires or
+  is refreshed, and the hold is persisted through FACT_SET state.
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm run build`、
+  `npm test`、`npx openspec validate npc-humanity-ai-memory --strict`、
+  `git diff --check` 通過；web build 仍只有既有 Vite chunk-size warning，
+  `git diff --check` 只有 Windows LF→CRLF working-copy warnings。
+- ✅ Local runtime verification：`/api/version`、`/healthz` 回 `0.15.23`；
+  `/api/npcs` exposes `internalState.agent`；`POST /api/npc/:id/dialog-hold`
+  makes the NPC active task `player-dialog`；Vite web root responds `200`。
+- 🚧 待完成：reviewer pass、browser/Phaser two-player visual E2E、追 social
+  notification 即時更新。
+
 ## v0.15.22 ✅ shipped — 2026-05-11
 
 **主題：always accept successful authoritative world snapshots**

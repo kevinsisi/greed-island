@@ -66,6 +66,13 @@ describe('living-world rule engine', () => {
         detail: { food: 22 },
         narration: '...'
       }),
+      makeLivingWorldCommand('NPC_DIALOG_HOLD', 'player-1', 'player', 5, 5, {
+        playerAccountId: 'player-1',
+        npcId: 'npc-a',
+        tile: 't_market',
+        holdTicks: 12,
+        narration: null
+      }),
       makeLivingWorldCommand('WEATHER_CHANGE', 'system', 'system', 5, 5, {
         from: '晴',
         to: '霧雨',

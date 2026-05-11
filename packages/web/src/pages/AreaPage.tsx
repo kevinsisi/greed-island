@@ -235,9 +235,10 @@ export function AreaPage() {
 
   const handleBuildingEnter = useCallback(
     (buildingId: string) => {
+      if (!token) return
       navigate(`/building/${buildingId}`)
     },
-    [navigate]
+    [navigate, token]
   )
 
   const handleExit = useCallback(() => {
@@ -255,10 +256,11 @@ export function AreaPage() {
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
+      if (!token) return
       const npc = npcs.find((n) => n.id === npcId)
       if (npc) setActiveNpc(npc)
     },
-    [npcs]
+    [npcs, token]
   )
 
   // 從 AreaScene 接收當前在玩家身邊（INTERACT_RADIUS 內）的 NPC ids
@@ -329,24 +331,31 @@ export function AreaPage() {
           onExit={handleExit}
           onNearbyBuildingChange={handleNearbyBuildingChange}
           onPositionChange={(pos) => setPlayerPosition({ tileId, ...pos })}
+          controlsEnabled={!!token}
         />
       </div>
+
+      {!token && (
+        <div className="mt-2 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
+          登入後才能移動、拾取紋卡、進入建築與互動；目前是只讀瀏覽模式。
+        </div>
+      )}
 
       {/* 下方：建築物進入按鈕 + tab 區 */}
       <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
         <div className="min-h-[44px]">
           <button
             type="button"
-            disabled={!nearbyBuilding?.def.enterable}
+            disabled={!token || !nearbyBuilding?.def.enterable}
             onClick={() => {
-              if (nearbyBuilding?.def.enterable) handleBuildingEnter(nearbyBuilding.def.id)
+              if (token && nearbyBuilding?.def.enterable) handleBuildingEnter(nearbyBuilding.def.id)
             }}
             className={[
               'gi-touch w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sharp bg-ember-600 hover:bg-ember-500 text-ground-950 font-display font-extrabold text-sm tracking-tightest transition-colors',
-              nearbyBuilding?.def.enterable ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              token && nearbyBuilding?.def.enterable ? 'opacity-100' : 'opacity-0 pointer-events-none'
             ].join(' ')}
-            aria-hidden={!nearbyBuilding?.def.enterable}
-            tabIndex={nearbyBuilding?.def.enterable ? 0 : -1}
+            aria-hidden={!token || !nearbyBuilding?.def.enterable}
+            tabIndex={token && nearbyBuilding?.def.enterable ? 0 : -1}
           >
             <span aria-hidden="true">{nearbyBuilding?.def.placement.glyph ?? '▣'}</span>
             <span>進入 {nearbyBuilding?.def.nameZh ?? '建築'}</span>
@@ -443,22 +452,22 @@ export function AreaPage() {
                           <button
                             key={npc.id}
                             type="button"
-                            disabled={!isNearby}
+                            disabled={!token || !isNearby}
                             onClick={() =>
-                              isNearby ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
+                              token && isNearby ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
                             }
                             className={[
                               'text-left flex items-center gap-3 px-2 py-2 rounded-sharp border transition-colors',
-                              isNearby
+                              token && isNearby
                                 ? 'border-ground-700 hover:border-ember-600 cursor-pointer'
                                 : 'border-ground-800 opacity-50 cursor-not-allowed'
                             ].join(' ')}
-                            title={isNearby ? '' : t('npc.tooFarHint')}
+                            title={!token ? '登入後才能互動' : isNearby ? '' : t('npc.tooFarHint')}
                           >
                             <span
                               className={[
                                 'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
-                                isNearby
+                                token && isNearby
                                   ? 'border-ember-600/60 text-ember-300'
                                   : 'border-ground-700 text-ground-500'
                               ].join(' ')}

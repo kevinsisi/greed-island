@@ -124,6 +124,61 @@ describe('social presence', () => {
       db.close()
     }
   })
+
+  it('keeps hub presence coordinates across the full main map canvas', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const social = new SocialStore(db)
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const runtime = { getCurrentTick: () => 100 } as unknown as SimulationRuntime
+    const bus = new SocialBus()
+    const playerA = await accounts.createAccount('a@example.test', 'hunter123')
+    const playerB = await accounts.createAccount('b@example.test', 'hunter123')
+
+    const app = express()
+    app.use(express.json())
+    app.use(createSocialRouter({ runtime, social, accounts, bus, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const tokenA = signToken(playerA.id, playerA.email, playerA.role, authConfig)
+      const tokenB = signToken(playerB.id, playerB.email, playerB.role, authConfig)
+
+      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ tileId: 't_dock', x: 48, y: 52, z: 2, clientUpdatedAt: 500 }),
+      })
+      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ tileId: 'hub', x: 760, y: 540, z: 0, clientUpdatedAt: 1_000 }),
+      })
+      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${tokenB}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ tileId: 'hub', x: 20, y: 30, z: 0, clientUpdatedAt: 1_000 }),
+      })
+
+      const nearby = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=hub`, {
+        headers: { authorization: `Bearer ${tokenB}` },
+      })
+      const payload = (await nearby.json()) as {
+        players: Array<{ id: number; x: number | null; y: number | null; z: number | null }>
+      }
+
+      expect(payload.players).toEqual([
+        expect.objectContaining({ id: playerA.id, x: 760, y: 540, z: 0 }),
+      ])
+      expect(social.getPlayerLocation(playerA.id)).toEqual(
+        expect.objectContaining({ tile_id: 't_dock', pos_x: 48, pos_y: 52, pos_z: 2 })
+      )
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
 })
 
 function signToken(

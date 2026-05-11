@@ -8,12 +8,16 @@
 //                                   static dialog library so the world
 //                                   stays playable.
 //
+//   POST /api/npc/:npcId/dialog-hold
+//                                   mark this NPC as currently held by an
+//                                   authenticated player dialog.
+//
 //   GET  /api/npc/:npcId/history    list this player's recent dialog
 //                                   turns with the given NPC.
 //
-// The world event log (kernel events) is NOT touched here — player NPC
-// dialog is intentionally a private slice. Public events (NPC routine
-// moves, weather, rare windows) keep flowing through SimulationRuntime.
+// Dialog transcript rows are private per-user state. When dialog needs to
+// affect public world presence, it must go through SimulationRuntime and a
+// persisted FACT_SET event rather than a renderer-only lock.
 
 import { Router, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -68,6 +72,27 @@ export function createNpcRouter(input: {
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+
+  router.post('/npc/:npcId/dialog-hold', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    const profile = input.runtime.findProfile(npcId)
+    if (!profile) {
+      res.status(404).json({ error: 'NPC_NOT_FOUND', message: `Unknown NPC id: ${npcId}` })
+      return
+    }
+    const hold = input.runtime.holdNpcForPlayerDialog(String(claims.sub), npcId)
+    res.json({
+      npcId,
+      held: hold !== null,
+      tick: hold?.tick ?? input.runtime.getCurrentTick(),
+      expiresAtTick: hold?.expiresAtTick ?? null,
+    })
+  })
 
   router.post('/npc/:npcId/interact', auth, async (req: Request, res: Response) => {
     const claims = req.auth

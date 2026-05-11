@@ -57,6 +57,8 @@ export interface BuildingSceneNpc {
 export interface BuildingSceneInit {
   building: ServerBuildingDef
   npcs: BuildingSceneNpc[]
+  /** Guests can browse interiors, but movement/actions require login. */
+  controlsEnabled?: boolean
   callbacks: {
     onNpcInteract: (npcId: string) => void
     onExit: () => void
@@ -69,6 +71,7 @@ export class BuildingScene extends Phaser.Scene {
   private building!: ServerBuildingDef
   private npcs: BuildingSceneNpc[] = []
   private callbacks!: BuildingSceneInit['callbacks']
+  private controlsEnabled = true
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -88,6 +91,7 @@ export class BuildingScene extends Phaser.Scene {
     this.building = data.building
     this.npcs = data.npcs
     this.callbacks = data.callbacks
+    this.controlsEnabled = data.controlsEnabled ?? true
   }
 
   create(): void {
@@ -104,10 +108,22 @@ export class BuildingScene extends Phaser.Scene {
   }
 
   update(_time: number, _delta: number): void {
+    if (!this.controlsEnabled) {
+      this.pointerTarget = null
+      this.player?.setVelocity(0, 0)
+      return
+    }
     this.handleMovement()
   }
 
-  applyExternalUpdate(payload: { npcs?: BuildingSceneNpc[] }): void {
+  applyExternalUpdate(payload: { npcs?: BuildingSceneNpc[]; controlsEnabled?: boolean }): void {
+    if (payload.controlsEnabled !== undefined) {
+      this.controlsEnabled = payload.controlsEnabled
+      if (!this.controlsEnabled) {
+        this.pointerTarget = null
+        this.player?.setVelocity(0, 0)
+      }
+    }
     if (payload.npcs) {
       this.npcs = payload.npcs
       this.refreshNpcs()
@@ -225,6 +241,10 @@ export class BuildingScene extends Phaser.Scene {
     this.exitHotspot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation?.()
       this.suppressNextPointerTarget = true
+      if (!this.controlsEnabled) {
+        this.suppressNextPointerTarget = false
+        return
+      }
       this.callbacks.onExit()
     })
   }
@@ -261,6 +281,10 @@ export class BuildingScene extends Phaser.Scene {
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         this.callbacks.onNpcInteract(npc.id)
       })
 
@@ -387,6 +411,7 @@ export class BuildingScene extends Phaser.Scene {
     this.wasd.E.on('down', () => this.tryExit())
     this.wasd.SPACE.on('down', () => this.tryExit())
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (this.suppressNextPointerTarget) {
         this.suppressNextPointerTarget = false
         return
@@ -394,6 +419,7 @@ export class BuildingScene extends Phaser.Scene {
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (pointer.isDown) {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
@@ -401,6 +427,7 @@ export class BuildingScene extends Phaser.Scene {
   }
 
   private tryExit(): void {
+    if (!this.controlsEnabled) return
     if (!this.player || !this.exitPos) return
     const distance = Phaser.Math.Distance.Between(
       this.player.x,
@@ -412,6 +439,10 @@ export class BuildingScene extends Phaser.Scene {
   }
 
   private handleMovement(): void {
+    if (!this.controlsEnabled) {
+      this.player.setVelocity(0, 0)
+      return
+    }
     let vx = 0
     let vy = 0
     if (this.cursors.left.isDown || this.wasd.A.isDown) vx -= 1

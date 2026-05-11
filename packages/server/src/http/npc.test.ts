@@ -68,6 +68,59 @@ describe('npc router', () => {
     }
   })
 
+  it('posts a deterministic NPC dialog hold when a dialog opens', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const store = new PlayerStateStore(db)
+    const settings = new SettingsStore(db)
+    const account = await accounts.createAccount('hold@example.test', 'hunter123')
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const profile: NpcProfile = {
+      id: 'npc-hold',
+      name: { zh: '守門人', en: 'Gatekeeper' },
+      role: { zh: '守門人', en: 'Gatekeeper' },
+      defaultLocation: 't_central',
+      routine: [],
+      triggers: [],
+      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+      personality: { trustBase: 50, patience: 0.8 },
+    }
+    const held: string[] = []
+    const runtime = {
+      findProfile: (npcId: string) => (npcId === profile.id ? profile : null),
+      getCurrentTick: () => 7,
+      holdNpcForPlayerDialog: (_playerAccountId: string, npcId: string) => {
+        held.push(npcId)
+        return { npcId, tick: 7, expiresAtTick: 19 }
+      },
+    } as unknown as SimulationRuntime
+
+    const app = express()
+    app.use(express.json())
+    app.use(createNpcRouter({ runtime, store, settings, accounts, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const token = jwt.sign(
+        { sub: account.id, email: account.email, role: account.role },
+        authConfig.jwtSecret
+      )
+      const response = await fetch(`http://127.0.0.1:${address.port}/npc/${profile.id}/dialog-hold`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const payload = (await response.json()) as { held: boolean; tick: number; expiresAtTick: number }
+
+      expect(response.status).toBe(200)
+      expect(held).toEqual([profile.id])
+      expect(payload).toEqual({ npcId: profile.id, held: true, tick: 7, expiresAtTick: 19 })
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
+
   it('sanitizes AI replies that invent unknown named entities', () => {
     const line = sanitizeNpcReplyForUnknownEntities({
       playerMessage: '腐叔就是個變態',

@@ -69,6 +69,7 @@ export interface AreaPhaserGameProps {
   hudStrings: { interact: string; pickup: string; tooFar: string; enterBuilding?: string }
   /** v0.15.1：當前世界天氣（已 normalise）；AreaScene 用來切換 VFX */
   weather?: AreaWeather
+  controlsEnabled?: boolean
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
   onNearbyNpcsChange?: (ids: string[]) => void
@@ -96,6 +97,7 @@ export function AreaPhaserGame({
   playerName,
   hudStrings,
   weather,
+  controlsEnabled = true,
   onNpcInteract,
   onDropPickup,
   onNearbyNpcsChange,
@@ -161,13 +163,14 @@ export function AreaPhaserGame({
     const game = new Phaser.Game(config)
     gameRef.current = game
 
-    const startPosition = loadPosition(sceneTileId, scenePlayerId)
+    const startPosition = controlsEnabled ? loadPosition(sceneTileId, scenePlayerId) : null
     const initialPosition = startPosition ?? { x: AREA_CANVAS_WIDTH / 2, y: AREA_CANVAS_HEIGHT / 2, z: 0 }
     const init: AreaSceneInit = {
       callbacks: {
         onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id),
         onDropPickup: (id) => callbacksRef.current.onDropPickup(id),
         onPositionChange: (pos) => {
+          if (!controlsEnabled) return
           savePosition(sceneTileId, scenePlayerId, pos)
           sceneOnPositionChange?.(pos)
         },
@@ -186,10 +189,11 @@ export function AreaPhaserGame({
       ...(playerName !== undefined ? { playerName } : {}),
       hudStrings,
       startPosition,
+      controlsEnabled,
       ...(weather ? { weather } : {})
     }
     game.scene.start(AreaScene.KEY, init)
-    sceneOnPositionChange?.(initialPosition)
+    if (controlsEnabled) sceneOnPositionChange?.(initialPosition)
 
     return () => {
       game.destroy(true)
@@ -197,7 +201,7 @@ export function AreaPhaserGame({
     }
     // 只在 mount 與 tileId 變動時跑一次：locale / npcs 變動透過下面的 effect 餵進場景。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileId, playerId])
+  }, [tileId, playerId, controlsEnabled])
 
   // npcs / players / drops / buildings / locale / hud / weather 變動 → 通知場景刷新
   useEffect(() => {
@@ -208,6 +212,7 @@ export function AreaPhaserGame({
       drops,
       locale,
       hudStrings,
+      controlsEnabled,
       ...(weather ? { weather } : {})
     }
     if (players) update.players = players
@@ -230,7 +235,7 @@ export function AreaPhaserGame({
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [npcs, players, playerName, drops, buildings, locale, hudStrings, weather])
+  }, [npcs, players, playerName, drops, buildings, locale, hudStrings, weather, controlsEnabled])
 
   return (
     <div

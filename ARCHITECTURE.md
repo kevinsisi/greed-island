@@ -142,6 +142,16 @@ NPCs emit Commands only; they never produce Events directly. NPC state
 must be derived from EventLog and must not live only in hidden mutable
 runtime memory.
 
+Each NPC is an agent in the runtime-architecture sense: a persistent
+actor with identity, bounded perception, memory, relationships, goals,
+permissions, active tasks, and command budget. NPCs are not free-form LLM
+agents. Any LLM involvement may only render, summarize, or phrase already
+grounded context; it must not decide facts, bypass the Rule Engine, or
+write state. Future NPC-humanity work should reuse agent-system design
+patterns such as profiles, dispatch/planning, explicit tool permissions,
+failure isolation, task state, and feedback, while preserving deterministic
+Command → Event resolution.
+
 NPC presence is globally unique. At any tick an NPC may have only one
 authoritative visible presence tuple: tile, optional building,
 sub-position, activity, optional travel route, and future intent.
@@ -155,6 +165,11 @@ NPC duty is a movement weight, not a permanent identity prison. Priests,
 merchants, craftsmen, guards, and civic NPCs may cross districts for
 errands, food, rest, patrols, social visits, events, or memory-driven
 intent unless a specific story rule declares that actor immobile.
+
+When a player is actively talking to an NPC, that conversation is an NPC
+agent task, not a renderer-only pause. The runtime may hold the NPC's
+current presence for a bounded deterministic tick window, persisted as
+world state, so schedule movement cannot make the NPC walk away mid-dialog.
 
 ### 0.12 Card And Combat Rule
 

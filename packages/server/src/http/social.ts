@@ -27,8 +27,11 @@ import type { SocialBus, SocialEvent } from './socialBus.js'
 // is within this window of the current simulation tick. With a 5s tick
 // rate this is roughly 5 minutes of grace.
 const PRESENCE_FRESH_TICKS = 60
+const HUB_PRESENCE_TILE_ID = 'hub'
 const AREA_PRESENCE_MAX_X = 600
 const AREA_PRESENCE_MAX_Y = 400
+const HUB_PRESENCE_MAX_X = 800
+const HUB_PRESENCE_MAX_Y = 600
 const AREA_PRESENCE_MIN_Z = 0
 const AREA_PRESENCE_MAX_Z = 16
 
@@ -205,9 +208,14 @@ export function createSocialRouter(input: {
     const me = req.auth!.sub
     const tileId = readTileId(req.body)
     if (tileId === null) return sendError(res, new SocialError('INVALID_TILE', 'tileId is required.'))
-    const position = readAreaPosition(req.body)
+    const position = readPresencePosition(req.body, tileId)
     const clientUpdatedAt = readClientUpdatedAt(req.body)
     const tick = input.runtime.getCurrentTick()
+    if (tileId === HUB_PRESENCE_TILE_ID) {
+      const updated = input.social.upsertHubLocation(me, tick, position, clientUpdatedAt)
+      res.json({ location: presenceToDto(updated.row) })
+      return
+    }
     const previous = input.social.getPlayerLocation(me)
     const updated = input.social.upsertPlayerLocation(me, tileId, tick, position, clientUpdatedAt)
     if (updated.applied && (!previous || previous.tile_id !== updated.row.tile_id)) {
@@ -250,7 +258,9 @@ export function createSocialRouter(input: {
       res.json({ tileId: null, players: [] })
       return
     }
-    const rows = input.social.listPlayersInTile(targetTile, tick - PRESENCE_FRESH_TICKS)
+    const rows = targetTile === HUB_PRESENCE_TILE_ID
+      ? input.social.listHubPlayers(tick - PRESENCE_FRESH_TICKS)
+      : input.social.listPlayersInTile(targetTile, tick - PRESENCE_FRESH_TICKS)
     const players = rows
       .filter((r) => r.user_id !== me)
       .map((r) => {
@@ -472,17 +482,19 @@ function readTileId(body: unknown): string | null {
   return trimmed
 }
 
-function readAreaPosition(body: unknown): { x: number; y: number; z: number } | null {
+function readPresencePosition(body: unknown, tileId: string): { x: number; y: number; z: number } | null {
   if (!body || typeof body !== 'object') return null
   const rawX = (body as { x?: unknown }).x
   const rawY = (body as { y?: unknown }).y
   const rawZ = (body as { z?: unknown }).z
   if (typeof rawX !== 'number' || typeof rawY !== 'number') return null
   if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return null
+  const maxX = tileId === HUB_PRESENCE_TILE_ID ? HUB_PRESENCE_MAX_X : AREA_PRESENCE_MAX_X
+  const maxY = tileId === HUB_PRESENCE_TILE_ID ? HUB_PRESENCE_MAX_Y : AREA_PRESENCE_MAX_Y
   const z = typeof rawZ === 'number' && Number.isFinite(rawZ) ? rawZ : 0
   return {
-    x: Math.max(0, Math.min(AREA_PRESENCE_MAX_X, Math.round(rawX))),
-    y: Math.max(0, Math.min(AREA_PRESENCE_MAX_Y, Math.round(rawY))),
+    x: Math.max(0, Math.min(maxX, Math.round(rawX))),
+    y: Math.max(0, Math.min(maxY, Math.round(rawY))),
     z: Math.max(AREA_PRESENCE_MIN_Z, Math.min(AREA_PRESENCE_MAX_Z, Math.round(z))),
   }
 }

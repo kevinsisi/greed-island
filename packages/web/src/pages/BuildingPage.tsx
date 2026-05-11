@@ -125,10 +125,11 @@ export function BuildingPage() {
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
+      if (!token) return
       const npc = npcs.find((n) => n.id === npcId)
       if (npc) setActiveNpc(npc)
     },
-    [npcs]
+    [npcs, token]
   )
 
   const handleExit = useCallback(() => {
@@ -256,7 +257,14 @@ export function BuildingPage() {
         npcs={sceneNpcs}
         onNpcInteract={handleNpcInteract}
         onExit={handleExit}
+        controlsEnabled={!!token}
       />
+
+      {!token && (
+        <div className="gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
+          登入後才能在室內移動、離開或互動；目前是只讀瀏覽模式。
+        </div>
+      )}
 
       {/* 在場 NPC list */}
       <div className="flex flex-col gap-2 bg-ground-900/85 border border-ground-700 rounded-sharp p-3">
@@ -273,7 +281,8 @@ export function BuildingPage() {
                 <li key={occupant.npcId}>
                   <button
                     type="button"
-                    onClick={() => npc && setActiveNpc(npc)}
+                    onClick={() => token && npc && setActiveNpc(npc)}
+                    disabled={!token}
                     className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-sharp border border-ground-700 hover:border-ember-600 transition-colors"
                   >
                     <span

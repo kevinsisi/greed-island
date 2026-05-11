@@ -19,6 +19,8 @@ const EXIT_RADIUS = AREA_TILE_SIZE * 1.45
 const POSITION_SAVE_INTERVAL_MS = 500
 // 後端 tick 為 5 秒；NPC 從上次位置 tween 到新位置花 ≈4.5 秒，剛好接到下個 tick
 const NPC_MOVE_TWEEN_MS = 4500
+// Nearby players are refreshed every 8 秒；用略短 tween 讓畫面平滑接上下一次 server presence。
+const PEER_PLAYER_MOVE_TWEEN_MS = 7500
 
 /** AreaScene 對外保留的型別 alias；和 NpcActivity 完全等價，給 React 層使用。 */
 export type AreaNpcActivity = NpcActivity
@@ -133,6 +135,8 @@ export interface AreaSceneInit {
   startPosition: { x: number; y: number } | null
   /** v0.15.1：當前世界天氣（後端 fact）；用於 Phaser VFX 切換 */
   weather?: AreaWeather
+  /** Guests can browse the map, but player movement/actions require login. */
+  controlsEnabled?: boolean
 }
 
 const DROP_SPRITE_SIZE = 22
@@ -178,6 +182,7 @@ export class AreaScene extends Phaser.Scene {
   private nearbyNpcIdsCache = ''
   private tooFarHintTimer: Phaser.Time.TimerEvent | null = null
   private weather: AreaWeather = 'clear'
+  private controlsEnabled = true
   /** v0.15.1：天氣 VFX layer，applyWeather 切換時整批 destroy 重畫。 */
   private weatherLayer: Phaser.GameObjects.Container | null = null
   /** v0.15.1：環境動畫的 tween 池（裝飾物擺動 / 燈火閃爍 / 水波漣漪）。 */
@@ -225,6 +230,7 @@ export class AreaScene extends Phaser.Scene {
     this.hudStrings = data.hudStrings
     this.startPosition = data.startPosition
     this.weather = data.weather ?? 'clear'
+    this.controlsEnabled = data.controlsEnabled ?? true
   }
 
   create(): void {
@@ -264,7 +270,16 @@ export class AreaScene extends Phaser.Scene {
     hudStrings?: AreaSceneInit['hudStrings']
     buildings?: AreaMapBuilding[]
     weather?: AreaWeather
+    controlsEnabled?: boolean
   }): void {
+    if (payload.controlsEnabled !== undefined) {
+      this.controlsEnabled = payload.controlsEnabled
+      if (!this.controlsEnabled) {
+        this.pointerTarget = null
+        this.player?.setVelocity(0, 0)
+        this.interactPrompt?.setVisible(false)
+      }
+    }
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
     if (payload.npcs) {
       this.npcs = payload.npcs
@@ -293,6 +308,12 @@ export class AreaScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (!this.controlsEnabled) {
+      this.pointerTarget = null
+      this.player?.setVelocity(0, 0)
+      this.syncPlayerNameLabel()
+      return
+    }
     this.handleMovement(delta)
     this.checkDropProximity()
     this.checkBuildingProximity()
@@ -767,6 +788,10 @@ export class AreaScene extends Phaser.Scene {
       hitRect.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         // 距離檢查：必須走近才能進入
         const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, cx, cy)
         if (d > AREA_TILE_SIZE * 2) {
@@ -885,11 +910,11 @@ export class AreaScene extends Phaser.Scene {
       const target = this.peerTarget(player, i)
       const existing = this.peerSprites.get(player.id)
       if (existing) {
-        existing.setPosition(target.x, target.y)
         const label = existing.getData('label') as Phaser.GameObjects.Text | undefined
         const badge = existing.getData('badge') as Phaser.GameObjects.Text | undefined
         if (label && label.text !== player.displayName) label.setText(player.displayName)
         if (badge && badge.text !== player.shortName) badge.setText(player.shortName)
+        this.tweenPeerTo(existing, target.x, target.y)
         continue
       }
       const body = this.add.rectangle(0, 0, PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, 0x9ee0c7, 1)
@@ -915,14 +940,66 @@ export class AreaScene extends Phaser.Scene {
       container.setDepth(78)
       container.setData('badge', badge)
       container.setData('label', label)
+      container.setData('targetX', target.x)
+      container.setData('targetY', target.y)
       this.peerSprites.set(player.id, container)
     }
     for (const [id, sprite] of this.peerSprites) {
       if (!seen.has(id)) {
-        sprite.destroy(true)
+        this.disposePeerSprite(sprite)
         this.peerSprites.delete(id)
       }
     }
+  }
+
+  private tweenPeerTo(container: Phaser.GameObjects.Container, x: number, y: number): void {
+    const currentTargetX = container.getData('targetX') as number | undefined
+    const currentTargetY = container.getData('targetY') as number | undefined
+    if (
+      typeof currentTargetX === 'number' &&
+      typeof currentTargetY === 'number' &&
+      Math.abs(currentTargetX - x) < 0.5 &&
+      Math.abs(currentTargetY - y) < 0.5
+    ) {
+      return
+    }
+
+    const prev = container.getData('moveTween') as Phaser.Tweens.Tween | undefined
+    if (prev) this.tweens.remove(prev)
+
+    container.setData('targetX', x)
+    container.setData('targetY', y)
+
+    const startX = container.x
+    const startY = container.y
+    const distance = Phaser.Math.Distance.Between(startX, startY, x, y)
+    if (distance < 0.5) {
+      container.setPosition(x, y)
+      container.setData('moveTween', undefined)
+      return
+    }
+
+    const tween = this.tweens.add({
+      targets: { px: startX, py: startY },
+      px: x,
+      py: y,
+      duration: PEER_PLAYER_MOVE_TWEEN_MS,
+      ease: 'Sine.easeInOut',
+      onUpdate: (_t, t: { px: number; py: number }) => {
+        container.setPosition(t.px, t.py)
+      },
+      onComplete: () => {
+        container.setPosition(x, y)
+        container.setData('moveTween', undefined)
+      }
+    })
+    container.setData('moveTween', tween)
+  }
+
+  private disposePeerSprite(container: Phaser.GameObjects.Container): void {
+    const moveTween = container.getData('moveTween') as Phaser.Tweens.Tween | undefined
+    if (moveTween) this.tweens.remove(moveTween)
+    container.destroy(true)
   }
 
   private peerTarget(player: AreaMapPlayer, index: number): { x: number; y: number } {
@@ -1025,6 +1102,10 @@ export class AreaScene extends Phaser.Scene {
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         const d = Phaser.Math.Distance.Between(
           this.player.x,
           this.player.y,
@@ -1128,6 +1209,10 @@ export class AreaScene extends Phaser.Scene {
       chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         const d = Phaser.Math.Distance.Between(
           this.player.x,
           this.player.y,
@@ -1327,6 +1412,10 @@ export class AreaScene extends Phaser.Scene {
       container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         // 玩家點擊 drop 的位置：先確認玩家是否已經夠近，否則自動走過去
         const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, drop.x, drop.y)
         if (d > DROP_PICKUP_RADIUS) {
@@ -1455,6 +1544,10 @@ export class AreaScene extends Phaser.Scene {
     this.exitHotspot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.stopPropagation?.()
       this.suppressNextPointerTarget = true
+      if (!this.controlsEnabled) {
+        this.suppressNextPointerTarget = false
+        return
+      }
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y)
       if (d > EXIT_RADIUS) {
         this.pointerTarget = { x, y }
@@ -1531,6 +1624,7 @@ export class AreaScene extends Phaser.Scene {
     // 上時，sprite 的 handler 會設此 flag，這裡就不要把目標設成那個座標
     // (避免點 NPC 後玩家還繼續走過去 / 雙觸)。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (this.suppressNextPointerTarget) {
         this.suppressNextPointerTarget = false
         return
@@ -1538,6 +1632,7 @@ export class AreaScene extends Phaser.Scene {
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (pointer.isDown) {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
@@ -1545,6 +1640,7 @@ export class AreaScene extends Phaser.Scene {
   }
 
   private tryInteract(): void {
+    if (!this.controlsEnabled) return
     // 紋卡 drop 比 NPC 優先（玩家會踩在 drop 上面，靠近兩者時優先撿卡）
     if (this.nearbyDropId !== null) {
       this.callbacks.onDropPickup(this.nearbyDropId)
@@ -1585,6 +1681,10 @@ export class AreaScene extends Phaser.Scene {
   // ---------- 移動 / 觸發 / 持久化 ----------
 
   private handleMovement(_delta: number): void {
+    if (!this.controlsEnabled) {
+      this.player.setVelocity(0, 0)
+      return
+    }
     let vx = 0
     let vy = 0
 

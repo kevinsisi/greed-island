@@ -63,6 +63,14 @@ export interface MapAreaOverlay {
   dominantFaction: FactionLeanId | null
 }
 
+export interface MapPlayer {
+  id: number
+  displayName: string
+  shortName: string
+  x?: number | null
+  y?: number | null
+}
+
 export interface MapSceneCallbacks {
   onAreaEnter: (districtId: DistrictId) => void
   onNpcInteract: (npcId: string) => void
@@ -71,6 +79,8 @@ export interface MapSceneCallbacks {
 export interface MapSceneInit {
   callbacks: MapSceneCallbacks
   npcs: MapNpc[]
+  players?: MapPlayer[]
+  playerName?: string | null
   locale: 'zh' | 'en'
   /** 「Press E / 點我互動」一類的提示文字 (i18n 過後的字串)。 */
   hudStrings: {
@@ -81,6 +91,8 @@ export interface MapSceneInit {
   initialPosition?: { x: number; y: number } | null
   /** v0.14.0：每 district 的派系 / 治安 / 經濟 overlay。 */
   areaOverlays?: MapAreaOverlay[]
+  /** Guests can browse the world, but player movement/actions require login. */
+  controlsEnabled?: boolean
 }
 
 const PLAYER_SPEED = 180 // px/s
@@ -89,6 +101,8 @@ const NPC_SPRITE_SIZE = 26
 const PLAYER_SPRITE_SIZE = 22
 /** NPC tween 時長：後端 5s/tick，前端 4.5s 平滑 → 4.5s 抵達下個 server 推的位置 */
 const NPC_MOVE_TWEEN_MS = 4500
+const PEER_MOVE_TWEEN_MS = 1800
+const SPRITE_FADE_MS = 450
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
 const NPC_SUBTILE_RADIUS = TILE_SIZE * 0.9
 
@@ -120,8 +134,11 @@ export class MapScene extends Phaser.Scene {
 
   private callbacks!: MapSceneCallbacks
   private npcs: MapNpc[] = []
+  private players: MapPlayer[] = []
+  private playerName: string | null = null
   private locale: 'zh' | 'en' = 'zh'
   private hudStrings: MapSceneInit['hudStrings'] = { interact: '', enterArea: '' }
+  private controlsEnabled = true
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -141,6 +158,8 @@ export class MapScene extends Phaser.Scene {
   private districtBannerTimer: number = 0
 
   private npcSprites: Map<string, Phaser.Physics.Arcade.Sprite> = new Map()
+  private peerSprites: Map<number, Phaser.GameObjects.Container> = new Map()
+  private playerNameLabel: Phaser.GameObjects.Text | null = null
   private envTweens: Phaser.Tweens.Tween[] = []
   private envSprites: Phaser.GameObjects.Text[] = []
 
@@ -153,9 +172,12 @@ export class MapScene extends Phaser.Scene {
   init(data: MapSceneInit): void {
     this.callbacks = data.callbacks
     this.npcs = data.npcs
+    this.players = data.players ?? []
+    this.playerName = data.playerName ?? null
     this.locale = data.locale
     this.hudStrings = data.hudStrings
     this.initialPosition = data.initialPosition ?? null
+    this.controlsEnabled = data.controlsEnabled ?? true
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -176,6 +198,7 @@ export class MapScene extends Phaser.Scene {
     this.refreshAreaOverlay()
     this.drawDistrictLabels()
     this.spawnPlayer()
+    this.refreshPeerSprites()
     this.spawnNpcs()
     this.setupInput()
     this.setupHud()
@@ -186,7 +209,7 @@ export class MapScene extends Phaser.Scene {
     // 如果玩家從還原的座標一開始就站在某街區裡，立刻同步給 React 端，
     // 否則「進入 XXX →」按鈕得等到玩家踏出街區再走回來才會出現。
     // 不放 banner — banner 是「剛走進」的通知，重整頁面時不該再演一次。
-    if (isDistrict(this.currentDistrict)) {
+    if (this.controlsEnabled && isDistrict(this.currentDistrict)) {
       this.callbacks.onAreaEnter(this.currentDistrict)
     }
 
@@ -200,11 +223,33 @@ export class MapScene extends Phaser.Scene {
    */
   applyExternalUpdate(payload: {
     npcs?: MapNpc[]
+    players?: MapPlayer[]
+    playerName?: string | null
     locale?: 'zh' | 'en'
     hudStrings?: MapSceneInit['hudStrings']
     areaOverlays?: MapAreaOverlay[]
+    controlsEnabled?: boolean
   }): void {
+    if (payload.controlsEnabled !== undefined) {
+      const wasControlsEnabled = this.controlsEnabled
+      this.controlsEnabled = payload.controlsEnabled
+      if (!this.controlsEnabled) {
+        this.pointerTarget = null
+        this.player?.setVelocity(0, 0)
+        this.interactPrompt?.setVisible(false)
+      } else if (!wasControlsEnabled && isDistrict(this.currentDistrict)) {
+        this.callbacks.onAreaEnter(this.currentDistrict)
+      }
+    }
     if (payload.hudStrings) this.hudStrings = payload.hudStrings
+    if (payload.players) {
+      this.players = payload.players
+      this.refreshPeerSprites()
+    }
+    if (payload.playerName !== undefined) {
+      this.playerName = payload.playerName
+      this.refreshPlayerNameLabel()
+    }
     if (payload.locale) this.locale = payload.locale
     if (payload.npcs) {
       this.npcs = payload.npcs
@@ -221,7 +266,14 @@ export class MapScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (!this.controlsEnabled) {
+      this.pointerTarget = null
+      this.player?.setVelocity(0, 0)
+      this.syncPlayerNameLabel()
+      return
+    }
     this.handleMovement(delta)
+    this.syncPlayerNameLabel()
     this.checkDistrictTransition()
     this.checkNpcProximity()
     this.tickDistrictBanner(delta)
@@ -536,8 +588,124 @@ export class MapScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(startX, startY, tex)
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)
+    this.refreshPlayerNameLabel()
     // 觀察玩家進入起始地塊
     this.currentDistrict = districtAtPixel(this.player.x, this.player.y)
+  }
+
+  private refreshPlayerNameLabel(): void {
+    if (!this.player) return
+    const label = this.playerName?.trim()
+    if (!label) {
+      this.playerNameLabel?.destroy()
+      this.playerNameLabel = null
+      return
+    }
+    if (!this.playerNameLabel) {
+      this.playerNameLabel = this.add.text(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.25, label, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 4
+      })
+      this.playerNameLabel.setOrigin(0.5, 1)
+      this.playerNameLabel.setDepth(84)
+      return
+    }
+    if (this.playerNameLabel.text !== label) this.playerNameLabel.setText(label)
+    this.syncPlayerNameLabel()
+  }
+
+  private syncPlayerNameLabel(): void {
+    if (!this.player || !this.playerNameLabel) return
+    this.playerNameLabel.setPosition(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.25)
+  }
+
+  private refreshPeerSprites(): void {
+    const seen = new Set<number>()
+    for (const player of this.players) {
+      seen.add(player.id)
+      const target = this.peerTarget(player)
+      const existing = this.peerSprites.get(player.id)
+      if (existing) {
+        this.tweenPeerTo(existing, target.x, target.y)
+        const label = existing.getData('label') as Phaser.GameObjects.Text | undefined
+        const badge = existing.getData('badge') as Phaser.GameObjects.Text | undefined
+        if (label && label.text !== player.displayName) label.setText(player.displayName)
+        if (badge && badge.text !== player.shortName) badge.setText(player.shortName)
+        continue
+      }
+      const body = this.add.rectangle(0, 0, PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, 0x9ee0c7, 1)
+      body.setStrokeStyle(2, 0x1c1300, 1)
+      const badge = this.add.text(0, 0, player.shortName, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '13px',
+        color: '#103226',
+        fontStyle: 'bold'
+      })
+      badge.setOrigin(0.5, 0.5)
+      const label = this.add.text(0, -PLAYER_SPRITE_SIZE * 0.85, player.displayName, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#d9fff0',
+        stroke: '#0a0a0a',
+        strokeThickness: 4
+      })
+      label.setOrigin(0.5, 1)
+      const container = this.add.container(target.x, target.y, [body, badge, label])
+      container.setDepth(78)
+      container.setAlpha(0)
+      container.setData('badge', badge)
+      container.setData('label', label)
+      this.peerSprites.set(player.id, container)
+      this.tweens.add({ targets: container, alpha: 1, duration: SPRITE_FADE_MS, ease: 'Sine.easeOut' })
+    }
+    for (const [id, sprite] of this.peerSprites) {
+      if (!seen.has(id)) {
+        const tween = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
+        if (tween) this.tweens.remove(tween)
+        this.peerSprites.delete(id)
+        this.tweens.add({
+          targets: sprite,
+          alpha: 0,
+          duration: SPRITE_FADE_MS,
+          ease: 'Sine.easeIn',
+          onComplete: () => sprite.destroy(true)
+        })
+      }
+    }
+  }
+
+  private tweenPeerTo(container: Phaser.GameObjects.Container, x: number, y: number): void {
+    const prev = container.getData('moveTween') as Phaser.Tweens.Tween | undefined
+    if (prev) this.tweens.remove(prev)
+    const distance = Math.hypot(x - container.x, y - container.y)
+    if (distance < 0.5) {
+      container.setPosition(x, y)
+      return
+    }
+    const tween = this.tweens.add({
+      targets: container,
+      x,
+      y,
+      duration: PEER_MOVE_TWEEN_MS,
+      ease: 'Sine.easeInOut'
+    })
+    container.setData('moveTween', tween)
+  }
+
+  private peerTarget(player: MapPlayer): { x: number; y: number } {
+    if (typeof player.x === 'number' && typeof player.y === 'number') {
+      return {
+        x: Math.min(Math.max(player.x, PLAYER_SPRITE_SIZE), CANVAS_WIDTH - PLAYER_SPRITE_SIZE),
+        y: Math.min(Math.max(player.y, PLAYER_SPRITE_SIZE), CANVAS_HEIGHT - PLAYER_SPRITE_SIZE)
+      }
+    }
+    return { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }
   }
 
   private spawnNpcs(): void {
@@ -603,12 +771,17 @@ export class MapScene extends Phaser.Scene {
       this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, 0x1c1300, 2)
       const sprite = this.physics.add.sprite(target.x, target.y, tex)
       sprite.setDepth(70)
+      sprite.setAlpha(0)
       sprite.setData('npcId', npc.id)
       sprite.setData('npcColor', fillColor)
       sprite.setInteractive({ useHandCursor: true })
       sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         this.callbacks.onNpcInteract(npc.id)
       })
 
@@ -621,6 +794,7 @@ export class MapScene extends Phaser.Scene {
       })
       badge.setOrigin(0.5, 0.5)
       badge.setDepth(71)
+      badge.setAlpha(0)
       sprite.setData('badge', badge)
 
       const nameLabel = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
@@ -633,6 +807,7 @@ export class MapScene extends Phaser.Scene {
       })
       nameLabel.setOrigin(0.5, 1)
       nameLabel.setDepth(72)
+      nameLabel.setAlpha(0)
       sprite.setData('nameLabel', nameLabel)
 
       const iconGlyph = activityGlyphFor(npc.activity)
@@ -652,6 +827,7 @@ export class MapScene extends Phaser.Scene {
       activityIconText.setOrigin(0.5, 0.5)
       activityIconText.setDepth(73)
       activityIconText.setVisible(iconGlyph.length > 0)
+      activityIconText.setAlpha(0)
       sprite.setData('activityIcon', activityIconText)
 
       const chatBubble = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 1.6, '💬', {
@@ -665,14 +841,20 @@ export class MapScene extends Phaser.Scene {
       chatBubble.setOrigin(0.5, 1)
       chatBubble.setDepth(73)
       chatBubble.setVisible(false)
+      chatBubble.setAlpha(0)
       chatBubble.setInteractive({ useHandCursor: true })
       chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
+        if (!this.controlsEnabled) {
+          this.suppressNextPointerTarget = false
+          return
+        }
         this.callbacks.onNpcInteract(npc.id)
       })
       sprite.setData('chatBubble', chatBubble)
       this.attachNpcIdleAnimation(sprite, npc.id)
+      this.fadeNpcSprite(sprite, 1)
 
       this.npcSprites.set(npc.id, sprite)
     }
@@ -798,12 +980,33 @@ export class MapScene extends Phaser.Scene {
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
-    if (badge) badge.destroy()
-    if (nameLabel) nameLabel.destroy()
-    if (activityIcon) activityIcon.destroy()
-    if (chatBubble) chatBubble.destroy()
-    sprite.destroy()
     this.npcSprites.delete(id)
+    this.tweens.add({
+      targets: [sprite, badge, nameLabel, activityIcon, chatBubble].filter(Boolean),
+      alpha: 0,
+      duration: SPRITE_FADE_MS,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        if (badge) badge.destroy()
+        if (nameLabel) nameLabel.destroy()
+        if (activityIcon) activityIcon.destroy()
+        if (chatBubble) chatBubble.destroy()
+        sprite.destroy()
+      }
+    })
+  }
+
+  private fadeNpcSprite(sprite: Phaser.Physics.Arcade.Sprite, alpha: number): void {
+    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+    const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+    const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
+    const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    this.tweens.add({
+      targets: [sprite, badge, nameLabel, activityIcon, chatBubble].filter(Boolean),
+      alpha,
+      duration: SPRITE_FADE_MS,
+      ease: 'Sine.easeOut'
+    })
   }
 
   private npcTextureKey(npcId: string, color?: number): string {
@@ -856,6 +1059,7 @@ export class MapScene extends Phaser.Scene {
     // suppressNextPointerTarget：點到 NPC sprite 時 sprite handler 會設此 flag，
     // 這次 pointerdown 就不要把目標設成那個座標 (避免雙觸)。
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (this.suppressNextPointerTarget) {
         this.suppressNextPointerTarget = false
         return
@@ -863,6 +1067,7 @@ export class MapScene extends Phaser.Scene {
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.controlsEnabled) return
       if (pointer.isDown) {
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
@@ -870,6 +1075,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private tryInteract(): void {
+    if (!this.controlsEnabled) return
     if (this.nearbyNpcId) {
       this.callbacks.onNpcInteract(this.nearbyNpcId)
     }
@@ -934,6 +1140,10 @@ export class MapScene extends Phaser.Scene {
   // ---------- 移動 / 觸發 ----------
 
   private handleMovement(_delta: number): void {
+    if (!this.controlsEnabled) {
+      this.player.setVelocity(0, 0)
+      return
+    }
     let vx = 0
     let vy = 0
 
@@ -966,6 +1176,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private checkDistrictTransition(): void {
+    if (!this.controlsEnabled) return
     const here = districtAtPixel(this.player.x, this.player.y)
     if (here !== this.currentDistrict) {
       this.currentDistrict = here

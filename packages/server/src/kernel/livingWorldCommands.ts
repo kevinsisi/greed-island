@@ -36,6 +36,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
   'PLAYER_INTERVENE',
+  'NPC_DIALOG_HOLD',
   // v0.15.0 — Combat Phase B (single-shot judgement)
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
@@ -160,6 +161,14 @@ export type PlayerIntervenecmd = Readonly<{
   narration: string
 }>
 
+export type NpcDialogHoldCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tile: string
+  holdTicks: number
+  narration: string | null
+}>
+
 /** v0.15.0 Combat Phase B — 全部 combat 動作都走 LivingWorld pipeline */
 export type CombatInitiateCmd = Readonly<{
   combatId: string
@@ -211,6 +220,7 @@ export type LivingWorldCommandPayload =
   | RareWindowCloseCmd
   | WorldTickCmd
   | PlayerIntervenecmd
+  | NpcDialogHoldCmd
   | CombatInitiateCmd
   | CombatPlayerActionCmd
   | CombatResolveCmd
@@ -402,6 +412,19 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.message !== 'string') return 'message required (can be empty string)'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_DIALOG_HOLD: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) {
+      return 'playerAccountId required'
+    }
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (typeof p.holdTicks !== 'number' || !Number.isFinite(p.holdTicks) || p.holdTicks <= 0) {
+      return 'holdTicks must be positive number'
+    }
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   }
 }

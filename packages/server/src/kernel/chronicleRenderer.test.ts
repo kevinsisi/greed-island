@@ -184,7 +184,7 @@ describe('chronicle AI rendering', () => {
     expect(rendered.aiMeta.fallbackReason).toContain('outside grounded context')
   })
 
-  it('excludes internal FACT_SET events from chronicle context', () => {
+  it('excludes internal FACT_SET and WORLD_TICK events from chronicle context', () => {
     const events = [
       {
         eventType: 'FACT_SET',
@@ -208,8 +208,20 @@ describe('chronicle AI rendering', () => {
 
     const context = buildChronicleContext({ events, memory: makeMemory() })
 
-    expect(context.events).toHaveLength(1)
-    expect(context.events[0]!.eventType).toBe('WORLD_TICK')
+    expect(context.events).toHaveLength(0)
+  })
+
+  it('renders deterministic fallback as a chronicle paragraph, not a tick list', async () => {
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(0),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(rendered.textZh).toContain('低聲交談')
+    expect(rendered.textZh).not.toContain('第 2 tick')
+    expect(rendered.textZh).not.toContain('\n')
   })
 
   it('adds actor display names to allowedNames', () => {

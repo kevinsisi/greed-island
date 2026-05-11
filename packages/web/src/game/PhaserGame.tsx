@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type DistrictId } from './districts'
-import { MapScene, type MapAreaOverlay, type MapNpc, type MapSceneInit } from './MapScene'
+import { MapScene, type MapAreaOverlay, type MapNpc, type MapPlayer, type MapSceneInit } from './MapScene'
 
 export interface PhaserGameProps {
   npcs: MapNpc[]
+  players?: MapPlayer[]
   locale: 'zh' | 'en'
+  playerName?: string | null
   hudStrings: MapSceneInit['hudStrings']
   onAreaEnter: (districtId: DistrictId) => void
   onNpcInteract: (npcId: string) => void
+  onPositionChange?: (pos: { x: number; y: number; z: number }) => void
   /** v0.14.0：每 tile 的派系 / 治安 / 經濟 overlay。空陣列 = 無 overlay。 */
   areaOverlays?: MapAreaOverlay[]
+  controlsEnabled?: boolean
 }
 
 const PLAYER_POS_STORAGE_KEY = 'gi:hub:player-pos:v1'
@@ -50,14 +54,28 @@ function savePlayerPosition(pos: { x: number; y: number } | null): void {
  * 把 Phaser 場景嵌進 React。生命週期：mount 建一次 game，unmount 才 destroy。
  * Props 變動 (npcs / locale / hud strings) 會以 emit 形式餵進 scene，避免重建整個 game。
  */
-export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInteract, areaOverlays }: PhaserGameProps) {
+export function PhaserGame({
+  npcs,
+  players,
+  locale,
+  playerName,
+  hudStrings,
+  onAreaEnter,
+  onNpcInteract,
+  onPositionChange,
+  areaOverlays,
+  controlsEnabled = true
+}: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
+  const controlsEnabledRef = useRef(controlsEnabled)
+  controlsEnabledRef.current = controlsEnabled
 
   // callback ref：讓 scene 內部呼叫時拿到最新版的 React handlers，避免閉包過期。
-  const callbacksRef = useRef({ onAreaEnter, onNpcInteract })
+  const callbacksRef = useRef({ onAreaEnter, onNpcInteract, onPositionChange })
   callbacksRef.current.onAreaEnter = onAreaEnter
   callbacksRef.current.onNpcInteract = onNpcInteract
+  callbacksRef.current.onPositionChange = onPositionChange
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -99,9 +117,12 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
         onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id)
       },
       npcs,
+      ...(players ? { players } : {}),
+      ...(playerName !== undefined ? { playerName } : {}),
       locale,
       hudStrings,
-      initialPosition: loadPlayerPosition()
+      initialPosition: controlsEnabled ? loadPlayerPosition() : null,
+      controlsEnabled
     }
     if (areaOverlays) init.areaOverlays = areaOverlays
     game.scene.start(MapScene.KEY, init)
@@ -109,15 +130,24 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
     // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
     const autosaveTimer = window.setInterval(() => {
       const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-      if (scene && scene.scene.isActive()) {
-        savePlayerPosition(scene.getPlayerPosition())
+      if (controlsEnabledRef.current && scene && scene.scene.isActive()) {
+        const pos = scene.getPlayerPosition()
+        savePlayerPosition(pos)
+        if (pos) callbacksRef.current.onPositionChange?.({ x: Math.round(pos.x), y: Math.round(pos.y), z: 0 })
       }
     }, PLAYER_POS_AUTOSAVE_MS)
+
+    window.setTimeout(() => {
+      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+      if (!controlsEnabledRef.current || !scene || !scene.scene.isActive()) return
+      const pos = scene.getPlayerPosition()
+      if (pos) callbacksRef.current.onPositionChange?.({ x: Math.round(pos.x), y: Math.round(pos.y), z: 0 })
+    }, 0)
 
     const handleVisibility = () => {
       if (document.visibilityState !== 'visible') {
         const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-        if (scene && scene.scene.isActive()) {
+        if (controlsEnabledRef.current && scene && scene.scene.isActive()) {
           savePlayerPosition(scene.getPlayerPosition())
         }
       }
@@ -126,7 +156,7 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
 
     return () => {
       const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-      if (scene) savePlayerPosition(scene.getPlayerPosition())
+      if (controlsEnabledRef.current && scene) savePlayerPosition(scene.getPlayerPosition())
       window.clearInterval(autosaveTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
       game.destroy(true)
@@ -136,14 +166,17 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // npcs / locale / hud 字串 / area overlay 變動 → 通知場景刷新
+  // npcs / players / locale / hud 字串 / area overlay 變動 → 通知場景刷新
   useEffect(() => {
     let retryTimer: number | null = null
     let attempts = 0
     const update: Parameters<MapScene['applyExternalUpdate']>[0] = {
       npcs,
+      ...(players ? { players } : {}),
+      ...(playerName !== undefined ? { playerName } : {}),
       locale,
-      hudStrings
+      hudStrings,
+      controlsEnabled
     }
     if (areaOverlays) update.areaOverlays = areaOverlays
     const apply = () => {
@@ -163,7 +196,7 @@ export function PhaserGame({ npcs, locale, hudStrings, onAreaEnter, onNpcInterac
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [npcs, locale, hudStrings, areaOverlays])
+  }, [npcs, players, playerName, locale, hudStrings, areaOverlays, controlsEnabled])
 
   return (
     <div

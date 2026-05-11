@@ -3,6 +3,121 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.23 In Progress
+
+### Completed Locally
+
+- Investigated the reported map symptom where other online players appeared to
+  teleport between positions.
+- Confirmed `AreaScene.refreshPeerSprites()` directly called `setPosition()` for
+  existing peer player containers on every nearby-player refresh, while NPCs
+  already used visual-only tweening from their current rendered position to the
+  next server-authoritative target.
+- Changed existing Area peer player containers to tween to the latest server
+  presence target instead of snapping. New peers still spawn at their
+  authoritative target, and vanished peers are destroyed with any active tween
+  cleaned up.
+- Kept presence coordinates as rendering input only; this change does not make
+  the renderer simulation authority.
+- Investigated the reported guest-control issue. Server mutation endpoints were
+  already behind auth, but Phaser scenes still spawned a controllable local
+  player and accepted movement/interaction input for guests, which made the game
+  appear playable while logged out.
+- Added guest read-only mode to Hub, Area, and Building Phaser scenes. Guests can
+  still view public world/read-only pages, but movement, NPC interaction, card
+  pickup, building enter/exit scene controls, and indoor controls are disabled
+  until login.
+- Added visible guest read-only notices on hub, area, and building pages.
+- Improved deterministic chronicle fallback output by filtering out internal
+  `WORLD_TICK` noise and rendering a paragraph-style summary instead of raw
+  `第 X tick` bullets.
+- Added the `/timeline` chronicle summary card backed by `/api/world/chronicle`.
+- Fixed Hub/main-map local player labeling and peer visibility: `HubPage` now
+  posts Hub social presence with the local map coordinates, polls nearby Hub
+  players, and passes player names/peer positions into `MapScene`.
+- Kept Hub presence separate from area-bound gameplay location by storing main-map
+  UI presence in `player_hub_locations` instead of overwriting
+  `player_locations`, which combat/shop code still reads for area checks.
+- Extended social presence coordinate clamping for `tileId='hub'` to the full
+  800x600 main-map canvas while keeping area maps on the existing 600x400
+  coordinate contract.
+- Fixed a Hub login-state edge case where logging in while already standing in a
+  district did not emit the current district CTA until the player moved out and
+  back in.
+- Reviewed `D:\Projects\ai-agents` and homelab `agent-design` guidance after the
+  NPC-agent question. Captured the durable rule in `ARCHITECTURE.md`: every NPC
+  is a deterministic runtime agent with identity, memory, goals, permissions,
+  task state, and command budget, not a free-form LLM agent.
+- Added the first deterministic NPC-agent runtime slice. `NpcEngine` now stores
+  per-NPC `agent` state with `profileId`, permission labels, bounded active task,
+  and last-decision metadata derived from schedule, deterministic nudge,
+  movement, and NPC social interaction state.
+- Tightened the NPC-agent slice after review: `social-interaction` active tasks
+  are now committed only after the corresponding `NPC_INTERACT` command passes
+  Rule Engine validation, remain active until their deterministic expiry tick,
+  and legacy hydrated states without `agent` use the hydrated tile as fallback.
+- Exposed NPC agent state through `/api/npcs` via `internalState.agent`, so the
+  UI/debug surfaces can inspect the agent projection without giving rendering any
+  simulation authority.
+- Smoothed Hub/main-map peer players and travel NPC rendering. Existing Hub peer
+  player containers now tween to the latest social presence target instead of
+  snapping, and Hub peer/NPC spawn/despawn paths fade instead of hard flashing.
+- Moved the Hub city title/description HUD out of the Phaser map and into a
+  compact header above the map, so it no longer covers the left side of the main
+  map.
+- Added deterministic player-dialog hold for active NPC conversations. Opening an
+  authenticated NPC dialog now posts `/api/npc/:npcId/dialog-hold` and refreshes
+  it while the dialog is open; the runtime validates `NPC_DIALOG_HOLD` through
+  the living-world Rule Engine before persisting a bounded `player-dialog` agent
+  task through FACT_SET state, so schedule movement cannot make that NPC walk
+  away mid-dialog.
+- Updated OpenSpec `npc-humanity-ai-memory` with the new deterministic NPC agent
+  state and player-dialog hold requirements, and marked tasks `3.5` and `3.6`
+  complete.
+- Bumped app version to `0.15.23`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- social` passed: 1 file / 2 tests,
+  including Hub presence separation from area `player_locations`.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm run test -w @greed-island/server -- npcEngine buildingRuntime` passed: 2
+  files / 22 tests.
+- `npm run build` passed: server build and web build completed; web build still
+  shows the existing Vite chunk-size warning.
+- `npm test` passed: server 19 files / 141 tests; web 5 files / 12 tests.
+- `npm run test -w @greed-island/server -- npcEngine` passed: 1 file / 21 tests.
+- `npm run test -w @greed-island/server -- npc` passed: 6 files / 50 tests.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed; output only contained Windows LF→CRLF working-copy
+  warnings.
+- Local Node runtime restarted from the latest build with
+  `JWT_SECRET=local-development-secret-0-15-23` and
+  `GREED_ISLAND_DATA_DIR=D:\Projects\_HomeProject\greed-island\deploy\data`.
+- Local runtime health passed: `/api/version` and `/healthz` both returned
+  `0.15.23`.
+- Local `/api/npcs` confirmed `internalState.agent.activeTask` is present.
+- Local dialog-hold verification passed: registering a local test account and
+  posting `/api/npc/central.broker.gui/dialog-hold` returned `held=true`,
+  `expiresAtTick=3848`, and `/api/npcs` then showed
+  `activeTask.kind = player-dialog` with `lastDecision.source = player`.
+- Local Vite web root `http://127.0.0.1:5173/` returned HTTP `200`.
+
+### Still Open
+
+- Continue the reported social notification investigation: social realtime
+  notifications should refresh from canonical social state; SSE/polling is only a
+  hint, not source of truth.
+- Browser/Phaser E2E coverage is still missing for two-player Hub presence and
+  Area/Hub peer tween behavior; current coverage is build/typecheck plus server
+  social presence and dialog-hold tests.
+- Browser/Phaser E2E coverage is still missing for active-dialog visual hold;
+  local API verification confirms the authoritative `player-dialog` task, but no
+  automated visual test opens the dialog in a real browser yet.
+- Docker compose local deploy remains blocked by Docker Hub TLS certificate
+  verification on this workstation.
+
 ## 2026-05-11 — v0.15.22 Shipped
 
 ### Completed Locally

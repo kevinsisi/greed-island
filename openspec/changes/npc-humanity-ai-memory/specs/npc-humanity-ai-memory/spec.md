@@ -79,6 +79,36 @@ chronicle rendering.
 - **THEN** both NPCs SHOULD receive memory rows for that interaction
 - **AND** relationship projection SHOULD update from the same committed event
 
+### Requirement: NPCs expose deterministic agent state
+
+The system SHALL model each NPC as a deterministic runtime agent with identity,
+bounded permissions, active task state, and last-decision metadata derived from
+profile data and committed simulation state. This agent state MUST remain a
+projection over deterministic inputs; AI MUST NOT directly choose the active task
+or mutate the agent state.
+
+#### Scenario: NPC state includes agent metadata
+- **GIVEN** an NPC profile is loaded by the runtime
+- **WHEN** `/api/npcs` or runtime snapshots expose that NPC
+- **THEN** the NPC internal state SHOULD include an `agent` object with profile
+  id, permission labels, active task, and last decision metadata
+- **AND** the active task MUST be derived from schedule, deterministic nudge,
+  movement, or committed interaction state
+
+#### Scenario: Social interaction becomes an active task
+- **WHEN** two NPCs produce a committed interaction candidate during a tick
+- **THEN** each participant's agent state SHOULD mark a bounded social task
+- **AND** the task MUST expire deterministically without relying on wall-clock time
+
+#### Scenario: Player dialog holds NPC presence
+- **GIVEN** a logged-in player opens a dialog with an NPC
+- **WHEN** the client submits the authenticated dialog-hold command
+- **THEN** the NPC agent state SHOULD mark a bounded `player-dialog` task
+- **AND** NPC movement/schedule changes MUST NOT move that NPC until the hold
+  expires or is refreshed
+- **AND** the hold MUST be persisted through the deterministic world state path,
+  not only through a frontend dialog overlay
+
 ### Requirement: AI chronicle rendering is grounded and non-authoritative
 
 The system SHALL use AI to render natural chronicle text from committed event

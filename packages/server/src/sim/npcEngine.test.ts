@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NpcEngine, type NpcRuntimeState } from './npcEngine.js'
+import { NpcEngine, NPC_PLAYER_DIALOG_HOLD_TICKS, type NpcRuntimeState } from './npcEngine.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY } from '../config/world.js'
 
@@ -381,5 +381,142 @@ describe('NpcEngine', () => {
       interactCount += r.events.filter((e) => e.kind === 'interact').length
     }
     expect(interactCount).toBe(0) // 兩位都在路上 (activity=move) 不互動
+  })
+
+  it('exposes deterministic agent state for each NPC', () => {
+    const engine = new NpcEngine([makeProfile({ id: 'agent.npc' })])
+    const initial = engine.getState('agent.npc')!
+
+    expect(initial.agent.profileId).toBe('agent.npc')
+    expect(initial.agent.permissions).toContain('move.cross_tile')
+    expect(initial.agent.permissions).toContain('interact.social')
+    expect(initial.agent.activeTask).toEqual({
+      kind: 'bootstrap',
+      reason: 'profile-loaded',
+      targetTile: 't_central',
+      startedAtTick: 0,
+      expiresAtTick: null
+    })
+
+    engine.tick(1)
+    const after = engine.getState('agent.npc')!
+    expect(after.agent.activeTask.kind).toBe('scheduled-duty')
+    expect(after.agent.activeTask.reason).toBe('schedule:work')
+    expect(after.agent.activeTask.targetTile).toBe('t_central')
+    expect(after.agent.lastDecision).toEqual({ tick: 1, source: 'schedule', reason: 'schedule:work' })
+  })
+
+  it('preserves an active agent task start tick while the task signature is stable', () => {
+    const profile = makeProfile({
+      id: 'stable.agent',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }]
+    })
+    const engine = new NpcEngine([profile])
+
+    engine.tick(1)
+    const startedAt = engine.getState('stable.agent')!.agent.activeTask.startedAtTick
+    engine.tick(2)
+
+    expect(engine.getState('stable.agent')!.agent.activeTask.kind).toBe('local-activity')
+    expect(engine.getState('stable.agent')!.agent.activeTask.startedAtTick).toBe(startedAt)
+  })
+
+  it('marks NPC interaction participants with bounded social agent tasks', () => {
+    const A = makeProfile({
+      id: 'social.A',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const B = makeProfile({
+      id: 'social.B',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const engine = new NpcEngine([A, B])
+    engine.hydrate('social.A', { tile: 't_central', targetTile: 't_central', activity: 'idle', subCol: 7, subRow: 5, subZ: 0, mood: 80 })
+    engine.hydrate('social.B', { tile: 't_central', targetTile: 't_central', activity: 'idle', subCol: 8, subRow: 5, subZ: 0, mood: 80 })
+
+    let interactionTick = 0
+    for (let t = 1; t <= 240; t += 1) {
+      const result = engine.tick(t)
+      if (result.events.some((e) => e.kind === 'interact')) {
+        interactionTick = t
+        break
+      }
+    }
+
+    expect(interactionTick).toBeGreaterThan(0)
+    // Runtime calls this only after Rule Engine acceptance; the engine test uses
+    // the public commit hook directly to keep Event authority explicit.
+    engine.commitSocialInteractionTask(['social.A', 'social.B'], 't_central', 'chat', interactionTick)
+
+    expect(engine.getState('social.A')!.agent.activeTask).toEqual(
+      expect.objectContaining({
+        kind: 'social-interaction',
+        targetTile: 't_central',
+        startedAtTick: interactionTick,
+        expiresAtTick: interactionTick + 6
+      })
+    )
+    expect(engine.getState('social.B')!.agent.lastDecision.source).toBe('social')
+  })
+
+  it('keeps accepted social agent tasks until their deterministic expiry tick', () => {
+    const profile = makeProfile({
+      id: 'social.ttl',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }]
+    })
+    const engine = new NpcEngine([profile])
+
+    engine.commitSocialInteractionTask(['social.ttl', 'missing.peer'], 't_central', 'argue', 10)
+    engine.tick(11)
+    expect(engine.getState('social.ttl')!.agent.activeTask.kind).toBe('social-interaction')
+    engine.tick(16)
+    expect(engine.getState('social.ttl')!.agent.activeTask.kind).toBe('local-activity')
+  })
+
+  it('holds an NPC in place while a player dialog task is active', () => {
+    const profile = makeProfile({
+      id: 'dialog.hold',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_dock', label: 'work' }]
+    })
+    const engine = new NpcEngine([profile])
+
+    const hold = engine.commitPlayerDialogHoldTask('dialog.hold', 10)
+    expect(hold?.state.agent.activeTask).toEqual(
+      expect.objectContaining({
+        kind: 'player-dialog',
+        targetTile: 't_central',
+        expiresAtTick: 10 + NPC_PLAYER_DIALOG_HOLD_TICKS
+      })
+    )
+    engine.tick(11)
+    expect(engine.getState('dialog.hold')!.tile).toBe('t_central')
+    expect(engine.getState('dialog.hold')!.agent.activeTask.kind).toBe('player-dialog')
+
+    engine.tick(10 + NPC_PLAYER_DIALOG_HOLD_TICKS)
+    expect(engine.getState('dialog.hold')!.agent.activeTask.kind).toBe('travel')
+    expect(engine.getState('dialog.hold')!.tile).not.toBe('t_central')
+  })
+
+  it('hydrates old persisted state without agent using the hydrated tile as fallback target', () => {
+    const engine = new NpcEngine([makeProfile({ id: 'legacy.agent' })])
+
+    engine.hydrate('legacy.agent', {
+      tile: 't_temple',
+      targetTile: 't_temple',
+      activity: 'work'
+    })
+
+    expect(engine.getState('legacy.agent')!.agent.activeTask).toEqual(
+      expect.objectContaining({
+        kind: 'bootstrap',
+        reason: 'hydrate-fallback',
+        targetTile: 't_temple'
+      })
+    )
   })
 })

@@ -8,9 +8,16 @@ export interface BuildingPhaserGameProps {
   npcs: BuildingSceneNpc[]
   onNpcInteract: (npcId: string) => void
   onExit: () => void
+  controlsEnabled?: boolean
 }
 
-export function BuildingPhaserGame({ building, npcs, onNpcInteract, onExit }: BuildingPhaserGameProps) {
+export function BuildingPhaserGame({
+  building,
+  npcs,
+  onNpcInteract,
+  onExit,
+  controlsEnabled = true
+}: BuildingPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
   const callbacksRef = useRef({ onNpcInteract, onExit })
@@ -41,6 +48,7 @@ export function BuildingPhaserGame({ building, npcs, onNpcInteract, onExit }: Bu
     const init: BuildingSceneInit = {
       building,
       npcs,
+      controlsEnabled,
       callbacks: {
         onNpcInteract: (id) => callbacksRef.current.onNpcInteract(id),
         onExit: () => callbacksRef.current.onExit()
@@ -53,15 +61,15 @@ export function BuildingPhaserGame({ building, npcs, onNpcInteract, onExit }: Bu
       gameRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [building.id])
+  }, [building.id, controlsEnabled])
 
   useEffect(() => {
     const game = gameRef.current
     if (!game) return
     const scene = game.scene.getScene(BuildingScene.KEY) as BuildingScene | null
     if (!scene || !scene.scene.isActive()) return
-    scene.applyExternalUpdate({ npcs })
-  }, [npcs])
+    scene.applyExternalUpdate({ npcs, controlsEnabled })
+  }, [npcs, controlsEnabled])
 
   return (
     <div

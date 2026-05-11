@@ -261,6 +261,28 @@ export type ServerNpcHistory = {
 
 export type ServerVersion = { version: string }
 
+export type ServerChronicleResponse = {
+  latestTick: number
+  chronicle: {
+    source: 'ai' | 'fallback'
+    textZh: string
+    textEn: string
+    aiError: string | null
+    aiMeta: {
+      requested: boolean
+      activeKeys: number
+      fallbackReason: string | null
+    }
+  }
+}
+
+export type ServerNpcDialogHold = {
+  npcId: string
+  held: boolean
+  tick: number
+  expiresAtTick: number | null
+}
+
 export type ServerPublicAccount = {
   id: number
   email: string
@@ -564,6 +586,8 @@ export const api = {
   map: () => jsonFetch<ServerMap>('/map'),
   dashboard: () => jsonFetch<ServerDashboard>('/dashboard'),
   worldEvents: () => jsonFetch<{ active: ServerActiveWorldEvent[] }>('/world-events'),
+  worldChronicle: (limit = 40, useAi = false) =>
+    jsonFetch<ServerChronicleResponse>(`/world/chronicle?limit=${limit}&ai=${useAi ? '1' : '0'}`),
   register: (email: string, password: string) =>
     jsonFetch<{ token: string; account: ServerAccount }>('/auth/register', {
       method: 'POST',
@@ -589,6 +613,14 @@ export const api = {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify(payload)
+      }
+    ),
+  npcDialogHold: (token: string, npcId: string) =>
+    jsonFetch<ServerNpcDialogHold>(
+      `/npc/${encodeURIComponent(npcId)}/dialog-hold`,
+      {
+        method: 'POST',
+        headers: authHeaders(token)
       }
     ),
   /** v0.14.0：玩家介入兩位 NPC 的爭執。回傳介入後的好感變化。 */

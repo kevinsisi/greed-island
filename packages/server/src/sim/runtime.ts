@@ -51,7 +51,12 @@ import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_NAME_BY_ID } from './mapGraph.js'
-import { NpcEngine, type NpcActivity, type NpcRuntimeState } from './npcEngine.js'
+import {
+  NpcEngine,
+  NPC_PLAYER_DIALOG_HOLD_TICKS,
+  type NpcActivity,
+  type NpcRuntimeState
+} from './npcEngine.js'
 import {
   AreaStateEngine,
   type AreaState,
@@ -405,7 +410,8 @@ export class SimulationRuntime {
         lastActedTick: s.lastActedTick,
         internalState: {
           patience: profile.personality.patience ?? null,
-          greed: profile.personality.greed ?? null
+          greed: profile.personality.greed ?? null,
+          agent: s.agent ?? null
         },
         activity: s.activity,
         mood: Math.round(s.mood),
@@ -466,6 +472,56 @@ export class SimulationRuntime {
 
   getCurrentTick(): number {
     return this.currentTick
+  }
+
+  holdNpcForPlayerDialog(
+    playerAccountId: string,
+    npcId: string
+  ): { npcId: string; tick: number; expiresAtTick: number } | null {
+    const state = this.npcEngine.getState(npcId)
+    if (!state) return null
+    const command = makeLivingWorldCommand(
+      'NPC_DIALOG_HOLD',
+      playerAccountId,
+      'player',
+      this.currentTick,
+      Date.now(),
+      {
+        playerAccountId,
+        npcId,
+        tile: state.tile,
+        holdTicks: NPC_PLAYER_DIALOG_HOLD_TICKS,
+        narration: null
+      }
+    )
+    const result = this.livingWorldRuleEngine.evaluate(command)
+    if (!result.accepted) {
+      console.warn(
+        `[runtime] rejected ${command.commandType} from ${command.actorId}: ${result.rejection.reason}`
+      )
+      return null
+    }
+    const change = this.npcEngine.commitPlayerDialogHoldTask(npcId, this.currentTick)
+    if (!change) return null
+    const expiresAtTick = change.state.agent.activeTask.expiresAtTick
+    const committed = this.store.appendEvents([
+      ...(result.events as EventDraft[]),
+      this.factSetDraft(
+        `${NPC_STATE_PREFIX}${change.npcId}`,
+        { ...change.state },
+        change.npcId,
+        this.currentTick
+      )
+    ])
+    if (committed.length > 0) {
+      this.lastSequence = committed[committed.length - 1]!.sequence
+      this.eventCount += committed.length
+    }
+    return {
+      npcId: change.npcId,
+      tick: this.currentTick,
+      expiresAtTick: typeof expiresAtTick === 'number' ? expiresAtTick : this.currentTick
+    }
   }
 
   findProfile(npcId: string): NpcProfile | null {
@@ -909,10 +965,31 @@ export class SimulationRuntime {
 
     // ---- Compile commands → typed event drafts via the Rule Engine ----
     const typedDrafts: EventDraft[] = []
+    const postAcceptedStateDrafts: EventDraft[] = []
     for (const cmd of commands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
         for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        if (cmd.commandType === 'NPC_INTERACT') {
+          const accepted = readAcceptedNpcInteraction(cmd.payload)
+          if (accepted) {
+            for (const change of this.npcEngine.commitSocialInteractionTask(
+              accepted.participants,
+              accepted.tile,
+              accepted.mode,
+              nextTick
+            )) {
+              postAcceptedStateDrafts.push(
+                this.factSetDraft(
+                  `${NPC_STATE_PREFIX}${change.npcId}`,
+                  { ...change.state },
+                  change.npcId,
+                  nextTick
+                )
+              )
+            }
+          }
+        }
       } else {
         console.warn(
           `[sim] rule engine rejected ${result.rejection.commandType} ` +
@@ -921,10 +998,10 @@ export class SimulationRuntime {
       }
     }
 
-    // Append both buckets in one transaction. Order: state snapshots
-    // first so the projection on disk is consistent before the typed
-    // events that reference that state.
-    const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts])
+    // Append in one transaction. Normal state snapshots stay before typed events;
+    // state that depends on an accepted typed command (for example NPC social
+    // active-task metadata) is appended after the accepted event draft.
+    const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
@@ -1132,6 +1209,21 @@ function readNarrativePayload(payload: unknown): NarrativeEventPayload | null {
     payload: (r.payload as Record<string, unknown> | undefined) ?? {},
     narration: typeof r.narration === 'string' ? r.narration : null
   }
+}
+
+function readAcceptedNpcInteraction(payload: unknown): {
+  tile: string
+  participants: readonly [string, string]
+  mode: 'chat' | 'argue'
+} | null {
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as { tile?: unknown; participants?: unknown; mode?: unknown }
+  if (typeof p.tile !== 'string') return null
+  if (p.mode !== 'chat' && p.mode !== 'argue') return null
+  if (!Array.isArray(p.participants) || p.participants.length !== 2) return null
+  const [a, b] = p.participants
+  if (typeof a !== 'string' || typeof b !== 'string') return null
+  return { tile: p.tile, participants: [a, b], mode: p.mode }
 }
 
 /**
