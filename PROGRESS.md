@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-11 — v0.15.20 In Progress
+## 2026-05-11 — v0.15.20 Shipped
 
 ### Completed Locally
 
@@ -29,8 +29,23 @@ developer. Keep latest status at the top.
 
 ### CI/CD And Runtime Verification
 
-- Pending Gemini review, commit, push, CI, Deploy Dev, and live iPhone-style
-  recovery checks.
+- Gemini staged review found one non-blocking test gap: the extracted recovery
+  scheduler is covered, but there is no mounted React provider integration test
+  harness for `WorldStateContext` orchestration yet. Accepted for this hotfix.
+- Commit `9bae7a2` pushed to `main`.
+- GitHub Actions CI run `25645138546` passed.
+- GitHub Actions Deploy Dev run `25645138560` passed.
+- Runtime health verified: `/healthz` returned `version: 0.15.20`.
+- Runtime API version verified: `/api/version` returned `0.15.20`.
+- Runtime tick progression verified: tick advanced from `74479` to `74481` over
+  10 seconds.
+- Runtime API verified: `/api/world` returned live server data with tick `74481`,
+  `eventCount=1269017`, and `npcCount=50`.
+- Runtime cache headers verified: `/api/world` returned `Cache-Control: no-store`.
+- Server logs verified clean boot at tick `74479`, HTTP listening on port 3000,
+  and ambient narrator attached with 41 active keys.
+- Web proxy logs confirmed the deploy restart window still produces short `502`
+  responses; the v0.15.20 client now retries quickly while still fixture-only.
 
 ## 2026-05-11 — v0.15.19 Shipped
 

@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.20 🚧 in progress — 2026-05-11
+## v0.15.20 ✅ shipped — 2026-05-11
 
 **主題：recover mobile world UI after deploy-time API 502**
 
@@ -12,7 +12,9 @@
 - ✅ 新增 fixture-only recovery retry：只要尚未拿到 authoritative server world，就在 failed refresh 後短間隔重試；成功拿到 `/api/world` 或 SSE snapshot 後取消 retry。
 - ✅ 新增 unit tests 覆蓋 fixture-only retry、server data arrived no-retry、pending retry dedupe/cancel。
 - ✅ 本機驗證：focused web state tests、`npm run build:web`、`npm run build:server`、`npm test`、`git diff --check` 通過。
-- ⏳ Gemini review、commit/push、CI、Deploy Dev、live verification pending。
+- ✅ Gemini staged review noted missing mounted React-provider integration coverage; accepted for this hotfix because the extracted scheduler is unit-tested and the repo does not currently have a React provider test harness。
+- ✅ Commit `9bae7a2` pushed to `main`; CI run `25645138546` passed; Deploy Dev run `25645138560` passed。
+- ✅ Live verification: `/healthz` and `/api/version` return `0.15.20`; tick advanced from `74479` to `74481`; `/api/world` returns `Cache-Control: no-store` and live server data with `eventCount=1269017`, `npcCount=50`。
 
 ## v0.15.19 ✅ shipped — 2026-05-11
 
