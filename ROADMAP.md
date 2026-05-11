@@ -4,6 +4,15 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.21 🚧 in progress — 2026-05-11
+
+**主題：disable API compression for mobile Safari world fetch**
+
+- ✅ 從 iPhone live proxy logs 確認 fresh `v0.15.20` HTML/JS 與 `/api/version` 成功，但同一輪沒有完成可見的 `/api/world`。
+- ✅ Root-cause candidate：internal Caddy global `encode zstd gzip` 讓 `/api/*` JSON 也被 zstd 壓縮；iPhone Safari 宣稱接受 zstd，但 world-state fetch 疑似卡在 response completion/decoding。
+- ✅ `/api/*` 保持 `Cache-Control: no-store`，但不再經 internal Caddy compression；zstd/gzip 只保留在 static HTML/assets handlers。
+- ⏳ 本機驗證、Gemini review、commit/push、CI、Deploy Dev、live verification pending。
+
 ## v0.15.20 ✅ shipped — 2026-05-11
 
 **主題：recover mobile world UI after deploy-time API 502**

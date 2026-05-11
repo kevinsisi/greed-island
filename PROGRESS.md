@@ -3,6 +3,28 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.21 In Progress
+
+### Completed Locally
+
+- Investigated continued iPhone fixture state after v0.15.20 using live web
+  proxy logs from the iPhone client.
+- Confirmed the iPhone loaded fresh `v0.15.20` HTML/JS and successfully fetched
+  `/api/version`, but did not complete a visible `/api/world` request in the
+  same load window.
+- Identified a likely transport-layer root cause: internal Caddy globally applied
+  `encode zstd gzip`, so proxied `/api/*` JSON could be served as zstd. iPhone
+  Safari advertised zstd support, but world-state fetch completion appeared to
+  stall while tiny uncompressed `/api/version` still worked.
+- Moved `encode zstd gzip` into static HTML/assets handlers only; proxied
+  `/api/*` JSON is now no-store and uncompressed.
+- Bumped app version to `0.15.21`.
+
+### Local Verification
+
+- Pending build, tests, Caddy validation, Gemini review, commit, push, CI/CD,
+  and live iPhone-style `/api/world` verification.
+
 ## 2026-05-11 — v0.15.20 Shipped
 
 ### Completed Locally
