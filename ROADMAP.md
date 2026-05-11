@@ -4,6 +4,33 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.31 ✅ shipped — 2026-05-11
+
+**主題：productive city actions**
+
+- ✅ Added deterministic `NPC_PRODUCTIVE_ACTION` events for construction/repair,
+  learning/research, trade/supply, and public-service progress.
+- ✅ Productive actions now flow through NPC policy → command → rule engine →
+  EventLog → memory/catch-up/UI projections, preserving AI-as-read-only-renderer.
+- ✅ Rebalanced public event cadence so social arguments are less dominant:
+  lower interaction probability, longer social cooldown, and per-tick caps for
+  social/productive events.
+- ✅ Since Last Visit now surfaces `城市進展` rows from catch-up summaries.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
+  passed; web build still has the existing Vite chunk-size warning.
+- ✅ Gemini staged review findings for deterministic ordering and NPC memory
+  projection tests were fixed; remaining notes were intentional balance/localized
+  text tradeoffs.
+- ✅ Commit `589ca77` pushed to `main`; CI run `25679493406` and Deploy Dev run
+  `25679493433` passed.
+- ✅ Live verification: `v0.15.31`, `/api/events?limit=80` included 12
+  `NPC_PRODUCTIVE_ACTION` rows versus 3 `NPC_INTERACT` rows, the 100-event window
+  included `build`, `learn`, `trade`, and `service`, and catch-up returned
+  `summary.productiveActions` in `25ms`.
+- 🚧 Optional follow-up: add exhaustive snapshot coverage for every productive
+  narration branch if future copy churn becomes risky.
+
 ## v0.15.30 ✅ shipped — 2026-05-11
 
 **主題：bounded catch-up availability fix**

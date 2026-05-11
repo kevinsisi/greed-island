@@ -3,6 +3,58 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.31 Productive City Actions
+
+### Completed Locally
+
+- Added deterministic `NPC_PRODUCTIVE_ACTION` events so NPC runtime policy can
+  emit construction/repair, learning/research, trade/supply, and public-service
+  progress as authoritative world events.
+- Threaded productive actions through the Command → Rule Engine → Event pipeline,
+  simulation runtime, catch-up summaries, NPC memory projection, API types, and the
+  Since Last Visit panel's `城市進展` section.
+- Balanced the public event stream by lowering spontaneous social interaction
+  probability, increasing social cooldown, and capping social/productive events per
+  tick so chronicles no longer collapse into mostly NPC arguments.
+- Added tests for productive event variety, deterministic tile ordering under the
+  per-tick cap, narration template substitution, Chinese role-keyword shaping,
+  catch-up summary output, and NPC memory projection.
+- Bumped app version from `0.15.30` to `0.15.31` and marked OpenSpec task `3.9`.
+
+### Local Verification
+
+- `npm test` passed: server 20 files / 155 tests, web 7 files / 18 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed.
+- Gemini staged review initially found deterministic ordering and memory-test gaps;
+  both were fixed. Final remaining review notes were accepted as intentional or
+  expected: reduced social frequency is the balance goal, broader exhaustive
+  narration matrices are optional follow-up, and Chinese narration strings are
+  current localized game text.
+
+### CI/CD + Live Verification
+
+- Code commit `589ca77` pushed to `main`.
+- GitHub Actions CI run `25679493406` passed.
+- GitHub Actions Deploy Dev run `25679493433` passed.
+- Live `v0.15.31` verification after deploy:
+  - `/healthz`: `200`, `version=0.15.31`, `tick=84224`, `121ms`.
+  - `/api/version`: `200`, `version=0.15.31`, `25ms`.
+  - `/api/world`: `200`, `13ms`, `eventCount=1490350`, `npcCount=50`.
+  - `/api/events?limit=80`: `200`, `127ms`, included 12
+    `NPC_PRODUCTIVE_ACTION` events versus 3 `NPC_INTERACT` events in the sample.
+  - `/api/events?limit=1000` returned the capped 100-event window with 23
+    productive actions across `build`, `learn`, `trade`, and `service` domains.
+  - `/api/world/catch-up?sinceTick=84197`: `200`, `25ms`, `untilTick=84227`, and
+    `summary.productiveActions` contained concrete city-progress rows.
+
+### Still Open
+
+- Optional follow-up: add a full narration matrix test if we want exhaustive
+  snapshot coverage for every archetype/role/fallback sentence branch.
+
 ## 2026-05-11 — v0.15.30 Bounded Catch-Up Availability Fix
 
 ### Completed Locally
