@@ -18,6 +18,7 @@ import type { SettingsStore } from './settings.js'
 
 const CATCH_UP_EVENT_TYPES = [
   'NPC_INTERACT',
+  'NPC_PRODUCTIVE_ACTION',
   'NPC_MOVE',
   'BUILDING_ENTER',
   'AREA_PRESSURE',

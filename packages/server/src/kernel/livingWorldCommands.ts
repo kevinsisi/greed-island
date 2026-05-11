@@ -24,6 +24,7 @@ export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
 export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MOVE',
   'NPC_ACTIVITY_CHANGE',
+  'NPC_PRODUCTIVE_ACTION',
   'NPC_INTERACT',
   'AREA_PRESSURE',
   'WEATHER_CHANGE',
@@ -64,6 +65,16 @@ export type NpcActivityChangeCmd = Readonly<{
   from: string
   to: string
   narration: string | null
+}>
+
+export type NpcProductiveActionCmd = Readonly<{
+  npcId: string
+  tile: string
+  activity: string
+  domain: 'build' | 'learn' | 'trade' | 'service'
+  metric: 'infrastructure' | 'knowledge' | 'economy' | 'safety' | 'supply'
+  delta: number
+  narration: string
 }>
 
 export type NpcInteractCmd = Readonly<{
@@ -208,6 +219,7 @@ export type CombatResolveCmd = Readonly<{
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
+  | NpcProductiveActionCmd
   | NpcInteractCmd
   | AreaPressureCmd
   | WeatherChangeCmd
@@ -262,6 +274,27 @@ const VALIDATORS: Readonly<
     if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
     if (typeof p.from !== 'string') return 'from required'
     if (typeof p.to !== 'string') return 'to required'
+    return null
+  },
+  NPC_PRODUCTIVE_ACTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (typeof p.activity !== 'string') return 'activity required'
+    if (p.domain !== 'build' && p.domain !== 'learn' && p.domain !== 'trade' && p.domain !== 'service') {
+      return 'invalid domain'
+    }
+    if (
+      p.metric !== 'infrastructure' &&
+      p.metric !== 'knowledge' &&
+      p.metric !== 'economy' &&
+      p.metric !== 'safety' &&
+      p.metric !== 'supply'
+    ) {
+      return 'invalid metric'
+    }
+    if (typeof p.delta !== 'number' || !Number.isFinite(p.delta)) return 'delta required'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
   NPC_INTERACT: (p) => {

@@ -685,6 +685,25 @@ export class SimulationRuntime {
             }
           )
         )
+      } else if (event.kind === 'productive') {
+        commands.push(
+          makeLivingWorldCommand(
+            'NPC_PRODUCTIVE_ACTION',
+            event.npcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              npcId: event.npcId,
+              tile: event.tile,
+              activity: event.activity,
+              domain: event.domain,
+              metric: event.metric,
+              delta: event.delta,
+              narration: event.narration
+            }
+          )
+        )
       } else if (event.kind === 'interact') {
         const [a, b] = event.participants
         commands.push(

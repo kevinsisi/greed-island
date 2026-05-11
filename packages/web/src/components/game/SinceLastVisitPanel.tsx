@@ -67,6 +67,7 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
       const hasWorld =
         !!w &&
         (w.pressureMoments.length > 0 ||
+          (w.productiveActions?.length ?? 0) > 0 ||
           w.worldEvents.length > 0 ||
           w.weatherChanges.length > 0 ||
           w.seasonChanges.length > 0 ||
@@ -89,6 +90,7 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
   if (loading || !hasContent) return null
 
   const pressureMoments = world?.pressureMoments ?? []
+  const productiveActions = world?.productiveActions ?? []
   const worldEvents = world?.worldEvents ?? []
   const weatherChanges = world?.weatherChanges ?? []
 
@@ -150,6 +152,27 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
                         {PRESSURE_LABEL[m.kind] ?? m.kind}
                       </div>
                       <div className="leading-snug">{m.narration}</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {productiveActions.length > 0 && (
+            <Section title="城市進展">
+              <ul className="flex flex-col gap-1.5">
+                {productiveActions.slice(0, 8).map((a, idx) => (
+                  <li key={`${a.tick}-${a.npcId}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => goToArea(a.tile)}
+                      className="w-full text-left border border-ground-800 hover:border-moss-700 rounded-sharp p-2 text-[12px] text-ground-200 hover:bg-ground-800/50 transition-colors"
+                    >
+                      <div className="font-display text-[10px] uppercase tracking-tightest text-moss-500 mb-1">
+                        tick {a.tick} | {TILE_NAME_ZH[a.tile] ?? a.tile} | {a.domain}/{a.metric} +{a.delta}
+                      </div>
+                      <div className="leading-snug">{a.narration}</div>
                     </button>
                   </li>
                 ))}

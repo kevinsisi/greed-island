@@ -11,6 +11,7 @@ import type {
   LivingWorldEventPayload,
   NpcInteractCmd,
   NpcMoveCmd,
+  NpcProductiveActionCmd,
   SeasonChangeCmd,
   WeatherChangeCmd,
   WorldEventSpawnCmd
@@ -35,6 +36,15 @@ export type CatchUpSummary = Readonly<{
     tick: number
     tileId: string
     kind: string
+    narration: string
+  }>
+  productiveActions: ReadonlyArray<{
+    tick: number
+    tile: string
+    npcId: string
+    domain: string
+    metric: string
+    delta: number
     narration: string
   }>
   interactions: ReadonlyArray<{
@@ -69,6 +79,15 @@ export function summarizeWindow(
     kind: string
     narration: string
   }> = []
+  const productiveActions: Array<{
+    tick: number
+    tile: string
+    npcId: string
+    domain: string
+    metric: string
+    delta: number
+    narration: string
+  }> = []
   const interactions: Array<{
     tick: number
     tile: string
@@ -100,6 +119,21 @@ export function summarizeWindow(
           byNpc[d.npcId] = (byNpc[d.npcId] ?? 0) + 1
           byArea[d.to] = (byArea[d.to] ?? 0) + 1
         }
+        break
+      }
+      case 'NPC_PRODUCTIVE_ACTION': {
+        const d = data as NpcProductiveActionCmd
+        byNpc[d.npcId] = (byNpc[d.npcId] ?? 0) + 1
+        byArea[d.tile] = (byArea[d.tile] ?? 0) + 1
+        productiveActions.push({
+          tick,
+          tile: d.tile,
+          npcId: d.npcId,
+          domain: d.domain,
+          metric: d.metric,
+          delta: d.delta,
+          narration: d.narration
+        })
         break
       }
       case 'BUILDING_ENTER': {
@@ -150,6 +184,7 @@ export function summarizeWindow(
     weatherChanges,
     seasonChanges,
     pressureMoments,
+    productiveActions,
     interactions
   }
   const digest = hashCanonicalJson(summary)

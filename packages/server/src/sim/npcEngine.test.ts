@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   NpcEngine,
+  NPC_INTERACT_COOLDOWN_TICKS,
   NPC_LOCAL_WAYPOINT_REFRESH_TICKS,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
+  type NpcDecisionEvent,
   type NpcRuntimeState
 } from './npcEngine.js'
 import type { NpcProfile } from '../npcs/types.js'
@@ -97,6 +99,74 @@ describe('NpcEngine', () => {
       targetTile: 't_central',
       startedAtTick: 1
     })
+  })
+
+  it('emits productive city actions beyond social arguments', () => {
+    const profiles = [
+      makeProfile({
+        id: 'smith',
+        name: { zh: '鐵匠', en: 'Smith' },
+        role: { zh: '鑄鐵工匠', en: 'Blacksmith' },
+        personality: { factionLean: 'guild', archetype: 'craftsman' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'forge work' }]
+      }),
+      makeProfile({
+        id: 'merchant',
+        name: { zh: '商人', en: 'Merchant' },
+        role: { zh: '市場商人', en: 'Market Merchant' },
+        personality: { factionLean: 'guild', archetype: 'shopkeeper' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_dock', label: 'market stall' }]
+      }),
+      makeProfile({
+        id: 'guard',
+        name: { zh: '守衛', en: 'Guard' },
+        role: { zh: '碼頭巡衛', en: 'Dock Guard' },
+        personality: { factionLean: 'civilian', archetype: 'guard' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_mountain', label: 'patrol rounds' }]
+      }),
+      makeProfile({
+        id: 'herbalist',
+        name: { zh: '藥師', en: 'Herbalist' },
+        role: { zh: '草藥師', en: 'Herbalist' },
+        personality: { factionLean: 'civilian', archetype: 'mystic' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_ruin', label: 'herbal study' }]
+      })
+    ]
+    const engine = new NpcEngine(profiles)
+    const domains = new Set<string>()
+
+    for (let tick = 1; tick <= 120; tick += 1) {
+      for (const event of engine.tick(tick).events) {
+        if (event.kind === 'productive') {
+          domains.add(event.domain)
+          expect(event.narration).not.toMatch(/[{}]/)
+        }
+      }
+    }
+
+    expect(domains).toEqual(new Set(['build', 'trade', 'service', 'learn']))
+  })
+
+  it('uses Chinese role keywords when shaping productive action narration', () => {
+    const profile = makeProfile({
+      id: 'cn-smith',
+      name: { zh: '修補匠', en: 'Mender' },
+      role: { zh: '鑄鐵工匠', en: 'Worker' },
+      personality: { factionLean: 'guild', archetype: 'resident' },
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'repair work' }]
+    })
+    const engine = new NpcEngine([profile])
+    let productive: Extract<NpcDecisionEvent, { kind: 'productive' }> | null = null
+
+    for (let tick = 1; tick <= 120 && !productive; tick += 1) {
+      const found = engine.tick(tick).events.find((event) => event.kind === 'productive')
+      if (found?.kind === 'productive') productive = found
+    }
+
+    expect(productive).not.toBeNull()
+    expect(productive!.domain).toBe('build')
+    expect(productive!.narration).toContain('夜潮區')
+    expect(productive!.narration).not.toMatch(/[{}]/)
   })
 
   it('clears travelRoute after the NPC arrives and resumes local presence', () => {
@@ -576,7 +646,7 @@ describe('NpcEngine', () => {
         kind: 'social-interaction',
         targetTile: 't_central',
         startedAtTick: interactionTick,
-        expiresAtTick: interactionTick + 6
+        expiresAtTick: interactionTick + NPC_INTERACT_COOLDOWN_TICKS
       })
     )
     expect(engine.getState('social.B')!.agent.lastDecision.source).toBe('social')
@@ -592,7 +662,7 @@ describe('NpcEngine', () => {
     engine.commitSocialInteractionTask(['social.ttl', 'missing.peer'], 't_central', 'argue', 10)
     engine.tick(11)
     expect(engine.getState('social.ttl')!.agent.activeTask.kind).toBe('social-interaction')
-    engine.tick(16)
+    engine.tick(10 + NPC_INTERACT_COOLDOWN_TICKS)
     expect(engine.getState('social.ttl')!.agent.activeTask.kind).toBe('local-activity')
   })
 

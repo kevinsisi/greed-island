@@ -392,6 +392,15 @@ export type ServerCatchUpSummary = {
     kind: string
     narration: string
   }>
+  productiveActions: Array<{
+    tick: number
+    tile: string
+    npcId: string
+    domain: string
+    metric: string
+    delta: number
+    narration: string
+  }>
   interactions: Array<{
     tick: number
     tile: string

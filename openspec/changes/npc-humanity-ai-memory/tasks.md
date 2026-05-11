@@ -56,6 +56,9 @@
 - [x] 3.8 Keep living-world catch-up endpoints bounded so returning-player
   summaries cannot synchronously hydrate the full production EventLog and block
   unrelated API responses.
+- [x] 3.9 Add deterministic productive city actions so public events include
+  construction/repair, learning/research, trade/supply, and public-service
+  progress instead of collapsing into mostly NPC arguments.
 
 ## 4. Completion
 

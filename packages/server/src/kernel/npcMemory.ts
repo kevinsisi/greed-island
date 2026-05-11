@@ -19,6 +19,7 @@ import type {
   LivingWorldEventPayload,
   NpcInteractCmd,
   NpcMoveCmd,
+  NpcProductiveActionCmd,
   PlayerIntervenecmd,
   SeasonChangeCmd,
   WeatherChangeCmd
@@ -309,6 +310,27 @@ function deriveMemoryRows(
           memoryType: 'movement',
           content: { kind: 'arrival', from: d.from, to: d.to, tick },
           importance: 2
+        }
+      ]
+    }
+    case 'NPC_PRODUCTIVE_ACTION': {
+      const d = data as NpcProductiveActionCmd
+      const importance = d.domain === 'build' || d.domain === 'learn' ? 6 : 5
+      return [
+        {
+          npcId: d.npcId,
+          memoryType: 'event',
+          content: {
+            kind: 'productive.action',
+            tile: d.tile,
+            activity: d.activity,
+            domain: d.domain,
+            metric: d.metric,
+            delta: d.delta,
+            narration,
+            tick
+          },
+          importance
         }
       ]
     }

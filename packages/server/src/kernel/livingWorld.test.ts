@@ -60,6 +60,15 @@ describe('living-world rule engine', () => {
         mode: 'chat',
         narration: '...'
       }),
+      makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 3, 3, {
+        npcId: 'npc-a',
+        tile: 't_market',
+        activity: 'work',
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: '...'
+      }),
       makeLivingWorldCommand('AREA_PRESSURE', 'system', 'system', 4, 4, {
         tileId: 't_market',
         kind: 'pressure.food_shortage',
@@ -139,6 +148,36 @@ describe('npc memory projection', () => {
     const recentA = memory.getRecent('npc-a', 5)
     expect(recentA[0]!.memoryType).toBe('interaction')
     expect(recentA[0]!.importance).toBe(7) // argue → high
+  })
+
+  it('creates event memory for NPC_PRODUCTIVE_ACTION', () => {
+    const { eventStore, memory, ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-smith', 'npc', 4, 4, {
+      npcId: 'npc-smith',
+      tile: 't_ruin',
+      activity: 'work',
+      domain: 'build',
+      metric: 'infrastructure',
+      delta: 2,
+      narration: 'The smith repaired the street cistern.'
+    })
+    const events = submit(cmd, ruleEngine, eventStore)
+    for (const ev of events) memory.project({ ...ev, sequence: ev.eventId.length })
+
+    expect(memory.countFor('npc-smith')).toBe(1)
+    const recent = memory.getRecent('npc-smith', 5)
+    expect(recent[0]!.memoryType).toBe('event')
+    expect(recent[0]!.importance).toBe(6)
+    expect(recent[0]!.content).toMatchObject({
+      kind: 'productive.action',
+      tile: 't_ruin',
+      activity: 'work',
+      domain: 'build',
+      metric: 'infrastructure',
+      delta: 2,
+      narration: 'The smith repaired the street cistern.',
+      tick: 4
+    })
   })
 
   it('creates one row per affected NPC on PLAYER_INTERVENE', () => {
@@ -390,6 +429,40 @@ describe('catch-up summary', () => {
     expect(summary.sinceTick).toBe(2)
     expect(summary.untilTick).toBe(4)
     expect(summary.digest).toBeDefined()
+  })
+
+  it('summarizes productive city actions as area and npc progress', () => {
+    const { eventStore, ruleEngine } = makeHarness()
+    submit(
+      makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-smith', 'npc', 4, 4, {
+        npcId: 'npc-smith',
+        tile: 't_ruin',
+        activity: 'work',
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: 'The smith repaired the street cistern.'
+      }),
+      ruleEngine,
+      eventStore
+    )
+
+    const summary = summarizeWindow(eventStore.readEvents(), 0, 10)
+
+    expect(summary.totalEvents).toBe(1)
+    expect(summary.byNpc['npc-smith']).toBe(1)
+    expect(summary.byArea['t_ruin']).toBe(1)
+    expect(summary.productiveActions).toEqual([
+      {
+        tick: 4,
+        tile: 't_ruin',
+        npcId: 'npc-smith',
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: 'The smith repaired the street cistern.'
+      }
+    ])
   })
 })
 

@@ -113,6 +113,16 @@ export type NpcDecisionEvent = Readonly<
       to: NpcActivity
     }
   | {
+      kind: 'productive'
+      npcId: string
+      tile: string
+      activity: NpcActivity
+      domain: ProductiveActionDomain
+      metric: ProductiveActionMetric
+      delta: number
+      narration: string
+    }
+  | {
       kind: 'interact'
       tile: string
       participants: readonly [string, string]
@@ -121,6 +131,9 @@ export type NpcDecisionEvent = Readonly<
       narration: string
     }
 >
+
+export type ProductiveActionDomain = 'build' | 'learn' | 'trade' | 'service'
+export type ProductiveActionMetric = 'infrastructure' | 'knowledge' | 'economy' | 'safety' | 'supply'
 
 export type NpcStateChange = Readonly<{
   npcId: string
@@ -154,11 +167,15 @@ const ACTIVITY_DRIFT: Readonly<
   patrol: { mood: -0.1, health: -0.1 }
 }
 
-const INTERACT_PROBABILITY = 0.18 // 每對同 tile NPC，每 tick 觸發機率
-const INTERACT_COOLDOWN_TICKS = 6
+const INTERACT_PROBABILITY = 0.08 // 每對同 tile NPC，每 tick 觸發機率
+const INTERACT_COOLDOWN_TICKS = 10
 const INTERACT_MAX_PLANAR_DISTANCE = 2
 const INTERACT_MAX_Z_DISTANCE = 0
 const PLAYER_DIALOG_HOLD_TICKS = TICKS_PER_MINUTE
+const PRODUCTIVE_ACTION_PROBABILITY = 0.52
+const PRODUCTIVE_ACTION_COOLDOWN_TICKS = 8
+const PRODUCTIVE_ACTION_MAX_PER_TICK = 3
+const INTERACT_MAX_PER_TICK = 2
 
 /**
  * 每位 NPC 每 N tick 評估一次個體化決策（偏離 schedule 的「個性 nudge」）。
@@ -205,6 +222,7 @@ export class NpcEngine {
   private readonly schedules = new Map<string, ScheduleSlot[]>()
   private readonly factions = new Map<string, string>()
   private readonly lastInteractTickByPair = new Map<string, number>()
+  private readonly lastProductiveTickByNpc = new Map<string, number>()
 
   constructor(private readonly profiles: readonly NpcProfile[]) {
     for (const profile of profiles) {
@@ -384,7 +402,46 @@ export class NpcEngine {
       }
     }
 
-    // ---- Phase 2: 同 tile NPC 兩兩互動 ----
+    // ---- Phase 2: productive city actions ----
+    // These are the city's forward motion: repair, trade, study, service.
+    // They are deterministic domain events, not AI narration and not renderer-only flavor.
+    const productiveCandidatesByTile = new Map<string, string[]>()
+    const indoorSet = context?.npcsInsideBuildings ?? null
+    for (const [npcId, s] of this.state) {
+      if (!canEmitProductiveAction(s)) continue
+      if (indoorSet && indoorSet.has(npcId)) continue
+      const last = this.lastProductiveTickByNpc.get(npcId) ?? -PRODUCTIVE_ACTION_COOLDOWN_TICKS
+      if (currentTick - last < PRODUCTIVE_ACTION_COOLDOWN_TICKS) continue
+      const arr = productiveCandidatesByTile.get(s.tile) ?? []
+      arr.push(npcId)
+      productiveCandidatesByTile.set(s.tile, arr)
+    }
+    let productiveCount = 0
+    for (const [tile, ids] of [...productiveCandidatesByTile.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      if (productiveCount >= PRODUCTIVE_ACTION_MAX_PER_TICK) break
+      let best: { npcId: string; roll: number } | null = null
+      for (const npcId of [...ids].sort()) {
+        const roll = productiveRoll(currentTick, npcId, tile)
+        if (roll >= PRODUCTIVE_ACTION_PROBABILITY) continue
+        if (!best || roll < best.roll) best = { npcId, roll }
+      }
+      if (!best) continue
+      const profile = this.profiles.find((p) => p.id === best.npcId)
+      const state = this.state.get(best.npcId)
+      if (!profile || !state) continue
+      const action = composeProductiveActionNarration(
+        profile,
+        state,
+        tile,
+        currentTick,
+        context?.weather ?? '晴'
+      )
+      events.push({ kind: 'productive', npcId: best.npcId, tile, activity: state.activity, ...action })
+      this.lastProductiveTickByNpc.set(best.npcId, currentTick)
+      productiveCount += 1
+    }
+
+    // ---- Phase 3: 同 tile NPC 兩兩互動 ----
     // 規則：
     //   - 必須同一 tile（NPC 必須真的走到對方旁邊，不能隔空）
     //   - 兩位 NPC 都不能正在移動（activity != 'move'）— 路上交錯不算交談
@@ -392,7 +449,6 @@ export class NpcEngine {
     //     不能說「鏽灣區起爭執」但兩位都關在某棟建築裡玩家找不到
     //   - 每個 tile 每 tick 最多 1 個互動事件，挑 pairRoll 最低的 pair
     const byTile = new Map<string, string[]>()
-    const indoorSet = context?.npcsInsideBuildings ?? null
     for (const [npcId, s] of this.state) {
       if (s.activity === 'move') continue // 路上不算「在場」
       if (indoorSet && indoorSet.has(npcId)) continue // 在建築內 → 主地圖看不到
@@ -400,7 +456,9 @@ export class NpcEngine {
       arr.push(npcId)
       byTile.set(s.tile, arr)
     }
+    let interactCount = 0
     for (const [tile, ids] of byTile) {
+      if (interactCount >= INTERACT_MAX_PER_TICK) break
       if (ids.length < 2) continue
       const sorted = [...ids].sort()
       // 找出本 tile 內 pairRoll 最小且未在冷卻內的一對 — 只觸發一次
@@ -456,6 +514,7 @@ export class NpcEngine {
         mode,
         narration
       })
+      interactCount += 1
       // 互動影響 mood（clamp 後寫回 state map；最後 dedupe 統一 emit）
       const delta = mode === 'chat' ? +1 : -2
       const na = { ...stateA, mood: clamp(stateA.mood + delta, MOOD_MIN, MOOD_MAX) }
@@ -466,7 +525,7 @@ export class NpcEngine {
       dirty.add(b)
     }
 
-    // ---- Phase 3: 從 dirty set 產出 dedupe 後的 changedStates ----
+    // ---- Phase 4: 從 dirty set 產出 dedupe 後的 changedStates ----
     const changedStates: NpcStateChange[] = []
     for (const id of dirty) {
       const final = this.state.get(id)
@@ -1206,6 +1265,174 @@ function isDutyAnchoredProfile(profile: NpcProfile): boolean {
   }
   if (/(abbot|cleric|priest|guard|shopkeeper|smith)/i.test(role)) return true
   return false
+}
+
+function canEmitProductiveAction(state: NpcRuntimeState): boolean {
+  return state.activity === 'work' || state.activity === 'trade' || state.activity === 'patrol'
+}
+
+function productiveRoll(tick: number, npcId: string, tile: string): number {
+  let h = (tick * 2246822519) >>> 0
+  for (const ch of `${npcId}|${tile}|productive`) {
+    h = (h ^ ch.charCodeAt(0)) >>> 0
+    h = Math.imul(h, 3266489917) >>> 0
+  }
+  return (h % 1000) / 1000
+}
+
+function composeProductiveActionNarration(
+  profile: NpcProfile,
+  state: NpcRuntimeState,
+  tile: string,
+  tick: number,
+  weather: string
+): Readonly<{
+  domain: ProductiveActionDomain
+  metric: ProductiveActionMetric
+  delta: number
+  narration: string
+}> {
+  const name = profile.name.zh
+  const role = `${profile.role.zh} ${profile.role.en}`.toLowerCase()
+  const arch = String(profile.personality.archetype ?? '')
+  const tileName = TILE_NAME_BY_ID[tile] ?? tile
+  const pick = <T>(items: readonly T[]): T => items[hashStr(`${profile.id}|${tile}|${tick}|${weather}`) % items.length]!
+
+  if (state.activity === 'trade' || arch === 'shopkeeper' || /(交易|商|market|shop|broker|vendor|cafe|tavern|exchange)/i.test(role)) {
+    return pick([
+      {
+        domain: 'trade',
+        metric: 'economy',
+        delta: 2,
+        narration: `${name}在${tileName}完成一筆紋卡與食材的換手，攤主把新價碼刻進木牌。`
+      },
+      {
+        domain: 'trade',
+        metric: 'supply',
+        delta: 2,
+        narration: `${name}把一箱補給分送到${tileName}的幾個攤位，晚市缺貨的叫喊少了些。`
+      },
+      {
+        domain: 'trade',
+        metric: 'economy',
+        delta: 1,
+        narration: `${name}在${tileName}重新撮合兩邊的訂單，壓住了剛要亂跳的價格。`
+      }
+    ])
+  }
+
+  if (state.activity === 'patrol' || arch === 'guard' || /(守衛|巡|guard|patrol|hunter|獵)/i.test(role)) {
+    return pick([
+      {
+        domain: 'service',
+        metric: 'safety',
+        delta: 2,
+        narration: `${name}沿著${tileName}巡了一圈，把兩處容易起衝突的巷口重新劃出通行線。`
+      },
+      {
+        domain: 'service',
+        metric: 'safety',
+        delta: 1,
+        narration: `${name}在${tileName}記下可疑腳印，交班時把路線改得更細。`
+      },
+      {
+        domain: 'service',
+        metric: 'safety',
+        delta: 2,
+        narration: `${name}把${tileName}的人流從擁擠路口分開，幾個攤販終於能重新開張。`
+      }
+    ])
+  }
+
+  if (arch === 'craftsman' || /(匠|鑄|修|工坊|smith|craft|foreman|mender|carver)/i.test(role)) {
+    return pick([
+      {
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: `${name}在${tileName}補上一排鬆動的鉚釘，老街板路踩起來終於不再吱呀作響。`
+      },
+      {
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: `${name}把${tileName}一段破損水槽重新接好，雨水開始照著該去的方向流。`
+      },
+      {
+        domain: 'build',
+        metric: 'supply',
+        delta: 1,
+        narration: `${name}在${tileName}磨出一批可用零件，旁邊的學徒把尺寸逐一記進冊子。`
+      }
+    ])
+  }
+
+  if (arch === 'mystic' || arch === 'cleric' || /(僧|祭|草藥|藥|星|讀牌|herbal|abbot|cleric|reader|scribe|library)/i.test(role)) {
+    return pick([
+      {
+        domain: 'learn',
+        metric: 'knowledge',
+        delta: 2,
+        narration: `${name}在${tileName}把一段潮汐刻文重新抄正，旁聽的人第一次聽懂其中兩個符號。`
+      },
+      {
+        domain: 'learn',
+        metric: 'knowledge',
+        delta: 1,
+        narration: `${name}把${tileName}採來的草藥分成三束，標出能止血與能醒神的差別。`
+      },
+      {
+        domain: 'learn',
+        metric: 'knowledge',
+        delta: 2,
+        narration: `${name}在${tileName}校對舊圖上的潮線，替下一次大潮留下更準的路標。`
+      }
+    ])
+  }
+
+  if (arch === 'civic' || /(員|公務|帳|調度|foreman|clerk|dispatcher|ledger|scribe)/i.test(role)) {
+    return pick([
+      {
+        domain: 'service',
+        metric: 'supply',
+        delta: 2,
+        narration: `${name}在${tileName}重排補給名冊，讓下一批米袋先送到最缺的街段。`
+      },
+      {
+        domain: 'service',
+        metric: 'economy',
+        delta: 1,
+        narration: `${name}把${tileName}的欠帳與工錢逐筆對上，幾個等薪水的人鬆了口氣。`
+      },
+      {
+        domain: 'service',
+        metric: 'infrastructure',
+        delta: 1,
+        narration: `${name}在${tileName}標出三處待修路面，工班終於知道明早先去哪裡。`
+      }
+    ])
+  }
+
+  return pick([
+    {
+      domain: 'service',
+      metric: 'supply',
+      delta: 1,
+      narration: `${name}在${tileName}把散落的物資收回公共箱，路過的人順手補上自己的那一份。`
+    },
+    {
+      domain: 'learn',
+      metric: 'knowledge',
+      delta: 1,
+      narration: `${name}在${tileName}記下今天人潮與貨流的變化，準備晚點交給熟識的店家。`
+    },
+    {
+      domain: 'build',
+      metric: 'infrastructure',
+      delta: 1,
+      narration: `${name}在${tileName}扶正一排被風雨推歪的路標，外地人終於少繞一條街。`
+    }
+  ])
 }
 
 // 0..1 deterministic：把 (tick, a, b) hash 成數字
