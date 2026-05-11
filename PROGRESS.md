@@ -29,10 +29,28 @@ developer. Keep latest status at the top.
 - `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
 - Gemini staged review found only the initial missing-test gap; the retry helper
   tests were added afterward.
+- Final Gemini staged review returned `No findings`.
+- Commit `d2d17b3` pushed to `main`.
+- GitHub Actions CI run `25666346557` passed.
+- GitHub Actions Deploy Dev run `25666346537` passed.
+
+### Live Verification
+
+- During the deploy restart window, `/api/*` briefly returned `502` while the web
+  container already served the new HTML. This matches the prior mobile failure
+  mode and is now covered by visible fixture-state retry.
+- After containers settled, live probes returned:
+  - `/healthz`: `version=0.15.25`, `tick=81348`.
+  - `/api/version`: `0.15.25`.
+  - `/api/world`: `tick=81348`, `eventCount=1397963`, `npcCount=50`.
+- `/api/world` response headers returned `200`, `Cache-Control: no-store`,
+  `Content-Length`, and no `Content-Encoding`.
+- `docker ps` showed `greed-island-web` healthy and `greed-island-server` up.
 
 ### Still Open
 
-- Pending deploy evidence and iPhone/live verification after CI/CD completes.
+- Await user-side iPhone reload confirmation that the fixture badge disappears;
+  server/proxy/API evidence is healthy at `v0.15.25`.
 
 ## 2026-05-11 — v0.15.24 Docker Local Recovery
 

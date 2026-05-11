@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.25 🚧 in progress — 2026-05-11
+## v0.15.25 ✅ shipped — 2026-05-11
 
 **主題：mobile fixture-state recovery hardening**
 
@@ -19,8 +19,14 @@
 - ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
   and `git diff --check` passed; web build still has the existing Vite chunk-size
   warning.
-- 🚧 Reviewer pass, commit/push, CI/CD, and live iPhone evidence are pending for
-  this hotfix.
+- ✅ Gemini staged review returned `No findings` after focused retry tests were
+  added.
+- ✅ Commit `d2d17b3` pushed to `main`; CI run `25666346557` and Deploy Dev run
+  `25666346537` passed.
+- ✅ Live verification: `/healthz` and `/api/version` report `0.15.25`,
+  `/api/world` returns live world data with `Cache-Control: no-store` and no API
+  compression.
+- 🚧 Await user-side iPhone reload confirmation that the fixture badge disappears.
 
 ## v0.15.24 🚧 in progress — 2026-05-11
 
