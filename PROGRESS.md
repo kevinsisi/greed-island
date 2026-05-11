@@ -25,7 +25,32 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/web -- npcProjection eventVisibility` passed: 2
   files / 5 tests.
 - `npm run build:web` passed, with the existing Vite chunk-size warning.
-- Full verification, review, commit, push, CI/CD, and live checks are pending.
+- `npm run build:server` passed.
+- Final `npm test` passed: server 20 files / 148 tests, web 7 files / 18 tests.
+- `npx openspec validate npc-humanity-ai-memory --strict` passed.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Gemini staged review returned `No findings`.
+
+### CI/CD + Live Verification
+
+- Commit `2559b24` pushed to `main`.
+- GitHub Actions CI run `25672281805` passed.
+- GitHub Actions Deploy Dev run `25672281818` passed.
+- Live `v0.15.29` verification after deploy:
+  - `/healthz`: `version=0.15.29`, `tick=82730`.
+  - `/api/npcs`: `50` rows.
+  - Hub traveller markers expected from live data: `0`, because no NPC currently
+    has `activity='move'` plus `travelRoute`; local district NPCs now stay off Hub.
+  - Nighttide local outdoor NPCs: `14`, rendered only by the area layer.
+  - `/api/events?limit=30` public filtered head is `AREA_PRESSURE`, not
+    `WORLD_TICK`, with narration present.
+  - `/api/world/chronicle?limit=40&ai=1`: `source=ai`, `requested=true`,
+    `activeKeys=40`, `fallbackReason=null`.
+
+### Still Open
+
+- No active blocker. If Hub feels too empty with no travellers, add district-level
+  aggregate activity badges instead of rendering individual area NPCs on Hub.
 
 ## 2026-05-11 — v0.15.28 NPC Intent Text + Local Motion Cadence
 

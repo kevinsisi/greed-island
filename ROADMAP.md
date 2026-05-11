@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.29 🚧 in progress — 2026-05-11
+## v0.15.29 ✅ shipped — 2026-05-11
 
 **主題：NPC layer uniqueness + chronicle cleanup**
 
@@ -19,7 +19,18 @@
 - ✅ Focused verification: `npm run test -w @greed-island/web -- npcProjection
   eventVisibility` and `npm run build:web` passed; web build still has the
   existing Vite chunk-size warning.
-- 🚧 Full verification, review, CI/CD, and live checks are pending.
+- ✅ Full verification: `npm run build:server`, `npm run build:web`, `npm test`,
+  `npx openspec validate npc-humanity-ai-memory --strict`, and `git diff --check`
+  passed; Gemini staged review returned `No findings`.
+- ✅ Commit `2559b24` pushed to `main`; CI run `25672281805` and Deploy Dev run
+  `25672281818` passed.
+- ✅ Live verification: `v0.15.29`, `/api/npcs` returns 50 rows, Hub traveller
+  markers expected from live data is 0 because no NPC is currently crossing
+  districts, Nighttide has 14 local outdoor NPCs for the area layer, public event
+  head is narrated `AREA_PRESSURE` rather than `WORLD_TICK`, and chronicle summary
+  returned `source=ai` with `activeKeys=40` and no fallback reason.
+- 🚧 If Hub feels too empty when no one is travelling, add aggregate district
+  activity badges instead of rendering individual area NPCs on Hub.
 
 ## v0.15.28 ✅ shipped — 2026-05-11
 
