@@ -3,7 +3,7 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-11 — v0.15.22 In Progress
+## 2026-05-11 — v0.15.22 Shipped
 
 ### Completed Locally
 
@@ -20,10 +20,29 @@ developer. Keep latest status at the top.
 
 ### Local Verification
 
-- Pending build, tests, Gemini review, commit, push, CI/CD, and live iPhone
-  verification.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 132 tests; web 5 files / 12 tests.
+- `docker run --rm -v ... caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile`
+  passed for `packages/web/Caddyfile.internal`.
+- `git diff --check` passed.
 
-## 2026-05-11 — v0.15.21 In Progress
+### CI/CD And Runtime Verification
+
+- Gemini staged review found a test-gap note for the overlapping refresh race;
+  accepted for this production hotfix because the repo lacks a mounted React
+  provider integration harness.
+- Commit `20f08b5` pushed to `main`.
+- GitHub Actions CI run `25645997945` passed.
+- GitHub Actions Deploy Dev run `25645997952` passed.
+- Runtime health verified: `/healthz` returned `version: 0.15.22`.
+- Runtime API version verified: `/api/version` returned `0.15.22`.
+- Runtime API verified: `/api/world` returned live data with tick `74789`,
+  `eventCount=1275697`, and `npcCount=50`.
+- User iPhone verification passed after reload: fixture/demo label disappeared
+  and authoritative live world data rendered.
+
+## 2026-05-11 — v0.15.21 Shipped
 
 ### Completed Locally
 
@@ -42,8 +61,22 @@ developer. Keep latest status at the top.
 
 ### Local Verification
 
-- Pending build, tests, Caddy validation, Gemini review, commit, push, CI/CD,
-  and live iPhone-style `/api/world` verification.
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 132 tests; web 5 files / 12 tests.
+- Caddyfile validate passed.
+- `git diff --check` passed.
+
+### CI/CD And Runtime Verification
+
+- Gemini staged review: `No findings`.
+- Commit `2558880` pushed to `main`.
+- GitHub Actions CI run `25645742538` passed.
+- GitHub Actions Deploy Dev run `25645742547` passed.
+- Runtime verified: `/api/world` returned `200`, `Cache-Control: no-store`,
+  `Content-Length`, and no `Content-Encoding` after deploy.
+- iPhone still showed fixture after `/api/world` became successful, which led to
+  the follow-up v0.15.22 frontend state fix.
 
 ## 2026-05-11 — v0.15.20 Shipped
 

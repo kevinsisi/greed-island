@@ -4,22 +4,25 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.22 🚧 in progress — 2026-05-11
+## v0.15.22 ✅ shipped — 2026-05-11
 
 **主題：always accept successful authoritative world snapshots**
 
 - ✅ v0.15.21 後確認 iPhone `/api/world` 已經 `200`、uncompressed、no-store，但 UI 仍停在 fixture。
 - ✅ 修正 `WorldStateContext`：任何成功 `/api/world` 都必須覆蓋 fixture，不再被 overlapping mobile refresh generation guard 丟棄。
-- ⏳ 本機驗證、Gemini review、commit/push、CI、Deploy Dev、live iPhone verification pending。
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm test`、Caddyfile validate、`git diff --check` 通過。
+- ✅ Commit `20f08b5` pushed to `main`; CI run `25645997945` passed; Deploy Dev run `25645997952` passed。
+- ✅ Live verification: `/healthz` and `/api/version` return `0.15.22`; `/api/world` returns live data; user iPhone reload confirmed fixture/demo label disappeared。
 
-## v0.15.21 🚧 in progress — 2026-05-11
+## v0.15.21 ✅ shipped — 2026-05-11
 
 **主題：disable API compression for mobile Safari world fetch**
 
 - ✅ 從 iPhone live proxy logs 確認 fresh `v0.15.20` HTML/JS 與 `/api/version` 成功，但同一輪沒有完成可見的 `/api/world`。
 - ✅ Root-cause candidate：internal Caddy global `encode zstd gzip` 讓 `/api/*` JSON 也被 zstd 壓縮；iPhone Safari 宣稱接受 zstd，但 world-state fetch 疑似卡在 response completion/decoding。
 - ✅ `/api/*` 保持 `Cache-Control: no-store`，但不再經 internal Caddy compression；zstd/gzip 只保留在 static HTML/assets handlers。
-- ⏳ 本機驗證、Gemini review、commit/push、CI、Deploy Dev、live verification pending。
+- ✅ 本機驗證、Gemini review、CI run `25645742538`、Deploy Dev run `25645742547` 通過。
+- ✅ Live verification: `/api/world` became uncompressed and returned `200`; remaining fixture issue was frontend state acceptance, fixed in v0.15.22。
 
 ## v0.15.20 ✅ shipped — 2026-05-11
 
