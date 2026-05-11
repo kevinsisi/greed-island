@@ -528,8 +528,10 @@ export class ApiError extends Error {
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    cache: 'no-store',
     headers: {
       Accept: 'application/json',
+      'Cache-Control': 'no-store',
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.headers ?? {})
     }

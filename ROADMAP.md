@@ -4,6 +4,16 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.19 🚧 in progress — 2026-05-11
+
+**主題：disable dynamic API conditional caching on mobile Safari**
+
+- ✅ 從 live web proxy logs 確認 iPhone 已載入新 bundle，但動態 JSON API 仍帶 `If-None-Match`，部分 endpoint 回 `304` 空 body。
+- ✅ 前端 `jsonFetch` 對 `/api/*` 設 `cache: 'no-store'` 與 `Cache-Control: no-store`，避免 Safari 對動態 JSON 做 conditional cache。
+- ✅ Internal Caddy `/api/*` response 加 `Cache-Control: no-store`。
+- ✅ 本機驗證：`npm run build:web`、`npm run build:server`、`npm test`、Caddyfile validate、`git diff --check` 通過。
+- ⏳ Commit/push、CI、Deploy Dev、live verification pending。
+
 ## v0.15.18 ✅ shipped — 2026-05-11
 
 **主題：mobile stale-client and weak-network refresh fix**

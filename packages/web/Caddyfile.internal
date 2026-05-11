@@ -18,6 +18,7 @@
 	encode zstd gzip
 
 	handle /api/* {
+		header Cache-Control "no-store"
 		reverse_proxy server:3000 {
 			# Pass-through for SSE so events reach the client live.
 			flush_interval -1

@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.19 In Progress
+
+### Completed Locally
+
+- Investigated continued mobile fixture state after v0.15.18 by checking live web
+  proxy logs for the iPhone client.
+- Found Safari/iOS requests sending `If-None-Match` for dynamic JSON endpoints;
+  several `/api/cards`, `/api/map`, and `/api/npcs` responses returned `304`,
+  which the frontend `jsonFetch` treats as a failed JSON response.
+- Added `cache: 'no-store'` and `Cache-Control: no-store` to the frontend API
+  fetch wrapper so Safari does not conditional-cache dynamic `/api/*` JSON.
+- Added `Cache-Control: no-store` to the internal Caddy `/api/*` route.
+- Bumped app version to `0.15.19`.
+
+### Local Verification
+
+- `npm run build:web` passed, with existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 132 tests; web 4 files / 9 tests.
+- `docker run --rm -v ... caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile`
+  passed for `packages/web/Caddyfile.internal`.
+- `git diff --check` passed.
+
+### CI/CD And Runtime Verification
+
+- Pending commit, push, CI, Deploy Dev, and live iPhone-style API cache checks.
+
 ## 2026-05-11 — v0.15.18 Shipped
 
 ### Completed Locally
