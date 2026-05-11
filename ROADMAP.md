@@ -4,6 +4,21 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.26 🚧 in progress — 2026-05-11
+
+**主題：Hub NPC overview visibility recovery**
+
+- ✅ Root cause: live `/api/npcs` returns all `50` NPCs, but no NPC currently has
+  `activity='move'`; Hub projection only rendered moving NPCs, making the main map
+  look empty despite valid district presence.
+- ✅ Hub world overview now renders all outdoor district NPCs and preserves
+  travel-route rendering for actual moving NPCs.
+- ✅ Building occupants remain excluded from Hub map and rendered by BuildingPage.
+- ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
+  and `git diff --check` passed; web build still has the existing Vite chunk-size
+  warning.
+- 🚧 Review, commit/push, CI/CD, and live evidence are pending.
+
 ## v0.15.25 ✅ shipped — 2026-05-11
 
 **主題：mobile fixture-state recovery hardening**

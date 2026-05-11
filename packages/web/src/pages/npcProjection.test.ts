@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { areaOutdoorNpcs, hubTravelNpcs } from './npcProjection'
+import { areaOutdoorNpcs, hubMapNpcs } from './npcProjection'
 import type { NpcSummary } from '../state/types'
 
 function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
@@ -36,7 +36,7 @@ describe('NPC scene projections', () => {
     expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local'])
   })
 
-  it('maps only travelling surface NPCs to hub route sprites', () => {
+  it('maps surface NPCs to hub overview sprites and keeps travel routes', () => {
     const people = [
       npc({ id: 'local', activity: 'idle', buildingId: null }),
       npc({
@@ -53,10 +53,10 @@ describe('NPC scene projections', () => {
       npc({ id: 'inside-moving', activity: 'move', buildingId: 'b_central_exchange' })
     ]
 
-    const hub = hubTravelNpcs(people)
+    const hub = hubMapNpcs(people)
 
-    expect(hub.map((p) => p.id)).toEqual(['traveller'])
-    expect(hub[0]?.travelRoute).toEqual({
+    expect(hub.map((p) => p.id)).toEqual(['local', 'traveller'])
+    expect(hub[1]?.travelRoute).toEqual({
       fromDistrictId: 't_central',
       toDistrictId: 't_dock',
       targetDistrictId: 't_dock'

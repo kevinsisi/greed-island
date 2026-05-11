@@ -3,6 +3,35 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-11 — v0.15.26 Hub NPC Overview Recovery
+
+### Completed Locally
+
+- Investigated the post-`v0.15.25` report that the fixture badge disappeared but
+  many NPCs also disappeared.
+- Confirmed live `/api/npcs` still returns all `50` NPCs and `world.npcCount=50`;
+  `49` NPCs are outdoors, but none currently have `activity='move'`.
+- Identified the frontend projection issue: Hub main-map rendering only included
+  `activity === 'move'` NPCs, so a valid world with no travelling NPCs made the
+  Hub appear empty even though NPCs were present in districts.
+- Changed Hub projection to show all outdoor district NPCs on the world overview,
+  while keeping `travelRoute` rendering for NPCs that are actually moving and
+  keeping building occupants out of the Hub map.
+- Updated focused projection tests and bumped app version from `0.15.25` to
+  `0.15.26`.
+
+### Local Verification
+
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npm run build:server` passed.
+- `npm test` passed: server 19 files / 141 tests, web 6 files / 15 tests.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Pending: Gemini review.
+
+### Still Open
+
+- Pending deploy and live verification.
+
 ## 2026-05-11 — v0.15.25 Mobile Fixture Recovery
 
 ### Completed Locally

@@ -14,7 +14,7 @@ import {
 } from '../game/districts'
 import type { FactionLeanId, MapAreaOverlay, MapNpc, MapPlayer } from '../game/MapScene'
 import type { NpcSummary } from '../state/types'
-import { hubTravelNpcs } from './npcProjection'
+import { hubMapNpcs } from './npcProjection'
 
 const KNOWN_DISTRICTS = new Set<DistrictId>([
   't_forest',
@@ -83,10 +83,10 @@ export function HubPage() {
       }))
   }, [areaStates])
 
-  // 主地圖只顯示正在跨區移動的 NPC；區域內 NPC 由 AreaPage 顯示，
-  // 建築內 NPC 由 BuildingPage 顯示，避免同一個人跨場景分身。
+  // 主地圖是世界總覽：顯示各區戶外 NPC；建築內 NPC 由 BuildingPage 顯示。
+  // 正在跨區移動的 NPC 仍以 travelRoute 呈現在世界線上。
   const mapNpcs = useMemo<MapNpc[]>(() => {
-    return hubTravelNpcs(npcs)
+    return hubMapNpcs(npcs)
   }, [npcs])
 
   const mapPlayers = useMemo<MapPlayer[]>(() => {

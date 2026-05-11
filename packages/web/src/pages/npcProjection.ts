@@ -19,10 +19,10 @@ export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): Np
   )
 }
 
-export function hubTravelNpcs(npcs: readonly NpcSummary[]): MapNpc[] {
+export function hubMapNpcs(npcs: readonly NpcSummary[]): MapNpc[] {
   return npcs
     .filter((npc) => isKnownDistrictId(npc.location))
-    .filter((npc) => !npc.buildingId && npc.activity === 'move')
+    .filter((npc) => !npc.buildingId)
     .map((npc) => {
       const route = normalizeTravelRoute(npc.travelRoute)
       const base: MapNpc = {
