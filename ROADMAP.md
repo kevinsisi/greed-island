@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.26 🚧 in progress — 2026-05-11
+## v0.15.26 ✅ shipped — 2026-05-11
 
 **主題：Hub NPC overview visibility recovery**
 
@@ -17,7 +17,13 @@
 - ✅ Local verification: `npm run build:web`, `npm run build:server`, `npm test`,
   and `git diff --check` passed; web build still has the existing Vite chunk-size
   warning.
-- 🚧 Review, commit/push, CI/CD, and live evidence are pending.
+- ✅ Gemini staged review returned `No findings`.
+- ✅ Commit `4f2d007` pushed to `main`; CI run `25666839843` and Deploy Dev run
+  `25666843244` passed.
+- ✅ Live verification: `v0.15.26`, `/api/world npcCount=50`, `/api/npcs` returns
+  50 rows, and Hub projection yields 49 outdoor district NPC markers plus 1 moving
+  marker from current live data.
+- 🚧 Await user-side iPhone confirmation that Hub NPC density now looks reasonable.
 
 ## v0.15.25 ✅ shipped — 2026-05-11
 

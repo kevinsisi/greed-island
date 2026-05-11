@@ -26,11 +26,24 @@ developer. Keep latest status at the top.
 - `npm run build:server` passed.
 - `npm test` passed: server 19 files / 141 tests, web 6 files / 15 tests.
 - `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
-- Pending: Gemini review.
+- Gemini staged review returned `No findings`.
+- Commit `4f2d007` pushed to `main`.
+- GitHub Actions CI run `25666839843` passed.
+- GitHub Actions Deploy Dev run `25666843244` passed.
+
+### Live Verification
+
+- During deploy restart, one immediate probe hit the expected transient API
+  restart gap; retry after containers settled succeeded.
+- `/healthz` and `/api/version` report `0.15.26`.
+- `/api/world` reports `npcCount=50`; `/api/npcs` returns `50` rows.
+- Hub overview projection now has `49` outdoor district NPC markers and `1`
+  moving marker from live data; one remaining NPC is inside a building and stays
+  excluded from the Hub map.
 
 ### Still Open
 
-- Pending deploy and live verification.
+- Await user-side iPhone confirmation that Hub NPC density now looks reasonable.
 
 ## 2026-05-11 — v0.15.25 Mobile Fixture Recovery
 
