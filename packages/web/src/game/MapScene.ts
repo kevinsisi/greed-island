@@ -115,6 +115,12 @@ const NPC_SPRITE_SIZE = 26
 const PLAYER_SPRITE_SIZE = 22
 /** NPC tween 時長：後端 5s/tick，前端 4.5s 平滑 → 4.5s 抵達下個 server 推的位置 */
 const NPC_MOVE_TWEEN_MS = 4500
+/**
+ * Routed Hub traveller tween 時長：server `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS`
+ * 預設 4 ticks ≈ 20 秒。前端 18 秒 tween → sprite 在 visibility hold 結束前
+ * 大致走到目的 district 中心，避免「sprite 釘在中點不動」的視覺 bug。
+ */
+const NPC_ROUTED_TWEEN_MS = 18000
 const PEER_MOVE_TWEEN_MS = 1800
 const SPRITE_FADE_MS = 450
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
@@ -890,6 +896,10 @@ export class MapScene extends Phaser.Scene {
       seqByDistrict.set(npc.districtId, seq + 1)
 
       const target = this.computeNpcTarget(npc, def, seq)
+      // v0.15.44: routed travellers tween at the Hub-traveller cadence
+      // (~18s) instead of the 4.5s NPC-tick cadence, matching the
+      // server's NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS (4 ticks ≈ 20s).
+      const tweenDurationMs = npc.travelRoute ? NPC_ROUTED_TWEEN_MS : NPC_MOVE_TWEEN_MS
       const fillColor = npc.color ?? NPC_BADGE_COLOR
       const badgeColor = npc.color === undefined ? NPC_BADGE_TEXT : textColorForBg(fillColor)
 
@@ -919,14 +929,16 @@ export class MapScene extends Phaser.Scene {
             iconText.setVisible(false)
           }
         }
-        this.tweenNpcTo(existing, target.x, target.y)
+        this.tweenNpcTo(existing, target.x, target.y, tweenDurationMs)
         continue
       }
 
-      // 新增 sprite — 直接落在目標位置
+      // 新增 sprite — routed traveller 起始在 from-center，然後 tween 到 to-center；
+      // 非 routed NPC 直接落在 target。沒有起始位置的話 sprite 會釘在中點不動。
+      const spawn = this.computeNpcSpawnPosition(npc, target)
       const tex = this.npcTextureKey(npc.id, fillColor)
       this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, 0x1c1300, 2)
-      const sprite = this.physics.add.sprite(target.x, target.y, tex)
+      const sprite = this.physics.add.sprite(spawn.x, spawn.y, tex)
       sprite.setDepth(70)
       sprite.setAlpha(0)
       sprite.setData('npcId', npc.id)
@@ -942,7 +954,7 @@ export class MapScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
-      const badge = this.add.text(target.x, target.y, npc.shortName, {
+      const badge = this.add.text(spawn.x, spawn.y, npc.shortName, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '14px',
@@ -954,7 +966,7 @@ export class MapScene extends Phaser.Scene {
       badge.setAlpha(0)
       sprite.setData('badge', badge)
 
-      const nameLabel = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
+      const nameLabel = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '11px',
@@ -969,8 +981,8 @@ export class MapScene extends Phaser.Scene {
 
       const iconGlyph = activityGlyphFor(npc.activity)
       const activityIconText = this.add.text(
-        target.x + NPC_SPRITE_SIZE * 0.55,
-        target.y - NPC_SPRITE_SIZE * 0.55,
+        spawn.x + NPC_SPRITE_SIZE * 0.55,
+        spawn.y - NPC_SPRITE_SIZE * 0.55,
         iconGlyph,
         {
           fontFamily:
@@ -987,7 +999,7 @@ export class MapScene extends Phaser.Scene {
       activityIconText.setAlpha(0)
       sprite.setData('activityIcon', activityIconText)
 
-      const chatBubble = this.add.text(target.x, target.y - NPC_SPRITE_SIZE * 1.6, '💬', {
+      const chatBubble = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 1.6, '💬', {
         fontFamily:
           '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
         fontSize: '18px',
@@ -1012,6 +1024,12 @@ export class MapScene extends Phaser.Scene {
       sprite.setData('chatBubble', chatBubble)
       this.attachNpcIdleAnimation(sprite, npc.id)
       this.fadeNpcSprite(sprite, 1)
+
+      // v0.15.44: routed traveller — kick off the tween from spawn (from-center)
+      // toward target (to-center). Non-routed sprites are already at target.
+      if (npc.travelRoute && (spawn.x !== target.x || spawn.y !== target.y)) {
+        this.tweenNpcTo(sprite, target.x, target.y, tweenDurationMs)
+      }
 
       this.npcSprites.set(npc.id, sprite)
     }
@@ -1053,28 +1071,47 @@ export class MapScene extends Phaser.Scene {
     sprite.setData('idleTween', tween)
   }
 
-  /** 計算 NPC 在世界地圖上應該出現的座標：district anchor + sub-tile 微偏移 */
+  /**
+   * 計算 NPC 在世界地圖上應該出現的「目標」座標。
+   * - Routed traveller：到目的 district 中心（tween 終點）
+   * - Local NPC：district anchor + sub-tile 微偏移
+   */
   private computeNpcTarget(
     npc: MapNpc,
     def: DistrictDef,
     seq: number
   ): { x: number; y: number } {
     if (npc.travelRoute) {
-      const from = DISTRICTS[npc.travelRoute.fromDistrictId]
       const to = DISTRICTS[npc.travelRoute.toDistrictId]
-      if (from && to) {
-        const a = this.districtCenter(from)
-        const b = this.districtCenter(to)
-        return { x: a.x + (b.x - a.x) * 0.5, y: a.y + (b.y - a.y) * 0.5 }
-      }
+      if (to) return this.districtCenter(to)
     }
-    // 基準：district anchor 中心
+    return this.computeNpcLocalPosition(npc, def, seq)
+  }
+
+  /**
+   * 計算 routed traveller sprite 在「剛 spawn」時應該坐落的位置 — 起點
+   * district 中心，這樣後續 `tweenNpcTo(target=toCenter)` 才會看到真的「從
+   * A 走到 B」。非 routed NPC 直接回傳 target。
+   */
+  private computeNpcSpawnPosition(
+    npc: MapNpc,
+    target: { x: number; y: number }
+  ): { x: number; y: number } {
+    if (npc.travelRoute) {
+      const from = DISTRICTS[npc.travelRoute.fromDistrictId]
+      if (from) return this.districtCenter(from)
+    }
+    return target
+  }
+
+  private computeNpcLocalPosition(
+    npc: MapNpc,
+    def: DistrictDef,
+    seq: number
+  ): { x: number; y: number } {
     const center = this.districtCenter(def)
     const baseX = center.x
     const baseY = center.y
-    // 後端 sub-tile (0..14, 0..9)：把它對應到以 anchor 為中心的小範圍偏移，
-    // 用百分比把 0..14 → -1..+1，乘上半徑後加到 anchor 上。這樣同 district
-    // 的 NPC 不再擠在一點，且 sub-tile 真的變了 → 世界地圖上就看得到動。
     if (typeof npc.subCol === 'number' && typeof npc.subRow === 'number') {
       const cx = (npc.subCol / 14) * 2 - 1 // -1..+1
       const cy = (npc.subRow / 9) * 2 - 1
@@ -1083,7 +1120,6 @@ export class MapScene extends Phaser.Scene {
         y: baseY + cy * NPC_SUBTILE_RADIUS
       }
     }
-    // Fallback：缺 sub-tile 時用 hash 60° ring 排（v0.12.1 的舊行為）
     const ringAngle = (seq * 60 * Math.PI) / 180
     const ringR = seq === 0 ? 0 : 12
     return {
@@ -1100,7 +1136,12 @@ export class MapScene extends Phaser.Scene {
   }
 
   /** 把 sprite + 所有 attached label tween 到目標 (x,y)。短距離直接 set。 */
-  private tweenNpcTo(sprite: Phaser.Physics.Arcade.Sprite, x: number, y: number): void {
+  private tweenNpcTo(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    x: number,
+    y: number,
+    durationMs: number = NPC_MOVE_TWEEN_MS
+  ): void {
     const prev = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (prev) prev.stop()
     const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
@@ -1121,13 +1162,11 @@ export class MapScene extends Phaser.Scene {
     }
     if (x > startX + 0.5) sprite.setFlipX(false)
     else if (x < startX - 0.5) sprite.setFlipX(true)
-    // 跨 district 距離可以非常遠（最遠 ≈ 600px），維持 4.5s tween：
-    // 接到下個 server tick 前剛好走完、看起來就是「正在路上」
     const tween = this.tweens.add({
       targets: { px: startX, py: startY },
       px: x,
       py: y,
-      duration: NPC_MOVE_TWEEN_MS,
+      duration: durationMs,
       ease: 'Sine.easeInOut',
       onUpdate: (_t, t: { px: number; py: number }) => {
         sprite.setPosition(t.px, t.py)

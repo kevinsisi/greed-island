@@ -3,6 +3,55 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.44 Hub Traveller Sprite + Fixture Flicker Fix
+
+### Completed This Session
+
+- Two related Hub map UX bugs surfaced by the v0.15.40 diagnostic:
+  - **Static traveller sprite** — `MapScene.computeNpcTarget` returned
+    the literal midpoint of `from`/`to` district centers for routed
+    NPCs, so the sprite spawned at the midpoint and sat there until the
+    server's route visibility hold (4 ticks ≈ 20s) expired. To the user
+    this looked like "the NPC is shown but does not move".
+  - **District label flicker** — `WorldStateContext` falls back to
+    `fixtureMap` until `/api/world` responds. The fixture has only 8
+    tiles (no `t_salt_marsh`), so `HubPage.activeDistrictIds` briefly
+    omits `t_salt_marsh`; `MapScene.labelFor()` then prints "施工中"
+    for that district. The label flipped to the real name as soon as
+    the server snapshot arrived.
+- Fixes:
+  - `MapScene.computeNpcTarget` now returns the *destination*
+    district's center for routed NPCs. A new
+    `computeNpcSpawnPosition` returns the *origin* center, so a freshly
+    spawned routed sprite starts at the origin and tweens toward the
+    destination.
+  - `MapScene.tweenNpcTo` accepts an optional `durationMs`. Routed
+    travellers use `NPC_ROUTED_TWEEN_MS = 18000ms`, close to the
+    server's `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS = 4` window of ~20s.
+    Non-routed NPCs keep the existing `NPC_MOVE_TWEEN_MS = 4500ms`
+    tick-pace tween.
+  - `HubPage` only mounts the Phaser canvas when
+    `useWorldState().source === 'server'`. Before that it shows a thin
+    "載入潮鳴市…" / "Loading Tide Hum City…" placeholder, eliminating
+    the brief "施工中" flicker from fixture state.
+- Bumped app version from `0.15.43` to `0.15.44`.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 189 tests, web 10 files / 28
+  tests.
+- `npm run build:server` and `npm run build:web` passed.
+- Local docker rebuilt; `/healthz` returns `version=0.15.44`.
+
+### Still Open
+
+- Live browser smoke: confirm routed travellers visibly walk between
+  districts and that no district shows "施工中" on cold reload.
+- Hub-side rendering regression test (still gated on a deterministic
+  Phaser test harness, deferred since v0.15.40).
+- civ-evo-construction Slice 4+ (projection / API / frontend) remains
+  on the queue.
+
 ## 2026-05-12 — v0.15.43 civ-evo-construction Slice 3: NPC Policy
 
 ### Completed This Session

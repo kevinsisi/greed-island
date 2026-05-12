@@ -30,7 +30,7 @@ type HubPosition = { x: number; y: number; z: number }
  */
 export function HubPage() {
   const { t, locale } = useI18n()
-  const { npcs, map, events } = useWorldState()
+  const { npcs, map, events, source } = useWorldState()
   const { token, account } = useAuth()
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
@@ -203,21 +203,30 @@ export function HubPage() {
       </div>
 
       <div className="relative w-full">
-        <PhaserGame
-          npcs={mapNpcs}
-          players={mapPlayers}
-          locale={locale}
-          playerName={account?.displayName ?? null}
-          hudStrings={hudStrings}
-          onAreaEnter={handleAreaEnter}
-          onNpcInteract={handleNpcInteract}
-          onPositionChange={handleHubPositionChange}
-          areaOverlays={areaOverlays}
-          activeDistrictIds={activeDistrictIds}
-          constructionActivities={constructionActivities}
-          controlsEnabled={!!token}
-        />
-
+        {source === 'server' ? (
+          <PhaserGame
+            npcs={mapNpcs}
+            players={mapPlayers}
+            locale={locale}
+            playerName={account?.displayName ?? null}
+            hudStrings={hudStrings}
+            onAreaEnter={handleAreaEnter}
+            onNpcInteract={handleNpcInteract}
+            onPositionChange={handleHubPositionChange}
+            areaOverlays={areaOverlays}
+            activeDistrictIds={activeDistrictIds}
+            constructionActivities={constructionActivities}
+            controlsEnabled={!!token}
+          />
+        ) : (
+          // v0.15.44: don't mount the Phaser canvas until /api/world has
+          // delivered an authoritative tile list. The fixture only has 8
+          // districts (no t_salt_marsh), which causes "施工中" labels to
+          // flicker into real names the moment the server response lands.
+          <div className="w-full max-w-[800px] mx-auto aspect-[4/3] rounded-sharp border border-ground-700 bg-ground-900 flex items-center justify-center text-ground-400 text-sm">
+            {locale === 'zh' ? '載入潮鳴市…' : 'Loading Tide Hum City…'}
+          </div>
+        )}
       </div>
 
       {!token && (

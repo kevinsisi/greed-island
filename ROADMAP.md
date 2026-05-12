@@ -4,6 +4,22 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.44 🚧 in progress — 2026-05-12
+
+**主題：Hub traveller sprite 真的會動 + 區塊標籤閃 "施工中" 修正**
+
+- ✅ Bug 1 修正：`MapScene.computeNpcTarget` 對 routed NPC 改回傳 to-center；
+  新 `computeNpcSpawnPosition` 回 from-center；`tweenNpcTo` 加 optional
+  `durationMs`，routed traveller 用 `NPC_ROUTED_TWEEN_MS=18000ms` 對齊
+  server `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS=4` (≈20s) 的 visibility hold。
+  Sprite 從起點 district 中心 spawn，tween 到目的中心。
+- ✅ Bug 2 修正：`HubPage` 等 `useWorldState().source === 'server'` 才
+  mount Phaser canvas。Cold load 期間顯示 "載入潮鳴市…" 預留位，避免
+  fixture 8 個 tile 缺 `t_salt_marsh` 造成的 "施工中" 閃跳。
+- ✅ 本機：`npm test` 全綠（server 189 / web 28）、`npm run build` 通過。
+- 🚧 還沒做：commit / push / docker rebuild + 你 reload 後驗證
+  「routed NPC 看得到走、districts 不再閃 "施工中"」。
+
 ## v0.15.43 🚧 in progress — 2026-05-12
 
 **主題：civ-evo-construction Slice 3 — NPC autonomous policy**
