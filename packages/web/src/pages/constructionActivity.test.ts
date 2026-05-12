@@ -27,7 +27,7 @@ function npc(id: string, name = id): NpcSummary {
 }
 
 describe('construction activity projection', () => {
-  it('shows the latest unfinished construction crew on locked expansion districts', () => {
+  it('shows the latest unfinished construction crew on districts', () => {
     const activities = constructionActivitiesFor(
       [
         event({ targetTileId: 't_salt_marsh', progressAfter: 4, targetProgress: 12, npcId: 'npc.b' }, 19),
@@ -77,6 +77,25 @@ describe('construction activity projection', () => {
         targetProgress: 24,
         builderNames: ['築仔']
       }
+    ])
+  })
+
+  it('reads construction progress from rule-engine payload.data events', () => {
+    const activities = constructionActivitiesFor(
+      [event({
+        actorType: 'npc',
+        data: {
+          targetTileId: 't_dimai',
+          progressAfter: 9,
+          targetProgress: 24,
+          npcId: 'mountain.miner.lei_zi'
+        }
+      }, 21)],
+      [npc('mountain.miner.lei_zi', '雷子')]
+    )
+
+    expect(activities).toEqual([
+      { districtId: 't_dimai', progressAfter: 9, targetProgress: 24, builderNames: ['雷子'] }
     ])
   })
 })

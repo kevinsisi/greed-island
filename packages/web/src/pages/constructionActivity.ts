@@ -29,7 +29,7 @@ export function constructionActivitiesFor(
 
   for (const event of sortedEvents) {
     if (event.eventType !== 'CONSTRUCTION_PROJECT_PROGRESS') continue
-    const payload = event.payload
+    const payload = payloadData(event.payload)
     const districtId = typeof payload.targetTileId === 'string' ? payload.targetTileId : null
     if (!districtId || !(districtId in DISTRICTS) || !isDistrict(districtId as DistrictId)) continue
     const district = districtId as DistrictId
@@ -105,6 +105,10 @@ function builderIdsFor(payload: Record<string, unknown>): Set<string> {
   const motivation = isRecord(payload.motivation) ? payload.motivation : null
   if (typeof motivation?.sourceNpcId === 'string') builderIds.add(motivation.sourceNpcId)
   return builderIds
+}
+
+function payloadData(payload: Record<string, unknown>): Record<string, unknown> {
+  return isRecord(payload.data) ? payload.data : payload
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

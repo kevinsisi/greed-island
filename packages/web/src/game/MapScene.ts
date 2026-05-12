@@ -705,7 +705,6 @@ export class MapScene extends Phaser.Scene {
 
   private drawConstructionSites(): void {
     for (const activity of this.constructionActivities) {
-      if (this.isActiveDistrict(activity.districtId)) continue
       const def = DISTRICTS[activity.districtId]
       const x = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
       const y = def.anchor.row * TILE_SIZE - TILE_SIZE * 0.25

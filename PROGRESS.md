@@ -5,6 +5,26 @@ developer. Keep latest status at the top.
 
 ## 2026-05-12 — v0.15.47c Projection Payload Nesting Fix + E2E Completion Verified
 
+### 2026-05-12 Follow-up — Active-District Construction Visibility Fix
+
+- User reported that NPC construction still looked invisible on the Hub map: no
+  NPC/build crew appeared to be building, so completed projects felt like they
+  appeared out of nowhere.
+- Root cause: `packages/web/src/game/MapScene.ts` skipped construction-site
+  rendering whenever `activity.districtId` was already active/unlocked:
+  `if (this.isActiveDistrict(activity.districtId)) continue`. Autonomous civ-evo
+  projects currently target active districts such as `t_dimai` and `t_mountain`,
+  so the frontend deliberately hid them.
+- Fix: removed that active-district skip. Hub construction markers now render on
+  both active districts and locked expansion districts, showing the construction
+  label, progress fraction, builder names, and animated worker/tool markers.
+- Also updated `packages/web/src/pages/constructionActivity.ts` to read recent
+  rule-engine events from `payload.data` with fallback to flat `payload`, matching
+  the live typed-event shape.
+- Verification: `npm run test -w @greed-island/web -- constructionActivity`
+  passed (4 tests); `npm run build:web` passed with only the known Vite chunk-size
+  warning.
+
 ### What Was Fixed
 
 The `constructionProjects` projection's `buildRowsFromEvents()` was reading
