@@ -4,15 +4,19 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.38 🚧 in progress — 2026-05-12
+## v0.15.39 🚧 in progress — 2026-05-12
 
-**主題：cross-district traveller visibility**
+**主題：cross-district traveller cadence**
 
-- ✅ Root cause: legal Hub travellers existed, but each route was visible for only
-  one 5-second tick, so the parent map often showed 0-1 moving NPC.
+- ✅ Root cause: legal Hub travellers were still too rare after the parent/child
+  layer fix. A route-only visibility hold was insufficient because the server
+  produced too few cross-district decisions.
 - ✅ Cross-tile `travelRoute` state now stays visible for 4 ticks (about 20
   seconds) before the NPC resumes local area presence or proceeds to the next
   route segment.
+- ✅ Added deterministic ambient errand decisions so non-low-state NPCs
+  periodically choose a neighboring district through NPC policy, creating real
+  routed Hub travellers instead of frontend-only duplicates.
 - ✅ Preserved the `v0.15.37` parent/child rule: Hub only renders routed
   cross-district travellers, never child area outdoor NPCs.
 - ✅ Local verification: focused `npcEngine`, full `npm test`,

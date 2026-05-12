@@ -967,8 +967,9 @@ function canNpcStatesInteract(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
 /**
  * 個性 nudge：只對「天生會遊蕩」的 archetype 有效。
  *
- * - entertainer + 極高 talkativeness：可能去鄰近 tile 湊熱鬧（且鄰居人多得明顯）
- * - outsider：高 greed 配低 patience 時往不安全鄰區「找事」
+  * - entertainer + 極高 talkativeness：可能去鄰近 tile 湊熱鬧（且鄰居人多得明顯）
+  * - outsider：高 greed 配低 patience 時往不安全鄰區「找事」
+  * - otherwise：low-frequency deterministic errands keep the city visibly alive
  *
  * Duty-anchored roles still use schedule windows as the strong source of truth.
  * They can leave through routine slots or injected off-duty errands, but this
@@ -986,8 +987,7 @@ function computePersonalityNudge(
 ): { targetTile: string; reason: string } | null {
   const arch = (profile.personality.archetype as string | undefined) ?? ''
 
-  // 只對 entertainer / outsider 啟用 nudge；其它角色由 duty-weighted schedule 驅動。
-  if (arch !== 'entertainer' && arch !== 'outsider') return null
+  if (before.activity === 'move') return null
 
   // 健康 / 心情低落 → 不漂泊，回家 / 留崗。
   if (before.mood < 30 || before.health < 30) return null
@@ -1017,7 +1017,31 @@ function computePersonalityNudge(
     }
   }
 
+  if (before.tile === scheduleTarget) {
+    const dutyAnchored = isDutyAnchoredProfile(profile)
+    const threshold = dutyAnchored ? 0.28 : 1
+    if (ambientErrandRoll(currentTick, profile.id) < threshold) {
+      const target = pickDeterministicNeighbor(before.tile, profile.id, currentTick)
+      if (target && target !== scheduleTarget) {
+        return {
+          targetTile: target,
+          reason: dutyAnchored ? 'off-duty-errand' : 'ambient-roam'
+        }
+      }
+    }
+  }
+
   return null
+}
+
+function ambientErrandRoll(tick: number, npcId: string): number {
+  return (hashStr(`${npcId}|${Math.floor(tick / PERSONALITY_DECISION_INTERVAL)}|ambient-errand`) % 1000) / 1000
+}
+
+function pickDeterministicNeighbor(origin: string, npcId: string, tick: number): string | null {
+  const neighbors = MAP_ADJACENCY[origin] ?? []
+  if (neighbors.length === 0) return null
+  return neighbors[hashStr(`${npcId}|${Math.floor(tick / PERSONALITY_DECISION_INTERVAL)}|neighbor`) % neighbors.length] ?? null
 }
 
 function pickMostCrowdedNeighbor(

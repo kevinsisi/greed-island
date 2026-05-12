@@ -143,7 +143,7 @@ describe('NpcEngine', () => {
     const engine = new NpcEngine(profiles)
     const domains = new Set<string>()
 
-    for (let tick = 1; tick <= 120; tick += 1) {
+    for (let tick = TICKS_PER_DAY / 2; tick <= TICKS_PER_DAY / 2 + 120; tick += 1) {
       for (const event of engine.tick(tick).events) {
         if (event.kind === 'productive') {
           domains.add(event.domain)
@@ -294,6 +294,74 @@ describe('NpcEngine', () => {
     }
     expect(crossed).toBe(true)
     expect(homeTicks).toBeGreaterThan(awayTicks)
+  })
+
+  it('creates ambient cross-district errands so the Hub has legal travellers', () => {
+    const profiles = Array.from({ length: 20 }, (_, i) =>
+      makeProfile({
+        id: `ambient.${i}`,
+        defaultLocation: 't_central',
+        routine: [
+          {
+            fromTickOfDay: 0,
+            toTickOfDay: TICKS_PER_DAY,
+            location: 't_central',
+            label: 'daily routine'
+          }
+        ],
+        personality: { archetype: 'resident', factionLean: 'civilian' }
+      })
+    )
+    const engine = new NpcEngine(profiles)
+    let routedTravellers = 0
+
+    for (let tick = TICKS_PER_DAY / 2; tick <= TICKS_PER_DAY / 2 + 120; tick += 1) {
+      engine.tick(tick)
+      routedTravellers = Math.max(
+        routedTravellers,
+        profiles.filter((profile) => {
+          const state = engine.getState(profile.id)
+          return state?.activity === 'move' && state.travelRoute !== null
+        }).length
+      )
+    }
+
+    expect(routedTravellers).toBeGreaterThan(1)
+  })
+
+  it('lets duty-anchored NPCs create sparse ambient errands', () => {
+    const profiles = Array.from({ length: 30 }, (_, i) =>
+      makeProfile({
+        id: `anchored.ambient.${i}`,
+        role: { zh: '店長', en: 'Shopkeeper' },
+        defaultLocation: 't_central',
+        routine: [
+          {
+            fromTickOfDay: 0,
+            toTickOfDay: TICKS_PER_DAY,
+            location: 't_central',
+            label: 'shop counter'
+          }
+        ],
+        personality: { archetype: 'shopkeeper', factionLean: 'civilian' }
+      })
+    )
+    const engine = new NpcEngine(profiles)
+    let routedTravellers = 0
+
+    for (let tick = TICKS_PER_DAY / 2; tick <= TICKS_PER_DAY / 2 + 180; tick += 1) {
+      engine.tick(tick)
+      routedTravellers = Math.max(
+        routedTravellers,
+        profiles.filter((profile) => {
+          const state = engine.getState(profile.id)
+          return state?.activity === 'move' && state.travelRoute !== null
+        }).length
+      )
+    }
+
+    expect(routedTravellers).toBeGreaterThan(0)
+    expect(routedTravellers).toBeLessThan(profiles.length)
   })
 
   it('honors explicit cross-district routine slots for duty-anchored priests', () => {
