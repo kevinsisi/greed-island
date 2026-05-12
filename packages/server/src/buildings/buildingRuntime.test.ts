@@ -45,6 +45,35 @@ describe('BuildingRuntime', () => {
     expect(outdoor.get('t_central') ?? []).toContain('local')
     expect(outdoor.get('t_central') ?? []).not.toContain('traveller')
   })
+
+  it('derives occupants for runtime-projected completed NPC buildings', () => {
+    const runtime = new BuildingRuntime()
+    const states = new Map<string, NpcRuntimeState>([
+      ['central.builder', npcState({ tile: 't_central', activity: 'work' })]
+    ])
+    const dynamic = [{
+      id: 'b_civ_evo_t_central.abcdef12',
+      tileId: 't_central',
+      nameZh: '自主設施',
+      nameEn: 'Autonomous Facility',
+      descriptionZh: '已完工的 NPC 自主建築',
+      type: 'landmark' as const,
+      placement: { col: 4, row: 4, glyph: '🏠', size: 24 },
+      interior: { cols: 9, rows: 7, props: [] },
+      ownerNpcId: 'central.builder',
+      hiring: [],
+      enterable: true,
+      restorative: false
+    }]
+
+    const view = runtime.snapshotForTile('t_central', states, dynamic).find((item) => item.def.id === dynamic[0]!.id)
+    const outdoor = runtime.npcsOutsideOnTile(states, dynamic)
+
+    expect(view?.occupants).toEqual([
+      { npcId: 'central.builder', shift: null, isOwner: true }
+    ])
+    expect(outdoor.get('t_central') ?? []).not.toContain('central.builder')
+  })
 })
 
 function npcState(input: Pick<NpcRuntimeState, 'tile' | 'activity'>): NpcRuntimeState {

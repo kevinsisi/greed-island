@@ -67,8 +67,8 @@ import {
   FACTIONS
 } from './areaStateEngine.js'
 import { BuildingRuntime } from '../buildings/buildingRuntime.js'
-import type { BuildingRuntimeView } from '../buildings/types.js'
-import { completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
+import type { BuildingDef, BuildingRuntimeView } from '../buildings/types.js'
+import { completedConstructionBuildingDef, completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
 import { findBuildingById, listAllBuildings, listBuildingsForTile } from '../buildings/catalog.js'
 import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
@@ -302,7 +302,7 @@ export class SimulationRuntime {
     if (!state) return null
     const presentNpcNames = this.getOutdoorNpcNamesAt(tileId)
     const presentBuildingNames = this.buildingRuntime
-      .snapshotForTile(tileId, this.npcEngine.snapshotAll())
+      .snapshotForTile(tileId, this.npcEngine.snapshotAll(), this.completedConstructionBuildingDefs())
       .map((b) => b.def.nameZh)
     const recentNarrations = this.getRecentEvents(20)
       .filter((e) => e.narration)
@@ -393,7 +393,11 @@ export class SimulationRuntime {
       tileId,
       this.mergeUnlockedBuildings(
         tileId,
-        this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
+        this.buildingRuntime.snapshotForTile(
+          tileId,
+          this.npcEngine.snapshotAll(),
+          this.completedConstructionBuildingDefs()
+        )
       )
     )
   }
@@ -404,7 +408,10 @@ export class SimulationRuntime {
   }
 
   getAllBuildings(): readonly BuildingRuntimeView[] {
-    const existing = this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())
+    const existing = this.buildingRuntime.snapshotAll(
+      this.npcEngine.snapshotAll(),
+      this.completedConstructionBuildingDefs()
+    )
     const byId = new Map(existing.map((view) => [view.def.id, view] as const))
     for (const def of listAllBuildings(this.lifeExpansion.unlockedBuildingIds)) {
       if (!byId.has(def.id)) byId.set(def.id, { def, occupants: [] })
@@ -430,6 +437,17 @@ export class SimulationRuntime {
       .filter((view): view is BuildingRuntimeView => view !== null)
   }
 
+  private completedConstructionBuildingDefs(): readonly BuildingDef[] {
+    return this.constructionProjects
+      .list()
+      .map((project) => project.completedAtTick !== null && project.initiatedByNpcId ? completedConstructionBuildingDef(project) : null)
+      .filter((def): def is BuildingDef => def !== null)
+  }
+
+  private findRuntimeBuildingById(id: string): BuildingDef | null {
+    return findBuildingById(id) ?? this.completedConstructionBuildingDefs().find((def) => def.id === id) ?? null
+  }
+
   private mergeUnlockedBuildings(tileId: string, existing: readonly BuildingRuntimeView[]): readonly BuildingRuntimeView[] {
     const byId = new Map(existing.map((view) => [view.def.id, view] as const))
     for (const def of listBuildingsForTile(tileId, this.lifeExpansion.unlockedBuildingIds)) {
@@ -452,12 +470,12 @@ export class SimulationRuntime {
 
   isNpcInsideBuilding(npcId: string, buildingId: string): boolean {
     const state = this.npcEngine.getState(npcId)
-    return state ? this.buildingRuntime.isNpcInside(npcId, buildingId, state) : false
+    return state ? this.buildingRuntime.isNpcInside(npcId, buildingId, state, this.completedConstructionBuildingDefs()) : false
   }
 
   getOutdoorNpcsAt(tileId: string): string[] {
     const all = this.npcEngine.snapshotAll()
-    return this.buildingRuntime.npcsOutsideOnTile(all).get(tileId) ?? []
+    return this.buildingRuntime.npcsOutsideOnTile(all, this.completedConstructionBuildingDefs()).get(tileId) ?? []
   }
 
   getOutdoorNpcNamesAt(tileId: string): string[] {
@@ -719,7 +737,7 @@ export class SimulationRuntime {
     // 這些 NPC，避免事件出現「鏽灣區起爭執」但玩家進到鏽灣區看不到那兩位 NPC
     // (因為他們其實在某棟建築內)。
     const npcsInsideBuildings = new Set<string>()
-    for (const view of this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())) {
+    for (const view of this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll(), this.completedConstructionBuildingDefs())) {
       for (const occupant of view.occupants) {
         npcsInsideBuildings.add(occupant.npcId)
       }
@@ -1017,12 +1035,12 @@ export class SimulationRuntime {
 
     // ---- BuildingRuntime：reconcile 室內 NPC 狀態 ----
     const npcSnapshot = this.npcEngine.snapshotAll()
-    const buildingDeltas = this.buildingRuntime.reconcile(npcSnapshot)
+    const buildingDeltas = this.buildingRuntime.reconcile(npcSnapshot, this.completedConstructionBuildingDefs())
     for (const delta of buildingDeltas) {
       const profile = this.profiles.find((p) => p.id === delta.npcId)
       const name = profile?.name.zh ?? delta.npcId
       if (delta.to !== null) {
-        const def = findBuildingById(delta.to)
+        const def = this.findRuntimeBuildingById(delta.to)
         if (def) {
           commands.push(
             makeLivingWorldCommand(
@@ -1042,7 +1060,7 @@ export class SimulationRuntime {
           )
         }
       } else if (delta.from !== null) {
-        const def = findBuildingById(delta.from)
+        const def = this.findRuntimeBuildingById(delta.from)
         if (def) {
           commands.push(
             makeLivingWorldCommand(

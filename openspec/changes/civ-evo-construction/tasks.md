@@ -66,3 +66,4 @@
 - [x] 9.2 Completed NPC buildings use project-specific IDs to avoid collisions when the same tile gets repeated autonomous projects.
 - [x] 9.3 Expose completed NPC buildings through `getBuildingsOnTile()`, `getAllBuildings()`, and `/api/buildings` detail routes.
 - [x] 9.4 Tests cover completed dynamic construction views and buildings API exposure.
+- [x] 9.5 Completed NPC buildings participate in `BuildingRuntime` owner occupancy so owner NPCs can enter/use them and are not simultaneously rendered outdoors.

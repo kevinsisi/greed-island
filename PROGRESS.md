@@ -21,6 +21,10 @@ developer. Keep latest status at the top.
   tile do not collide.
 - Completed buildings are enterable `landmark` buildings, retain
   `ownerNpcId = initiatedByNpcId`, and expose basic hiring slots.
+- Follow-up: `BuildingRuntime` now accepts runtime-projected completed building
+  defs, so the owner NPC can be resolved as an occupant when working/trading/etc.
+  in the same tile. Those NPCs are removed from outdoor presence, preventing
+  indoor/outdoor duplication for dynamic completed buildings.
 
 ### Verification
 
@@ -39,6 +43,7 @@ developer. Keep latest status at the top.
 - Live `/api/buildings/b_civ_evo_t_mountain.60c7d731` returned the completed
   building detail with `enterable: true`, owner `mountain.miner.lei_zi`, interior
   props, and hiring slots.
+- Follow-up focused tests: `npm run test -w @greed-island/server -- buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 10 tests.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
