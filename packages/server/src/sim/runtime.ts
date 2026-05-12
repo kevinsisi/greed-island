@@ -32,6 +32,7 @@ import {
   LivingWorldRuleEngine,
   isLivingWorldCommandType,
   makeLivingWorldCommand,
+  type ConstructionMotivation,
   type LivingWorldCommand,
   type LivingWorldEventPayload
 } from '../kernel/livingWorldCommands.js'
@@ -765,6 +766,12 @@ export class SimulationRuntime {
         if (!plannedSaltMarshCompleted && isExpansionProductiveDomain(event.domain)) {
           const delta = event.domain === 'build' ? 2 : 1
           plannedSaltMarshProgress = Math.min(SALT_MARSH_PROJECT_TARGET, plannedSaltMarshProgress + delta)
+          const motivation = this.buildSaltMarshConstructionMotivation(
+            event.npcId,
+            profile ?? null,
+            this.npcEngine.getState(event.npcId),
+            nextTick
+          )
           commands.push(
             makeLivingWorldCommand(
               'CONSTRUCTION_PROJECT_PROGRESS',
@@ -781,7 +788,8 @@ export class SimulationRuntime {
                 delta,
                 progressAfter: plannedSaltMarshProgress,
                 targetProgress: SALT_MARSH_PROJECT_TARGET,
-                narration: `城市建設隊把${event.npcId}的成果記入鹽沼外環拓荒工程：${plannedSaltMarshProgress}/${SALT_MARSH_PROJECT_TARGET}。`
+                motivation,
+                narration: `城市建設隊把${profile?.name.zh ?? event.npcId}的成果記入鹽沼外環拓荒工程：${plannedSaltMarshProgress}/${SALT_MARSH_PROJECT_TARGET}。原因：${motivation.explanation}`
               }
             )
           )
@@ -798,7 +806,8 @@ export class SimulationRuntime {
                   projectId: SALT_MARSH_PROJECT_ID,
                   tileId: SALT_MARSH_TILE_ID,
                   adjacentTo: ['t_dock', 't_ruin'],
-                  narration: '鹽沼外環的步道終於打通，潮鳴市的地圖向外多了一片可抵達的新邊界。'
+                  motivation,
+                  narration: `鹽沼外環的步道終於打通，潮鳴市的地圖向外多了一片可抵達的新邊界。原因：${motivation.explanation}`
                 }
               ),
               makeLivingWorldCommand(
@@ -811,7 +820,8 @@ export class SimulationRuntime {
                   projectId: SALT_MARSH_PROJECT_ID,
                   buildingId: SALT_MARSH_BUILDING_ID,
                   tileId: SALT_MARSH_TILE_ID,
-                  narration: '鹽沼拓荒站掛上第一盞燈，工匠、巡衛與商販有了新的落腳處。'
+                  motivation,
+                  narration: `鹽沼拓荒站掛上第一盞燈，工匠、巡衛與商販有了新的落腳處。原因：${motivation.explanation}`
                 }
               )
             )
@@ -1383,6 +1393,57 @@ export class SimulationRuntime {
       )
   }
 
+  private buildSaltMarshConstructionMotivation(
+    npcId: string,
+    profile: NpcProfile | null,
+    state: NpcRuntimeState | null,
+    tick: number
+  ): ConstructionMotivation {
+    const fallbackTile = state?.tile ?? profile?.defaultLocation ?? 't_central'
+    const fallbackProfile = profile ?? {
+      id: npcId,
+      name: { zh: npcId, en: npcId },
+      role: { zh: '居民', en: 'Resident' },
+      defaultLocation: fallbackTile,
+      routine: [],
+      triggers: [],
+      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+      personality: { factionLean: 'civilian' }
+    } satisfies NpcProfile
+    const fallbackState = state ?? ({
+      tile: fallbackTile,
+      mood: 60,
+      health: 80,
+      activity: 'work',
+      faction: 'civilian',
+      targetTile: fallbackTile,
+      lastActedTick: tick,
+      subCol: 7,
+      subRow: 5,
+      subZ: 0
+    } as NpcRuntimeState)
+    const life = deriveNpcLifeView({
+      profile: fallbackProfile,
+      state: fallbackState,
+      areaState: this.getAreaState(fallbackTile),
+      lifeExpansion: this.lifeExpansion,
+      tick
+    })
+    const primary = strongestNeed(life.needs)
+    const sourceTileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
+    const targetTileName = TILE_NAME_BY_ID[SALT_MARSH_TILE_ID] ?? '鹽沼外環'
+    const projectPurpose = '把鹽沼外環變成新的住所、巡衛落腳點與補給節點，分散舊街區的住房與安全壓力。'
+    return {
+      projectPurpose,
+      primaryPressure: primary.key,
+      pressureScore: Math.max(primary.value, life.goal.pressure),
+      sourceGoalKind: life.goal.kind,
+      sourceNpcId: npcId,
+      sourceTileId: fallbackTile,
+      explanation: `${fallbackProfile.name.zh}在${sourceTileName}的目標是「${life.goal.narration}」，${needLabel(primary.key)}壓力 ${primary.value}；${targetTileName}的拓荒站能提供住處、補給與巡查路線。`
+    }
+  }
+
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
     this.eventCount = state.eventCount
@@ -1478,6 +1539,25 @@ function pickFromCycle<T>(values: readonly T[], step: number): T {
 
 function isExpansionProductiveDomain(domain: string): boolean {
   return domain === 'build' || domain === 'service' || domain === 'trade' || domain === 'learn'
+}
+
+function strongestNeed(needs: NpcLifeView['needs']): { key: ConstructionMotivation['primaryPressure']; value: number } {
+  let best: { key: ConstructionMotivation['primaryPressure']; value: number } = { key: 'housing', value: needs.housing }
+  for (const key of ['food', 'rest', 'money', 'housing', 'safety'] as const) {
+    if (needs[key] > best.value) best = { key, value: needs[key] }
+  }
+  return best
+}
+
+function needLabel(key: ConstructionMotivation['primaryPressure']): string {
+  switch (key) {
+    case 'food': return '食物'
+    case 'rest': return '休息'
+    case 'money': return '收入'
+    case 'housing': return '住房'
+    case 'safety': return '安全'
+    case 'infrastructure': return '基礎建設'
+  }
 }
 
 function makeExpansionAreaState(tileId: string, tick: number): AreaState {

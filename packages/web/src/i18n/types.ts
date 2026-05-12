@@ -222,6 +222,8 @@ export type TranslationKey =
   | 'timeline.filter.npc'
   | 'timeline.filter.world'
   | 'timeline.empty'
+  | 'timeline.eventMotivation'
+  | 'timeline.eventPurpose'
   | 'timeline.payload'
   | 'timeline.noNarration'
   // event ticker

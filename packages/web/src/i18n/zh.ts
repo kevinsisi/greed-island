@@ -205,6 +205,8 @@ export const zh: Translations = {
   'timeline.filter.npc': '人物',
   'timeline.filter.world': '世界',
   'timeline.empty': '沒有符合的事件。',
+  'timeline.eventMotivation': '事件動機',
+  'timeline.eventPurpose': '目的 / 壓力',
   'timeline.payload': '原始 payload',
   'timeline.noNarration': '尚未生成敘事',
 

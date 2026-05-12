@@ -59,13 +59,16 @@ export type CatchUpSummary = Readonly<{
     targetTileId: string
     progressAfter: number
     targetProgress: number
+    motivation?: ConstructionProjectProgressCmd['motivation']
     narration: string
   }>
   expansions: ReadonlyArray<{
     tick: number
     kind: 'building' | 'map_tile'
+    projectId: string
     id: string
     tileId: string
+    motivation?: BuildingConstructedCmd['motivation'] | MapTileUnlockedCmd['motivation']
     narration: string
   }>
   households: ReadonlyArray<{
@@ -129,13 +132,16 @@ export function summarizeWindow(
     targetTileId: string
     progressAfter: number
     targetProgress: number
+    motivation?: ConstructionProjectProgressCmd['motivation']
     narration: string
   }> = []
   const expansions: Array<{
     tick: number
     kind: 'building' | 'map_tile'
+    projectId: string
     id: string
     tileId: string
+    motivation?: BuildingConstructedCmd['motivation'] | MapTileUnlockedCmd['motivation']
     narration: string
   }> = []
   const households: Array<{
@@ -224,6 +230,7 @@ export function summarizeWindow(
           targetTileId: d.targetTileId,
           progressAfter: d.progressAfter,
           targetProgress: d.targetProgress,
+          ...(d.motivation ? { motivation: d.motivation } : {}),
           narration: d.narration
         })
         break
@@ -231,13 +238,13 @@ export function summarizeWindow(
       case 'BUILDING_CONSTRUCTED': {
         const d = data as BuildingConstructedCmd
         byArea[d.tileId] = (byArea[d.tileId] ?? 0) + 1
-        expansions.push({ tick, kind: 'building', id: d.buildingId, tileId: d.tileId, narration: d.narration })
+        expansions.push({ tick, kind: 'building', projectId: d.projectId, id: d.buildingId, tileId: d.tileId, ...(d.motivation ? { motivation: d.motivation } : {}), narration: d.narration })
         break
       }
       case 'MAP_TILE_UNLOCKED': {
         const d = data as MapTileUnlockedCmd
         byArea[d.tileId] = (byArea[d.tileId] ?? 0) + 1
-        expansions.push({ tick, kind: 'map_tile', id: d.tileId, tileId: d.tileId, narration: d.narration })
+        expansions.push({ tick, kind: 'map_tile', projectId: d.projectId, id: d.tileId, tileId: d.tileId, ...(d.motivation ? { motivation: d.motivation } : {}), narration: d.narration })
         break
       }
       case 'NPC_HOUSEHOLD_FORMED': {

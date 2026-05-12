@@ -203,6 +203,11 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
                         tick {a.tick} | {TILE_NAME_ZH[a.tileId] ?? a.tileId} | {a.kind}
                       </div>
                       <div className="leading-snug">{a.narration}</div>
+                      {constructionReason(a) && (
+                        <div className="mt-1 text-[11px] leading-snug text-moss-300">
+                          原因：{constructionReason(a)}
+                        </div>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -217,6 +222,11 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
                         tick {a.tick} | {TILE_NAME_ZH[a.targetTileId] ?? a.targetTileId} | {a.progressAfter}/{a.targetProgress}
                       </div>
                       <div className="leading-snug">{a.narration}</div>
+                      {constructionReason(a) && (
+                        <div className="mt-1 text-[11px] leading-snug text-moss-300">
+                          原因：{constructionReason(a)}
+                        </div>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -331,6 +341,16 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: 'emb
       <b className={colorClass}>{value}</b>
     </span>
   )
+}
+
+function constructionReason(
+  row: ServerCatchUpSummary['constructionProgress'][number] | ServerCatchUpSummary['expansions'][number]
+): string | null {
+  if (row.motivation?.explanation) return row.motivation.explanation
+  if (row.projectId === 'project.salt_marsh_settlement') {
+    return '舊街區的住房、安全與補給壓力正在上升；鹽沼外環被選為新的住處、巡衛落腳點與公共補給節點。'
+  }
+  return null
 }
 
 function buildDigest(

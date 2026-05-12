@@ -205,6 +205,8 @@ export const en: Translations = {
   'timeline.filter.npc': 'NPCs',
   'timeline.filter.world': 'World',
   'timeline.empty': 'No matching events.',
+  'timeline.eventMotivation': 'Motivation',
+  'timeline.eventPurpose': 'Purpose / pressure',
   'timeline.payload': 'payload',
   'timeline.noNarration': 'No narration yet',
 

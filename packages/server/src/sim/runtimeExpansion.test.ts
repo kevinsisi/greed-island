@@ -25,6 +25,12 @@ describe('SimulationRuntime life goals and expansion', () => {
       const events = eventStore.readEvents()
       const eventTypes = new Set(events.map((event) => event.eventType))
       const householdEvents = events.filter((event) => event.eventType === 'NPC_HOUSEHOLD_FORMED')
+      const constructionEvent = events
+        .filter((event) => event.eventType === 'CONSTRUCTION_PROJECT_PROGRESS')
+        .find((event) => ((event.payload as { data?: { progressAfter?: number } }).data?.progressAfter ?? 0) >= 12)
+      const constructionData = (constructionEvent?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const mapUnlockData = (events.find((event) => event.eventType === 'MAP_TILE_UNLOCKED')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const buildingData = (events.find((event) => event.eventType === 'BUILDING_CONSTRUCTED')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
       const world = runtime.getSnapshot()
       const map = runtime.getMap()
       const saltMarshBuildings = runtime.getBuildingsOnTile(SALT_MARSH_TILE_ID)
@@ -39,6 +45,14 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(map.tiles.map((tile) => tile.id)).toContain(SALT_MARSH_TILE_ID)
       expect(saltMarshBuildings.map((view) => view.def.id)).toContain(SALT_MARSH_BUILDING_ID)
       expect(householdEvents.length).toBeGreaterThanOrEqual(2)
+      expect(constructionData?.motivation?.projectPurpose).toContain('住房')
+      expect(constructionData?.motivation?.explanation).toContain('目標')
+      expect(constructionData?.motivation?.explanation).toContain('夜潮區')
+      expect(constructionData?.motivation?.explanation).toContain('鹽沼外環')
+      expect(constructionData?.motivation?.explanation).not.toContain('{')
+      expect(constructionData?.motivation?.explanation).not.toContain('}')
+      expect(mapUnlockData?.motivation?.explanation).toBe(constructionData?.motivation?.explanation)
+      expect(buildingData?.motivation?.projectPurpose).toBe(constructionData?.motivation?.projectPurpose)
       expect(npcs.every((npc) => npc.life?.goal.kind)).toBe(true)
       expect((world.facts.lifeExpansion as { unlockedTileIds?: string[] }).unlockedTileIds).toContain(SALT_MARSH_TILE_ID)
     } finally {

@@ -413,13 +413,16 @@ export type ServerCatchUpSummary = {
     targetTileId: string
     progressAfter: number
     targetProgress: number
+    motivation?: ServerConstructionMotivation
     narration: string
   }>
   expansions: Array<{
     tick: number
     kind: 'building' | 'map_tile'
+    projectId: string
     id: string
     tileId: string
+    motivation?: ServerConstructionMotivation
     narration: string
   }>
   households: Array<{
@@ -444,6 +447,16 @@ export type ServerCatchUpSummary = {
     mode: 'chat' | 'argue'
   }>
   digest: string
+}
+
+export type ServerConstructionMotivation = {
+  projectPurpose: string
+  primaryPressure: 'food' | 'rest' | 'money' | 'housing' | 'safety' | 'infrastructure'
+  pressureScore: number
+  sourceGoalKind: string
+  sourceNpcId: string
+  sourceTileId: string
+  explanation: string
 }
 
 export type ServerWorldSinceLastVisit = {

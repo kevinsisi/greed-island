@@ -106,6 +106,16 @@ export type NpcProductiveActionCmd = Readonly<{
   narration: string
 }>
 
+export type ConstructionMotivation = Readonly<{
+  projectPurpose: string
+  primaryPressure: 'food' | 'rest' | 'money' | 'housing' | 'safety' | 'infrastructure'
+  pressureScore: number
+  sourceGoalKind: string
+  sourceNpcId: string
+  sourceTileId: string
+  explanation: string
+}>
+
 export type ConstructionProjectProgressCmd = Readonly<{
   projectId: string
   kind: 'settlement'
@@ -115,6 +125,7 @@ export type ConstructionProjectProgressCmd = Readonly<{
   delta: number
   progressAfter: number
   targetProgress: number
+  motivation?: ConstructionMotivation
   narration: string
 }>
 
@@ -122,6 +133,7 @@ export type BuildingConstructedCmd = Readonly<{
   projectId: string
   buildingId: string
   tileId: string
+  motivation?: ConstructionMotivation
   narration: string
 }>
 
@@ -129,6 +141,7 @@ export type MapTileUnlockedCmd = Readonly<{
   projectId: string
   tileId: string
   adjacentTo: readonly string[]
+  motivation?: ConstructionMotivation
   narration: string
 }>
 
@@ -404,6 +417,10 @@ const VALIDATORS: Readonly<
     if (typeof p.delta !== 'number' || !Number.isFinite(p.delta) || p.delta <= 0) return 'delta required'
     if (typeof p.progressAfter !== 'number' || !Number.isFinite(p.progressAfter)) return 'progressAfter required'
     if (typeof p.targetProgress !== 'number' || !Number.isFinite(p.targetProgress)) return 'targetProgress required'
+    if (p.motivation !== undefined) {
+      const err = validateConstructionMotivation(p.motivation)
+      if (err) return err
+    }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -412,6 +429,10 @@ const VALIDATORS: Readonly<
     if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
     if (typeof p.buildingId !== 'string' || p.buildingId.length === 0) return 'buildingId required'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (p.motivation !== undefined) {
+      const err = validateConstructionMotivation(p.motivation)
+      if (err) return err
+    }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -420,6 +441,10 @@ const VALIDATORS: Readonly<
     if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!Array.isArray(p.adjacentTo) || !p.adjacentTo.every((v) => typeof v === 'string')) return 'adjacentTo required'
+    if (p.motivation !== undefined) {
+      const err = validateConstructionMotivation(p.motivation)
+      if (err) return err
+    }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -687,6 +712,25 @@ function reject(
     reason
   }
   return { accepted: false, rejection }
+}
+
+function validateConstructionMotivation(value: unknown): string | null {
+  if (!isRecord(value)) return 'motivation must be object'
+  if (typeof value.projectPurpose !== 'string' || value.projectPurpose.length === 0) return 'motivation projectPurpose required'
+  if (
+    value.primaryPressure !== 'food' &&
+    value.primaryPressure !== 'rest' &&
+    value.primaryPressure !== 'money' &&
+    value.primaryPressure !== 'housing' &&
+    value.primaryPressure !== 'safety' &&
+    value.primaryPressure !== 'infrastructure'
+  ) return 'motivation primaryPressure invalid'
+  if (typeof value.pressureScore !== 'number' || !Number.isFinite(value.pressureScore)) return 'motivation pressureScore required'
+  if (typeof value.sourceGoalKind !== 'string' || value.sourceGoalKind.length === 0) return 'motivation sourceGoalKind required'
+  if (typeof value.sourceNpcId !== 'string' || value.sourceNpcId.length === 0) return 'motivation sourceNpcId required'
+  if (typeof value.sourceTileId !== 'string' || value.sourceTileId.length === 0) return 'motivation sourceTileId required'
+  if (typeof value.explanation !== 'string' || value.explanation.length === 0) return 'motivation explanation required'
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
