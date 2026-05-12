@@ -209,6 +209,40 @@ export class MapScene extends Phaser.Scene {
     return { x: this.player.x, y: this.player.y }
   }
 
+  /**
+   * v0.15.40 Hub traveller rendering 診斷快照。React 端 `mapNpcs` 已有 routed
+   * traveller 但 Hub 視覺空白時，從 browser devtools 呼叫
+   * `window.__giHubTravellerDiagnostics()` 可同時看到輸入規模與實際 sprite 狀態，
+   * 直接決定 bug 在「資料沒到」「sprite 沒建」「sprite 不可見/離畫面」哪一段。
+   */
+  getHubTravellerDiagnostics(): {
+    inputCount: number
+    routedInputCount: number
+    routedInputIds: string[]
+    spriteCount: number
+    spriteEntries: { id: string; x: number; y: number; alpha: number; depth: number; visible: boolean }[]
+  } {
+    const entries: { id: string; x: number; y: number; alpha: number; depth: number; visible: boolean }[] = []
+    for (const [id, sprite] of this.npcSprites) {
+      entries.push({
+        id,
+        x: sprite.x,
+        y: sprite.y,
+        alpha: sprite.alpha,
+        depth: sprite.depth,
+        visible: sprite.visible
+      })
+    }
+    const routedIds = this.npcs.filter((n) => n.travelRoute).map((n) => n.id)
+    return {
+      inputCount: this.npcs.length,
+      routedInputCount: routedIds.length,
+      routedInputIds: routedIds,
+      spriteCount: this.npcSprites.size,
+      spriteEntries: entries
+    }
+  }
+
   create(): void {
     this.cameras.main.setBackgroundColor(0x12141a)
 
@@ -986,6 +1020,19 @@ export class MapScene extends Phaser.Scene {
     for (const [id, sprite] of this.npcSprites) {
       if (seen.has(id)) continue
       this.disposeNpcSprite(id, sprite)
+    }
+
+    // v0.15.40：Hub traveller 視覺除錯。React 端有 routed traveller 卻沒有 sprite
+    // 時，把輸入規模 + 實際 sprite 狀態送進 console.debug；console verbose 開啟後
+    // 直接看得到「輸入 N 個 routed，sprite 建出 S 個」這條跡象。
+    const routedInput = this.npcs.filter((n) => n.travelRoute)
+    if (routedInput.length > 0) {
+      console.debug('[gi:hub-traveller]', {
+        inputCount: this.npcs.length,
+        routedInputCount: routedInput.length,
+        routedInputIds: routedInput.map((n) => n.id),
+        spriteCount: this.npcSprites.size
+      })
     }
   }
 

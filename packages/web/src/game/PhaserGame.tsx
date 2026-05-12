@@ -160,11 +160,24 @@ export function PhaserGame({
     }
     document.addEventListener('visibilitychange', handleVisibility)
 
+    // v0.15.40：把 Hub traveller 診斷快照掛到 window，方便 production browser
+    // devtools 直接呼叫，不需要 dev build。回傳目前 MapScene 看到的輸入 NPC 與
+    // 實際 sprite 狀態，定位「資料沒到 / sprite 沒建 / sprite 不可見」哪一段。
+    type HubTravellerDebugWindow = typeof window & {
+      __giHubTravellerDiagnostics?: () => ReturnType<MapScene['getHubTravellerDiagnostics']> | null
+    }
+    ;(window as HubTravellerDebugWindow).__giHubTravellerDiagnostics = () => {
+      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
+      if (!scene || !scene.scene.isActive()) return null
+      return scene.getHubTravellerDiagnostics()
+    }
+
     return () => {
       const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
       if (controlsEnabledRef.current && scene) savePlayerPosition(scene.getPlayerPosition())
       window.clearInterval(autosaveTimer)
       document.removeEventListener('visibilitychange', handleVisibility)
+      delete (window as HubTravellerDebugWindow).__giHubTravellerDiagnostics
       game.destroy(true)
       gameRef.current = null
     }

@@ -3,6 +3,49 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.40 Hub Traveller Diagnostic Instrumentation
+
+### Completed This Session
+
+- Reproduced the Hub traveller rendering investigation from the v0.15.39 handoff
+  end-to-end via static analysis of `hubMapNpcs()`, `PhaserGame` effect
+  plumbing, `MapScene.applyExternalUpdate()`, `refreshNpcSprites()`, and
+  `computeNpcTarget()`. Code path is consistent with the projection tests and
+  there is no obvious filter or coordinate bug visible without browser state.
+- Added diagnostic instrumentation so the next live deploy exposes the gap
+  directly instead of requiring another static-analysis pass:
+  - `MapScene.getHubTravellerDiagnostics()` returns `inputCount`,
+    `routedInputCount`, `routedInputIds`, `spriteCount`, and per-sprite
+    `{ x, y, alpha, depth, visible }` entries.
+  - `PhaserGame` exposes the getter as `window.__giHubTravellerDiagnostics()`
+    so the live Hub can be probed from browser devtools without a dev build.
+  - `MapScene.refreshNpcSprites()` emits one `console.debug('[gi:hub-traveller]', …)`
+    summary per refresh when the input contains routed travellers.
+  - `HubPage` emits `console.debug('[gi:hub-traveller:react]', …)` whenever
+    the React projection produces routed map NPCs, so we can tell whether the
+    gap is at the React state, projection, or Phaser sprite layer.
+- Bumped app version from `0.15.39` to `0.15.40`.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 166 tests, web 10 files / 28 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+
+### Still Open
+
+- Use the new diagnostic in a live browser session to capture
+  `routedInputCount` vs `spriteCount` and per-sprite `(x, y, alpha, depth,
+  visible)` for a sample tick where the side text says an NPC is moving. The
+  resulting evidence pins the visual failure to one of:
+  (a) React state lacks routed travellers (server projection bug),
+  (b) `hubMapNpcs()` projection drops routed travellers in the browser,
+  (c) `refreshNpcSprites()` does not create the sprite,
+  (d) sprite exists but is invisible (alpha / depth / off-canvas).
+- Add a frontend rendering regression test once the concrete failure is found.
+- Do not reintroduce parent-map child NPC rendering as a workaround. Hub must
+  stay limited to routed cross-district travellers.
+
 ## 2026-05-12 — v0.15.39 Hub Traveller Rendering Follow-Up
 
 ### Completed This Session

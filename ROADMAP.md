@@ -4,6 +4,28 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.40 🚧 in progress — 2026-05-12
+
+**主題：Hub traveller rendering diagnostic instrumentation**
+
+- ✅ 確認 `hubMapNpcs()` → `PhaserGame` → `MapScene.refreshNpcSprites()` →
+  `computeNpcTarget()` 整條 pipeline 在 static analysis 下找不到顯然的視覺 bug，
+  且 projection 測試 (`npcProjection.test.ts`) 已覆蓋 routed traveller 投影。
+  下一步必須 live browser 驗證，故先 ship 診斷儀表。
+- ✅ `MapScene.getHubTravellerDiagnostics()` 暴露
+  `{ inputCount, routedInputCount, routedInputIds, spriteCount, spriteEntries }`
+  其中 `spriteEntries` 包含每 sprite 的 `(x, y, alpha, depth, visible)`。
+- ✅ `PhaserGame` 在 mount 時把上面的 getter 設成 `window.__giHubTravellerDiagnostics`，
+  unmount 時清掉，方便 production browser devtools 直接呼叫。
+- ✅ `MapScene.refreshNpcSprites()` 偵測到輸入有 routed traveller 就送
+  `console.debug('[gi:hub-traveller]', …)` 摘要；`HubPage` 也送
+  `console.debug('[gi:hub-traveller:react]', …)`，讓 React state / projection / sprite
+  三層可分別檢查。
+- ✅ 本機驗證：`npm test`、`npm run build:server`、`npm run build:web` 通過；
+  web build 仍只有既有 Vite chunk-size warning。
+- 🚧 還未做：commit / push / CI / Deploy；live `__giHubTravellerDiagnostics()`
+  取樣後，據此補 frontend rendering regression test。
+
 ## v0.15.39 ✅ shipped — 2026-05-12
 
 **主題：cross-district traveller cadence**

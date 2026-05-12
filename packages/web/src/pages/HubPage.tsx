@@ -85,6 +85,20 @@ export function HubPage() {
     return hubMapNpcs(npcs, locale)
   }, [locale, npcs])
 
+  // v0.15.40：當 React 端有 routed traveller 時，把這次 Hub 投影規模送進
+  // console.debug。配合 MapScene 內的 sprite diagnostic 與 window.__giHubTravellerDiagnostics()，
+  // 可在 live 上直接定位「資料是否進 React state」「投影是否丟掉」「sprite 是否建出」三段。
+  useEffect(() => {
+    const routed = mapNpcs.filter((n) => n.travelRoute)
+    if (routed.length === 0) return
+    console.debug('[gi:hub-traveller:react]', {
+      reactNpcCount: npcs.length,
+      mapNpcCount: mapNpcs.length,
+      routedMapNpcCount: routed.length,
+      routedIds: routed.map((n) => n.id)
+    })
+  }, [mapNpcs, npcs])
+
   const constructionActivities = useMemo<MapConstructionActivity[]>(() => {
     return constructionActivitiesFor(events, npcs)
   }, [events, npcs])
