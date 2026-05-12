@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.40 🚧 in progress — 2026-05-12
+## v0.15.40 ✅ shipped — 2026-05-12
 
 **主題：Hub traveller rendering diagnostic instrumentation**
 
@@ -23,8 +23,28 @@
   三層可分別檢查。
 - ✅ 本機驗證：`npm test`、`npm run build:server`、`npm run build:web` 通過；
   web build 仍只有既有 Vite chunk-size warning。
-- 🚧 還未做：commit / push / CI / Deploy；live `__giHubTravellerDiagnostics()`
-  取樣後，據此補 frontend rendering regression test。
+- ✅ Commit `6eebc8e` pushed to `main`; CI run `25718223343` passed; Deploy Dev
+  run `25718223330` passed（runner-internal smoke check 通過）。
+- 🚧 還未做：live `window.__giHubTravellerDiagnostics()` 取樣後，據此補
+  frontend rendering regression test。
+
+## v0.15.40-spec ✅ shipped — 2026-05-12
+
+**主題：propose civilization evolution + combat phase c (OpenSpec)**
+
+- ✅ `openspec/changes/civ-evo-construction/`：ARCHITECTURE §11.8 第一個可實作
+  slice。NPC 透過 `CONSTRUCTION_INITIATE` Command → Rule Engine →
+  `CONSTRUCTION_INITIATED` Event 自主啟動新建築建設；不引入新 `FACT_SET`
+  domain；production chain / settlement / faction 留給後續 slice。
+- ✅ `openspec/changes/combat-phase-c-realtime-subtick/`：和
+  `combat-phase-b-single-shot/` 平行的 Phase C delta。10 Hz sub-tick + 5-phase
+  rule engine + 紋卡 priority table + tie-break + SSE `CombatProjection` +
+  reconcile-on-reject。把 CombatStore 變成 EventLog 的 read-only projection，
+  關掉 §11.4。
+- ✅ 兩個 change 都 `openspec validate --strict` 通過；皆帶有 design.md 內的
+  Open Questions block，等待回覆後才能進 `/opsx:apply`。
+- ✅ Commit `da88078` pushed to `main`; CI run `25718288400` passed; Deploy Dev
+  run `25718288375` passed (docs-only change, no runtime delta)。
 
 ## v0.15.39 ✅ shipped — 2026-05-12
 

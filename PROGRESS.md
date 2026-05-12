@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — Civilization Evolution + Combat Phase C OpenSpec Proposed
+
+### Completed This Session
+
+- Drafted and committed two reviewable OpenSpec changes for the two largest
+  open architectural targets in `ARCHITECTURE.md` §11:
+  - `openspec/changes/civ-evo-construction/`: smallest deterministic slice of
+    §11.8 (Civilization Evolution). NPCs autonomously submit
+    `CONSTRUCTION_INITIATE` commands; Rule Engine commits `CONSTRUCTION_INITIATED`
+    events; no new `FACT_SET` domain introduced (avoids §11.5 regression).
+    Production chains, settlement formation, and factions remain out of scope
+    for this slice.
+  - `openspec/changes/combat-phase-c-realtime-subtick/`: sibling change to
+    `combat-phase-b-single-shot/`. 10 Hz sub-tick loop, 5-phase rule engine,
+    deterministic card priority + `(actorId, commandId)` tie-break, SSE-driven
+    `CombatProjection` with reconcile-on-reject. Refactors `CombatStore` into
+    a read-only projection of canonical EventLog events, closing §11.4.
+- Both proposals pass `openspec validate --strict`. Each carries an explicit
+  Open Questions block in `design.md` that blocks `/opsx:apply` until answered.
+
+### CI/CD + Live Verification
+
+- Commit `da88078` pushed to `main`.
+- GitHub Actions CI run `25718288400` passed.
+- GitHub Actions Deploy Dev run `25718288375` passed (docs-only change, no
+  runtime delta expected).
+
+### Still Open
+
+- User decision required on each proposal's Open Questions before any task
+  implementation begins.
+- `civ-evo-construction` open questions:
+  1. Building catalog scope for first slice (whitelist vs full catalog)
+  2. Construction duration model (fixed per-building / hash-bounded / NPC-skill)
+  3. Same-tile race policy (first-wins vs multi-NPC collaboration)
+  4. Tile-buildability check location (NPC policy vs Rule Engine validator)
+  5. Chronicle / Timeline narration of NPC-initiated construction in this slice
+- `combat-phase-c-realtime-subtick` open questions:
+  1. Multi-tick card channeling vs instant-cast in v1
+  2. NPC card AI: keep `seededRandInt(deck)` in v1, planner in Phase D
+  3. Damage formula: card stats replace Phase B formula or layer on top
+  4. Snapshot retention duration after combat resolves
+  5. AoE cards (nullable target) in v1 or strictly single-target
+
 ## 2026-05-12 — v0.15.40 Hub Traveller Diagnostic Instrumentation
 
 ### Completed This Session
@@ -31,6 +75,13 @@ developer. Keep latest status at the top.
 - `npm test` passed: server 22 files / 166 tests, web 10 files / 28 tests.
 - `npm run build:server` passed.
 - `npm run build:web` passed, with the existing Vite chunk-size warning.
+
+### CI/CD + Live Verification
+
+- Commit `6eebc8e` pushed to `main`.
+- GitHub Actions CI run `25718223343` passed.
+- GitHub Actions Deploy Dev run `25718223330` passed (Deploy Dev runner-internal
+  smoke check confirms `v0.15.40` is running on the desktop host).
 
 ### Still Open
 
