@@ -55,12 +55,13 @@ function buildRowsFromEvents(
   for (const event of sorted) {
     const payload = isRecord(event.payload) ? event.payload : null
     if (!payload) continue
+    const data = isRecord(payload.data) ? payload.data : payload
     if (event.eventType === 'CONSTRUCTION_INITIATE' || event.eventType === 'CONSTRUCTION_INITIATED') {
-      const npcId = readString(payload.npcId) ?? readString(payload.initiatedByNpcId)
-      const tileId = readString(payload.tileId)
-      const buildingId = readString(payload.buildingId)
-      const duration = readNumber(payload.duration)
-      const tick = event.tick ?? readNumber(payload.startedAtTick) ?? 0
+      const npcId = data ? (readString(data.npcId) ?? readString(data.initiatedByNpcId)) : null
+      const tileId = data ? readString(data.tileId) : null
+      const buildingId = data ? readString(data.buildingId) : null
+      const duration = data ? readNumber(data.duration) : null
+      const tick = event.tick ?? (data ? readNumber(data.startedAtTick) : null) ?? 0
       if (!npcId || !tileId || !buildingId || duration === null) continue
       const projectId = deriveConstructionInitiateProjectId({
         npcId,
@@ -86,12 +87,13 @@ function buildRowsFromEvents(
       continue
     }
     if (event.eventType === 'CONSTRUCTION_PROJECT_PROGRESS') {
-      const projectId = readString(payload.projectId)
-      const targetTileId = readString(payload.targetTileId)
-      const buildingId = readString(payload.buildingId)
-      const npcId = readString(payload.npcId)
-      const progressAfter = readNumber(payload.progressAfter)
-      const targetProgress = readNumber(payload.targetProgress)
+      if (!data) continue
+      const projectId = readString(data.projectId)
+      const targetTileId = readString(data.targetTileId)
+      const buildingId = readString(data.buildingId)
+      const npcId = readString(data.npcId)
+      const progressAfter = readNumber(data.progressAfter)
+      const targetProgress = readNumber(data.targetProgress)
       if (!projectId || !targetTileId || !buildingId || progressAfter === null || targetProgress === null) continue
       const existing = rows.get(projectId)
       rows.set(projectId, {
@@ -109,7 +111,8 @@ function buildRowsFromEvents(
       continue
     }
     if (event.eventType === 'BUILDING_CONSTRUCTED') {
-      const projectId = readString(payload.projectId)
+      if (!data) continue
+      const projectId = readString(data.projectId)
       if (!projectId) continue
       const existing = rows.get(projectId)
       if (!existing) continue
