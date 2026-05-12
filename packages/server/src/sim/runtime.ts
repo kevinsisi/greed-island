@@ -74,6 +74,7 @@ import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
 import {
   LIFE_EXPANSION_FACT_KEY,
+  CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE,
   SALT_MARSH_BUILDING_ID,
   SALT_MARSH_PROJECT_ID,
   SALT_MARSH_PROJECT_TARGET,
@@ -431,17 +432,28 @@ export class SimulationRuntime {
   }
 
   private completedConstructionBuildingViews(): readonly BuildingRuntimeView[] {
-    return this.constructionProjects
-      .list()
+    return this.cappedCompletedConstructionProjects()
       .map((project) => completedConstructionBuildingView(project))
       .filter((view): view is BuildingRuntimeView => view !== null)
   }
 
   private completedConstructionBuildingDefs(): readonly BuildingDef[] {
-    return this.constructionProjects
-      .list()
+    return this.cappedCompletedConstructionProjects()
       .map((project) => project.completedAtTick !== null && project.initiatedByNpcId ? completedConstructionBuildingDef(project) : null)
       .filter((def): def is BuildingDef => def !== null)
+  }
+
+  private cappedCompletedConstructionProjects(): readonly ConstructionProjectRow[] {
+    const countsByTile = new Map<string, number>()
+    return this.constructionProjects
+      .list()
+      .filter((project) => project.completedAtTick !== null && project.initiatedByNpcId)
+      .filter((project) => {
+        const count = countsByTile.get(project.targetTileId) ?? 0
+        if (count >= CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE) return false
+        countsByTile.set(project.targetTileId, count + 1)
+        return true
+      })
   }
 
   private findRuntimeBuildingById(id: string): BuildingDef | null {

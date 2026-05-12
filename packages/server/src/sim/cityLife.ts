@@ -10,6 +10,7 @@ export const SALT_MARSH_TILE_ID = 't_salt_marsh'
 export const SALT_MARSH_BUILDING_ID = 'b_salt_marsh_field_station'
 export const SALT_MARSH_PROJECT_TARGET = 12
 export const CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80
+export const CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE = 3
 export const NPC_PRODUCTIVE_XP_PER_DELTA = 5
 export const NPC_PRODUCTIVE_SKILL_BONUS_XP_STEP = 25
 export const NPC_PRODUCTIVE_SKILL_BONUS_MAX = 3
@@ -370,7 +371,10 @@ export function withConstructionInitiated(
  *   3. Same-tile-race: skip if any open civ-evo project already
  *      exists on this tile (first NPC wins; collaboration is future
  *      work). Salt-marsh's own settlement does NOT count.
- *   4. No double-bookkeeping: skip if this NPC already has an open
+ *   4. Anti-speculation cap: each tile may expose only a small number
+ *      of autonomous completed/open facilities; history remains in the
+ *      event log, but NPCs must stop opening endless same-tile projects.
+ *   5. No double-bookkeeping: skip if this NPC already has an open
  *      civ-evo project anywhere.
  *
  * Building id is `b_civ_evo_${tile}` so the slice does not depend on
@@ -392,12 +396,16 @@ export function decideCivEvoConstructionInitiate(input: {
   if (input.tile === SALT_MARSH_TILE_ID) return null
   const economy = input.areaState?.resources.economy ?? 100
   if (economy >= CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD) return null
+  let sameTileAutonomousProjects = 0
   for (const project of Object.values(input.lifeExpansion.constructionProjects)) {
-    if (project.completedAtTick !== null) continue
     if (project.projectId === SALT_MARSH_PROJECT_ID) continue
-    if (project.targetTileId === input.tile) return null
-    if (project.initiatedByNpcId === input.npcId) return null
+    if (project.targetTileId === input.tile) {
+      sameTileAutonomousProjects += 1
+      if (project.completedAtTick === null) return null
+    }
+    if (project.completedAtTick === null && project.initiatedByNpcId === input.npcId) return null
   }
+  if (sameTileAutonomousProjects >= CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE) return null
   return {
     npcId: input.npcId,
     tileId: input.tile,

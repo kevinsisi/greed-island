@@ -3,6 +3,7 @@ import type { NpcProfile } from '../npcs/types.js'
 import type { AreaState } from './areaStateEngine.js'
 import type { NpcRuntimeState } from './npcEngine.js'
 import {
+  CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE,
   SALT_MARSH_BUILDING_ID,
   SALT_MARSH_PROJECT_ID,
   SALT_MARSH_TILE_ID,
@@ -389,6 +390,47 @@ describe('city life projection', () => {
         lifeExpansion: expansion
       })
       expect(decision).not.toBeNull()
+    })
+
+    it('stops new projects once a tile reaches the autonomous building cap', () => {
+      let expansion = createInitialLifeExpansionState()
+      for (let i = 0; i < CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE; i += 1) {
+        const npcId = `central.builder.${i}`
+        const tick = 40 + i
+        expansion = withConstructionInitiated(expansion, {
+          npcId,
+          tileId: 't_central',
+          buildingId: 'b_civ_evo_t_central',
+          duration: 24,
+          tick
+        })
+        const projectId = deriveConstructionInitiateProjectId({
+          npcId,
+          tileId: 't_central',
+          buildingId: 'b_civ_evo_t_central',
+          startedAtTick: tick
+        })
+        expansion = {
+          ...expansion,
+          constructionProjects: {
+            ...expansion.constructionProjects,
+            [projectId]: {
+              ...expansion.constructionProjects[projectId]!,
+              progress: 24,
+              completedAtTick: tick + 24
+            }
+          }
+        }
+      }
+
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.builder.next',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: expansion
+      })
+
+      expect(decision).toBeNull()
     })
   })
 

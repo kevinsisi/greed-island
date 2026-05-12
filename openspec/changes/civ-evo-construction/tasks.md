@@ -67,3 +67,4 @@
 - [x] 9.3 Expose completed NPC buildings through `getBuildingsOnTile()`, `getAllBuildings()`, and `/api/buildings` detail routes.
 - [x] 9.4 Tests cover completed dynamic construction views and buildings API exposure.
 - [x] 9.5 Completed NPC buildings participate in `BuildingRuntime` owner occupancy so owner NPCs can enter/use them and are not simultaneously rendered outdoors.
+- [x] 9.6 Autonomous NPC construction has a per-tile cap to prevent infinite same-tile building spam; existing event history is preserved while runtime/API building projection only exposes the capped set.
