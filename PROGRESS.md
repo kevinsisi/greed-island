@@ -24,6 +24,14 @@ developer. Keep latest status at the top.
   `npm run build:server` passed, `npm run build:web` passed with the known Vite
   chunk-size warning, and `npx openspec validate npc-economy-skills --strict`
   passed.
+- Commit `55aa49a` (`feat(npc): let skill xp improve productive output`) passed
+  CI run `25732723920` and Deploy Dev run `25732723905`.
+- Live `/api/events?limit=100` verified skill-boosted productive deltas after
+  deploy:
+  - `forest.falconer.ye_jing` build delta `5`.
+  - `desert.starreader.gu_lao` learn delta `5`.
+  - `port.concierge.an_qing_an` service delta `5`.
+  - `port.merchant.anton` trade delta `5`.
 
 ### Implemented
 
