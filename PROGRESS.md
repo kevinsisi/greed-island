@@ -3,6 +3,49 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.39 Hub Traveller Rendering Follow-Up
+
+### Completed This Session
+
+- Confirmed live `v0.15.39` already fixed the server-side scarcity problem: live
+  `/api/npcs` sampling after deploy produced legal routed Hub travellers with
+  `activity=move` and a non-null `travelRoute`.
+- Investigated the remaining report that the Hub map still looks visually empty
+  even when side text says an NPC is moving between districts.
+- Reviewed the current frontend path:
+  - `HubPage` projects `useWorldState().npcs` through `hubMapNpcs()`.
+  - `hubMapNpcs()` only emits NPCs with known district ids, `activity=move`, no
+    `buildingId`, and a normalized `travelRoute`.
+  - `PhaserGame` passes those `MapNpc[]` into `MapScene.applyExternalUpdate()`.
+  - `MapScene.refreshNpcSprites()` should create/update one sprite per routed
+    NPC, and `computeNpcTarget()` should place routed NPCs at the midpoint
+    between `fromDistrictId` and `toDistrictId`.
+- No product code change was made in this follow-up; the worktree was still clean
+  before this documentation update, except for the pre-existing untracked
+  `.claude/worktrees/` directory.
+
+### Current Assessment
+
+- The server and React projection now appear to provide the data required for Hub
+  traveller rendering.
+- The likely remaining gap is a runtime/visual Phaser behavior issue rather than
+  missing server travellers. The next debugging step should verify the actual
+  Phaser object state in browser/devtools or an automated browser smoke test:
+  routed `mapNpcs.length`, `MapScene.npcSprites.size`, sprite `alpha`, depth, and
+  final `(x,y)` positions during a live traveller sample.
+- Do not reintroduce parent-map child NPC rendering as a workaround. Hub must stay
+  limited to routed cross-district travellers; child area NPCs belong only to
+  area/building maps.
+
+### Next Steps
+
+- Reproduce the visual failure in a browser against live or local server data.
+- If `mapNpcs.length > 0` but `npcSprites.size === 0`, inspect
+  `applyExternalUpdate()` timing and scene active/restart flow.
+- If sprites exist but are invisible, inspect texture generation, alpha fade,
+  depth ordering, and target coordinates for `travelRoute` midpoints.
+- Add a frontend rendering regression once the concrete failure is found.
+
 ## 2026-05-12 — v0.15.39 Cross-District Traveller Cadence
 
 ### Completed Locally
