@@ -35,11 +35,31 @@ developer. Keep latest status at the top.
 - `npx openspec validate civ-evo-construction --strict` passed.
 - `git diff --check` passed.
 
+### CI/CD + Live Verification
+
+- Commit `212dd78` (`feat(construction): surface npc-initiated sites`) passed CI
+  run `25726976702` and Deploy Dev run `25726976704`.
+- Follow-up commit `291be4a` fixed `packages/server/src/version.ts` so
+  `/healthz` and `/api/version` report the intended `0.15.47` app version.
+- Commit `291be4a` passed CI run `25727404230` and Deploy Dev run
+  `25727404200`; the only recurring annotation is the existing GitHub Actions
+  Node.js 20 deprecation warning.
+- Live public and direct deployed health checks both returned `version=0.15.47`
+  at tick `97547`.
+- Live `/api/world` at tick `97562` contains one open NPC-initiated project:
+  `project.civ-evo.60c7d73178549922db29fbde`, target tile `t_mountain`,
+  building `b_civ_evo_t_mountain`, initiated by `mountain.miner.lei_zi`,
+  progress `0/24`.
+- Live `/api/buildings?tileId=t_mountain` returns that project in `inProgress`
+  and exposes `b_civ_evo_t_mountain` as an enterable `construction` building
+  with glyph `🚧`.
+- Live `/api/buildings/b_civ_evo_t_mountain` returns the construction building
+  detail and interior props, confirming the Area click-through target is served.
+
 ### Still Open
 
-- Browser smoke after deploy: verify a live NPC-initiated construction site shows
-  on Hub, appears in Area as an enterable 🚧 site, and opens the construction
-  interior page.
+- Browser smoke after deploy: API evidence confirms the Hub/Area/Building data
+  path, but a real browser click-through still needs manual visual confirmation.
 - Slice 7 remains open: full end-to-end progress/completion replay beyond the
   visible in-progress project surface.
 
