@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.37 🚧 in progress — 2026-05-12
+## v0.15.37 ✅ shipped — 2026-05-12
 
 **主題：Hub parent/child NPC layer fix**
 
@@ -18,7 +18,14 @@
 - ✅ Local verification: focused `npcProjection`, full `npm test`,
   `npm run build:server`, and `npm run build:web` passed; web build still has
   the existing Vite chunk-size warning.
-- 🚧 Commit, push, CI/CD, and live verification are in progress.
+- ✅ Gemini staged review reported no findings.
+- ✅ Commit `456640b` pushed to `main`; CI run `25711915895` and Deploy Dev run
+  `25711915891` passed.
+- ✅ Live verification: `v0.15.37`, `/api/map` still includes `t_salt_marsh`, and
+  current live data has 47 child-map outdoor NPCs excluded from Hub projection
+  with 0 routed Hub travellers.
+- 🚧 If the parent Hub feels too empty with zero travellers, add aggregate
+  district activity badges or construction summaries, not child NPC sprites.
 
 ## v0.15.36 ✅ shipped — 2026-05-12
 

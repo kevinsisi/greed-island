@@ -24,10 +24,24 @@ developer. Keep latest status at the top.
 - `npm test` passed: server 22 files / 163 tests, web 10 files / 28 tests.
 - `npm run build:server` passed.
 - `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `git diff --check` passed.
+- Gemini staged review reported no findings.
+
+### CI/CD + Live Verification
+
+- Code commit `456640b` pushed to `main`.
+- GitHub Actions CI run `25711915895` passed.
+- GitHub Actions Deploy Dev run `25711915891` passed.
+- Live `v0.15.37` verification after deploy:
+  - `/healthz`: `200`, `version=0.15.37`, `tick=93028`.
+  - `/api/map`: includes unlocked `t_salt_marsh`; tile count is `9`.
+  - `/api/npcs`: 50 NPCs returned; 47 current child-map outdoor NPCs are now
+    excluded from Hub projection, and current routed Hub travellers are `0`.
 
 ### Still Open
 
-- Commit, push, CI/CD, and live verification are in progress.
+- If the parent Hub feels too empty with zero travellers, add aggregate district
+  activity badges or construction summaries, not child NPC sprites.
 
 ## 2026-05-12 — v0.15.36 Restart-Safe Expansion Hydration
 
