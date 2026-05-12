@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
+
+### Implemented
+
+- Added OpenSpec change `openspec/changes/npc-economy-skills/`.
+- Extended `LifeExpansionState` with `npcCivicRecords[npcId]`:
+  - `gold`: deterministic personal money earned from productive actions.
+  - `skillXp`: deterministic XP buckets for `construction`, `knowledge`,
+    `commerce`, and `civic`.
+  - `lastProductiveTick`: last tick where accepted productive work changed the
+    NPC's personal record.
+- Added pure reducer `withNpcProductiveActionRecorded(...)`:
+  - `build -> construction XP`, gold `1 * delta`.
+  - `learn -> knowledge XP`, gold `0`.
+  - `trade -> commerce XP`, gold `3 * delta`.
+  - `service -> civic XP`, gold `2 * delta`.
+  - XP gain is `5 * delta`.
+- Runtime now updates `lifeExpansion` after accepted `NPC_PRODUCTIVE_ACTION`, so
+  NPC work/learning has replayable personal consequences rather than only flavor
+  narration.
+- `SimulationRuntime.getNpcs()` now exposes `npc.civic` so `/api/npcs` consumers
+  can inspect NPC money and skill XP.
+- Frontend `NpcSummary` type now includes optional `civic`.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- runtimeExpansion cityLife` passed.
+- Full suite during implementation: `npm test` passed with 196 server tests + 30 web tests.
+- Builds: `npm run build:server` passed; `npm run build:web` passed with only the existing Vite chunk-size warning.
+- OpenSpec: `npx openspec validate npc-economy-skills --strict` passed.
+
+### Remaining
+
+- Commit/push/deploy and live verify `/api/npcs` shows non-null `civic` records
+  after productive ticks.
+
 ## 2026-05-12 — v0.15.47c Projection Payload Nesting Fix + E2E Completion Verified
 
 ### 2026-05-12 Follow-up — Active-District Construction Visibility Fix

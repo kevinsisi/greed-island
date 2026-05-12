@@ -86,8 +86,10 @@ import {
   withConstructionInitiated,
   withConstructionProgress,
   withHouseholdFormed,
+  withNpcProductiveActionRecorded,
   withUnlockedExpansion,
   type LifeExpansionState,
+  type NpcCivicRecord,
   type NpcLifeView
 } from './cityLife.js'
 import { ConstructionProjectsProjection, type ConstructionProjectRow } from '../projections/constructionProjects.js'
@@ -156,6 +158,8 @@ export type SimNpcState = Readonly<{
   intentLine: NpcIntentLine
   /** Deterministic life pressure and current long-term goal. */
   life: NpcLifeView
+  /** Deterministic personal economic and skill state derived from productive actions. */
+  civic: NpcCivicRecord | null
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -492,7 +496,8 @@ export class SimulationRuntime {
           areaState: this.getAreaState(s.tile),
           lifeExpansion: this.lifeExpansion,
           tick: this.currentTick
-        })
+        }),
+        civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null
       }
     })
   }
@@ -1257,6 +1262,19 @@ export class SimulationRuntime {
             tileId: payload.tileId,
             buildingId: payload.buildingId,
             duration: payload.duration,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'NPC_PRODUCTIVE_ACTION') {
+          const payload = cmd.payload as {
+            npcId: string
+            domain: 'build' | 'learn' | 'trade' | 'service'
+            delta: number
+          }
+          this.lifeExpansion = withNpcProductiveActionRecorded(this.lifeExpansion, {
+            npcId: payload.npcId,
+            domain: payload.domain,
+            delta: payload.delta,
             tick: nextTick
           })
           lifeExpansionChanged = true

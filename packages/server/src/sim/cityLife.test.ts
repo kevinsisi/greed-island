@@ -15,6 +15,7 @@ import {
   withConstructionInitiated,
   withConstructionProgress,
   withHouseholdFormed,
+  withNpcProductiveActionRecorded,
   withUnlockedExpansion
 } from './cityLife.js'
 
@@ -99,6 +100,37 @@ describe('city life projection', () => {
     expect(replayed.unlockedBuildingIds).toContain(SALT_MARSH_BUILDING_ID)
     expect(replayed.households['household.a.b']!.childIds).toEqual(['child.1'])
     expect(replayed.children['child.1']!.nameEn).toBe('Tideborn')
+  })
+
+  it('records NPC productive work into replayable gold and skill XP', () => {
+    let expansion = createInitialLifeExpansionState()
+    expansion = withNpcProductiveActionRecorded(expansion, {
+      npcId: 'central.broker.gui',
+      domain: 'trade',
+      delta: 2,
+      tick: 20
+    })
+    expansion = withNpcProductiveActionRecorded(expansion, {
+      npcId: 'central.broker.gui',
+      domain: 'learn',
+      delta: 1,
+      tick: 21
+    })
+
+    const replayed = hydrateLifeExpansionState(JSON.parse(JSON.stringify(expansion)))
+    const record = replayed.npcCivicRecords['central.broker.gui']
+
+    expect(record).toEqual({
+      npcId: 'central.broker.gui',
+      gold: 6,
+      skillXp: {
+        construction: 0,
+        knowledge: 5,
+        commerce: 10,
+        civic: 0
+      },
+      lastProductiveTick: 21
+    })
   })
 
   describe('civ-evo-construction: withConstructionInitiated', () => {

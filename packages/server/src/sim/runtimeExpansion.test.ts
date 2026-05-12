@@ -67,13 +67,17 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(mapUnlockData?.motivation?.explanation).toBe(constructionData?.motivation?.explanation)
       expect(buildingData?.motivation?.projectPurpose).toBe(constructionData?.motivation?.projectPurpose)
       expect(npcs.every((npc) => npc.life?.goal.kind)).toBe(true)
+      expect(npcs.some((npc) => npc.civic && npc.civic.gold > 0)).toBe(true)
+      expect(npcs.some((npc) => npc.civic && Object.values(npc.civic.skillXp).some((xp) => xp > 0))).toBe(true)
       expect((world.facts.lifeExpansion as { unlockedTileIds?: string[] }).unlockedTileIds).toContain(SALT_MARSH_TILE_ID)
+      expect(Object.keys((world.facts.lifeExpansion as { npcCivicRecords?: Record<string, unknown> }).npcCivicRecords ?? {})).not.toHaveLength(0)
 
       runtime.stop()
       const restored = new SimulationRuntime(eventStore, profiles, loadCardCatalog())
       try {
         expect(restored.getMap().tiles.map((tile) => tile.id)).toContain(SALT_MARSH_TILE_ID)
         expect(restored.getBuildingsOnTile(SALT_MARSH_TILE_ID).map((view) => view.def.id)).toContain(SALT_MARSH_BUILDING_ID)
+        expect(restored.getNpcs().some((npc) => npc.civic && npc.civic.gold > 0)).toBe(true)
       } finally {
         restored.stop()
       }

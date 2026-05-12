@@ -10,6 +10,13 @@ export const SALT_MARSH_TILE_ID = 't_salt_marsh'
 export const SALT_MARSH_BUILDING_ID = 'b_salt_marsh_field_station'
 export const SALT_MARSH_PROJECT_TARGET = 12
 export const CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80
+export const NPC_PRODUCTIVE_XP_PER_DELTA = 5
+export const NPC_PRODUCTIVE_GOLD_BY_DOMAIN = {
+  build: 1,
+  learn: 0,
+  trade: 3,
+  service: 2
+} as const
 
 export type NpcLifeNeedKey = 'food' | 'rest' | 'money' | 'housing' | 'safety'
 export type NpcLifeGoalKind =
@@ -48,6 +55,16 @@ export type ChildRecord = Readonly<{
   bornAtTick: number
 }>
 
+export type NpcProductiveDomain = 'build' | 'learn' | 'trade' | 'service'
+export type NpcSkillKey = 'construction' | 'knowledge' | 'commerce' | 'civic'
+
+export type NpcCivicRecord = Readonly<{
+  npcId: string
+  gold: number
+  skillXp: Readonly<Record<NpcSkillKey, number>>
+  lastProductiveTick: number | null
+}>
+
 export type ConstructionProjectRecord = Readonly<{
   projectId: string
   kind: 'settlement'
@@ -66,6 +83,7 @@ export type ConstructionProjectRecord = Readonly<{
 export type LifeExpansionState = Readonly<{
   households: Record<string, HouseholdRecord>
   children: Record<string, ChildRecord>
+  npcCivicRecords: Record<string, NpcCivicRecord>
   constructionProjects: Record<string, ConstructionProjectRecord>
   unlockedTileIds: readonly string[]
   unlockedBuildingIds: readonly string[]
@@ -75,6 +93,7 @@ export function createInitialLifeExpansionState(): LifeExpansionState {
   return {
     households: {},
     children: {},
+    npcCivicRecords: {},
     constructionProjects: {},
     unlockedTileIds: [],
     unlockedBuildingIds: []
@@ -132,6 +151,24 @@ export function hydrateLifeExpansionState(raw: unknown): LifeExpansionState {
     }
   }
 
+  const npcCivicRecords: Record<string, NpcCivicRecord> = {}
+  if (r.npcCivicRecords && typeof r.npcCivicRecords === 'object') {
+    for (const [id, value] of Object.entries(r.npcCivicRecords)) {
+      if (!value || typeof value !== 'object') continue
+      const record = value as Partial<NpcCivicRecord>
+      if (typeof record.npcId !== 'string') continue
+      const skillXp = readSkillXp(record.skillXp)
+      npcCivicRecords[id] = {
+        npcId: record.npcId,
+        gold: finiteNonNegative(record.gold) ?? 0,
+        skillXp,
+        lastProductiveTick: typeof record.lastProductiveTick === 'number' && Number.isFinite(record.lastProductiveTick)
+          ? record.lastProductiveTick
+          : null
+      }
+    }
+  }
+
   const constructionProjects: Record<string, ConstructionProjectRecord> = {}
   if (r.constructionProjects && typeof r.constructionProjects === 'object') {
     for (const [id, value] of Object.entries(r.constructionProjects)) {
@@ -164,6 +201,7 @@ export function hydrateLifeExpansionState(raw: unknown): LifeExpansionState {
   return {
     households,
     children,
+    npcCivicRecords,
     constructionProjects,
     unlockedTileIds: Array.isArray(r.unlockedTileIds)
       ? [...new Set(r.unlockedTileIds.filter((v): v is string => typeof v === 'string'))]
@@ -422,6 +460,32 @@ export function withChildBorn(
   }
 }
 
+export function withNpcProductiveActionRecorded(
+  state: LifeExpansionState,
+  input: { npcId: string; domain: NpcProductiveDomain; delta: number; tick: number }
+): LifeExpansionState {
+  const delta = Math.max(1, Math.floor(input.delta))
+  const before = state.npcCivicRecords[input.npcId] ?? createNpcCivicRecord(input.npcId)
+  const skillKey = skillKeyForProductiveDomain(input.domain)
+  const goldGain = NPC_PRODUCTIVE_GOLD_BY_DOMAIN[input.domain] * delta
+  const xpGain = NPC_PRODUCTIVE_XP_PER_DELTA * delta
+  return {
+    ...state,
+    npcCivicRecords: {
+      ...state.npcCivicRecords,
+      [input.npcId]: {
+        npcId: input.npcId,
+        gold: before.gold + goldGain,
+        skillXp: {
+          ...before.skillXp,
+          [skillKey]: before.skillXp[skillKey] + xpGain
+        },
+        lastProductiveTick: input.tick
+      }
+    }
+  }
+}
+
 function pickGoal(
   profile: NpcProfile,
   needs: Readonly<Record<NpcLifeNeedKey, number>>,
@@ -466,6 +530,45 @@ function goalNarration(kind: NpcLifeGoalKind): string {
 
 function addUnique(values: readonly string[], value: string): string[] {
   return values.includes(value) ? [...values] : [...values, value]
+}
+
+function createNpcCivicRecord(npcId: string): NpcCivicRecord {
+  return {
+    npcId,
+    gold: 0,
+    skillXp: {
+      construction: 0,
+      knowledge: 0,
+      commerce: 0,
+      civic: 0
+    },
+    lastProductiveTick: null
+  }
+}
+
+function skillKeyForProductiveDomain(domain: NpcProductiveDomain): NpcSkillKey {
+  switch (domain) {
+    case 'build': return 'construction'
+    case 'learn': return 'knowledge'
+    case 'trade': return 'commerce'
+    case 'service': return 'civic'
+  }
+}
+
+function readSkillXp(value: unknown): NpcCivicRecord['skillXp'] {
+  const base = createNpcCivicRecord('').skillXp
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return base
+  const r = value as Partial<Record<NpcSkillKey, unknown>>
+  return {
+    construction: finiteNonNegative(r.construction) ?? 0,
+    knowledge: finiteNonNegative(r.knowledge) ?? 0,
+    commerce: finiteNonNegative(r.commerce) ?? 0,
+    civic: finiteNonNegative(r.civic) ?? 0
+  }
+}
+
+function finiteNonNegative(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null
 }
 
 function clampNeed(value: number): number {

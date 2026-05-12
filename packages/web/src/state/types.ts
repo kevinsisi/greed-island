@@ -77,6 +77,13 @@ export interface NpcSummary {
     goal: { kind: string; pressure: number; narration: string }
     householdId: string | null
   }
+  /** Deterministic personal economy/skill projection derived from productive NPC actions. */
+  civic?: {
+    npcId: string
+    gold: number
+    skillXp: Record<'construction' | 'knowledge' | 'commerce' | 'civic', number>
+    lastProductiveTick: number | null
+  } | null
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'

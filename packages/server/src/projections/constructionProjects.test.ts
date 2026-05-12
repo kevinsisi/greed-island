@@ -109,6 +109,7 @@ describe('construction_projects projection', () => {
     let lifeExpansion: LifeExpansionState = {
       households: {},
       children: {},
+      npcCivicRecords: {},
       constructionProjects: {},
       unlockedTileIds: [],
       unlockedBuildingIds: []
