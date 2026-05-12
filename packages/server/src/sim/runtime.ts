@@ -82,6 +82,7 @@ import {
   decideCivEvoConstructionInitiate,
   hydrateLifeExpansionState,
   householdIdForNpc,
+  productiveDeltaWithNpcSkill,
   withChildBorn,
   withConstructionInitiated,
   withConstructionProgress,
@@ -767,6 +768,11 @@ export class SimulationRuntime {
           )
         )
       } else if (event.kind === 'productive') {
+        const productiveDelta = productiveDeltaWithNpcSkill(this.lifeExpansion, {
+          npcId: event.npcId,
+          domain: event.domain,
+          baseDelta: event.delta
+        })
         commands.push(
           makeLivingWorldCommand(
             'NPC_PRODUCTIVE_ACTION',
@@ -780,7 +786,7 @@ export class SimulationRuntime {
               activity: event.activity,
               domain: event.domain,
               metric: event.metric,
-              delta: event.delta,
+              delta: productiveDelta,
               motivation: this.buildProductiveActionMotivation(
                 event.npcId,
                 profile ?? null,
@@ -794,7 +800,11 @@ export class SimulationRuntime {
           )
         )
         if (!plannedSaltMarshCompleted && isExpansionProductiveDomain(event.domain)) {
-          const delta = event.domain === 'build' ? 2 : 1
+          const delta = productiveDeltaWithNpcSkill(this.lifeExpansion, {
+            npcId: event.npcId,
+            domain: event.domain,
+            baseDelta: event.domain === 'build' ? 2 : 1
+          })
           plannedSaltMarshProgress = Math.min(SALT_MARSH_PROJECT_TARGET, plannedSaltMarshProgress + delta)
           const motivation = this.buildSaltMarshConstructionMotivation(
             event.npcId,
@@ -894,7 +904,11 @@ export class SimulationRuntime {
           if (project.completedAtTick !== null) continue
           if (project.projectId === SALT_MARSH_PROJECT_ID) continue
           if (project.targetTileId !== event.tile) continue
-          const delta = event.domain === 'build' ? 2 : 1
+          const delta = productiveDeltaWithNpcSkill(this.lifeExpansion, {
+            npcId: event.npcId,
+            domain: event.domain,
+            baseDelta: event.domain === 'build' ? 2 : 1
+          })
           const projectName = profile?.name.zh ?? event.npcId
           const tileName = TILE_NAME_BY_ID[event.tile] ?? event.tile
           const progressAfter = Math.min(project.targetProgress, project.progress + delta)

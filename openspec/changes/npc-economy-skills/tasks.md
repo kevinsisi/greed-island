@@ -20,3 +20,10 @@
 - [x] 4.1 Add reducer tests for replay, hydration, gold accumulation, and XP accumulation.
 - [x] 4.2 Run server tests, web typecheck/build, OpenSpec validation if available.
 - [x] 4.3 Update `PROGRESS.md`, commit, push, and verify live API shows NPC civic records.
+
+## 5. Skill Feedback Loop
+
+- [x] 5.1 Add deterministic `productiveDeltaWithNpcSkill(...)` helper.
+- [x] 5.2 Skill XP increases future productive delta: every 25 XP grants +1 delta, capped at +3.
+- [x] 5.3 Runtime applies skill-adjusted delta to `NPC_PRODUCTIVE_ACTION` and construction progress commands.
+- [x] 5.4 Tests cover domain-specific bonus and cap behavior.

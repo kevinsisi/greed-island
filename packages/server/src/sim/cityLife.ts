@@ -11,6 +11,8 @@ export const SALT_MARSH_BUILDING_ID = 'b_salt_marsh_field_station'
 export const SALT_MARSH_PROJECT_TARGET = 12
 export const CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80
 export const NPC_PRODUCTIVE_XP_PER_DELTA = 5
+export const NPC_PRODUCTIVE_SKILL_BONUS_XP_STEP = 25
+export const NPC_PRODUCTIVE_SKILL_BONUS_MAX = 3
 export const NPC_PRODUCTIVE_GOLD_BY_DOMAIN = {
   build: 1,
   learn: 0,
@@ -466,7 +468,7 @@ export function withNpcProductiveActionRecorded(
 ): LifeExpansionState {
   const delta = Math.max(1, Math.floor(input.delta))
   const before = state.npcCivicRecords[input.npcId] ?? createNpcCivicRecord(input.npcId)
-  const skillKey = skillKeyForProductiveDomain(input.domain)
+  const skillKey = productiveSkillKeyForDomain(input.domain)
   const goldGain = NPC_PRODUCTIVE_GOLD_BY_DOMAIN[input.domain] * delta
   const xpGain = NPC_PRODUCTIVE_XP_PER_DELTA * delta
   return {
@@ -484,6 +486,20 @@ export function withNpcProductiveActionRecorded(
       }
     }
   }
+}
+
+export function productiveDeltaWithNpcSkill(
+  state: LifeExpansionState,
+  input: { npcId: string; domain: NpcProductiveDomain; baseDelta: number }
+): number {
+  const baseDelta = Math.max(1, Math.floor(input.baseDelta))
+  const skillKey = productiveSkillKeyForDomain(input.domain)
+  const skillXp = state.npcCivicRecords[input.npcId]?.skillXp[skillKey] ?? 0
+  const bonus = Math.min(
+    NPC_PRODUCTIVE_SKILL_BONUS_MAX,
+    Math.floor(skillXp / NPC_PRODUCTIVE_SKILL_BONUS_XP_STEP)
+  )
+  return baseDelta + bonus
 }
 
 function pickGoal(
@@ -546,7 +562,7 @@ function createNpcCivicRecord(npcId: string): NpcCivicRecord {
   }
 }
 
-function skillKeyForProductiveDomain(domain: NpcProductiveDomain): NpcSkillKey {
+export function productiveSkillKeyForDomain(domain: NpcProductiveDomain): NpcSkillKey {
   switch (domain) {
     case 'build': return 'construction'
     case 'learn': return 'knowledge'

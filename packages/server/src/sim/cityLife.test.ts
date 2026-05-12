@@ -11,6 +11,7 @@ import {
   deriveConstructionInitiateProjectId,
   deriveNpcLifeView,
   hydrateLifeExpansionState,
+  productiveDeltaWithNpcSkill,
   withChildBorn,
   withConstructionInitiated,
   withConstructionProgress,
@@ -131,6 +132,45 @@ describe('city life projection', () => {
       },
       lastProductiveTick: 21
     })
+  })
+
+  it('uses accumulated skill XP to increase future productive deltas deterministically', () => {
+    let expansion = createInitialLifeExpansionState()
+    expansion = withNpcProductiveActionRecorded(expansion, {
+      npcId: 'central.broker.gui',
+      domain: 'trade',
+      delta: 5,
+      tick: 20
+    })
+
+    expect(productiveDeltaWithNpcSkill(expansion, {
+      npcId: 'central.broker.gui',
+      domain: 'trade',
+      baseDelta: 2
+    })).toBe(3)
+    expect(productiveDeltaWithNpcSkill(expansion, {
+      npcId: 'central.broker.gui',
+      domain: 'learn',
+      baseDelta: 2
+    })).toBe(2)
+  })
+
+  it('caps productive skill delta bonus', () => {
+    let expansion = createInitialLifeExpansionState()
+    for (let i = 0; i < 30; i += 1) {
+      expansion = withNpcProductiveActionRecorded(expansion, {
+        npcId: 'forest.woodworker.mo_fan',
+        domain: 'build',
+        delta: 5,
+        tick: 100 + i
+      })
+    }
+
+    expect(productiveDeltaWithNpcSkill(expansion, {
+      npcId: 'forest.woodworker.mo_fan',
+      domain: 'build',
+      baseDelta: 2
+    })).toBe(5)
   })
 
   describe('civ-evo-construction: withConstructionInitiated', () => {

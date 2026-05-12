@@ -5,6 +5,26 @@ developer. Keep latest status at the top.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
+### 2026-05-12 Follow-up — Skill XP Affects Productive Output
+
+- Added deterministic helper `productiveDeltaWithNpcSkill(...)`.
+- Every 25 XP in the matching skill grants +1 productive delta, capped at +3.
+- Domain mapping:
+  - `build -> construction`
+  - `learn -> knowledge`
+  - `trade -> commerce`
+  - `service -> civic`
+- Runtime now applies skill-adjusted delta to accepted `NPC_PRODUCTIVE_ACTION`
+  payloads and to construction progress commands. This means high-skill builders
+  build faster, high-commerce NPCs earn more per trade action, and learning XP
+  improves future learn actions.
+- Tests added for matching-domain bonus, non-matching-domain isolation, and cap
+  behavior.
+- Verification: `npm test` passed (198 server tests + 30 web tests),
+  `npm run build:server` passed, `npm run build:web` passed with the known Vite
+  chunk-size warning, and `npx openspec validate npc-economy-skills --strict`
+  passed.
+
 ### Implemented
 
 - Added OpenSpec change `openspec/changes/npc-economy-skills/`.

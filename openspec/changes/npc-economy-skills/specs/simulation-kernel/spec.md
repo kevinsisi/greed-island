@@ -15,3 +15,15 @@ Accepted `NPC_PRODUCTIVE_ACTION` events SHALL update a deterministic NPC civic p
 #### Scenario: Projection is replayable
 - **WHEN** the same productive EventLog is reduced twice
 - **THEN** the NPC civic records SHALL be identical
+
+### Requirement: NPC skills affect future productive output
+
+NPC skill XP SHALL deterministically increase future productive action delta for the matching domain without reading external state or randomness.
+
+#### Scenario: Matching skill increases delta
+- **WHEN** an NPC has accumulated XP for the skill mapped to a productive domain
+- **THEN** future productive actions in that domain SHALL use a skill-adjusted delta
+
+#### Scenario: Non-matching skill does not increase delta
+- **WHEN** an NPC has commerce XP but performs a learn action
+- **THEN** the commerce XP SHALL NOT increase the learn action delta
