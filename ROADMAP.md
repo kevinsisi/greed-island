@@ -4,6 +4,55 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.36 ✅ shipped — 2026-05-12
+
+**主題：restart-safe expansion hydration**
+
+- ✅ Fixed deploy/restart expansion flicker by hydrating selected latest
+  `FACT_SET` values on boot instead of relying on an empty availability-first
+  snapshot or replaying the full production EventLog.
+- ✅ Added targeted latest-fact lookup for expansion, weather, active events,
+  building occupants, NPC state, legacy NPC locations, and area state.
+- ✅ Covered restart persistence for `world.lifeExpansion`, including unlocked
+  `t_salt_marsh` and constructed `b_salt_marsh_field_station`.
+- ✅ Hub map now treats the overview as a living-world layer and can show outdoor
+  district NPCs rather than only cross-district travellers.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  and `git diff --check` passed; web build still has the existing Vite
+  chunk-size warning.
+- ✅ Commit `299b574` pushed to `main`; CI run `25711337994` and Deploy Dev run
+  `25711337993` passed.
+- ✅ Live verification after a brief post-deploy public `502` recovered:
+  `v0.15.36`, `/api/map` includes `t_salt_marsh`, `/api/world` keeps
+  `lifeExpansion` at `12/12` with `t_salt_marsh` and
+  `b_salt_marsh_field_station` unlocked, `/api/npcs` returns 47 map-visible
+  outdoor district NPCs, and latest sampled events carry server-authored
+  motivation payloads.
+- 🚧 Next slice: persistent NPC inner life, including memory, expectations,
+  routines, fatigue, relationships, goals, and dream/subconscious state, while
+  preserving Command -> Rule Engine -> Event authority.
+
+## v0.15.35 ✅ shipped — 2026-05-12
+
+**主題：construction crews + Hub life projection**
+
+- ✅ Kept locked expansion sites visible as construction zones and added
+  deterministic construction crew/progress overlays on the Hub map.
+- ✅ Added `constructionActivitiesFor()` to project worker count, crew positions,
+  and progress text from server facts into frontend map activity.
+- ✅ Fixed Hub NPC projection regressions so salt-marsh travellers and arrived
+  outdoor NPCs are not hidden by transit-only filtering.
+- ✅ Added Hub walkability/spawn helpers so locked expansion districts stay
+  non-enterable while still allowing construction visuals.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  and `git diff --check` passed; web build still has the existing Vite
+  chunk-size warning.
+- ✅ Commit `b697fb4` pushed to `main`; CI run `25710687572` and Deploy Dev run
+  `25710687605` passed.
+- ✅ Live verification: `v0.15.35`, `/healthz` returned `tick=92574`.
+- 🚧 Restart hydration flicker found during live validation was fixed in
+  `v0.15.36`.
+
 ## v0.15.34 ✅ shipped — 2026-05-12
 
 **主題：server event motivation payloads**

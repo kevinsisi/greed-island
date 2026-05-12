@@ -3,6 +3,97 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.36 Restart-Safe Expansion Hydration
+
+### Completed Locally
+
+- Root cause: availability-first boot used an empty latest fact snapshot, so
+  deploy/restart could temporarily lose persisted expansion state until runtime
+  progressed enough to reconstruct it from new facts.
+- Added targeted boot hydration for selected latest `FACT_SET` values instead of
+  replaying the full production EventLog, preserving restart availability while
+  restoring expansion, weather, active-event, building-occupant, NPC, and area
+  state facts.
+- Added `SqliteEventStore.readLatestFactValues(keys)` plus schema support for
+  efficient latest fact lookup by fact key.
+- Covered restart persistence for `world.lifeExpansion`, including unlocked
+  `t_salt_marsh` and `b_salt_marsh_field_station`.
+- Updated Hub NPC projection so the world overview shows outdoor district life,
+  not only cross-district travellers.
+- Bumped app version from `0.15.35` to `0.15.36`.
+
+### Local Verification
+
+- `npm test` passed.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `git diff --check` passed.
+- Gemini staged review raised only non-blocking audit concerns after targeted
+  comments and restart tests were added.
+
+### CI/CD + Live Verification
+
+- Code commit `299b574` pushed to `main`.
+- GitHub Actions CI run `25711337994` passed.
+- GitHub Actions Deploy Dev run `25711337993` passed.
+- Public endpoint briefly returned `502 Bad Gateway` immediately after deploy,
+  then recovered without a hotfix; direct Tailscale host and Docker checks showed
+  healthy `greed-island-web` and `greed-island-server` containers.
+- Live `v0.15.36` verification after recovery:
+  - `/healthz`: `200`, `version=0.15.36`, `tick=92836`.
+  - `/api/map`: includes unlocked `t_salt_marsh`; tile count is `9`.
+  - `/api/world`: `facts.lifeExpansion.unlockedTileIds` includes
+    `t_salt_marsh`, `unlockedBuildingIds` includes
+    `b_salt_marsh_field_station`, and `project.salt_marsh_settlement` remains
+    `12/12` complete after deploy/restart.
+  - `/api/npcs`: 50 NPCs returned; 47 are map-visible outdoor district NPCs for
+    the Hub overview feed.
+  - `/api/events?limit=3`: latest sampled events carry server-authored
+    `payload.motivation` data.
+
+### Still Open
+
+- Next NPC depth slice should move beyond surface motion into persistent inner
+  life: memory, expectations, routines, fatigue, relationships, goals, and dream
+  or subconscious state, while preserving NPC policy -> command -> Rule Engine ->
+  Event authority.
+
+## 2026-05-12 — v0.15.35 Construction Crews + Hub Life Projection
+
+### Completed Locally
+
+- Root cause: locked expansion districts could be hidden or look inert, making
+  salt-marsh construction feel like magic rather than NPC labor.
+- Kept construction-zone visuals visible for locked expansion sites and added
+  deterministic construction crew/progress overlays on the Hub map.
+- Added `constructionActivitiesFor()` to project build progress, worker count,
+  and crew marker positions from server facts into map-renderable activity.
+- Fixed Hub NPC projection so salt-marsh travellers and arrived outdoor NPCs are
+  not hidden by transit-only filtering.
+- Added pure Hub walkability/spawn helpers so locked expansion districts remain
+  non-enterable while construction visuals can still be displayed.
+- Bumped app version from `0.15.34` to `0.15.35`.
+
+### Local Verification
+
+- `npm test` passed.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `git diff --check` passed.
+- Gemini staged review produced no blocking findings after fixes.
+
+### CI/CD + Live Verification
+
+- Code commit `b697fb4` pushed to `main`.
+- GitHub Actions CI run `25710687572` passed.
+- GitHub Actions Deploy Dev run `25710687605` passed.
+- Live `/healthz` returned `version=0.15.35`, `tick=92574`.
+
+### Still Open
+
+- `v0.15.35` exposed that restart hydration could still make expansion state
+  flicker after deploy; fixed in `v0.15.36`.
+
 ## 2026-05-12 — v0.15.34 Server Event Motivation Payloads
 
 ### Completed Locally
