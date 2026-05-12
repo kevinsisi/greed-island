@@ -34,10 +34,18 @@ developer. Keep latest status at the top.
 - Builds: `npm run build:server` passed; `npm run build:web` passed with only the existing Vite chunk-size warning.
 - OpenSpec: `npx openspec validate npc-economy-skills --strict` passed.
 
-### Remaining
+### CI/CD + Live Verification
 
-- Commit/push/deploy and live verify `/api/npcs` shows non-null `civic` records
-  after productive ticks.
+- Commit `5a898f7` (`feat(npc): persist personal economy and skill xp`) pushed to
+  `main`.
+- CI run `25731941727` passed: OpenSpec validate + build/typecheck/test.
+- Deploy Dev run `25731941739` passed.
+- Live `/api/npcs` after deploy: 50 NPCs total, 9 already have non-null `civic`
+  records after productive ticks.
+- Sample live records confirmed:
+  - `central.broker.gui`: `gold=6`, `commerce XP=10`, `lastProductiveTick=98692`.
+  - `central.busker.huang_yu_cheng`: `gold=1`, `construction XP=5`.
+  - `central.guildclerk.su_fang`: `gold=4`, `civic XP=10`.
 
 ## 2026-05-12 — v0.15.47c Projection Payload Nesting Fix + E2E Completion Verified
 

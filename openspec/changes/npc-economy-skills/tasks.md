@@ -19,4 +19,4 @@
 
 - [x] 4.1 Add reducer tests for replay, hydration, gold accumulation, and XP accumulation.
 - [x] 4.2 Run server tests, web typecheck/build, OpenSpec validation if available.
-- [ ] 4.3 Update `PROGRESS.md`, commit, push, and verify live API shows NPC civic records.
+- [x] 4.3 Update `PROGRESS.md`, commit, push, and verify live API shows NPC civic records.
