@@ -26,7 +26,19 @@ developer. Keep latest status at the top.
 
 - `npx tsc -p packages/server/tsconfig.json --noEmit` passed.
 - `npm run test -w @greed-island/server -- dynamicConstruction buildingsRouter runtimeExpansion` passed: 7 tests.
-- Pending: full suite/build/OpenSpec, commit/push/deploy, live API verification.
+- `npm test` passed: 201 server tests + 30 web tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with only the known Vite chunk-size warning.
+- `npx openspec validate civ-evo-construction --strict` and
+  `npx openspec validate npc-economy-skills --strict` passed.
+- Commit `0196436` (`feat(construction): persist completed npc buildings`) passed
+  CI run `25738921562` and Deploy Dev run `25738921084`.
+- Live `/api/buildings?tileId=t_mountain` verified multiple completed NPC
+  buildings now appear, including `b_civ_evo_t_mountain.60c7d731`,
+  `b_civ_evo_t_mountain.7eb240bc`, and `b_civ_evo_t_mountain.4e0addcd`.
+- Live `/api/buildings/b_civ_evo_t_mountain.60c7d731` returned the completed
+  building detail with `enterable: true`, owner `mountain.miner.lei_zi`, interior
+  props, and hiring slots.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
