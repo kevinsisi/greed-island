@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPublicNarrativeEvent } from './eventVisibility'
+import { isChronicleSurfaceEvent, isPublicNarrativeEvent } from './eventVisibility'
 import type { EventSummary } from './types'
 
 function event(input: Partial<EventSummary>): EventSummary {
@@ -22,5 +22,12 @@ describe('isPublicNarrativeEvent', () => {
 
   it('keeps committed public events with narration', () => {
     expect(isPublicNarrativeEvent(event({ eventType: 'NPC_INTERACT' }))).toBe(true)
+  })
+
+  it('keeps routine productive actions out of chronicle surfaces', () => {
+    const productive = event({ eventType: 'NPC_PRODUCTIVE_ACTION', narration: '某人補了一箱貨。' })
+
+    expect(isPublicNarrativeEvent(productive)).toBe(true)
+    expect(isChronicleSurfaceEvent(productive)).toBe(false)
   })
 })

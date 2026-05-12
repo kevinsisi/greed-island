@@ -34,6 +34,10 @@ developer. Keep latest status at the top.
   `CONSTRUCTION_INITIATE` carries `goldCost`, and the lifeExpansion projection
   deducts the initiating NPC's gold exactly once. Healthy-economy tiles are not
   permanently excluded; they require stronger personal demand.
+- Chronicle clarity fix: routine `NPC_PRODUCTIVE_ACTION` events are still stored
+  and visible under NPC filtering, but no longer drive the default chronicle
+  summary/ticker surface. Construction site labels now spell out progress as
+  `建造中 current/target` plus remaining points instead of an unexplained ratio.
 
 ### Verification
 
@@ -55,6 +59,7 @@ developer. Keep latest status at the top.
 - Follow-up focused tests: `npm run test -w @greed-island/server -- buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 10 tests.
 - Hotfix focused tests: `npm run test -w @greed-island/server -- cityLife buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 30 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
 - Demand/cost focused tests: `npm run test -w @greed-island/server -- cityLife livingWorld runtimeExpansion` passed: 64 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
+- Chronicle clarity focused tests: `npm run test -w @greed-island/server -- livingWorld chronicleRenderer` passed: 50 tests. `npm run test -w @greed-island/web -- eventVisibility TimelinePage` passed: 6 tests. Server and web typechecks passed.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 

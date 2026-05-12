@@ -708,12 +708,17 @@ export class MapScene extends Phaser.Scene {
       const def = DISTRICTS[activity.districtId]
       const x = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
       const y = def.anchor.row * TILE_SIZE - TILE_SIZE * 0.25
-      const progressText = `${Math.max(0, activity.progressAfter)}/${Math.max(1, activity.targetProgress)}`
+      const progress = Math.max(0, activity.progressAfter)
+      const target = Math.max(1, activity.targetProgress)
+      const remaining = Math.max(0, target - progress)
+      const progressText = this.locale === 'zh'
+        ? `建造中 ${progress}/${target}\n剩 ${remaining}`
+        : `Building ${progress}/${target}\n${remaining} left`
       const builderText = activity.builderNames.slice(0, 2).join('、')
       const label = this.locale === 'zh'
-        ? `施工隊 ${progressText}${builderText ? `\n${builderText}` : ''}`
-        : `Crew ${progressText}${builderText ? `\n${builderText}` : ''}`
-      const bg = this.add.rectangle(x, y + 12, 132, builderText ? 45 : 30, 0x141820, 0.86)
+        ? `${progressText}${builderText ? `\n${builderText}` : ''}`
+        : `${progressText}${builderText ? `\n${builderText}` : ''}`
+      const bg = this.add.rectangle(x, y + 12, 132, builderText ? 58 : 44, 0x141820, 0.86)
       bg.setStrokeStyle(2, 0xf6c560, 0.9)
       bg.setDepth(54)
       this.constructionSiteObjects.push(bg)

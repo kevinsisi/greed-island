@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
-import { isPublicNarrativeEvent } from '../../state/eventVisibility'
+import { isChronicleSurfaceEvent } from '../../state/eventVisibility'
 
 const TICKER_LIMIT = 8
 
@@ -10,7 +10,7 @@ export function EventTicker() {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState(false)
 
-  const visible = events.filter(isPublicNarrativeEvent).slice(0, TICKER_LIMIT)
+  const visible = events.filter(isChronicleSurfaceEvent).slice(0, TICKER_LIMIT)
 
   return (
     <aside
@@ -55,7 +55,7 @@ export function EventTicker() {
 export function EventTickerStrip() {
   const { events } = useWorldState()
   const { t } = useI18n()
-  const head = events.find(isPublicNarrativeEvent)
+  const head = events.find(isChronicleSurfaceEvent)
   return (
     <div className="lg:hidden fixed bottom-[60px] inset-x-0 z-20 border-t border-b border-ground-800 bg-ground-900/95 backdrop-blur px-4 py-2 text-[12px] font-display tracking-tight text-ground-300">
       <div className="flex items-baseline gap-2">

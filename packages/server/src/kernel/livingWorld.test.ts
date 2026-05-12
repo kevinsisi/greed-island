@@ -648,6 +648,27 @@ describe('grounded chronicle renderer', () => {
     expect(context.allowedNames).toContain('npc-b')
   })
 
+  it('keeps routine productive actions out of chronicle context', () => {
+    const { eventStore, memory, ruleEngine } = makeHarness()
+    submit(
+      makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 1, 1, {
+        npcId: 'npc-a',
+        tile: 't_market',
+        activity: 'trade',
+        domain: 'trade',
+        metric: 'supply',
+        delta: 1,
+        narration: 'npc-a 把一箱補給分送到市場。'
+      }),
+      ruleEngine,
+      eventStore
+    )
+
+    const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
+
+    expect(context.events).toHaveLength(0)
+  })
+
   it('renders deterministic fallback without AI keys', async () => {
     const { db, eventStore, memory, ruleEngine } = makeHarness()
     const settings = new SettingsStore(db)

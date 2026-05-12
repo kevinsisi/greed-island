@@ -1,8 +1,14 @@
 import type { EventSummary } from './types'
 
 const INTERNAL_EVENT_TYPES = new Set(['FACT_SET', 'WORLD_TICK'])
+const ROUTINE_CHRONICLE_EVENT_TYPES = new Set(['NPC_PRODUCTIVE_ACTION'])
 
 export function isPublicNarrativeEvent(event: EventSummary): boolean {
   if (INTERNAL_EVENT_TYPES.has(event.eventType)) return false
   return event.narration !== null && event.narration !== undefined && event.narration.trim().length > 0
+}
+
+export function isChronicleSurfaceEvent(event: EventSummary): boolean {
+  if (!isPublicNarrativeEvent(event)) return false
+  return !ROUTINE_CHRONICLE_EVENT_TYPES.has(event.eventType)
 }

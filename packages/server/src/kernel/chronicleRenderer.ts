@@ -282,6 +282,7 @@ function sleep(ms: number): Promise<void> {
 function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
   if (event.eventType === 'WORLD_TICK') return null
+  if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return null
   const tick = typeof event.tick === 'number' ? event.tick : 0
   const payload = event.payload as LivingWorldEventPayload | undefined
   const narration = payload && typeof payload === 'object' ? payload.narration ?? null : null

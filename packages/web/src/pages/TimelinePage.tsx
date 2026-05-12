@@ -3,7 +3,7 @@ import { useWorldState } from '../state/WorldStateContext'
 import { useI18n, type TranslationKey, type Translator } from '../i18n'
 import type { EventSummary } from '../state/types'
 import { api, type ServerChronicleResponse } from '../api/client'
-import { isPublicNarrativeEvent } from '../state/eventVisibility'
+import { isChronicleSurfaceEvent, isPublicNarrativeEvent } from '../state/eventVisibility'
 
 interface EventFilter {
   id: 'all' | 'cards' | 'npc' | 'world'
@@ -44,8 +44,11 @@ export function TimelinePage() {
 
   const filter = FILTERS.find((f) => f.id === filterId) ?? FILTERS[0]!
   const visible = useMemo(
-    () => events.filter((e) => isPublicNarrativeEvent(e) && filter.match(e.eventType)),
-    [events, filter]
+    () => events.filter((e) => {
+      if (!isPublicNarrativeEvent(e) || !filter.match(e.eventType)) return false
+      return filterId === 'all' ? isChronicleSurfaceEvent(e) : true
+    }),
+    [events, filter, filterId]
   )
 
   return (
