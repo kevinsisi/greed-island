@@ -3,6 +3,72 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.32 NPC Life Goals + Expansion Foundation
+
+### Completed Locally
+
+- Added deterministic NPC life pressure and life-goal projection on `/api/npcs`,
+  derived from needs, role/personality signals, local area resources, and household
+  state without AI mutating world state.
+- Added authoritative life/household/child/construction command types and Rule
+  Engine events: `NPC_LIFE_GOAL_SET`, `NPC_HOUSEHOLD_FORMED`, `NPC_CHILD_BORN`,
+  `CONSTRUCTION_PROJECT_PROGRESS`, `MAP_TILE_UNLOCKED`, and `BUILDING_CONSTRUCTED`.
+- Connected committed productive actions in build/service/trade/learn domains to
+  the `project.salt_marsh_settlement` construction project, completing at `12/12`
+  progress and unlocking `t_salt_marsh` plus `b_salt_marsh_field_station`.
+- Threaded life goals, households, construction progress, map unlocks, and building
+  unlocks through replay/projection, catch-up summaries, API types, Hub navigation,
+  Area/Hub map rendering, and Since Last Visit UI.
+- Kept expansion authority server-side: Hub only treats districts returned by
+  `/api/map` as enterable, and expansion building detail lookup relies on runtime
+  unlocked building projection even before any NPC occupies the building.
+- Bumped app version from `0.15.31` to `0.15.32` and completed OpenSpec change
+  `npc-life-goals-and-expansion` verification/release tasks.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 160 tests, web 7 files / 18 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npx openspec validate npc-life-goals-and-expansion --strict` passed.
+- `git diff --check` passed.
+- Focused regression coverage added for deterministic city-life projection,
+  runtime end-to-end life/household/construction/unlock facts, unlocked map graph
+  routing, living-world command validation, and constructed expansion building API
+  detail lookup with zero occupants.
+- Gemini staged review found two actionable issues: household formation was gated
+  to only the first household, and direct building detail lookup needed to rely on
+  runtime-unlocked buildings. Both were fixed and covered by tests. Remaining
+  `????` review notes were confirmed as Gemini CLI encoding artifacts against
+  source files containing valid localized Chinese text.
+
+### CI/CD + Live Verification
+
+- Code commit `bd8a3ae` pushed to `main`.
+- GitHub Actions CI run `25706302025` passed.
+- GitHub Actions Deploy Dev run `25706302028` passed.
+- Live `v0.15.32` verification after deploy:
+  - `/healthz`: `200`, `version=0.15.32`, `tick=91002` during the first probe.
+  - `/api/npcs`: `200`, NPC rows include `life.needs`, `life.goal`, and
+    `life.householdId` projections.
+  - `/api/events?limit=5000`: included `11` `CONSTRUCTION_PROJECT_PROGRESS`, `1`
+    `MAP_TILE_UNLOCKED`, and `1` `BUILDING_CONSTRUCTED` event for the salt-marsh
+    project; the next 30-tick gate emitted `8` `NPC_LIFE_GOAL_SET` and `1`
+    `NPC_HOUSEHOLD_FORMED` event at tick `91021`.
+  - `/api/map`: `200`, includes unlocked `t_salt_marsh` / `鹽沼外環`.
+  - `/api/buildings?tileId=t_salt_marsh`: `200`, includes
+    `b_salt_marsh_field_station` with localized Chinese building/prop labels.
+  - `/api/buildings/b_salt_marsh_field_station`: `200`, returns the constructed
+    building even with `occupants=[]`.
+
+### Still Open
+
+- `NPC_CHILD_BORN` is intentionally delayed until 90 ticks after household
+  formation; local integration tests cover it, but live evidence was not delayed
+  another 7.5 minutes just to wait for the first production child event.
+- Optional follow-up: add Phaser-level E2E/scene tests for locked district visuals
+  if future map-rendering changes become frequent.
+
 ## 2026-05-11 — v0.15.31 Productive City Actions
 
 ### Completed Locally

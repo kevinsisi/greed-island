@@ -30,4 +30,4 @@
 - [x] 4.2 Add projection tests for constructed buildings and unlocked map tiles.
 - [x] 4.3 Run server/web tests, builds, OpenSpec validation, diff check, and staged
   review.
-- [ ] 4.4 Commit, push, watch CI/CD, verify live evidence, and update docs.
+- [x] 4.4 Commit, push, watch CI/CD, verify live evidence, and update docs.

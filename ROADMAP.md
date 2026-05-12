@@ -4,6 +4,39 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.32 ✅ shipped — 2026-05-12
+
+**主題：NPC life goals + expansion foundation**
+
+- ✅ Added deterministic NPC needs and life-goal projections on `/api/npcs`, keeping
+  AI as read-only renderer/narrator rather than simulation authority.
+- ✅ Added authoritative life/household/child/construction commands and events:
+  `NPC_LIFE_GOAL_SET`, `NPC_HOUSEHOLD_FORMED`, `NPC_CHILD_BORN`,
+  `CONSTRUCTION_PROJECT_PROGRESS`, `MAP_TILE_UNLOCKED`, and
+  `BUILDING_CONSTRUCTED`.
+- ✅ Productive NPC actions in build/service/trade/learn domains now advance the
+  salt-marsh settlement project and can unlock `t_salt_marsh` plus
+  `b_salt_marsh_field_station` through Rule Engine events and replayable facts.
+- ✅ Hub navigation and building APIs now honor server-authoritative unlocked map
+  and building projections; locked expansion districts are not enterable.
+- ✅ Since Last Visit and NPC dialog UI surface life goals, household changes,
+  construction progress, and expansion unlocks, with new NPC life labels routed
+  through i18n.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  `npx openspec validate npc-life-goals-and-expansion --strict`, and
+  `git diff --check` passed; web build still has the existing Vite chunk-size
+  warning.
+- ✅ Gemini staged review findings for multi-household formation and expansion
+  building detail lookup were fixed and covered by integration tests.
+- ✅ Commit `bd8a3ae` pushed to `main`; CI run `25706302025` and Deploy Dev run
+  `25706302028` passed.
+- ✅ Live verification: `v0.15.32`, `/api/npcs` includes `life`, `/api/events`
+  observed construction/unlock/building events plus the next tick-gated life goal
+  and household events, `/api/map` includes `t_salt_marsh`, and direct
+  `/api/buildings/b_salt_marsh_field_station` returns `200` with `occupants=[]`.
+- 🚧 Optional follow-up: wait for or accelerate a live `NPC_CHILD_BORN` event if
+  production evidence for the 90-tick child delay is needed beyond local tests.
+
 ## v0.15.31 ✅ shipped — 2026-05-11
 
 **主題：productive city actions**
