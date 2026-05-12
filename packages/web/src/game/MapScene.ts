@@ -250,6 +250,14 @@ export class MapScene extends Phaser.Scene {
   }
 
   create(): void {
+    // v0.15.46: scene.restart() reuses the same MapScene instance, so JS
+    // class-field Maps still hold references to display objects from the
+    // previous (now-destroyed) scene. The first refreshNpcSprites() after
+    // a restart would then call setTexture() on a destroyed sprite and
+    // crash inside Phaser (`Cannot read properties of undefined (reading
+    // 'sys')`). Reset every registry before re-creating the scene.
+    this.resetSpriteRegistries()
+
     this.cameras.main.setBackgroundColor(0x12141a)
 
     this.drawTiles()
@@ -273,8 +281,33 @@ export class MapScene extends Phaser.Scene {
       this.callbacks.onAreaEnter(this.currentDistrict)
     }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.disposeEnvAnimations())
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.disposeEnvAnimations())
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.disposeEnvAnimations()
+      this.resetSpriteRegistries()
+    })
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      this.disposeEnvAnimations()
+      this.resetSpriteRegistries()
+    })
+  }
+
+  /**
+   * Clear every Map / array / nullable field that holds a reference to a
+   * Phaser display object owned by the current scene. Phaser destroys the
+   * actual objects on SHUTDOWN, but the JS refs in our class fields would
+   * otherwise survive the restart and cause setTexture() / setData() to
+   * fault on dead objects in the next create().
+   */
+  private resetSpriteRegistries(): void {
+    this.npcSprites.clear()
+    this.peerSprites.clear()
+    this.districtLabels.clear()
+    this.constructionSiteObjects = []
+    this.playerNameLabel = null
+    this.overlayGraphics = null
+    this.envSprites = []
+    this.envTweens = []
+    this.nearbyNpcId = null
   }
 
   /**

@@ -4,6 +4,21 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.46 🚧 in progress — 2026-05-12
+
+**主題：MapScene 對 scene.restart() 安全：清掉 sprite 引用**
+
+- ✅ Root cause：`scene.restart()` 重用同一個 MapScene 實例，但 class field
+  `npcSprites/peerSprites/districtLabels` 等 Maps 還握上一回 scene 的
+  destroyed sprite。新 create 跑到 refreshNpcSprites 就在 `setTexture` 上
+  炸 `Cannot read properties of undefined (reading 'sys')`。
+- ✅ 新 `resetSpriteRegistries()` 清掉所有 sprite 參考。create() 開頭叫一次
+  (防禦)，SHUTDOWN / DESTROY 各叫一次。
+- ✅ 本機：`npm test` 全綠（server 189 / web 28）、`npm run build` 通過。
+- 🚧 還沒做：commit / push / docker rebuild + 你 hard reload 確認 crash 沒了。
+- 🚧 後續：為什麼 activeDistrictIds 會頻繁變動 (理論上整 session 應該穩定)
+  — 一個 hypothesis：boot hydration 過渡期間 /api/map 偶爾少 tile。
+
 ## v0.15.45 🚧 in progress — 2026-05-12
 
 **主題：Hub mount latch + since-panel session memory**

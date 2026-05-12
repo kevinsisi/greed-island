@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.46 MapScene Restart-Safe Sprite Registries
+
+### Completed This Session
+
+- Live browser crash captured during v0.15.45 testing:
+  `Uncaught TypeError: Cannot read properties of undefined (reading 'sys')`
+  thrown from `setTexture` inside `MapScene.refreshNpcSprites` (call
+  stack: `step → update → step → bootScene → create → spawnNpcs →
+  refreshNpcSprites:913 → setTexture:phaser.js:45368`).
+- Root cause: `MapScene.applyExternalUpdate()` calls `this.scene.restart()`
+  whenever `activeDistrictIds` content changes. `scene.restart()` reuses
+  the same `MapScene` JS instance, so class-field Maps such as
+  `npcSprites`, `peerSprites`, and `districtLabels` retained references
+  to display objects from the previous, now-destroyed scene. The first
+  `refreshNpcSprites` after restart fetched a dead sprite from the Map
+  and called `setTexture` on it, which faulted inside Phaser because
+  the sprite's `.scene` was undefined. Symptom in the browser: half the
+  Hub map renders, the rest is frozen, t_salt_marsh still labelled
+  「施工中」.
+- Fix in `MapScene.ts`:
+  - New `resetSpriteRegistries()` clears every Map / array / nullable
+    field that holds a Phaser display reference: `npcSprites`,
+    `peerSprites`, `districtLabels`, `constructionSiteObjects`,
+    `playerNameLabel`, `overlayGraphics`, `envSprites`, `envTweens`,
+    `nearbyNpcId`.
+  - Called at the top of `create()` (defensive — even the first create
+    is safe) and from SHUTDOWN / DESTROY handlers (so the next create
+    on restart sees empty registries).
+- Bumped app version from `0.15.45` to `0.15.46`.
+
+### Local Verification
+
+- `npm test` passed: server 22 / 189, web 10 / 28.
+- `npm run build:server` and `npm run build:web` passed.
+
+### Still Open
+
+- Docker rebuild + browser hard reload to confirm the crash is gone.
+- Investigate WHY `activeDistrictIds` content is changing at all during
+  a session (it should be stable while the world is up). Suspected
+  cause: a transient `/api/map` snapshot during boot hydration that
+  excludes a tile then re-includes it. Worth tracing once the crash is
+  out of the way.
+
 ## 2026-05-12 — v0.15.45 Hub Mount Latch + Since-Panel Session Memory
 
 ### Completed This Session
