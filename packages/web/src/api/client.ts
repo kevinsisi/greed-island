@@ -561,6 +561,19 @@ export type ServerBuildingView = {
   occupants: Array<{ npcId: string; shift: ServerShift | null; isOwner: boolean }>
 }
 
+export type ServerConstructionProject = {
+  projectId: string
+  kind: 'settlement'
+  targetTileId: string
+  buildingId: string
+  progress: number
+  targetProgress: number
+  startedAtTick: number
+  completedAtTick: number | null
+  initiatedByNpcId: string
+  builderNpcIds: readonly string[]
+}
+
 export type ServerPlayerJob = {
   accountId: number
   buildingId: string
@@ -973,7 +986,7 @@ export const api = {
     ),
   areaStates: () => jsonFetch<{ areas: ServerAreaState[] }>('/areas'),
   buildings: (tileId?: string) =>
-    jsonFetch<{ buildings: ServerBuildingView[] }>(
+    jsonFetch<{ buildings: ServerBuildingView[]; inProgress?: ServerConstructionProject[] }>(
       tileId ? `/buildings?tileId=${encodeURIComponent(tileId)}` : '/buildings'
     ),
   buildingDetail: (buildingId: string) =>

@@ -3,6 +3,84 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.47 NPC-Initiated Construction Surface
+
+### Completed Locally
+
+- Continued `openspec/changes/civ-evo-construction/` through Slice 4-6.
+- Added `ConstructionProjectsProjection` with `rebuildFromEvents()`,
+  `getInProgressByTile()`, `getByProjectId()`, and canonical-hash tests.
+- Hydrated/runtime-projected `construction_projects` from the committed
+  EventLog/lifeExpansion state, and projected newly committed construction
+  events as they arrive.
+- Extended `GET /api/buildings?tileId=X` to return `inProgress` NPC-initiated
+  projects, and to expose each open project as an enterable `construction`
+  site view so the player can click into it from the Area map.
+- Extended the Hub construction projection so NPC-initiated in-progress projects
+  render through existing `MapScene.drawConstructionSites()` with no new Phaser
+  drawing branch.
+- Added B1 demo trigger: `CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80` so
+  current low/mid-economy districts can trigger autonomous construction now.
+- Preserved the correction that salt-marsh remains a legacy/system fixed project
+  (`initiatedByNpcId: ""`) and must not be described as NPC-autonomous.
+- Bumped app version from `0.15.46` to `0.15.47`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- constructionProjects buildingsRouter cityLife` passed: 20 tests.
+- `npm run test -w @greed-island/web -- constructionActivity` passed: 3 tests.
+- `npm test` passed: server 23 files / 193 tests, web 10 files / 29 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npx openspec validate civ-evo-construction --strict` passed.
+- `git diff --check` passed.
+
+### Still Open
+
+- Browser smoke after deploy: verify a live NPC-initiated construction site shows
+  on Hub, appears in Area as an enterable 🚧 site, and opens the construction
+  interior page.
+- Slice 7 remains open: full end-to-end progress/completion replay beyond the
+  visible in-progress project surface.
+
+## 2026-05-12 — Construction Autonomy Correction
+
+### Verified Reality
+
+- User report was correct: the current visible salt-marsh map expansion is not a
+  fully NPC-autonomous construction system.
+- Live `/api/world` at tick `96466` shows only
+  `project.salt_marsh_settlement` under `lifeExpansion.constructionProjects`,
+  with `initiatedByNpcId: ""`. That marks it as the legacy/system project, not
+  an NPC-initiated project.
+- Code confirms the hard-coded path:
+  - `packages/server/src/sim/cityLife.ts` has fixed constants
+    `SALT_MARSH_PROJECT_ID`, `SALT_MARSH_TILE_ID`,
+    `SALT_MARSH_BUILDING_ID`, and `SALT_MARSH_PROJECT_TARGET`.
+  - `withConstructionProgress()` always creates/updates that fixed salt-marsh
+    project when no project exists.
+  - `withUnlockedExpansion()` always unlocks `t_salt_marsh` and
+    `b_salt_marsh_field_station`.
+  - `packages/server/src/sim/runtime.ts` converts generic
+    `NPC_PRODUCTIVE_ACTION` output into progress for that fixed salt-marsh
+    project. NPC labor is used as a trigger/source attribution, but the project
+    target is not autonomously selected by an NPC.
+- The civ-evo-construction work through `v0.15.43` only implemented autonomous
+  initiation (`CONSTRUCTION_INITIATE` records with `initiatedByNpcId`) for
+  non-salt-marsh low-economy districts. The remaining projection/API/frontend
+  slices are still incomplete, so those projects are not yet the current visible
+  Hub map construction experience.
+
+### Correct Framing
+
+- Do not describe the current salt-marsh Hub construction as "NPC autonomous
+  building". It is a legacy fixed expansion whose progress is advanced by
+  accepted NPC productive events.
+- Real NPC-autonomous construction requires continuing
+  `openspec/changes/civ-evo-construction/` Slice 4+:
+  `construction_projects` projection, API exposure, frontend Hub projection,
+  and generic project progress/completion behavior.
+
 ## 2026-05-12 — v0.15.46 MapScene Restart-Safe Sprite Registries
 
 ### Completed This Session
@@ -140,12 +218,11 @@ developer. Keep latest status at the top.
 
 ### Completed This Session
 
-- First user-visible slice of `openspec/changes/civ-evo-construction/`.
-  NPCs in low-economy districts will now autonomously submit
+- First policy slice of `openspec/changes/civ-evo-construction/`.
+  NPCs in low-economy districts can now autonomously submit
   `CONSTRUCTION_INITIATE` commands through the existing
-  productive-build event path; the §11.8 first autonomous-civilization
-  loop is now closed end-to-end (Command → Rule Engine → Event →
-  Projection).
+  productive-build event path; the §11.8 loop is not yet user-visible
+  end-to-end because projection/API/frontend slices remain open.
   - `packages/server/src/sim/cityLife.ts`: added pure
     `decideCivEvoConstructionInitiate(input)`. Returns the command
     payload to emit, or `null` when policy says "skip this tick". Gating

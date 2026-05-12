@@ -52,4 +52,31 @@ describe('construction activity projection', () => {
 
     expect(activities).toEqual([])
   })
+
+  it('shows NPC-initiated in-progress construction projects', () => {
+    const activities = constructionActivitiesFor(
+      [],
+      [npc('central.builder', '築仔')],
+      [{
+        projectId: 'project.civ-evo.test',
+        targetTileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        progress: 3,
+        targetProgress: 24,
+        completedAtTick: null,
+        initiatedByNpcId: 'central.builder'
+      }]
+    )
+
+    expect(activities).toEqual([
+      {
+        districtId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        initiatedByNpcId: 'central.builder',
+        progressAfter: 3,
+        targetProgress: 24,
+        builderNames: ['築仔']
+      }
+    ])
+  })
 })

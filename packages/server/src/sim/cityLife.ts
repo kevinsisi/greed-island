@@ -9,6 +9,7 @@ export const SALT_MARSH_PROJECT_ID = 'project.salt_marsh_settlement'
 export const SALT_MARSH_TILE_ID = 't_salt_marsh'
 export const SALT_MARSH_BUILDING_ID = 'b_salt_marsh_field_station'
 export const SALT_MARSH_PROJECT_TARGET = 12
+export const CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80
 
 export type NpcLifeNeedKey = 'food' | 'rest' | 'money' | 'housing' | 'safety'
 export type NpcLifeGoalKind =
@@ -203,9 +204,10 @@ export function householdIdForNpc(state: LifeExpansionState, npcId: string): str
 
 export function withConstructionProgress(
   state: LifeExpansionState,
-  input: { tick: number; delta: number }
+  input: { tick: number; delta: number; projectId?: string }
 ): LifeExpansionState {
-  const before = state.constructionProjects[SALT_MARSH_PROJECT_ID] ?? {
+  const projectId = input.projectId ?? SALT_MARSH_PROJECT_ID
+  const before = state.constructionProjects[projectId] ?? (projectId === SALT_MARSH_PROJECT_ID ? {
     projectId: SALT_MARSH_PROJECT_ID,
     kind: 'settlement' as const,
     targetTileId: SALT_MARSH_TILE_ID,
@@ -215,13 +217,14 @@ export function withConstructionProgress(
     startedAtTick: input.tick,
     completedAtTick: null,
     initiatedByNpcId: ''
-  }
+  } : null)
+  if (!before) return state
   const progress = Math.min(before.targetProgress, before.progress + Math.max(1, Math.floor(input.delta)))
   return {
     ...state,
     constructionProjects: {
       ...state.constructionProjects,
-      [SALT_MARSH_PROJECT_ID]: {
+      [projectId]: {
         ...before,
         progress,
         completedAtTick: progress >= before.targetProgress ? input.tick : before.completedAtTick
@@ -320,7 +323,8 @@ export function withConstructionInitiated(
  * Gating rules:
  *   1. Tile must NOT be the legacy salt-marsh expansion tile (its own
  *      progress engine still runs the salt-marsh fixed project).
- *   2. `areaState.resources.economy < 50` is the Slice-3 proxy for the
+ *   2. `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD`
+ *      is the Slice-3 demo proxy for the
  *      §11.8 "infrastructure" resource that is not yet modelled. A
  *      future slice will introduce a dedicated `infrastructure` field.
  *   3. Same-tile-race: skip if any open civ-evo project already
@@ -347,7 +351,7 @@ export function decideCivEvoConstructionInitiate(input: {
 } | null {
   if (input.tile === SALT_MARSH_TILE_ID) return null
   const economy = input.areaState?.resources.economy ?? 100
-  if (economy >= 50) return null
+  if (economy >= CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD) return null
   for (const project of Object.values(input.lifeExpansion.constructionProjects)) {
     if (project.completedAtTick !== null) continue
     if (project.projectId === SALT_MARSH_PROJECT_ID) continue

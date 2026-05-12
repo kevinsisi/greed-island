@@ -194,7 +194,7 @@ describe('city life projection', () => {
 
   describe('civ-evo-construction: decideCivEvoConstructionInitiate', () => {
     const lowEconomyArea = { resources: { food: 70, safety: 72, economy: 30 } }
-    const richArea = { resources: { food: 80, safety: 80, economy: 75 } }
+    const richArea = { resources: { food: 80, safety: 80, economy: 85 } }
     const empty = createInitialLifeExpansionState()
 
     it('emits a fresh decision when economy is below the proxy threshold and tile is empty', () => {

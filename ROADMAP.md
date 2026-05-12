@@ -4,6 +4,27 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.47 🚧 in progress — 2026-05-12
+
+**主題：civ-evo-construction Slice 4-6 — NPC-initiated 工地可見且可點**
+
+- ✅ 新增 `ConstructionProjectsProjection`，支援 `rebuildFromEvents()`、
+  `getInProgressByTile()`、`getByProjectId()`，並加 canonical-hash / replay
+  一致性測試。
+- ✅ `/api/buildings?tileId=X` 回傳 `inProgress`，並把 open NPC-initiated
+  project 投影成可進入的 `construction` site view。
+- ✅ Hub `constructionActivitiesFor()` 會把 `lifeExpansion` 裡的
+  NPC-initiated open projects 轉成 `MapConstructionActivity`，沿用既有
+  `MapScene.drawConstructionSites()` 畫工地。
+- ✅ B1 demo gate：`CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80`，讓目前
+  economy < 80 的區域可以觸發。
+- ✅ 明確保留修正：salt-marsh 是 legacy/system fixed project，不再包裝成
+  NPC 自主建造。
+- ✅ 本機：targeted tests、`npm test`、server/web build、OpenSpec validate、
+  `git diff --check` 通過。
+- 🚧 還沒做：browser/live smoke，確認 Hub 看到工地、Area 可點 🚧、進入工地
+  interior。
+
 ## v0.15.46 🚧 in progress — 2026-05-12
 
 **主題：MapScene 對 scene.restart() 安全：清掉 sprite 引用**
@@ -18,6 +39,23 @@
 - 🚧 還沒做：commit / push / docker rebuild + 你 hard reload 確認 crash 沒了。
 - 🚧 後續：為什麼 activeDistrictIds 會頻繁變動 (理論上整 session 應該穩定)
   — 一個 hypothesis：boot hydration 過渡期間 /api/map 偶爾少 tile。
+
+## 2026-05-12 Correction — Salt-Marsh Is Legacy, Not NPC-Autonomous
+
+- ⚠️ User report confirmed: the visible salt-marsh map construction is not true
+  NPC-autonomous construction.
+- Live `lifeExpansion.constructionProjects.project.salt_marsh_settlement` has
+  `initiatedByNpcId: ""`, which means legacy/system project.
+- Code path is fixed by constants in `cityLife.ts`:
+  `SALT_MARSH_PROJECT_ID`, `SALT_MARSH_TILE_ID`, `SALT_MARSH_BUILDING_ID`, and
+  `SALT_MARSH_PROJECT_TARGET`; `withUnlockedExpansion()` always unlocks that
+  tile/building.
+- NPC productive events currently advance that fixed project, but NPCs do not
+  choose the salt-marsh target/building autonomously.
+- `civ-evo-construction` Slice 3 only implemented autonomous initiation for
+  non-salt-marsh low-economy districts. Slice 4+ projection/API/frontend and
+  generic progress/completion are still required before the map can honestly
+  show NPC-initiated construction.
 
 ## v0.15.45 🚧 in progress — 2026-05-12
 
@@ -50,7 +88,7 @@
 
 ## v0.15.43 🚧 in progress — 2026-05-12
 
-**主題：civ-evo-construction Slice 3 — NPC autonomous policy**
+**主題：civ-evo-construction Slice 3 — NPC autonomous initiation policy**
 
 - ✅ `cityLife.ts`：新增 `decideCivEvoConstructionInitiate()` 純函式策略。
   Gating：非 salt-marsh tile、`area.resources.economy < 50`（Slice-3 對
@@ -63,8 +101,8 @@
 - ✅ `cityLife.test.ts`：7 個新 Slice-3 policy 測試覆蓋每一條 gate。
 - ✅ 本機：`npm test`（server 189 / web 28）、`npm run build`、
   `openspec validate civ-evo-construction --strict` 通過。
-- 🚧 還沒做：commit / push / docker rebuild。Live deploy 後低 economy
-  區應該開始出現單一 open civ-evo 案。
+- 🚧 還沒做：Slice 4+ projection/API/frontend + generic progress/completion。
+  不可把 salt-marsh legacy fixed project 包裝成 NPC 自主建造。
 
 ## v0.15.42 🚧 in progress — 2026-05-12
 

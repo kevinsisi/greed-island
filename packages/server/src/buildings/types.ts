@@ -10,6 +10,7 @@ export type BuildingType =
   | 'exchange'
   | 'temple'
   | 'landmark'
+  | 'construction'
 
 export type Shift = 'morning' | 'afternoon' | 'night'
 

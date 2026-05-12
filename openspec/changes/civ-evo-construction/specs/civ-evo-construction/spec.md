@@ -6,7 +6,7 @@ The system SHALL allow an NPC, under deterministic policy, to emit a `CONSTRUCTI
 
 #### Scenario: NPC with build goal and low infrastructure emits CONSTRUCTION_INITIATE
 - **GIVEN** an NPC whose `goal.kind` is `build_city`
-- **AND** `areaState.resources.infrastructure < 45` on the target tile
+- **AND** `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD` on the target tile for the demo slice
 - **AND** the NPC has no active `build` task and no other NPC has an open project on the same `tileId`
 - **WHEN** the deterministic NPC policy runs in `cityLife.ts`
 - **THEN** the NPC SHALL emit `CONSTRUCTION_INITIATE { npcId, tileId, buildingId, duration, motivation? }`

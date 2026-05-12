@@ -15,7 +15,7 @@ import {
 import type { FactionLeanId, MapAreaOverlay, MapConstructionActivity, MapNpc, MapPlayer } from '../game/MapScene'
 import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
-import { constructionActivitiesFor } from './constructionActivity'
+import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './constructionActivity'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
@@ -31,7 +31,7 @@ type HubPosition = { x: number; y: number; z: number }
  */
 export function HubPage() {
   const { t, locale } = useI18n()
-  const { npcs, map, events, source } = useWorldState()
+  const { npcs, map, events, source, world } = useWorldState()
   const { token, account } = useAuth()
   // v0.15.45: one-way latch. Once we have seen authoritative server data
   // once, keep the Phaser canvas mounted forever — even if SSE/poll
@@ -131,8 +131,8 @@ export function HubPage() {
   }, [mapNpcs, npcs])
 
   const constructionActivities = useMemo<MapConstructionActivity[]>(() => {
-    return constructionActivitiesFor(events, npcs)
-  }, [events, npcs])
+    return constructionActivitiesFor(events, npcs, constructionProjectsFromWorldFact(world.facts['lifeExpansion']))
+  }, [events, npcs, world.facts])
 
   const mapPlayers = useMemo<MapPlayer[]>(() => {
     return nearbyPlayers.map((player) => ({

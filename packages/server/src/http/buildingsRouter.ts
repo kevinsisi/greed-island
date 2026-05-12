@@ -15,10 +15,11 @@ import { Router, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { shiftFor, DAILY_SHIFT_COOLDOWN_TICKS } from '../buildings/playerJobsStore.js'
-import type { Shift } from '../buildings/types.js'
+import type { BuildingDef, BuildingRuntimeView, Shift } from '../buildings/types.js'
 import { REST_RESTORATION } from '../buildings/types.js'
 import { listAllBuildings } from '../buildings/catalog.js'
 import { requireAuth, type AuthConfig } from './auth.js'
+import type { ConstructionProjectRow } from '../projections/constructionProjects.js'
 
 const VALID_SHIFTS: readonly Shift[] = ['morning', 'afternoon', 'night']
 const REST_COOLDOWN_TICKS = 60 // 5 分鐘冷卻（避免短時間反覆按）
@@ -31,7 +32,8 @@ export function createBuildingsRouter(input: {
   const router = Router()
   const auth = requireAuth(input.authConfig)
   const findVisibleBuilding = (id: string) => {
-    return input.runtime.getAllBuildings().find((v) => v.def.id === id) ?? null
+    return input.runtime.getAllBuildings().find((v) => v.def.id === id) ??
+      constructionSiteView(input.runtime.getInProgressConstructionProjects().find((p) => p.buildingId === id))
   }
 
   router.get('/buildings', (req: Request, res: Response) => {
@@ -39,7 +41,11 @@ export function createBuildingsRouter(input: {
     const views = tileId
       ? input.runtime.getBuildingsOnTile(tileId)
       : input.runtime.getAllBuildings()
-    res.json({ buildings: views })
+    const inProgress = input.runtime.getInProgressConstructionProjects(tileId ?? undefined)
+    const constructionSites = inProgress
+      .map((project) => constructionSiteView(project))
+      .filter((view): view is BuildingRuntimeView => view !== null)
+    res.json({ buildings: [...views, ...constructionSites], inProgress })
   })
 
   router.get('/buildings/:id', (req: Request, res: Response) => {
@@ -216,4 +222,47 @@ export function createBuildingsRouter(input: {
   })
 
   return router
+}
+
+function constructionSiteView(project: ConstructionProjectRow | undefined): BuildingRuntimeView | null {
+  if (!project) return null
+  return { def: constructionSiteDef(project), occupants: [] }
+}
+
+function constructionSiteDef(project: ConstructionProjectRow): BuildingDef {
+  const seed = hashString(project.projectId)
+  return {
+    id: project.buildingId,
+    tileId: project.targetTileId,
+    nameZh: `自主工地 ${project.progress}/${project.targetProgress}`,
+    nameEn: `Autonomous Site ${project.progress}/${project.targetProgress}`,
+    descriptionZh: `這是由 ${project.initiatedByNpcId} 發起的 NPC 自主建案。進度 ${project.progress}/${project.targetProgress}。`,
+    type: 'construction',
+    placement: {
+      col: 2 + (seed % 11),
+      row: 2 + ((seed >>> 4) % 6),
+      glyph: '🚧',
+      size: 26
+    },
+    interior: {
+      cols: 9,
+      rows: 7,
+      backgroundColor: 0x241a10,
+      props: [
+        { col: 2, row: 2, glyph: '🧱', size: 24, label: '材料' },
+        { col: 5, row: 3, glyph: '🪵', size: 24, label: '木料' },
+        { col: 6, row: 5, glyph: '🔨', size: 22, label: '工具' }
+      ]
+    },
+    ownerNpcId: project.initiatedByNpcId,
+    hiring: [],
+    enterable: true,
+    restorative: false
+  }
+}
+
+function hashString(value: string): number {
+  let h = 5381
+  for (const ch of value) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+  return h
 }

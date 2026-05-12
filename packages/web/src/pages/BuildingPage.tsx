@@ -30,7 +30,8 @@ const TYPE_LABEL_ZH: Record<string, string> = {
   library: '圖書館',
   exchange: '紋卡交易所',
   temple: '神殿',
-  landmark: '地標'
+  landmark: '地標',
+  construction: '工地'
 }
 
 export function BuildingPage() {

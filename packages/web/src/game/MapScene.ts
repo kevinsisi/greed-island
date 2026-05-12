@@ -76,6 +76,8 @@ export interface MapPlayer {
 
 export interface MapConstructionActivity {
   districtId: DistrictId
+  buildingId?: string
+  initiatedByNpcId?: string
   progressAfter: number
   targetProgress: number
   builderNames: string[]

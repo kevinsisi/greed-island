@@ -695,18 +695,22 @@ of them. Full autonomy at larger scale requires bounded per-tick work.
 
 The architecture requires projections to expose rebuild-from-events
 paths. Some projection-like stores are still operational tables without
-formal rebuild tests. Add rebuild and canonical-hash assertions for each
-world-facing projection before treating it as guaranteed.
+formal rebuild tests. `construction_projects` now has a rebuild path and
+canonical-hash coverage for the civ-evo-construction slice; add the same
+assertions for each remaining world-facing projection before treating it
+as guaranteed.
 
-### 11.8 Civilization Evolution Is Not Implemented Yet
+### 11.8 Civilization Evolution Is Partially Implemented
 
 Section 0.17 defines the intended civilization target, but the current
-implementation does not yet have Commands/Events/reducers for
-construction, production chains, resource transport, settlement
-formation, map mutation, faction war, household formation, or skill
-learning. These must be implemented as incremental OpenSpec changes with
-deterministic replay tests before claiming autonomous civilization
-evolution.
+implementation only has the first construction slice: NPCs can emit
+`CONSTRUCTION_INITIATE`, the Rule Engine commits the event, projection/API
+surfaces in-progress NPC-initiated construction, and the Hub/Area UI can
+render/click the resulting work site. Production chains, resource
+transport, settlement formation, map mutation beyond existing expansion,
+faction war, household depth, and skill learning still require incremental
+OpenSpec changes with deterministic replay tests before claiming full
+autonomous civilization evolution.
 
 ### 11.9 NPC Personal Dialog Is Not Fully Grounded In Memory
 

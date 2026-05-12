@@ -27,6 +27,7 @@ describe('buildings router', () => {
         getCurrentTick: () => 100,
         getBuildingsOnTile: () => [],
         getAllBuildings: () => listAllBuildings().map((def) => ({ def, occupants: [] })),
+        getInProgressConstructionProjects: () => [],
         getAreaState: () => null,
         getAmbientNarrator: () => null,
       } as unknown as SimulationRuntime
@@ -57,6 +58,55 @@ describe('buildings router', () => {
       expect(first.status).toBe(200)
       expect(second.status).toBe(409)
       expect(payload.error).toBe('ALREADY_HIRED')
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
+
+  it('returns NPC-initiated in-progress construction sites for a tile', async () => {
+    const db = new Database(':memory:')
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const jobs = new PlayerJobsStore(db)
+    const runtime = {
+      getCurrentTick: () => 100,
+      getBuildingsOnTile: () => [],
+      getAllBuildings: () => [],
+      getInProgressConstructionProjects: (tileId?: string) => tileId === 't_central' ? [{
+        projectId: 'project.civ-evo.test',
+        kind: 'settlement',
+        targetTileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        progress: 3,
+        targetProgress: 24,
+        startedAtTick: 90,
+        completedAtTick: null,
+        initiatedByNpcId: 'central.builder',
+        builderNpcIds: ['central.builder']
+      }] : [],
+      getAreaState: () => null,
+      getAmbientNarrator: () => null,
+    } as unknown as SimulationRuntime
+    const app = express()
+    app.use(express.json())
+    app.use(createBuildingsRouter({ runtime, jobs, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const response = await fetch(`http://127.0.0.1:${address.port}/buildings?tileId=t_central`)
+      const payload = (await response.json()) as {
+        buildings: Array<{ def: { id: string; type: string; enterable: boolean } }>
+        inProgress: Array<{ projectId: string; initiatedByNpcId: string }>
+      }
+
+      expect(response.status).toBe(200)
+      expect(payload.inProgress).toEqual([
+        expect.objectContaining({ projectId: 'project.civ-evo.test', initiatedByNpcId: 'central.builder' })
+      ])
+      expect(payload.buildings).toEqual([
+        expect.objectContaining({ def: expect.objectContaining({ id: 'b_civ_evo_t_central', type: 'construction', enterable: true }) })
+      ])
     } finally {
       await close(server)
       db.close()

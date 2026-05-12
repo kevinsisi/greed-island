@@ -16,28 +16,28 @@
 ## 3. NPC Policy + Build Task
 
 - [x] 3.1 Extend `NpcAgentTaskKind` union in `packages/server/src/sim/npcEngine.ts` with `'build'` (reserved for future projection; no per-kind extra fields needed because `targetTile`, `startedAtTick`, `expiresAtTick` already exist on the universal task shape).
-- [x] 3.2 Add `decideCivEvoConstructionInitiate(...)` pure policy in `cityLife.ts` and call it from `runtime.ts` after the salt-marsh productive-build block. Gates: tile ≠ salt-marsh, `areaState.resources.economy < 50` (Slice-3 proxy for the §11.8 infrastructure resource — not yet modelled), no open civ-evo project on this tile, no open civ-evo project by this NPC.
+- [x] 3.2 Add `decideCivEvoConstructionInitiate(...)` pure policy in `cityLife.ts` and call it from `runtime.ts` after the salt-marsh productive-build block. Gates: tile ≠ salt-marsh, `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD` (currently 80 for demo visibility; Slice-3 proxy for the §11.8 infrastructure resource — not yet modelled), no open civ-evo project on this tile, no open civ-evo project by this NPC.
 - [x] 3.3 Suppression of re-emission is achieved by the reducer's idempotent `projectId` hash + the open-project check, so the NPC's agent task does not need to be mutated authoritatively. `'build'` agent kind is reserved for the projection layer (Slice 6 / 7).
 - [x] 3.4 Behavioral tests in `cityLife.test.ts` cover: emission on low economy + empty tile, suppression on rich economy, suppression on salt-marsh tile, same-tile-race rejection, per-NPC single-project rejection, salt-marsh's own settlement not blocking civ-evo, re-emission allowed after the previous project completes.
 
 ## 4. construction_projects Projection
 
-- [ ] 4.1 Create `packages/server/src/projections/constructionProjects.ts`.
-- [ ] 4.2 Implement `rebuildFromEvents(events)` over `CONSTRUCTION_INITIATED` + `CONSTRUCTION_PROJECT_PROGRESS` + `BUILDING_CONSTRUCTED` in tick order.
-- [ ] 4.3 Expose `getInProgressByTile(tileId)` and `getByProjectId(id)`.
-- [ ] 4.4 Canonical-hash test: projection rebuilt twice from the same EventLog MUST produce identical canonical hash.
-- [ ] 4.5 Cross-projection consistency test: `construction_projects` rows agree with `lifeExpansion.constructionProjects` on `progress`, `targetProgress`, `initiatedByNpcId`, `startedAtTick`.
+- [x] 4.1 Create `packages/server/src/projections/constructionProjects.ts`.
+- [x] 4.2 Implement `rebuildFromEvents(events)` over `CONSTRUCTION_INITIATED` + `CONSTRUCTION_PROJECT_PROGRESS` + `BUILDING_CONSTRUCTED` in tick order.
+- [x] 4.3 Expose `getInProgressByTile(tileId)` and `getByProjectId(id)`.
+- [x] 4.4 Canonical-hash test: projection rebuilt twice from the same EventLog MUST produce identical canonical hash.
+- [x] 4.5 Cross-projection consistency test: `construction_projects` rows agree with `lifeExpansion.constructionProjects` on `progress`, `targetProgress`, `initiatedByNpcId`, `startedAtTick`.
 
 ## 5. API Surface
 
-- [ ] 5.1 Extend `GET /api/buildings?tileId=X` in `packages/server/src/http/buildingsRouter.ts` to include `inProgress: [{ projectId, buildingId, progress, targetProgress, initiatedByNpcId, startedAtTick }]`.
-- [ ] 5.2 Source `inProgress` from `construction_projects.getInProgressByTile(tileId)`.
-- [ ] 5.3 Integration test: open project → response includes it; after `BUILDING_CONSTRUCTED` → response moves it out of `inProgress` and into completed buildings.
+- [x] 5.1 Extend `GET /api/buildings?tileId=X` in `packages/server/src/http/buildingsRouter.ts` to include `inProgress: [{ projectId, buildingId, progress, targetProgress, initiatedByNpcId, startedAtTick }]`.
+- [x] 5.2 Source `inProgress` from `construction_projects.getInProgressByTile(tileId)`.
+- [x] 5.3 Integration test: open project → response includes it; after `BUILDING_CONSTRUCTED` → response moves it out of `inProgress` and into completed buildings.
 
 ## 6. Frontend
 
-- [ ] 6.1 Extend `constructionActivitiesFor()` in `packages/web/src/pages/constructionActivity.ts` to return NPC-initiated in-progress projects as `MapConstructionActivity` entries.
-- [ ] 6.2 Confirm `MapScene.drawConstructionSites()` consumes the new entries with no code change.
+- [x] 6.1 Extend `constructionActivitiesFor()` in `packages/web/src/pages/constructionActivity.ts` to return NPC-initiated in-progress projects as `MapConstructionActivity` entries.
+- [x] 6.2 Confirm `MapScene.drawConstructionSites()` consumes the new entries with no code change.
 - [ ] 6.3 UI smoke test: Hub display shows NPC-initiated project progress alongside expansion progress.
 
 ## 7. End-to-End Determinism
@@ -47,7 +47,7 @@
 
 ## 8. Docs + Release
 
-- [ ] 8.1 Update PROGRESS.md with this slice.
-- [ ] 8.2 Update ARCHITECTURE.md §11.8 status (construction sub-item: autonomous initiation done).
-- [ ] 8.3 Add ROADMAP.md entry pointing to remaining §11.8 sub-items (production, settlement, faction, skill).
+- [x] 8.1 Update PROGRESS.md with this slice.
+- [x] 8.2 Update ARCHITECTURE.md §11.8 status (construction sub-item: autonomous initiation done).
+- [x] 8.3 Add ROADMAP.md entry pointing to remaining §11.8 sub-items (production, settlement, faction, skill).
 - [ ] 8.4 Run completion-checklist: tests, build, OpenSpec validate, diff review, version bump, commit, push.

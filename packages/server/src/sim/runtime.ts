@@ -90,6 +90,7 @@ import {
   type LifeExpansionState,
   type NpcLifeView
 } from './cityLife.js'
+import { ConstructionProjectsProjection, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -210,6 +211,7 @@ export class SimulationRuntime {
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
+  private readonly constructionProjects = new ConstructionProjectsProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -385,6 +387,11 @@ export class SimulationRuntime {
       tileId,
       this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
     )
+  }
+
+  getInProgressConstructionProjects(tileId?: string): readonly ConstructionProjectRow[] {
+    if (tileId) return this.constructionProjects.getInProgressByTile(tileId)
+    return this.constructionProjects.list().filter((project) => project.completedAtTick === null)
   }
 
   getAllBuildings(): readonly BuildingRuntimeView[] {
@@ -620,6 +627,7 @@ export class SimulationRuntime {
     for (const ev of committed) {
       if (this.npcMemory) this.npcMemory.project(ev)
       if (this.npcRelationships) this.npcRelationships.project(ev)
+      this.constructionProjects.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -1279,6 +1287,7 @@ export class SimulationRuntime {
       for (const ev of committed) {
         if (this.npcMemory) this.npcMemory.project(ev)
         if (this.npcRelationships) this.npcRelationships.project(ev)
+        this.constructionProjects.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
@@ -1614,6 +1623,7 @@ export class SimulationRuntime {
     if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
 
     this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
+    this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
 
     const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {

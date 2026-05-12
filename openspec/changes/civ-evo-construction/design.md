@@ -43,7 +43,7 @@ Alternative considered: store the build task as a world-level fact. Rejected bec
 
 ### Decision: Policy hook lives in `cityLife.ts` next to existing reducers
 
-When `goal.kind === 'build_city'` and `areaState.resources.infrastructure < 45` and the NPC has no active `build` task and no other NPC has an open project on the same `tileId`, emit `CONSTRUCTION_INITIATE`. The `45` threshold and `build_city` goal name already exist in `cityLife.ts`; this is a hook addition, not a new subsystem.
+When `goal.kind === 'build_city'` and `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD` and the NPC has no active `build` task and no other NPC has an open project on the same `tileId`, emit `CONSTRUCTION_INITIATE`. The threshold is currently `80` for demo visibility; a later slice should replace this proxy with a real infrastructure resource.
 
 Alternative considered: a standalone construction policy module. Rejected for the first slice because city/infrastructure pressure is already computed in `cityLife.ts` and a separate file would duplicate inputs.
 
