@@ -31,10 +31,27 @@ developer. Keep latest status at the top.
 - `npm test` passed: server 22 files / 166 tests, web 10 files / 28 tests.
 - `npm run build:server` passed.
 - `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `git diff --check` passed.
+- Gemini staged review reported no findings.
+
+### CI/CD + Live Verification
+
+- Code commit `72f7b7b` pushed to `main`.
+- GitHub Actions CI run `25712965531` passed.
+- GitHub Actions Deploy Dev run `25712965526` passed.
+- Live `v0.15.39` verification after deploy:
+  - `/healthz`: `200`, `version=0.15.39`, `tick=93423`.
+  - 10 consecutive `/api/npcs` samples over live ticks `93423..93432` had routed
+    Hub travellers in every sample, with counts ranging from `1` to `4`.
+  - Sample routed traveller IDs included `desert.starreader.gu_lao`,
+    `dock.surfer.jiang_bo_ran`, `central.exchange.shen_ruo_yun`,
+    `ruin.singer.zhou_you_you`, `central.noodle.a_cheng`, and
+    `port.concierge.an_qing_an`.
 
 ### Still Open
 
-- Gemini review, commit, push, CI/CD, and live evidence are in progress.
+- If Hub still feels underpopulated, add non-NPC aggregate district activity
+  indicators; do not render child area NPCs on the parent map.
 
 ## 2026-05-12 — v0.15.37 Hub Parent/Child NPC Layer Fix
 

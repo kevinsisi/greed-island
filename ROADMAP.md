@@ -4,7 +4,7 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
-## v0.15.39 🚧 in progress — 2026-05-12
+## v0.15.39 ✅ shipped — 2026-05-12
 
 **主題：cross-district traveller cadence**
 
@@ -22,7 +22,13 @@
 - ✅ Local verification: focused `npcEngine`, full `npm test`,
   `npm run build:server`, and `npm run build:web` passed; web build still has
   the existing Vite chunk-size warning.
-- 🚧 Gemini review, commit, push, CI/CD, and live evidence are in progress.
+- ✅ Gemini staged review reported no findings.
+- ✅ Commit `72f7b7b` pushed to `main`; CI run `25712965531` and Deploy Dev run
+  `25712965526` passed.
+- ✅ Live verification: `v0.15.39`, 10 consecutive `/api/npcs` samples over ticks
+  `93423..93432` each had routed Hub travellers, with counts from `1` to `4`.
+- 🚧 If Hub still feels underpopulated, add non-NPC aggregate district activity
+  indicators; do not render child area NPCs on the parent map.
 
 ## v0.15.37 ✅ shipped — 2026-05-12
 
