@@ -23,19 +23,16 @@ export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): Np
 export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'zh'): MapNpc[] {
   return npcs
     .filter((npc) => isKnownDistrictId(npc.location))
-    // Hub is the living-world overview, not a transit-only layer. Keep outdoor
-    // NPCs visible here so the main map does not look empty while city life is
-    // happening inside districts; building interiors still own indoor NPCs.
-    .filter((npc) => !npc.buildingId)
     .map((npc) => {
       const route = normalizeTravelRoute(npc.travelRoute)
+      if (npc.buildingId || npc.activity !== 'move' || !route) return null
       const base: MapNpc = {
         id: npc.id,
         name: npc.name,
         shortName: npc.name.charAt(0),
         districtId: npc.location as DistrictId
       }
-      if (route) base.travelRoute = route
+      base.travelRoute = route
       if (typeof npc.color === 'number') base.color = npc.color
       if (npc.activity) base.activity = npc.activity
       if (typeof npc.subCol === 'number') base.subCol = npc.subCol
@@ -45,6 +42,7 @@ export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'z
       if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
       return base
     })
+    .filter((npc): npc is MapNpc => npc !== null)
 }
 
 function normalizeTravelRoute(route: NpcSummary['travelRoute']): MapNpc['travelRoute'] | null {

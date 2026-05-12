@@ -3,6 +3,32 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.37 Hub Parent/Child NPC Layer Fix
+
+### Completed Locally
+
+- Root cause: `v0.15.36` changed Hub projection to show every outdoor district
+  NPC, so the parent Hub map rendered NPCs that already belonged to child area
+  maps.
+- Restored the one-NPC-one-map rule for Hub projection: parent Hub only renders
+  NPCs that are actively crossing districts with a valid `travelRoute`.
+- Local outdoor NPCs and arrived expansion NPCs now stay on their child area map
+  only; building occupants remain owned by building maps.
+- Added regression coverage proving local/arrived child-map NPCs are excluded
+  from Hub, while routed travellers remain visible on Hub.
+- Bumped app version from `0.15.36` to `0.15.37`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/web -- npcProjection` passed: 6 tests.
+- `npm test` passed: server 22 files / 163 tests, web 10 files / 28 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+
+### Still Open
+
+- Commit, push, CI/CD, and live verification are in progress.
+
 ## 2026-05-12 — v0.15.36 Restart-Safe Expansion Hydration
 
 ### Completed Locally
