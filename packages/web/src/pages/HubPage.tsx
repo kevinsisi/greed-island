@@ -12,9 +12,10 @@ import {
   type DistrictId,
   isDistrict,
 } from '../game/districts'
-import type { FactionLeanId, MapAreaOverlay, MapNpc, MapPlayer } from '../game/MapScene'
+import type { FactionLeanId, MapAreaOverlay, MapConstructionActivity, MapNpc, MapPlayer } from '../game/MapScene'
 import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
+import { constructionActivitiesFor } from './constructionActivity'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
@@ -29,7 +30,7 @@ type HubPosition = { x: number; y: number; z: number }
  */
 export function HubPage() {
   const { t, locale } = useI18n()
-  const { npcs, map } = useWorldState()
+  const { npcs, map, events } = useWorldState()
   const { token, account } = useAuth()
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
@@ -83,6 +84,10 @@ export function HubPage() {
   const mapNpcs = useMemo<MapNpc[]>(() => {
     return hubMapNpcs(npcs, locale)
   }, [locale, npcs])
+
+  const constructionActivities = useMemo<MapConstructionActivity[]>(() => {
+    return constructionActivitiesFor(events, npcs)
+  }, [events, npcs])
 
   const mapPlayers = useMemo<MapPlayer[]>(() => {
     return nearbyPlayers.map((player) => ({
@@ -195,6 +200,7 @@ export function HubPage() {
           onPositionChange={handleHubPositionChange}
           areaOverlays={areaOverlays}
           activeDistrictIds={activeDistrictIds}
+          constructionActivities={constructionActivities}
           controlsEnabled={!!token}
         />
 

@@ -19,6 +19,7 @@ import {
 } from './districts'
 import { CITY_DECORATIONS } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
 import type { NpcActivity } from '../state/types'
 
 export interface MapNpc {
@@ -73,6 +74,13 @@ export interface MapPlayer {
   y?: number | null
 }
 
+export interface MapConstructionActivity {
+  districtId: DistrictId
+  progressAfter: number
+  targetProgress: number
+  builderNames: string[]
+}
+
 export interface MapSceneCallbacks {
   onAreaEnter: (districtId: DistrictId) => void
   onNpcInteract: (npcId: string) => void
@@ -95,6 +103,8 @@ export interface MapSceneInit {
   areaOverlays?: MapAreaOverlay[]
   /** District ids returned by `/api/map`; expansion districts are locked until present. */
   activeDistrictIds?: DistrictId[]
+  /** Recent authoritative construction progress, used to show who is building locked expansion areas. */
+  constructionActivities?: MapConstructionActivity[]
   /** Guests can browse the world, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
@@ -144,12 +154,14 @@ export class MapScene extends Phaser.Scene {
   private hudStrings: MapSceneInit['hudStrings'] = { interact: '', enterArea: '' }
   private controlsEnabled = true
   private activeDistrictIds = new Set<DistrictId>(DISTRICT_IDS)
+  private constructionActivities: MapConstructionActivity[] = []
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'SPACE', Phaser.Input.Keyboard.Key>
 
   private pointerTarget: { x: number; y: number } | null = null
+  private lastWalkablePosition: { x: number; y: number } | null = null
 
   private currentDistrict: DistrictId = 't_road'
   private nearbyNpcId: string | null = null
@@ -184,6 +196,7 @@ export class MapScene extends Phaser.Scene {
     this.initialPosition = data.initialPosition ?? null
     this.controlsEnabled = data.controlsEnabled ?? true
     this.activeDistrictIds = new Set(data.activeDistrictIds ?? DISTRICT_IDS)
+    this.constructionActivities = data.constructionActivities ?? []
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -203,6 +216,7 @@ export class MapScene extends Phaser.Scene {
     this.drawDecorations()
     this.refreshAreaOverlay()
     this.drawDistrictLabels()
+    this.drawConstructionSites()
     this.spawnPlayer()
     this.refreshPeerSprites()
     this.spawnNpcs()
@@ -235,6 +249,7 @@ export class MapScene extends Phaser.Scene {
     hudStrings?: MapSceneInit['hudStrings']
     areaOverlays?: MapAreaOverlay[]
     activeDistrictIds?: DistrictId[]
+    constructionActivities?: MapConstructionActivity[]
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -269,7 +284,29 @@ export class MapScene extends Phaser.Scene {
       this.areaOverlays = payload.areaOverlays
       this.refreshAreaOverlay()
     }
-    if (payload.activeDistrictIds) this.activeDistrictIds = new Set(payload.activeDistrictIds)
+    const hasConstructionUpdate = payload.constructionActivities !== undefined
+    if (hasConstructionUpdate) this.constructionActivities = payload.constructionActivities ?? []
+    if (payload.activeDistrictIds) {
+      const nextActiveDistrictIds = new Set(payload.activeDistrictIds)
+      if (!sameDistrictSet(this.activeDistrictIds, nextActiveDistrictIds)) {
+        this.activeDistrictIds = nextActiveDistrictIds
+        this.scene.restart({
+          callbacks: this.callbacks,
+          npcs: this.npcs,
+          players: this.players,
+          playerName: this.playerName,
+          locale: this.locale,
+          hudStrings: this.hudStrings,
+          initialPosition: this.getPlayerPosition(),
+          areaOverlays: this.areaOverlays,
+          activeDistrictIds: Array.from(this.activeDistrictIds),
+          constructionActivities: this.constructionActivities,
+          controlsEnabled: this.controlsEnabled
+        } satisfies MapSceneInit)
+        return
+      }
+    }
+    if (hasConstructionUpdate) this.redrawConstructionSites()
     this.redrawDistrictLabels()
   }
 
@@ -281,6 +318,7 @@ export class MapScene extends Phaser.Scene {
       return
     }
     this.handleMovement(delta)
+    this.enforceWalkablePosition()
     this.syncPlayerNameLabel()
     this.checkDistrictTransition()
     this.checkNpcProximity()
@@ -545,7 +583,8 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  private districtLabels: Phaser.GameObjects.Text[] = []
+  private districtLabels = new Map<DistrictId, Phaser.GameObjects.Text>()
+  private constructionSiteObjects: Phaser.GameObjects.GameObject[] = []
 
   private drawDistrictLabels(): void {
     for (const id of DISTRICT_IDS) {
@@ -566,17 +605,13 @@ export class MapScene extends Phaser.Scene {
       )
       text.setOrigin(0.5, 0.5)
       text.setDepth(50)
-      this.districtLabels.push(text)
+      this.districtLabels.set(id, text)
     }
   }
 
   private redrawDistrictLabels(): void {
-    let i = 0
-    for (const id of DISTRICT_IDS) {
-      const t = this.districtLabels[i]
-      if (!t) continue
-      t.setText(this.labelFor(DISTRICTS[id]))
-      i += 1
+    for (const [id, text] of this.districtLabels) {
+      text.setText(this.labelFor(DISTRICTS[id]))
     }
   }
 
@@ -589,6 +624,79 @@ export class MapScene extends Phaser.Scene {
     return isDistrict(id) && this.activeDistrictIds.has(id)
   }
 
+  private isWalkableAtPixel(x: number, y: number): boolean {
+    return isHubWalkablePixel(x, y, this.activeDistrictIds)
+  }
+
+  private drawConstructionSites(): void {
+    for (const activity of this.constructionActivities) {
+      if (this.isActiveDistrict(activity.districtId)) continue
+      const def = DISTRICTS[activity.districtId]
+      const x = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
+      const y = def.anchor.row * TILE_SIZE - TILE_SIZE * 0.25
+      const progressText = `${Math.max(0, activity.progressAfter)}/${Math.max(1, activity.targetProgress)}`
+      const builderText = activity.builderNames.slice(0, 2).join('、')
+      const label = this.locale === 'zh'
+        ? `施工隊 ${progressText}${builderText ? `\n${builderText}` : ''}`
+        : `Crew ${progressText}${builderText ? `\n${builderText}` : ''}`
+      const bg = this.add.rectangle(x, y + 12, 132, builderText ? 45 : 30, 0x141820, 0.86)
+      bg.setStrokeStyle(2, 0xf6c560, 0.9)
+      bg.setDepth(54)
+      this.constructionSiteObjects.push(bg)
+
+      const sign = this.add.text(x, y + 12, label, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 3,
+        align: 'center'
+      })
+      sign.setOrigin(0.5, 0.5)
+      sign.setDepth(55)
+      this.constructionSiteObjects.push(sign)
+
+      const workerOffsets = [
+        { dx: -42, dy: -8, glyph: '👷' },
+        { dx: 42, dy: -5, glyph: '🔨' },
+        { dx: 0, dy: 38, glyph: '🪵' }
+      ]
+      for (const marker of workerOffsets) {
+        const worker = this.add.text(x + marker.dx, y + marker.dy, marker.glyph, {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: '24px',
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        })
+        worker.setOrigin(0.5, 0.5)
+        worker.setDepth(56)
+        this.constructionSiteObjects.push(worker)
+        this.envTweens.push(
+          this.tweens.add({
+            targets: worker,
+            y: worker.y + 3,
+            duration: 900 + Math.abs(marker.dx) * 8,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          })
+        )
+      }
+    }
+  }
+
+  private redrawConstructionSites(): void {
+    for (const object of this.constructionSiteObjects) {
+      this.tweens.killTweensOf(object)
+      object.destroy()
+    }
+    this.constructionSiteObjects = []
+    this.drawConstructionSites()
+  }
+
   // ---------- 玩家 / NPC sprite ----------
 
   private spawnPlayer(): void {
@@ -598,15 +706,11 @@ export class MapScene extends Phaser.Scene {
     const defaultX = CANVAS_WIDTH / 2
     const defaultY = CANVAS_HEIGHT / 2 - TILE_SIZE
     const saved = this.initialPosition
-    const startX = saved
-      ? Math.min(Math.max(saved.x, 0), CANVAS_WIDTH)
-      : defaultX
-    const startY = saved
-      ? Math.min(Math.max(saved.y, 0), CANVAS_HEIGHT)
-      : defaultY
+    const { x: startX, y: startY } = resolveHubSpawnPosition(saved, { x: defaultX, y: defaultY }, this.activeDistrictIds)
     this.player = this.physics.add.sprite(startX, startY, tex)
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)
+    this.lastWalkablePosition = { x: this.player.x, y: this.player.y }
     this.refreshPlayerNameLabel()
     // 觀察玩家進入起始地塊
     this.currentDistrict = districtAtPixel(this.player.x, this.player.y)
@@ -1083,11 +1187,13 @@ export class MapScene extends Phaser.Scene {
         this.suppressNextPointerTarget = false
         return
       }
+      if (!this.isWalkableAtPixel(pointer.worldX, pointer.worldY)) return
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (!this.controlsEnabled) return
       if (pointer.isDown) {
+        if (!this.isWalkableAtPixel(pointer.worldX, pointer.worldY)) return
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
     })
@@ -1194,6 +1300,17 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
+  private enforceWalkablePosition(): void {
+    if (this.isWalkableAtPixel(this.player.x, this.player.y)) {
+      this.lastWalkablePosition = { x: this.player.x, y: this.player.y }
+      return
+    }
+    if (!this.lastWalkablePosition) return
+    this.player.setPosition(this.lastWalkablePosition.x, this.lastWalkablePosition.y)
+    this.player.setVelocity(0, 0)
+    this.pointerTarget = null
+  }
+
   private checkDistrictTransition(): void {
     if (!this.controlsEnabled) return
     const here = districtAtPixel(this.player.x, this.player.y)
@@ -1236,4 +1353,12 @@ export class MapScene extends Phaser.Scene {
       this.interactPrompt.setVisible(false)
     }
   }
+}
+
+function sameDistrictSet(a: ReadonlySet<DistrictId>, b: ReadonlySet<DistrictId>): boolean {
+  if (a.size !== b.size) return false
+  for (const id of a) {
+    if (!b.has(id)) return false
+  }
+  return true
 }

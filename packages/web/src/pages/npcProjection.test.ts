@@ -64,6 +64,35 @@ describe('NPC scene projections', () => {
     })
   })
 
+  it('keeps expansion-district travellers visible on the hub overview', () => {
+    const people = [
+      npc({
+        id: 'builder',
+        activity: 'move',
+        buildingId: null,
+        location: 't_salt_marsh',
+        travelRoute: {
+          fromTile: 't_dock',
+          toTile: 't_salt_marsh',
+          targetTile: 't_salt_marsh',
+          startedAtTick: 24
+        }
+      })
+    ]
+
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual(['builder'])
+    expect(hubMapNpcs(people)[0]?.travelRoute?.targetDistrictId).toBe('t_salt_marsh')
+  })
+
+  it('keeps arrived expansion-district NPCs off the hub overview', () => {
+    const people = [
+      npc({ id: 'builder', activity: 'work', buildingId: null, location: 't_salt_marsh' })
+    ]
+
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
+    expect(areaOutdoorNpcs(people, 't_salt_marsh').map((p) => p.id)).toEqual(['builder'])
+  })
+
   it('keeps local outdoor NPCs on the area map only', () => {
     const people = [
       npc({ id: 'local', activity: 'trade', buildingId: null, location: 't_central' })

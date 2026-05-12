@@ -10,7 +10,8 @@ const KNOWN_DISTRICTS = new Set<DistrictId>([
   't_desert',
   't_central',
   't_ruin',
-  't_dock'
+  't_dock',
+  't_salt_marsh'
 ])
 
 export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): NpcSummary[] {
