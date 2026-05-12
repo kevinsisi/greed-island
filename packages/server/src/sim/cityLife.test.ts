@@ -319,4 +319,60 @@ describe('city life projection', () => {
       expect(decision).not.toBeNull()
     })
   })
+
+  describe('Slice 7: E2E lifecycle — initiate → progress → complete', () => {
+    it('advances an NPC-initiated project through withConstructionProgress with the correct projectId', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 6,
+        tick: 100
+      })
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        startedAtTick: 100
+      })
+      let record = expansion.constructionProjects[projectId]!
+      expect(record.progress).toBe(0)
+      expect(record.completedAtTick).toBeNull()
+
+      // advance by 2
+      expansion = withConstructionProgress(expansion, { tick: 101, delta: 2, projectId })
+      record = expansion.constructionProjects[projectId]!
+      expect(record.progress).toBe(2)
+      expect(record.completedAtTick).toBeNull()
+
+      // advance by 4 → completes (2+4=6 >= 6)
+      expansion = withConstructionProgress(expansion, { tick: 102, delta: 4, projectId })
+      record = expansion.constructionProjects[projectId]!
+      expect(record.progress).toBe(6)
+      expect(record.completedAtTick).toBe(102)
+    })
+
+    it('clamps progress to targetProgress and does not over-complete', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 5,
+        tick: 100
+      })
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        startedAtTick: 100
+      })
+      // advance by 10, but target is 5 → clamped to 5
+      expansion = withConstructionProgress(expansion, { tick: 101, delta: 10, projectId })
+      const record = expansion.constructionProjects[projectId]!
+      expect(record.progress).toBe(5)
+      expect(record.completedAtTick).toBe(101)
+    })
+  })
 })

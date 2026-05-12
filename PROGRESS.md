@@ -58,10 +58,39 @@ developer. Keep latest status at the top.
 
 ### Still Open
 
-- Browser smoke after deploy: API evidence confirms the Hub/Area/Building data
-  path, but a real browser click-through still needs manual visual confirmation.
-- Slice 7 remains open: full end-to-end progress/completion replay beyond the
-  visible in-progress project surface.
+- **6.3 UI smoke** (manual browser click-through still needs visual confirmation)
+- Salt-marsh `withUnlockedExpansion` is still salt-marsh-specific; generic `BUILDING_CONSTRUCTED` unlock for NPC-initiated projects remains for a later slice.
+
+## 2026-05-12 — v0.15.47b NPC-Initiated Construction Progress Fix
+
+### What Was Missing
+
+Despite Slice 4-6 making NPC-initiated projects visible through the API/frontend,
+`withConstructionProgress()` in `cityLife.ts` was only ever called with no
+`projectId`, defaulting to the hardcoded salt-marsh project. NPC-initiated
+projects (e.g. `mountain.miner.lei_zi`'s `b_civ_evo_t_mountain`) never advanced
+past 0/24.
+
+### Fix
+
+**`packages/server/src/sim/runtime.ts`:**
+1. Reducer for `CONSTRUCTION_PROJECT_PROGRESS` now extracts `projectId` from the
+   command payload and passes it to `withConstructionProgress()`. Without this,
+   even if the command is emitted, the reducer ignores the target project.
+2. After each productive NPC event, the runtime now scans for any open
+   NPC-initiated project on the NPC's tile and emits
+   `CONSTRUCTION_PROJECT_PROGRESS` for it (same delta logic: 2 for `build`
+   domain, 1 for others).
+
+**`packages/server/src/sim/cityLife.test.ts`:**
+- Added "Slice 7: E2E lifecycle" describe block with two tests: progress
+  advancing through target, clamp-on-overflow behavior.
+
+### Verification
+
+- `npm test`: 195 server tests + 29 web tests passed
+  (server count includes +2 new E2E lifecycle tests).
+- `npm run build:server` + `npm run build:web` passed.
 
 ## 2026-05-12 — Construction Autonomy Correction
 

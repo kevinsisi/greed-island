@@ -884,6 +884,36 @@ export class SimulationRuntime {
             )
           }
         }
+        // v0.15.47: advance any open NPC-initiated project on this tile
+        for (const project of Object.values(this.lifeExpansion.constructionProjects)) {
+          if (project.completedAtTick !== null) continue
+          if (project.projectId === SALT_MARSH_PROJECT_ID) continue
+          if (project.targetTileId !== event.tile) continue
+          const delta = event.domain === 'build' ? 2 : 1
+          const projectName = profile?.name.zh ?? event.npcId
+          const tileName = TILE_NAME_BY_ID[event.tile] ?? event.tile
+          const progressAfter = Math.min(project.targetProgress, project.progress + delta)
+          commands.push(
+            makeLivingWorldCommand(
+              'CONSTRUCTION_PROJECT_PROGRESS',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                projectId: project.projectId,
+                kind: project.kind,
+                targetTileId: project.targetTileId,
+                buildingId: project.buildingId,
+                npcId: event.npcId,
+                delta,
+                progressAfter,
+                targetProgress: project.targetProgress,
+                narration: `${projectName}在${tileName}的自主建案進度前進 ${delta}（${progressAfter}/${project.targetProgress}）。`
+              }
+            )
+          )
+        }
       } else if (event.kind === 'interact') {
         const [a, b] = event.participants
         commands.push(
@@ -1214,10 +1244,11 @@ export class SimulationRuntime {
           })
           lifeExpansionChanged = true
         } else if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
-          const payload = cmd.payload as { delta: number }
+          const payload = cmd.payload as { delta: number; projectId?: string }
           this.lifeExpansion = withConstructionProgress(this.lifeExpansion, {
             tick: nextTick,
-            delta: payload.delta
+            delta: payload.delta,
+            ...(payload.projectId !== undefined ? { projectId: payload.projectId } : {})
           })
           lifeExpansionChanged = true
         } else if (cmd.commandType === 'MAP_TILE_UNLOCKED' || cmd.commandType === 'BUILDING_CONSTRUCTED') {

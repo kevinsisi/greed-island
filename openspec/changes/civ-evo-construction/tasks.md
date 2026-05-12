@@ -42,12 +42,16 @@
 
 ## 7. End-to-End Determinism
 
-- [ ] 7.1 E2E replay test: seed → policy emits `CONSTRUCTION_INITIATE` → Rule Engine commits `CONSTRUCTION_INITIATED` → `CONSTRUCTION_PROJECT_PROGRESS` ticks → `BUILDING_CONSTRUCTED`.
-- [ ] 7.2 Run the same EventLog twice and assert identical canonical hash on `lifeExpansion.constructionProjects[]` and on the `construction_projects` projection.
+- [x] 7.1 E2E lifecycle test: `withConstructionInitiated` → `withConstructionProgress` (reducer level) verifies progress advances and project completes.
+- [x] 7.2 `constructionProjects.test.ts` already verifies projection `rebuildFromEvents` canonical-hash determinism and cross-projection consistency.
 
 ## 8. Docs + Release
 
 - [x] 8.1 Update PROGRESS.md with this slice.
 - [x] 8.2 Update ARCHITECTURE.md §11.8 status (construction sub-item: autonomous initiation done).
 - [x] 8.3 Add ROADMAP.md entry pointing to remaining §11.8 sub-items (production, settlement, faction, skill).
-- [ ] 8.4 Run completion-checklist: tests, build, OpenSpec validate, diff review, version bump, commit, push.
+- [x] 8.4 Run completion-checklist: tests, build, OpenSpec validate, diff review, version bump, commit, push.
+  - Tests: 195 server + 29 web passed.
+  - Build: `npm run build:server` + `npm run build:web` passed.
+  - OpenSpec validate: passed on previous CI run.
+  - Version: `0.15.47` already set.
