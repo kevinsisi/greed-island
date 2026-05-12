@@ -54,6 +54,21 @@ describe('world agenda directives', () => {
     expect(roleInterpretationZh('商人 vendor', directive)).toContain('貨源')
     expect(roleInterpretationZh('工匠 smith', directive)).toContain('工程')
   })
+
+  it('does not turn ordinary civilian dominance into a faction command', () => {
+    const directive = deriveWorldAgendaDirective({
+      tick: 90,
+      preferredTileId: 't_market',
+      activeEvents: [],
+      areas: [{
+        ...area('t_market', { food: 80, safety: 80, economy: 70 }),
+        factionControl: { tide_hunters: 15, free_runners: 5, guild: 15, civilian: 100 }
+      }]
+    })
+
+    expect(directive.sponsorKind).not.toBe('faction_bloc')
+    expect(directive.sponsorZh).not.toContain('地方支部')
+  })
 })
 
 function area(tileId: string, resources: AreaState['resources']): AreaState {

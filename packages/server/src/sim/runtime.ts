@@ -1688,7 +1688,7 @@ export class SimulationRuntime {
     const domainText = productiveDomainText(domain)
     const agenda = this.worldAgendaFor(fallbackTile, tick)
     return makeMotivation(
-      `${agenda.sponsorZh}對${agenda.scopeNameZh}的上位指令是「${agenda.directiveZh}」；原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，個人最高壓力是${needLabel(primary.key)} ${primary.value}，因此這次${domainText}不是隨機善行，而是對制度壓力的角色回應。`,
+      `${agenda.sponsorZh}對${agenda.scopeNameZh}的上位指令是「${agenda.directiveZh}」；原因是：${agenda.rationaleZh}${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，個人最高壓力是${needLabel(primary.key)} ${primary.value}，因此這次${domainText}不是隨機善行，而是對制度壓力的角色回應。`,
       `${purpose}；上位指令 ${agenda.id}`
     )
   }
@@ -1721,7 +1721,7 @@ export class SimulationRuntime {
       sourceGoalKind: life.goal.kind,
       sourceNpcId: npcId,
       sourceTileId: fallbackTile,
-      explanation: `上位指令：${agenda.sponsorZh}正在${agenda.scopeNameZh}推動「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}；他在${sourceTileName}的個人目標是「${life.goal.narration}」，${needLabel(primary.key)}壓力 ${primary.value}，所以${targetTileName}拓荒站成為可被執行的制度工程。`
+      explanation: `上位指令：${agenda.sponsorZh}正在${agenda.scopeNameZh}推動「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}；他在${sourceTileName}的個人目標是「${life.goal.narration}」，${needLabel(primary.key)}壓力 ${primary.value}，所以${targetTileName}拓荒站成為可被執行的制度工程。`
     }
   }
 
@@ -1753,7 +1753,7 @@ export class SimulationRuntime {
       sourceGoalKind: life.goal.kind,
       sourceNpcId: npcId,
       sourceTileId: targetTileId,
-      explanation: `上位指令：${agenda.sponsorZh}把${targetTileName}列入「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，並用自己的 ${goldCost} 金承擔開工成本；個人目標「${life.goal.narration}」只是他願意響應上位指令的原因，不是世界憑空蓋房的原因。`
+      explanation: `上位指令：${agenda.sponsorZh}把${targetTileName}列入「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，並用自己的 ${goldCost} 金承擔開工成本；個人目標「${life.goal.narration}」只是他願意響應上位指令的原因，不是世界憑空蓋房的原因。`
     }
   }
 

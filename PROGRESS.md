@@ -44,6 +44,10 @@ developer. Keep latest status at the top.
   then role interpretation, then personal pressure, so city-scale actions read
   as top-down institutional/faction/hidden-overseer pressure rather than a
   generic NPC motivation pool.
+- Follow-up agenda tuning: ordinary `civilian` dominance no longer becomes a
+  faction command (`平民地方支部`) because live observation showed it flattened
+  every district into the same sponsor. Active world events now outrank local
+  faction/resource directives, so hidden-overseer pressure can actually surface.
 
 ### Verification
 
@@ -67,6 +71,7 @@ developer. Keep latest status at the top.
 - Demand/cost focused tests: `npm run test -w @greed-island/server -- cityLife livingWorld runtimeExpansion` passed: 64 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
 - Chronicle clarity focused tests: `npm run test -w @greed-island/server -- livingWorld chronicleRenderer` passed: 50 tests. `npm run test -w @greed-island/web -- eventVisibility TimelinePage` passed: 6 tests. Server and web typechecks passed.
 - World agenda focused tests: `npm run test -w @greed-island/server -- worldAgenda runtimeExpansion livingWorld` passed: 43 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. `npx openspec validate world-agenda-directives --strict` passed.
+- Agenda priority focused tests: `npm run test -w @greed-island/server -- worldAgenda runtimeExpansion` passed: 5 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. Full `npm test` passed: 213 server tests + 31 web tests. `npm run build:server` passed. `npm run build:web` passed with only the known Vite chunk-size warning. `npx openspec validate world-agenda-directives --strict` passed.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 

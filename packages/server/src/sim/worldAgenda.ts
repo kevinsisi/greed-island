@@ -88,6 +88,7 @@ function dominantFactionDirective(area: AreaState, tick: number): WorldAgendaDir
   const entries = Object.entries(area.factionControl) as Array<[FactionId, number]>
   const [faction, value] = [...entries].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0]
   if (!faction || value < 60) return null
+  if (faction === 'civilian') return null
   const label = FACTION_LABEL_ZH[faction]
   const tileName = TILE_NAME_BY_ID[area.tileId] ?? area.tileId
   return {
@@ -114,7 +115,7 @@ function worldEventDirective(area: AreaState, activeEvents: readonly ActiveWorld
     scopeTileId: area.tileId,
     scopeNameZh: tileName,
     pressureKind: 'world_event',
-    pressureScore: 75,
+    pressureScore: 120,
     directiveZh: `利用「${event.text.zh}」重排${tileName}的人流與資源`,
     rationaleZh: `世界事件「${event.text.zh}」仍在作用，島嶼背後的暗流把它當成推動局勢偏移的槓桿。`
   }
