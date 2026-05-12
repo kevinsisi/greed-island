@@ -82,6 +82,13 @@ describe('living-world rule engine', () => {
         nameEn: 'Tideborn',
         narration: '...'
       }),
+      makeLivingWorldCommand('CONSTRUCTION_INITIATE', 'npc-a', 'npc', 3, 3, {
+        npcId: 'npc-a',
+        tileId: 't_central',
+        buildingId: 'b_central_well',
+        duration: 20,
+        narration: '阿鬼決定在中央區起一口井。'
+      }),
       makeLivingWorldCommand('CONSTRUCTION_PROJECT_PROGRESS', 'npc-a', 'npc', 3, 3, {
         projectId: 'project-a',
         kind: 'settlement',
@@ -160,6 +167,86 @@ describe('living-world rule engine', () => {
     const result = ruleEngine.evaluate(cmd)
     expect(result.accepted).toBe(false)
     if (!result.accepted) expect(result.rejection.code).toBe('INVALID_PAYLOAD')
+  })
+
+  describe('CONSTRUCTION_INITIATE validator', () => {
+    const base = {
+      npcId: 'npc-a',
+      tileId: 't_central',
+      buildingId: 'b_central_well',
+      duration: 20,
+      narration: '...'
+    } as const
+
+    it('accepts a well-formed payload', () => {
+      const { ruleEngine } = makeHarness()
+      const cmd = makeLivingWorldCommand('CONSTRUCTION_INITIATE', 'npc-a', 'npc', 3, 3, base)
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted).toBe(true)
+    })
+
+    it('accepts a payload with a valid ConstructionMotivation', () => {
+      const { ruleEngine } = makeHarness()
+      const cmd = makeLivingWorldCommand('CONSTRUCTION_INITIATE', 'npc-a', 'npc', 3, 3, {
+        ...base,
+        motivation: {
+          projectPurpose: '基礎建設',
+          primaryPressure: 'infrastructure',
+          pressureScore: 0.62,
+          sourceGoalKind: 'build_city',
+          sourceNpcId: 'npc-a',
+          sourceTileId: 't_central',
+          explanation: '中央區基建低於 45，由阿鬼開案。'
+        }
+      })
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted).toBe(true)
+    })
+
+    // NaN / Infinity are blocked one layer earlier by canonical JSON, so the
+    // validator's `Number.isFinite` check is defence in depth — not reachable
+    // through the public makeLivingWorldCommand path. We exercise the other
+    // duration boundary checks here.
+    const invalidCases: Array<{ label: string; patch: Partial<Record<keyof typeof base, unknown>>; reason: string }> = [
+      { label: 'empty npcId', patch: { npcId: '' }, reason: 'npcId required' },
+      { label: 'empty tileId', patch: { tileId: '' }, reason: 'tileId required' },
+      { label: 'empty buildingId', patch: { buildingId: '' }, reason: 'buildingId required' },
+      { label: 'non-number duration', patch: { duration: '20' }, reason: 'duration required' },
+      { label: 'fractional duration', patch: { duration: 1.5 }, reason: 'duration must be an integer in [1, 1000]' },
+      { label: 'zero duration', patch: { duration: 0 }, reason: 'duration must be an integer in [1, 1000]' },
+      { label: 'duration over 1000', patch: { duration: 1001 }, reason: 'duration must be an integer in [1, 1000]' },
+      { label: 'non-string narration', patch: { narration: 42 }, reason: 'narration required' }
+    ]
+
+    for (const c of invalidCases) {
+      it(`rejects ${c.label}`, () => {
+        const { ruleEngine } = makeHarness()
+        const cmd = makeLivingWorldCommand(
+          'CONSTRUCTION_INITIATE',
+          'npc-a',
+          'npc',
+          3,
+          3,
+          { ...base, ...c.patch } as never
+        )
+        const result = ruleEngine.evaluate(cmd)
+        expect(result.accepted).toBe(false)
+        if (!result.accepted) expect(result.rejection.reason).toBe(c.reason)
+      })
+    }
+
+    it('rejects a malformed motivation', () => {
+      const { ruleEngine } = makeHarness()
+      const cmd = makeLivingWorldCommand('CONSTRUCTION_INITIATE', 'npc-a', 'npc', 3, 3, {
+        ...base,
+        // ConstructionMotivation requires the full shape; passing only
+        // projectPurpose triggers the first missing-field check.
+        motivation: { projectPurpose: 'missing fields' }
+      } as never)
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted).toBe(false)
+      if (!result.accepted) expect(result.rejection.reason).toMatch(/^motivation /)
+    })
   })
 
   it('rejects malformed motivation payloads', () => {

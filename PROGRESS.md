@@ -3,6 +3,48 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.41 civ-evo-construction Slice 1: Command Catalog
+
+### Completed This Session
+
+- First implementation slice of `openspec/changes/civ-evo-construction/`.
+  Adds the `CONSTRUCTION_INITIATE` command type so NPCs can later submit
+  autonomous construction intent through the Rule Engine.
+  - `packages/server/src/kernel/livingWorldCommands.ts`: added
+    `CONSTRUCTION_INITIATE` to `LIVING_WORLD_COMMAND_TYPES`,
+    `ConstructionInitiateCmd` payload type, union membership, and the
+    matching `VALIDATORS` entry (non-empty `npcId/tileId/buildingId`,
+    integer `duration` in `[1, 1000]`, optional `ConstructionMotivation`,
+    required `narration`).
+  - `packages/server/src/kernel/livingWorld.test.ts`: extended the
+    catalog-accepts test plus added a dedicated
+    `CONSTRUCTION_INITIATE validator` block covering each rejection path
+    (empty IDs, non-numeric / fractional / zero / out-of-range duration,
+    non-string narration, malformed motivation).
+- No NPC policy emits this command yet — that lands in Slice 3 (task
+  group 3 in `openspec/changes/civ-evo-construction/tasks.md`). The
+  Rule Engine simply now refuses to drop the command on the floor when
+  a future policy emits it.
+- Bumped app version from `0.15.40` to `0.15.41`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- livingWorld` passed: 38 tests
+  (incl. 11 new `CONSTRUCTION_INITIATE` validator cases).
+- `npm test` passed: server 22 files / 167 tests, web 10 files / 28
+  tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `openspec validate civ-evo-construction --strict` still passes.
+
+### Still Open
+
+- Slice 2 (Event Reducer + `initiatedByNpcId` + deterministic
+  `projectId` hash + replay test) — next.
+- Open questions on duration / catalog scope / same-tile race / tile
+  buildability / chronicle narration remain unanswered; defaults
+  reused from `design.md` are tolerated until Slice 3 (NPC policy).
+
 ## 2026-05-12 — Civilization Evolution + Combat Phase C OpenSpec Proposed
 
 ### Completed This Session

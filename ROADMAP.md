@@ -4,6 +4,18 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.41 🚧 in progress — 2026-05-12
+
+**主題：civ-evo-construction Slice 1 — command catalog**
+
+- ✅ `packages/server/src/kernel/livingWorldCommands.ts` 加入 `CONSTRUCTION_INITIATE`
+  type、`ConstructionInitiateCmd` payload、`VALIDATORS` 條目。
+- ✅ `packages/server/src/kernel/livingWorld.test.ts` 新增 `CONSTRUCTION_INITIATE
+  validator` 測試 block + 把新指令加進 catalog-accepts 測試；38 tests 全綠。
+- ✅ 本機驗證：`npm test`、`npm run build:server`、`npm run build:web`、
+  `openspec validate civ-evo-construction --strict` 通過。
+- 🚧 還沒做：commit / push / docker rebuild；Slice 2 reducer + replay test。
+
 ## v0.15.40 ✅ shipped — 2026-05-12
 
 **主題：Hub traveller rendering diagnostic instrumentation**

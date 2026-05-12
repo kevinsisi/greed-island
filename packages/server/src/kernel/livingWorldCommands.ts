@@ -28,6 +28,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
   'NPC_PRODUCTIVE_ACTION',
+  'CONSTRUCTION_INITIATE',
   'CONSTRUCTION_PROJECT_PROGRESS',
   'BUILDING_CONSTRUCTED',
   'MAP_TILE_UNLOCKED',
@@ -125,6 +126,15 @@ export type ConstructionMotivation = Readonly<{
   sourceNpcId: string
   sourceTileId: string
   explanation: string
+}>
+
+export type ConstructionInitiateCmd = Readonly<{
+  npcId: string
+  tileId: string
+  buildingId: string
+  duration: number
+  motivation?: ConstructionMotivation
+  narration: string
 }>
 
 export type ConstructionProjectProgressCmd = Readonly<{
@@ -312,6 +322,7 @@ export type LivingWorldCommandPayload =
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
   | NpcProductiveActionCmd
+  | ConstructionInitiateCmd
   | ConstructionProjectProgressCmd
   | BuildingConstructedCmd
   | MapTileUnlockedCmd
@@ -425,6 +436,22 @@ const VALIDATORS: Readonly<
       return 'invalid metric'
     }
     if (typeof p.delta !== 'number' || !Number.isFinite(p.delta)) return 'delta required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  CONSTRUCTION_INITIATE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.buildingId !== 'string' || p.buildingId.length === 0) return 'buildingId required'
+    if (typeof p.duration !== 'number' || !Number.isFinite(p.duration)) return 'duration required'
+    if (!Number.isInteger(p.duration) || p.duration < 1 || p.duration > 1000) {
+      return 'duration must be an integer in [1, 1000]'
+    }
+    if (p.motivation !== undefined) {
+      const err = validateConstructionMotivation(p.motivation)
+      if (err) return err
+    }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

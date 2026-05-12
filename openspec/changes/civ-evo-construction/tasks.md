@@ -1,9 +1,9 @@
 ## 1. Command Catalog
 
-- [ ] 1.1 Add `CONSTRUCTION_INITIATE` to `LIVING_WORLD_COMMAND_TYPES` in `packages/server/src/kernel/livingWorldCommands.ts`.
-- [ ] 1.2 Define `ConstructionInitiateCmd` payload type `{ npcId, tileId, buildingId, duration, motivation? }`.
-- [ ] 1.3 Add `VALIDATORS` entry: non-empty `npcId/tileId/buildingId`, `duration` in `[1, 1000]`, optional `motivation` shape; no `WorldState` access.
-- [ ] 1.4 Unit-test the validator with valid + each invalid payload variant (Vitest).
+- [x] 1.1 Add `CONSTRUCTION_INITIATE` to `LIVING_WORLD_COMMAND_TYPES` in `packages/server/src/kernel/livingWorldCommands.ts`.
+- [x] 1.2 Define `ConstructionInitiateCmd` payload type `{ npcId, tileId, buildingId, duration, motivation?, narration }`.
+- [x] 1.3 Add `VALIDATORS` entry: non-empty `npcId/tileId/buildingId`, `duration` integer in `[1, 1000]`, optional `motivation` shape, required `narration` string; no `WorldState` access.
+- [x] 1.4 Unit-test the validator with valid + each invalid payload variant (Vitest).
 
 ## 2. Event Reducer
 
