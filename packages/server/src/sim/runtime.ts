@@ -1496,6 +1496,20 @@ export class SimulationRuntime {
 
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
+    // Boot intentionally hydrates only stateful simulation facts needed before
+    // the next tick. Add new persisted runtime fact keys here when features rely
+    // on them surviving deploy/restart; do not reintroduce full EventLog replay.
+    const facts = this.store.readLatestFactValues([
+      FACT_WEATHER,
+      FACT_SEASON,
+      FACT_RARE_WINDOW,
+      FACT_ACTIVE_EVENTS,
+      FACT_BUILDING_OCCUPANTS,
+      LIFE_EXPANSION_FACT_KEY,
+      ...this.profiles.map((profile) => `${NPC_STATE_PREFIX}${profile.id}`),
+      ...this.profiles.map((profile) => `npc.${profile.id}.location`),
+      ...MAP_TILES.map((tile) => `${AREA_STATE_PREFIX}${tile.id}`)
+    ])
     this.eventCount = state.eventCount
     this.lastSequence = state.lastSequence
     if (state.eventCount > BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
@@ -1512,15 +1526,15 @@ export class SimulationRuntime {
       // the latest committed tick so deterministic event ids do not collide.
       this.currentTick = state.latestTick
     }
-    const weatherFact = state.facts[FACT_WEATHER]
+    const weatherFact = facts[FACT_WEATHER]
     if (typeof weatherFact === 'string' && (WEATHERS as readonly string[]).includes(weatherFact)) {
       this.weather = weatherFact
     }
-    const seasonFact = state.facts[FACT_SEASON]
+    const seasonFact = facts[FACT_SEASON]
     if (typeof seasonFact === 'string' && (SEASONS as readonly string[]).includes(seasonFact)) {
       this.season = seasonFact
     }
-    const rareFact = state.facts[FACT_RARE_WINDOW]
+    const rareFact = facts[FACT_RARE_WINDOW]
     if (rareFact && typeof rareFact === 'object' && 'open' in (rareFact as Record<string, unknown>)) {
       const r = rareFact as { open: boolean; closesAt: number | null }
       this.rareWindowOpen = !!r.open
@@ -1531,28 +1545,28 @@ export class SimulationRuntime {
     // 就把舊的位置補上去。
     for (const profile of this.profiles) {
       const newKey = `${NPC_STATE_PREFIX}${profile.id}`
-      const newRaw = state.facts[newKey]
+      const newRaw = facts[newKey]
       if (newRaw) {
         this.npcEngine.hydrate(profile.id, newRaw)
         continue
       }
       const legacyKey = `npc.${profile.id}.location`
-      const legacy = state.facts[legacyKey]
+      const legacy = facts[legacyKey]
       if (typeof legacy === 'string') {
         this.npcEngine.hydrate(profile.id, { tile: legacy, targetTile: legacy })
       }
     }
     // hydrate area states
     for (const tile of MAP_TILES) {
-      const raw = state.facts[`${AREA_STATE_PREFIX}${tile.id}`]
+      const raw = facts[`${AREA_STATE_PREFIX}${tile.id}`]
       if (raw) this.areaEngine.hydrate(tile.id, raw)
     }
-    const buildingFact = state.facts[FACT_BUILDING_OCCUPANTS]
+    const buildingFact = facts[FACT_BUILDING_OCCUPANTS]
     if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
 
-    this.lifeExpansion = hydrateLifeExpansionState(state.facts[LIFE_EXPANSION_FACT_KEY])
+    this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
 
-    const activeEventsFact = state.facts[FACT_ACTIVE_EVENTS]
+    const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
       const restored: ActiveWorldEvent[] = []
       for (const item of activeEventsFact) {

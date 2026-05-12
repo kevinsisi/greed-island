@@ -206,6 +206,26 @@ export class SqliteEventStore {
     }
   }
 
+  readLatestFactValues(keys: readonly string[]): Record<string, unknown> {
+    const uniqueKeys = [...new Set(keys.filter((key) => key.length > 0))]
+    if (uniqueKeys.length === 0) return {}
+    const statement = this.db.prepare(`
+      SELECT payload_json FROM event_log
+      WHERE event_type = 'FACT_SET'
+        AND json_extract(payload_json, '$.key') = ?
+      ORDER BY sequence DESC
+      LIMIT 1
+    `)
+    const facts: Record<string, unknown> = {}
+    for (const key of uniqueKeys) {
+      const row = statement.get(key) as { payload_json: string } | undefined
+      if (!row) continue
+      const payload = JSON.parse(row.payload_json) as { value?: unknown }
+      facts[key] = payload.value
+    }
+    return facts
+  }
+
   countEvents(): number {
     const row = this.db.prepare('SELECT COUNT(*) as count FROM event_log').get() as { count: number }
     return row.count
@@ -291,6 +311,9 @@ export function initializeKernelSchema(db: DatabaseConnection): void {
     CREATE INDEX IF NOT EXISTS idx_event_log_actor ON event_log(actor_id);
     CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
     CREATE INDEX IF NOT EXISTS idx_event_log_type_tick_sequence ON event_log(event_type, tick, sequence);
+    CREATE INDEX IF NOT EXISTS idx_event_log_fact_key_sequence
+      ON event_log(json_extract(payload_json, '$.key'), sequence)
+      WHERE event_type = 'FACT_SET';
     CREATE INDEX IF NOT EXISTS idx_event_log_deterministic_key ON event_log(deterministic_key);
 
     CREATE TRIGGER IF NOT EXISTS event_log_no_update

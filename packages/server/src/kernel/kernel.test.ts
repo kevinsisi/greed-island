@@ -104,6 +104,22 @@ describe('simulation kernel', () => {
     expect(store.readLatestFactSnapshot().latestTick).toBe(8)
   })
 
+  it('reads latest selected facts without full fact hydration', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      createEventDraft('event-life-old', 'FACT_SET', 1, { key: 'world.lifeExpansion', value: { unlockedTileIds: [] } }),
+      createEventDraft('event-weather', 'FACT_SET', 2, { key: 'world.weather', value: '晴' }),
+      createEventDraft('event-life-new', 'FACT_SET', 3, { key: 'world.lifeExpansion', value: { unlockedTileIds: ['t_salt_marsh'] } }),
+      createEventDraft('event-unrelated', 'NPC_MOVE', 4, { npcId: 'npc-a' })
+    ])
+
+    expect(store.readLatestFactSnapshot().facts).toEqual({})
+    expect(store.readLatestFactValues(['world.lifeExpansion', 'world.weather', 'missing'])).toEqual({
+      'world.lifeExpansion': { unlockedTileIds: ['t_salt_marsh'] },
+      'world.weather': '晴'
+    })
+  })
+
   it('reads a bounded tick window without hydrating the whole event log', () => {
     const { store } = createKernelHarness()
     store.appendEvents([

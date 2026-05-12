@@ -11,9 +11,10 @@ describe('SimulationRuntime life goals and expansion', () => {
   it('turns NPC life pressure and productive work into committed expansion facts', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
+    const profiles = [profile('npc.a'), profile('npc.b'), profile('npc.c'), profile('npc.d')]
     const runtime = new SimulationRuntime(
       eventStore,
-      [profile('npc.a'), profile('npc.b'), profile('npc.c'), profile('npc.d')],
+      profiles,
       loadCardCatalog()
     )
 
@@ -67,6 +68,15 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(buildingData?.motivation?.projectPurpose).toBe(constructionData?.motivation?.projectPurpose)
       expect(npcs.every((npc) => npc.life?.goal.kind)).toBe(true)
       expect((world.facts.lifeExpansion as { unlockedTileIds?: string[] }).unlockedTileIds).toContain(SALT_MARSH_TILE_ID)
+
+      runtime.stop()
+      const restored = new SimulationRuntime(eventStore, profiles, loadCardCatalog())
+      try {
+        expect(restored.getMap().tiles.map((tile) => tile.id)).toContain(SALT_MARSH_TILE_ID)
+        expect(restored.getBuildingsOnTile(SALT_MARSH_TILE_ID).map((view) => view.def.id)).toContain(SALT_MARSH_BUILDING_ID)
+      } finally {
+        restored.stop()
+      }
     } finally {
       runtime.stop()
       db.close()
