@@ -96,6 +96,7 @@ import {
   type NpcLifeView
 } from './cityLife.js'
 import { ConstructionProjectsProjection, type ConstructionProjectRow } from '../projections/constructionProjects.js'
+import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -454,6 +455,15 @@ export class SimulationRuntime {
       tick
     })
     return life.goal.kind === 'build_city' || life.goal.kind === 'secure_home' ? life.goal.pressure : 0
+  }
+
+  private worldAgendaFor(tileId: string, tick: number): WorldAgendaDirective {
+    return deriveWorldAgendaDirective({
+      areas: this.getAreaStates(),
+      activeEvents: this.eventEngine.getActive(),
+      tick,
+      preferredTileId: tileId
+    })
   }
 
   private cappedCompletedConstructionProjects(): readonly ConstructionProjectRow[] {
@@ -948,6 +958,14 @@ export class SimulationRuntime {
             availableGold: this.lifeExpansion.npcCivicRecords[event.npcId]?.gold ?? 0
           })
           if (decision) {
+            const motivation = this.buildAutonomousConstructionMotivation(
+              event.npcId,
+              profile ?? null,
+              this.npcEngine.getState(event.npcId),
+              decision.tileId,
+              decision.goldCost,
+              nextTick
+            )
             commands.push(
               makeLivingWorldCommand(
                 'CONSTRUCTION_INITIATE',
@@ -961,7 +979,8 @@ export class SimulationRuntime {
                   buildingId: decision.buildingId,
                   duration: decision.duration,
                   goldCost: decision.goldCost,
-                  narration: `${profile?.name.zh ?? event.npcId}因生活建設需求在${event.tile}支付 ${decision.goldCost} 金開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
+                  motivation,
+                  narration: `${profile?.name.zh ?? event.npcId}承接${motivation.projectPurpose}，在${event.tile}支付 ${decision.goldCost} 金開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
                 }
               )
             )
@@ -1132,6 +1151,7 @@ export class SimulationRuntime {
       )
     }
     for (const pe of areaResult.pressureEvents) {
+      const agenda = this.worldAgendaFor(pe.tileId, nextTick)
       commands.push(
         makeLivingWorldCommand(
           'AREA_PRESSURE',
@@ -1143,7 +1163,7 @@ export class SimulationRuntime {
             tileId: pe.tileId,
             kind: pe.kind,
             detail: pe.detail,
-            motivation: makeMotivation(areaPressureMotivation(pe.kind)),
+            motivation: makeMotivation(`${agenda.sponsorZh}把${agenda.scopeNameZh}列入「${agenda.directiveZh}」；${areaPressureMotivation(pe.kind)} 這不是單一事件的孤立警報，而是上位指令調整街區資源與派系部署的依據。`, `上位指令 ${agenda.id}`),
             narration: pe.narration
           }
         )
@@ -1621,8 +1641,9 @@ export class SimulationRuntime {
       .filter((item): item is { profile: NpcProfile; state: NpcRuntimeState; life: NpcLifeView } => item !== null)
       .sort((a, b) => b.life.goal.pressure - a.life.goal.pressure || a.profile.id.localeCompare(b.profile.id))
       .slice(0, 8)
-      .map(({ profile, state, life }) =>
-        makeLivingWorldCommand(
+      .map(({ profile, state, life }) => {
+        const agenda = this.worldAgendaFor(state.tile, nextTick)
+        return makeLivingWorldCommand(
           'NPC_LIFE_GOAL_SET',
           profile.id,
           'npc',
@@ -1634,13 +1655,13 @@ export class SimulationRuntime {
             needs: life.needs,
             goal: life.goal,
             motivation: makeMotivation(
-              `${profile.name.zh}的食物、休息、收入、住房與安全需求重新計算後，最高壓力把生活目標推向「${life.goal.narration}」。`,
-              `目標壓力 ${life.goal.pressure}`
+              `上位指令：${agenda.sponsorZh}正在${agenda.scopeNameZh}推動「${agenda.directiveZh}」（${agenda.rationaleZh}）。${profile.name.zh}以${profile.role.zh}身分${roleInterpretationZh(`${profile.role.zh} ${profile.role.en}`, agenda)}，再用自己的食物、休息、收入、住房與安全需求決定眼前目標：「${life.goal.narration}」。`,
+              `上位指令 ${agenda.id}；目標壓力 ${life.goal.pressure}`
             ),
             narration: `${profile.name.zh}把眼前生活目標定為：${life.goal.narration}`
           }
         )
-      )
+      })
   }
 
   private buildProductiveActionMotivation(
@@ -1665,9 +1686,10 @@ export class SimulationRuntime {
     const tileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
     const purpose = metricPurpose(metric)
     const domainText = productiveDomainText(domain)
+    const agenda = this.worldAgendaFor(fallbackTile, tick)
     return makeMotivation(
-      `${fallbackProfile.name.zh}在${tileName}的生活目標是「${life.goal.narration}」，目前最高壓力是${needLabel(primary.key)} ${primary.value}；這次${domainText}把個人目標轉成城市進展。`,
-      purpose
+      `${agenda.sponsorZh}對${agenda.scopeNameZh}的上位指令是「${agenda.directiveZh}」；原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，個人最高壓力是${needLabel(primary.key)} ${primary.value}，因此這次${domainText}不是隨機善行，而是對制度壓力的角色回應。`,
+      `${purpose}；上位指令 ${agenda.id}`
     )
   }
 
@@ -1690,7 +1712,8 @@ export class SimulationRuntime {
     const primary = strongestNeed(life.needs)
     const sourceTileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
     const targetTileName = TILE_NAME_BY_ID[SALT_MARSH_TILE_ID] ?? '鹽沼外環'
-    const projectPurpose = '把鹽沼外環變成新的住所、巡衛落腳點與補給節點，分散舊街區的住房與安全壓力。'
+    const agenda = this.worldAgendaFor(fallbackTile, tick)
+    const projectPurpose = `回應上位指令「${agenda.directiveZh}」，把鹽沼外環變成新的住所、巡衛落腳點與補給節點，分散舊街區的住房與安全壓力。`
     return {
       projectPurpose,
       primaryPressure: primary.key,
@@ -1698,7 +1721,39 @@ export class SimulationRuntime {
       sourceGoalKind: life.goal.kind,
       sourceNpcId: npcId,
       sourceTileId: fallbackTile,
-      explanation: `${fallbackProfile.name.zh}在${sourceTileName}的目標是「${life.goal.narration}」，${needLabel(primary.key)}壓力 ${primary.value}；${targetTileName}的拓荒站能提供住處、補給與巡查路線。`
+      explanation: `上位指令：${agenda.sponsorZh}正在${agenda.scopeNameZh}推動「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}；他在${sourceTileName}的個人目標是「${life.goal.narration}」，${needLabel(primary.key)}壓力 ${primary.value}，所以${targetTileName}拓荒站成為可被執行的制度工程。`
+    }
+  }
+
+  private buildAutonomousConstructionMotivation(
+    npcId: string,
+    profile: NpcProfile | null,
+    state: NpcRuntimeState | null,
+    targetTileId: string,
+    goldCost: number,
+    tick: number
+  ): ConstructionMotivation {
+    const fallbackTile = state?.tile ?? targetTileId
+    const fallbackProfile = profile ?? makeFallbackProfile(npcId, fallbackTile)
+    const fallbackState = state ?? makeFallbackNpcState(fallbackTile, tick)
+    const life = deriveNpcLifeView({
+      profile: fallbackProfile,
+      state: fallbackState,
+      areaState: this.getAreaState(targetTileId),
+      lifeExpansion: this.lifeExpansion,
+      tick
+    })
+    const primary = strongestNeed(life.needs)
+    const agenda = this.worldAgendaFor(targetTileId, tick)
+    const targetTileName = TILE_NAME_BY_ID[targetTileId] ?? targetTileId
+    return {
+      projectPurpose: `${agenda.sponsorZh}的「${agenda.directiveZh}」`,
+      primaryPressure: primary.key,
+      pressureScore: Math.max(primary.value, life.goal.pressure, agenda.pressureScore),
+      sourceGoalKind: life.goal.kind,
+      sourceNpcId: npcId,
+      sourceTileId: targetTileId,
+      explanation: `上位指令：${agenda.sponsorZh}把${targetTileName}列入「${agenda.directiveZh}」，原因是：${agenda.rationaleZh}。${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，並用自己的 ${goldCost} 金承擔開工成本；個人目標「${life.goal.narration}」只是他願意響應上位指令的原因，不是世界憑空蓋房的原因。`
     }
   }
 

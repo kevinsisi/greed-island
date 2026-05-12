@@ -38,6 +38,12 @@ developer. Keep latest status at the top.
   and visible under NPC filtering, but no longer drive the default chronicle
   summary/ticker surface. Construction site labels now spell out progress as
   `建造中 current/target` plus remaining points instead of an unexplained ratio.
+- World agenda slice: added deterministic `WorldAgendaDirective` derivation from
+  area resources, faction control, and active world events. Life-goal,
+  productive-action, and construction motivations now cite a sponsor/directive,
+  then role interpretation, then personal pressure, so city-scale actions read
+  as top-down institutional/faction/hidden-overseer pressure rather than a
+  generic NPC motivation pool.
 
 ### Verification
 
@@ -60,6 +66,7 @@ developer. Keep latest status at the top.
 - Hotfix focused tests: `npm run test -w @greed-island/server -- cityLife buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 30 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
 - Demand/cost focused tests: `npm run test -w @greed-island/server -- cityLife livingWorld runtimeExpansion` passed: 64 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
 - Chronicle clarity focused tests: `npm run test -w @greed-island/server -- livingWorld chronicleRenderer` passed: 50 tests. `npm run test -w @greed-island/web -- eventVisibility TimelinePage` passed: 6 tests. Server and web typechecks passed.
+- World agenda focused tests: `npm run test -w @greed-island/server -- worldAgenda runtimeExpansion livingWorld` passed: 43 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. `npx openspec validate world-agenda-directives --strict` passed.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 

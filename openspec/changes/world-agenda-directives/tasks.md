@@ -1,0 +1,4 @@
+- [x] 1.1 Define deterministic `WorldAgendaDirective` model.
+- [x] 1.2 Derive directives from area resources, faction control, and active world events.
+- [x] 1.3 Route life-goal, productive-action, and construction motivations through directives.
+- [x] 1.4 Add tests for directive derivation and top-down motivation evidence.
