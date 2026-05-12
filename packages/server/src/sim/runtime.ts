@@ -82,6 +82,7 @@ import {
   hydrateLifeExpansionState,
   householdIdForNpc,
   withChildBorn,
+  withConstructionInitiated,
   withConstructionProgress,
   withHouseholdFormed,
   withUnlockedExpansion,
@@ -1156,7 +1157,22 @@ export class SimulationRuntime {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
         for (const draft of result.events) typedDrafts.push(draft as EventDraft)
-        if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
+        if (cmd.commandType === 'CONSTRUCTION_INITIATE') {
+          const payload = cmd.payload as {
+            npcId: string
+            tileId: string
+            buildingId: string
+            duration: number
+          }
+          this.lifeExpansion = withConstructionInitiated(this.lifeExpansion, {
+            npcId: payload.npcId,
+            tileId: payload.tileId,
+            buildingId: payload.buildingId,
+            duration: payload.duration,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
           const payload = cmd.payload as { delta: number }
           this.lifeExpansion = withConstructionProgress(this.lifeExpansion, {
             tick: nextTick,

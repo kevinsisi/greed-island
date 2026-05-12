@@ -1,6 +1,8 @@
 import type { NpcProfile } from '../npcs/types.js'
 import type { AreaState } from './areaStateEngine.js'
 import type { NpcRuntimeState } from './npcEngine.js'
+import { hashCanonicalJson } from '../kernel/canonicalJson.js'
+import { DEFAULT_RULESET_VERSION } from '../kernel/types.js'
 
 export const LIFE_EXPANSION_FACT_KEY = 'world.lifeExpansion'
 export const SALT_MARSH_PROJECT_ID = 'project.salt_marsh_settlement'
@@ -54,6 +56,10 @@ export type ConstructionProjectRecord = Readonly<{
   targetProgress: number
   startedAtTick: number
   completedAtTick: number | null
+  // v0.15.42+ civ-evo-construction Slice 2: who autonomously initiated
+  // this project. '' for system-driven legacy projects (e.g. the v0.15.x
+  // salt-marsh settlement that predates §11.8).
+  initiatedByNpcId: string
 }>
 
 export type LifeExpansionState = Readonly<{
@@ -147,7 +153,8 @@ export function hydrateLifeExpansionState(raw: unknown): LifeExpansionState {
           progress: p.progress,
           targetProgress: p.targetProgress,
           startedAtTick: p.startedAtTick,
-          completedAtTick: typeof p.completedAtTick === 'number' ? p.completedAtTick : null
+          completedAtTick: typeof p.completedAtTick === 'number' ? p.completedAtTick : null,
+          initiatedByNpcId: typeof p.initiatedByNpcId === 'string' ? p.initiatedByNpcId : ''
         }
       }
     }
@@ -206,7 +213,8 @@ export function withConstructionProgress(
     progress: 0,
     targetProgress: SALT_MARSH_PROJECT_TARGET,
     startedAtTick: input.tick,
-    completedAtTick: null
+    completedAtTick: null,
+    initiatedByNpcId: ''
   }
   const progress = Math.min(before.targetProgress, before.progress + Math.max(1, Math.floor(input.delta)))
   return {
@@ -217,6 +225,85 @@ export function withConstructionProgress(
         ...before,
         progress,
         completedAtTick: progress >= before.targetProgress ? input.tick : before.completedAtTick
+      }
+    }
+  }
+}
+
+/**
+ * civ-evo-construction Slice 2: deterministic project id for autonomously
+ * NPC-initiated construction projects. Pure function of the command payload
+ * + `startedAtTick` + ruleset version, so replay of the same EventLog yields
+ * the same id byte-for-byte.
+ *
+ * Salt-marsh's legacy fixed id (`SALT_MARSH_PROJECT_ID`) is unchanged; this
+ * helper is only used for the §11.8 autonomous construction pipeline.
+ */
+export function deriveConstructionInitiateProjectId(input: {
+  npcId: string
+  tileId: string
+  buildingId: string
+  startedAtTick: number
+  rulesetVersion?: string
+}): string {
+  const seed = {
+    scheme: 'civ-evo-construction.initiate',
+    npcId: input.npcId,
+    tileId: input.tileId,
+    buildingId: input.buildingId,
+    startedAtTick: input.startedAtTick,
+    rulesetVersion: input.rulesetVersion ?? DEFAULT_RULESET_VERSION
+  }
+  // Short, URL-safe, deterministic; keeps the project key the same on
+  // replay even if the SQLite row order changes.
+  return `project.civ-evo.${hashCanonicalJson(seed).slice(0, 24)}`
+}
+
+/**
+ * civ-evo-construction Slice 2: reducer for `CONSTRUCTION_INITIATE`. Adds
+ * a fresh `ConstructionProjectRecord` carrying `initiatedByNpcId`.
+ *
+ * Idempotent: if the derived `projectId` already exists in state, returns
+ * state unchanged so replaying the same EventLog never double-counts.
+ */
+export function withConstructionInitiated(
+  state: LifeExpansionState,
+  input: {
+    npcId: string
+    tileId: string
+    buildingId: string
+    duration: number
+    tick: number
+    rulesetVersion?: string
+  }
+): LifeExpansionState {
+  const projectId = deriveConstructionInitiateProjectId({
+    npcId: input.npcId,
+    tileId: input.tileId,
+    buildingId: input.buildingId,
+    startedAtTick: input.tick,
+    // `exactOptionalPropertyTypes` mode: only forward rulesetVersion when
+    // the caller actually set it.
+    ...(input.rulesetVersion !== undefined ? { rulesetVersion: input.rulesetVersion } : {})
+  })
+  if (state.constructionProjects[projectId]) return state
+  return {
+    ...state,
+    constructionProjects: {
+      ...state.constructionProjects,
+      [projectId]: {
+        projectId,
+        // Reusing the existing 'settlement' kind discriminator for the
+        // §11.8 first slice; a per-kind progress path lands in a later
+        // slice when production chains / settlement formation arrive.
+        kind: 'settlement',
+        targetTileId: input.tileId,
+        buildingId: input.buildingId,
+        progress: 0,
+        targetProgress: Math.max(1, Math.floor(input.duration)),
+        startedAtTick: input.tick,
+        completedAtTick: null,
+        initiatedByNpcId: input.npcId
       }
     }
   }

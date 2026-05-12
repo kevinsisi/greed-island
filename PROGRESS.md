@@ -3,6 +3,55 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.42 civ-evo-construction Slice 2: Event Reducer
+
+### Completed This Session
+
+- Second implementation slice of `openspec/changes/civ-evo-construction/`.
+  Adds the deterministic reducer that turns a committed
+  `CONSTRUCTION_INITIATE` event into a `ConstructionProjectRecord`,
+  tagged with the originating NPC.
+  - `packages/server/src/sim/cityLife.ts`:
+    - Extended `ConstructionProjectRecord` with `initiatedByNpcId: string`
+      (legacy salt-marsh records default to `''`).
+    - Added `deriveConstructionInitiateProjectId(...)` returning a stable
+      `project.civ-evo.<24-char hash>` id seeded by canonical-JSON over
+      `{scheme, npcId, tileId, buildingId, startedAtTick, rulesetVersion}`.
+    - Added `withConstructionInitiated(state, input)` reducer.
+      Idempotent: if the derived `projectId` already exists, returns
+      state ref unchanged — required for EventLog replay determinism.
+    - Updated `hydrateLifeExpansionState` to preserve `initiatedByNpcId`
+      on the way in (defaults to `''` for older snapshots).
+  - `packages/server/src/sim/runtime.ts`: added a `CONSTRUCTION_INITIATE`
+    branch to the Rule-Engine-accepted command dispatch alongside the
+    existing salt-marsh `CONSTRUCTION_PROJECT_PROGRESS` branch.
+  - `packages/server/src/sim/cityLife.test.ts`: 5 new tests covering
+    deterministic projectId derivation, record shape, idempotency,
+    distinct projects per `(npcId, tick)`, and `hydrateLifeExpansionState`
+    round-trip.
+- No NPC policy emits `CONSTRUCTION_INITIATE` yet (Slice 3). The
+  reducer is exercised only via tests so far; running the deployed
+  server still observes 0 new civ-evo projects.
+- Bumped app version from `0.15.41` to `0.15.42`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- cityLife` passed: 7 tests.
+- `npm test` passed: server 22 files / 182 tests, web 10 files / 28
+  tests.
+- `npm run build:server` passed (`exactOptionalPropertyTypes` mode
+  required guarding the optional `rulesetVersion` spread).
+- `npm run build:web` passed.
+- `openspec validate civ-evo-construction --strict` still passes.
+
+### Still Open
+
+- Slice 3 (NPC policy + `build` task variant) — next. Will be the first
+  slice with user-visible effect once an NPC actually emits the command.
+- Open questions in `design.md` will start to bite at Slice 3 (catalog
+  scope, duration model, same-tile race, tile buildability check
+  location, chronicle narration).
+
 ## 2026-05-12 — v0.15.41 civ-evo-construction Slice 1: Command Catalog
 
 ### Completed This Session

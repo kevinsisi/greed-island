@@ -7,11 +7,11 @@
 
 ## 2. Event Reducer
 
-- [ ] 2.1 Extend `ConstructionProjectRecord` with `initiatedByNpcId: string` in `packages/server/src/sim/cityLife.ts` (or its types file).
-- [ ] 2.2 Implement `withConstructionInitiated(state, cmd)` modeled on `withConstructionProgress(...)`.
-- [ ] 2.3 Implement deterministic `projectId = hash(npcId + tileId + buildingId + startedAtTick + rulesetVersion)`.
-- [ ] 2.4 Add reducer dispatch for `CONSTRUCTION_INITIATED`.
-- [ ] 2.5 Replay test: same EventLog twice MUST produce byte-identical `lifeExpansion.constructionProjects[]`.
+- [x] 2.1 Extend `ConstructionProjectRecord` with `initiatedByNpcId: string` in `packages/server/src/sim/cityLife.ts`; legacy salt-marsh entries default `''`.
+- [x] 2.2 Implement `withConstructionInitiated(state, input)` modeled on `withConstructionProgress(...)`.
+- [x] 2.3 Implement deterministic `projectId = 'project.civ-evo.' + hashCanonicalJson({ scheme, npcId, tileId, buildingId, startedAtTick, rulesetVersion }).slice(0, 24)`.
+- [x] 2.4 Add reducer dispatch for `CONSTRUCTION_INITIATE` in `packages/server/src/sim/runtime.ts` (the command name is reused as the event type per the kernel's convention).
+- [x] 2.5 Replay/idempotency tests: same `CONSTRUCTION_INITIATE` reducer call returns the same state ref; round-trip through `hydrateLifeExpansionState` preserves `initiatedByNpcId` and `targetProgress`.
 
 ## 3. NPC Policy + Build Task
 

@@ -4,6 +4,26 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.42 🚧 in progress — 2026-05-12
+
+**主題：civ-evo-construction Slice 2 — event reducer + deterministic projectId**
+
+- ✅ `cityLife.ts`：`ConstructionProjectRecord` 加入 `initiatedByNpcId`；
+  legacy salt-marsh 預設 `''`。`hydrateLifeExpansionState` 同步更新。
+- ✅ 新增 `deriveConstructionInitiateProjectId(...)`：以
+  `hashCanonicalJson({ scheme, npcId, tileId, buildingId, startedAtTick,
+  rulesetVersion })` 推 `project.civ-evo.<24-char hash>`，replay 確定。
+- ✅ 新增 `withConstructionInitiated(state, input)`：idempotent — 同
+  projectId 已存在則回原 state ref，保 EventLog 重放穩定。
+- ✅ `runtime.ts`：command dispatch 加入 `CONSTRUCTION_INITIATE` 分支，
+  接 `withConstructionInitiated`。
+- ✅ `cityLife.test.ts`：5 個新測試覆蓋 projectId 確定性、record 內容、
+  idempotency、不同 NPC + tick 產生 distinct projects、hydrate 往返。
+- ✅ 本機：`npm test` 全綠（server 182 / web 28）、`npm run build` 通過、
+  `openspec validate civ-evo-construction --strict` 通過。
+- 🚧 還沒做：commit / push / docker rebuild；Slice 3 NPC policy 才會
+  讓任何 NPC 真的去 emit 這個 command。
+
 ## v0.15.41 🚧 in progress — 2026-05-12
 
 **主題：civ-evo-construction Slice 1 — command catalog**

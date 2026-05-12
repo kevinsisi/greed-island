@@ -7,9 +7,11 @@ import {
   SALT_MARSH_PROJECT_ID,
   SALT_MARSH_TILE_ID,
   createInitialLifeExpansionState,
+  deriveConstructionInitiateProjectId,
   deriveNpcLifeView,
   hydrateLifeExpansionState,
   withChildBorn,
+  withConstructionInitiated,
   withConstructionProgress,
   withHouseholdFormed,
   withUnlockedExpansion
@@ -96,5 +98,96 @@ describe('city life projection', () => {
     expect(replayed.unlockedBuildingIds).toContain(SALT_MARSH_BUILDING_ID)
     expect(replayed.households['household.a.b']!.childIds).toEqual(['child.1'])
     expect(replayed.children['child.1']!.nameEn).toBe('Tideborn')
+  })
+
+  describe('civ-evo-construction: withConstructionInitiated', () => {
+    const npcInput = {
+      npcId: 'central.broker.gui',
+      tileId: 't_central',
+      buildingId: 'b_central_well',
+      duration: 24,
+      tick: 100
+    } as const
+
+    it('derives a deterministic projectId from the command payload', () => {
+      const a = deriveConstructionInitiateProjectId({
+        npcId: npcInput.npcId,
+        tileId: npcInput.tileId,
+        buildingId: npcInput.buildingId,
+        startedAtTick: npcInput.tick
+      })
+      const b = deriveConstructionInitiateProjectId({
+        npcId: npcInput.npcId,
+        tileId: npcInput.tileId,
+        buildingId: npcInput.buildingId,
+        startedAtTick: npcInput.tick
+      })
+      expect(a).toBe(b)
+      expect(a.startsWith('project.civ-evo.')).toBe(true)
+      // changing any input changes the id
+      const c = deriveConstructionInitiateProjectId({
+        npcId: npcInput.npcId,
+        tileId: npcInput.tileId,
+        buildingId: npcInput.buildingId,
+        startedAtTick: npcInput.tick + 1
+      })
+      expect(c).not.toBe(a)
+    })
+
+    it('adds a new project carrying initiatedByNpcId, progress=0, targetProgress=duration', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, npcInput)
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: npcInput.npcId,
+        tileId: npcInput.tileId,
+        buildingId: npcInput.buildingId,
+        startedAtTick: npcInput.tick
+      })
+      const record = expansion.constructionProjects[projectId]
+      expect(record).toBeDefined()
+      expect(record!.initiatedByNpcId).toBe(npcInput.npcId)
+      expect(record!.targetTileId).toBe(npcInput.tileId)
+      expect(record!.buildingId).toBe(npcInput.buildingId)
+      expect(record!.progress).toBe(0)
+      expect(record!.targetProgress).toBe(npcInput.duration)
+      expect(record!.startedAtTick).toBe(npcInput.tick)
+      expect(record!.completedAtTick).toBeNull()
+    })
+
+    it('is idempotent: replaying the same CONSTRUCTION_INITIATE does not double-insert', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, npcInput)
+      const afterFirst = expansion
+      expansion = withConstructionInitiated(expansion, npcInput)
+      // Same reducer call with same payload returns the same state ref —
+      // critical for EventLog replay determinism.
+      expect(expansion).toBe(afterFirst)
+      expect(Object.keys(expansion.constructionProjects)).toHaveLength(1)
+    })
+
+    it('two different initiates on the same tile produce distinct projects', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, npcInput)
+      expansion = withConstructionInitiated(expansion, {
+        ...npcInput,
+        npcId: 'dock.surfer.jiang_bo_ran',
+        tick: npcInput.tick + 1
+      })
+      expect(Object.keys(expansion.constructionProjects)).toHaveLength(2)
+    })
+
+    it('round-trips through hydrateLifeExpansionState preserving initiatedByNpcId', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, npcInput)
+      const replayed = hydrateLifeExpansionState(JSON.parse(JSON.stringify(expansion)))
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: npcInput.npcId,
+        tileId: npcInput.tileId,
+        buildingId: npcInput.buildingId,
+        startedAtTick: npcInput.tick
+      })
+      expect(replayed.constructionProjects[projectId]!.initiatedByNpcId).toBe(npcInput.npcId)
+      expect(replayed.constructionProjects[projectId]!.targetProgress).toBe(npcInput.duration)
+    })
   })
 })
