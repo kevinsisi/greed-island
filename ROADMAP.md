@@ -4,6 +4,32 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.33 ✅ shipped — 2026-05-12
+
+**主題：event motivation chronicle**
+
+- ✅ Timeline now shows `事件動機` for public event rows so players can see why an
+  event happened, not only what happened.
+- ✅ Added explicit deterministic construction motivation payloads for construction
+  progress, map unlocks, and building unlocks, tied to NPC life goals/needs and
+  project purpose.
+- ✅ Added deterministic fallback motivations for current and older event payloads:
+  productive actions, NPC interactions, area pressure, life goals, households,
+  children, movement/activity, building enter/leave, weather/season, world events,
+  rare windows, player interventions, and card events.
+- ✅ Raw payload remains available behind the disclosure for debugging.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  `npx openspec validate event-motivation-chronicle --strict`, and
+  `git diff --check` passed; web build still has the existing Vite chunk-size
+  warning.
+- ✅ Commit `21113bf` pushed to `main`; CI run `25707720719` and Deploy Dev run
+  `25707720708` passed.
+- ✅ Live verification: `v0.15.33`, current event window includes motivated event
+  families (`AREA_PRESSURE`, `NPC_INTERACT`, `NPC_PRODUCTIVE_ACTION`), and the
+  deployed web asset contains `事件動機` plus deterministic motivation fallbacks.
+- 🚧 Future depth: move more non-construction motivations into authoritative server
+  payloads as richer planning state is added per event domain.
+
 ## v0.15.32 ✅ shipped — 2026-05-12
 
 **主題：NPC life goals + expansion foundation**

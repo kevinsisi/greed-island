@@ -3,6 +3,55 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.33 Event Motivation Chronicle
+
+### Completed Locally
+
+- Responded to the issue that the chronicle showed what happened but not why it
+  happened; broadened the solution from construction-only to all public events.
+- Added OpenSpec change `event-motivation-chronicle` requiring public Timeline
+  rows to expose deterministic motivation, pressure, purpose, or trigger context.
+- Added explicit construction motivation payloads for new construction progress,
+  map unlock, and building unlock events, derived from NPC life goals/needs and
+  project purpose rather than AI text.
+- Added deterministic Timeline motivation fallbacks for public event families:
+  productive actions, NPC interactions, area pressure, life goals, households,
+  children, movement/activity, building enter/leave, weather/season cycles, world
+  events, rare windows, player interventions, and card events.
+- Kept raw payload disclosure available while surfacing `事件動機` as first-class
+  context on Timeline cards.
+- Bumped app version from `0.15.32` to `0.15.33`.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 160 tests, web 8 files / 21 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npx openspec validate event-motivation-chronicle --strict` passed.
+- `git diff --check` passed with only Windows LF→CRLF working-copy warnings.
+- Gemini staged review repeatedly reported a template-literal issue caused by
+  Chinese diff encoding; source and tests confirm interpolation works and
+  motivation explanations contain actual tile names with no `{` / `}` placeholders.
+
+### CI/CD + Live Verification
+
+- Code commit `21113bf` pushed to `main`.
+- GitHub Actions CI run `25707720719` passed.
+- GitHub Actions Deploy Dev run `25707720708` passed.
+- Live `v0.15.33` verification after deploy:
+  - `/healthz`: `200`, `version=0.15.33`, `tick=91499`.
+  - `/api/events?limit=80`: current window included `AREA_PRESSURE`,
+    `NPC_INTERACT`, and `NPC_PRODUCTIVE_ACTION` rows that now receive deterministic
+    Timeline motivation fallback text.
+  - Deployed web asset `/assets/index-CswV12I_.js` contains `事件動機`, the salt-marsh
+    fallback explanation, and productive-action motivation fallback text.
+
+### Still Open
+
+- Future depth: move more non-construction motivations into authoritative server
+  payloads as each domain gets richer planning state. Current release guarantees
+  visible deterministic motivation for public Timeline rows without AI invention.
+
 ## 2026-05-12 — v0.15.32 NPC Life Goals + Expansion Foundation
 
 ### Completed Locally

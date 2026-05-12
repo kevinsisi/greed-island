@@ -14,4 +14,4 @@
 
 - [x] 3.1 Add/update tests for motivation payloads and Timeline rendering helpers.
 - [x] 3.2 Run focused tests/builds, OpenSpec validation, and staged review.
-- [ ] 3.3 Commit, push, watch CI/CD, verify live evidence, and update docs.
+- [x] 3.3 Commit, push, watch CI/CD, verify live evidence, and update docs.
