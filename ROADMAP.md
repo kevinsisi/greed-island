@@ -4,6 +4,31 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.34 ✅ shipped — 2026-05-12
+
+**主題：server event motivation payloads**
+
+- ✅ Added generic `EventMotivation` payload support for living-world commands and
+  Rule Engine validation for malformed optional motivation data.
+- ✅ New common runtime events now carry deterministic server-authored
+  `payload.data.motivation` when context is available, covering NPC
+  movement/activity, productive actions, interactions, area pressure,
+  weather/season, rare windows, world events, building enter/leave, life goals,
+  households, and children.
+- ✅ Kept `v0.15.33` Timeline fallback text for older events while letting new rows
+  prefer committed server reasons.
+- ✅ Local verification: `npm test`, `npm run build:server`, `npm run build:web`,
+  `npx openspec validate server-event-motivation-payloads --strict`, and
+  `git diff --check` passed; web build still has the existing Vite chunk-size
+  warning.
+- ✅ Gemini staged review coverage finding was fixed with runtime assertions for
+  representative motivated event families; final review reported `No findings`.
+- ✅ Commit `1bd24ec` pushed to `main`; CI run `25709754151` and Deploy Dev run
+  `25709754147` passed.
+- ✅ Live verification: `v0.15.34`, `/api/events?limit=100` sampled 86 committed
+  motivation payloads, including `WORLD_EVENT_SPAWN`, `WEATHER_CHANGE`,
+  `NPC_INTERACT`, and `NPC_PRODUCTIVE_ACTION`.
+
 ## v0.15.33 ✅ shipped — 2026-05-12
 
 **主題：event motivation chronicle**

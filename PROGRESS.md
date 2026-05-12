@@ -3,6 +3,55 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.34 Server Event Motivation Payloads
+
+### Completed Locally
+
+- Added OpenSpec change `server-event-motivation-payloads` requiring deterministic
+  server-authored motivation payloads for living-world events when runtime context
+  is available.
+- Added a generic `EventMotivation` shape and Rule Engine validation so malformed
+  optional `motivation` payloads are rejected before events are appended.
+- Attached authoritative motivation payloads to common runtime event families:
+  NPC movement/activity, productive actions, interactions, area pressure, weather
+  and season changes, rare windows, world-event spawn/end, building enter/leave,
+  life goals, households, and children.
+- Kept the `v0.15.33` client fallback path for older events and edge cases, while
+  allowing new events to carry committed reasons in `payload.data.motivation`.
+- Bumped app version from `0.15.33` to `0.15.34`.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 162 tests, web 8 files / 21 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+- `npx openspec validate server-event-motivation-payloads --strict` passed.
+- `git diff --check` passed.
+- Gemini staged review initially hit Windows UTF-8 pipe rendering for Chinese text;
+  rerunning with UTF-8 pipe settings found one test-coverage gap, which was fixed
+  with runtime assertions for representative activity, interaction, building,
+  area-pressure, weather, and world-event motivations. Final Gemini review:
+  `No findings`.
+
+### CI/CD + Live Verification
+
+- Code commit `1bd24ec` pushed to `main`.
+- GitHub Actions CI run `25709754151` passed.
+- GitHub Actions Deploy Dev run `25709754147` passed.
+- Live `v0.15.34` verification after deploy:
+  - `https://hunter.sisihome.org/healthz`: `200`, `version=0.15.34`, `tick=92232`.
+  - `https://hunter.sisihome.org/api/events?limit=100`: 86 of 100 sampled recent
+    rows carried committed motivation payloads.
+  - Sample motivated rows included `WORLD_EVENT_SPAWN`, `WEATHER_CHANGE`,
+    `NPC_INTERACT`, and `NPC_PRODUCTIVE_ACTION`; productive action payloads include
+    both `explanation` and `projectPurpose`.
+
+### Still Open
+
+- Continue enriching individual motivations as future NPC planners expose more
+  domain-specific intent, but new common runtime events now prefer committed
+  server reasons over client inference.
+
 ## 2026-05-12 — v0.15.33 Event Motivation Chronicle
 
 ### Completed Locally
