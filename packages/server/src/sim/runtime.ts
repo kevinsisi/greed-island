@@ -913,6 +913,23 @@ export class SimulationRuntime {
               }
             )
           )
+          if (progressAfter >= project.targetProgress) {
+            commands.push(
+              makeLivingWorldCommand(
+                'BUILDING_CONSTRUCTED',
+                SIM_ACTOR_WORLD,
+                'system',
+                nextTick,
+                submittedAt,
+                {
+                  projectId: project.projectId,
+                  buildingId: project.buildingId,
+                  tileId: project.targetTileId,
+                  narration: `${projectName}在${tileName}的自主建案 ${project.buildingId} 完工。`
+                }
+              )
+            )
+          }
         }
       } else if (event.kind === 'interact') {
         const [a, b] = event.participants
