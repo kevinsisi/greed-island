@@ -51,7 +51,10 @@
 - [x] 8.2 Update ARCHITECTURE.md §11.8 status (construction sub-item: autonomous initiation done).
 - [x] 8.3 Add ROADMAP.md entry pointing to remaining §11.8 sub-items (production, settlement, faction, skill).
 - [x] 8.4 Run completion-checklist: tests, build, OpenSpec validate, diff review, version bump, commit, push.
+- [x] 8.5 Live E2E verification: NPC-initiated project completes end-to-end with correct projection state.
   - Tests: 195 server + 29 web passed.
   - Build: `npm run build:server` + `npm run build:web` passed.
   - OpenSpec validate: passed on previous CI run.
   - Version: `0.15.47` already set.
+  - Projection payload-fix: `buildRowsFromEvents` now reads from `payload.data` (rule-engine wrapper) with fallback to direct `payload` (test-fixture format). Deployed and live-verified.
+  - E2E live verification: NPC-initiated mountain project progressed 0→24/24, emitted `BUILDING_CONSTRUCTED`, set `completedAtTick`. Multiple subsequent NPC projects started autonomously (5 total in world history).

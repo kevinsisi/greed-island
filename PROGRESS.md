@@ -3,6 +3,47 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.47c Projection Payload Nesting Fix + E2E Completion Verified
+
+### What Was Fixed
+
+The `constructionProjects` projection's `buildRowsFromEvents()` was reading
+event payload fields directly from `event.payload.*`, but the rule engine wraps
+all typed-event fields under `event.payload.data` (with `actorType` and
+`narration` at the outer level). This caused all `project(ev)` calls to silently
+skip CONSTRUCTION_PROJECT_PROGRESS and BUILDING_CONSTRUCTED events, leaving the
+projection permanently stale — the `/api/buildings` endpoint showed completed
+projects with frozen progress values.
+
+**`packages/server/src/projections/constructionProjects.ts`:**
+- `data = isRecord(payload.data) ? payload.data : payload` — reads from the
+  nested `.data` field for live rule-engine events, falls back to the flat
+  payload for test fixtures.
+- All three event-type handlers (CONSTRUCTION_INITIATE / CONSTRUCTION_PROJECT_PROGRESS /
+  BUILDING_CONSTRUCTED) now use `data.*` instead of `payload.*`.
+
+### What Was Verified End-to-End Live
+
+- NPC-initiated project on t_mountain (lei_zi) progressed from 0 → 24/24,
+  completed at tick 97993 with `completedAtTick` set in world fact.
+- `BUILDING_CONSTRUCTED` event was emitted and recorded in EventLog.
+- After projection fix deploy, `/api/buildings?tileId=t_mountain` correctly
+  returns only the active project (progress 7/24 by mo_fan), with no stale
+  completed entries.
+- NPC autonomous construction continues generating new projects: **5 total
+  in world history** (2 completed by lei_zi, 2 in progress by lei_zi + mo_fan).
+
+### Local Verification
+
+- `npm test`: 195 server tests all pass (23 files).
+- `npm run build:server` passed.
+- `git diff --check` passed.
+
+### CI/CD
+
+- Commits `392dbb1` (projection fix) passed CI run `25729485271` and
+  Deploy Dev run `25729485263` (live-verified after deploy).
+
 ## 2026-05-12 — v0.15.47 NPC-Initiated Construction Surface
 
 ### Completed Locally
