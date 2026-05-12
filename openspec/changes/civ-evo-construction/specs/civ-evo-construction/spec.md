@@ -6,15 +6,27 @@ The system SHALL allow an NPC, under deterministic policy, to emit a `CONSTRUCTI
 
 #### Scenario: NPC with build goal and low infrastructure emits CONSTRUCTION_INITIATE
 - **GIVEN** an NPC whose `goal.kind` is `build_city`
-- **AND** `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD` on the target tile for the demo slice
+- **AND** the NPC's construction demand meets the target tile's demand threshold
+- **AND** the NPC has at least `CIV_EVO_CONSTRUCTION_GOLD_COST` personal gold
 - **AND** the NPC has no active `build` task and no other NPC has an open project on the same `tileId`
 - **WHEN** the deterministic NPC policy runs in `cityLife.ts`
-- **THEN** the NPC SHALL emit `CONSTRUCTION_INITIATE { npcId, tileId, buildingId, duration, motivation? }`
+- **THEN** the NPC SHALL emit `CONSTRUCTION_INITIATE { npcId, tileId, buildingId, duration, goldCost, motivation? }`
+
+#### Scenario: Healthy-economy tiles require stronger demand instead of being excluded
+- **GIVEN** `areaState.resources.economy >= CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD`
+- **WHEN** an NPC has severe construction demand and enough gold
+- **THEN** the policy MAY emit `CONSTRUCTION_INITIATE`
+- **AND** healthy-economy tiles MUST NOT be permanently excluded from autonomous construction
+
+#### Scenario: Construction without demand or funds is rejected by policy
+- **WHEN** an NPC lacks construction demand or has less than `CIV_EVO_CONSTRUCTION_GOLD_COST` gold
+- **THEN** the deterministic NPC policy MUST NOT emit `CONSTRUCTION_INITIATE`
 
 #### Scenario: Rule Engine validates payload shape only
 - **WHEN** the Rule Engine evaluates a `CONSTRUCTION_INITIATE` command
 - **THEN** validation MUST require non-empty `npcId`, `tileId`, `buildingId`
 - **AND** `duration` MUST be an integer in `[1, 1000]`
+- **AND** `goldCost` (if present) MUST be a non-negative number
 - **AND** `motivation` (if present) MUST match the existing motivation payload shape
 - **AND** the validator MUST NOT read `WorldState` in this slice
 
@@ -22,7 +34,7 @@ The system SHALL allow an NPC, under deterministic policy, to emit a `CONSTRUCTI
 - **GIVEN** a payload-valid `CONSTRUCTION_INITIATE` command
 - **WHEN** the Rule Engine accepts it
 - **THEN** a `CONSTRUCTION_INITIATED` event MUST be appended to the EventLog
-- **AND** the event payload MUST carry `initiatedByNpcId`, `tileId`, `buildingId`, `duration`, `startedAtTick`
+- **AND** the event payload MUST carry `initiatedByNpcId`, `tileId`, `buildingId`, `duration`, `goldCost`, `startedAtTick`
 
 ### Requirement: ConstructionProjectRecord records the initiating NPC
 
@@ -31,6 +43,13 @@ The system SHALL extend `ConstructionProjectRecord` with `initiatedByNpcId: stri
 #### Scenario: Reducer appends a new record from CONSTRUCTION_INITIATED
 - **WHEN** `withConstructionInitiated(state, cmd)` runs
 - **THEN** a new `ConstructionProjectRecord` MUST be appended to `lifeExpansion.constructionProjects` with `kind: 'building'`, `targetTileId`, `buildingId`, `initiatedByNpcId`, `progress: 0`, `targetProgress: duration`, `startedAtTick`, `completedAtTick: null`
+
+#### Scenario: Reducer charges the initiating NPC once
+- **GIVEN** `cmd.goldCost > 0`
+- **WHEN** `withConstructionInitiated(state, cmd)` creates a new project
+- **THEN** the initiating NPC's `npcCivicRecords[npcId].gold` MUST decrease by `goldCost`
+- **AND** replaying the same initiate MUST NOT double-charge gold
+- **AND** the reducer MUST NOT create a paid project if the NPC cannot afford `goldCost`
 
 #### Scenario: projectId is a deterministic hash
 - **WHEN** a record is created

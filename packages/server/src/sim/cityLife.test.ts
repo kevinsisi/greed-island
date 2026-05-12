@@ -3,6 +3,7 @@ import type { NpcProfile } from '../npcs/types.js'
 import type { AreaState } from './areaStateEngine.js'
 import type { NpcRuntimeState } from './npcEngine.js'
 import {
+  CIV_EVO_CONSTRUCTION_GOLD_COST,
   CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE,
   SALT_MARSH_BUILDING_ID,
   SALT_MARSH_PROJECT_ID,
@@ -263,36 +264,116 @@ describe('city life projection', () => {
       expect(replayed.constructionProjects[projectId]!.initiatedByNpcId).toBe(npcInput.npcId)
       expect(replayed.constructionProjects[projectId]!.targetProgress).toBe(npcInput.duration)
     })
+
+    it('charges NPC gold when a construction initiate carries a start cost', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withNpcProductiveActionRecorded(expansion, {
+        npcId: npcInput.npcId,
+        domain: 'trade',
+        delta: 8,
+        tick: 90
+      })
+      expect(expansion.npcCivicRecords[npcInput.npcId]!.gold).toBe(CIV_EVO_CONSTRUCTION_GOLD_COST)
+
+      expansion = withConstructionInitiated(expansion, {
+        ...npcInput,
+        goldCost: CIV_EVO_CONSTRUCTION_GOLD_COST
+      })
+      const afterFirst = expansion
+      expansion = withConstructionInitiated(expansion, {
+        ...npcInput,
+        goldCost: CIV_EVO_CONSTRUCTION_GOLD_COST
+      })
+
+      expect(Object.keys(expansion.constructionProjects)).toHaveLength(1)
+      expect(expansion.npcCivicRecords[npcInput.npcId]!.gold).toBe(0)
+      expect(expansion).toBe(afterFirst)
+    })
+
+    it('does not start paid construction when the NPC cannot afford it', () => {
+      const expansion = withConstructionInitiated(createInitialLifeExpansionState(), {
+        ...npcInput,
+        goldCost: CIV_EVO_CONSTRUCTION_GOLD_COST
+      })
+
+      expect(Object.keys(expansion.constructionProjects)).toHaveLength(0)
+      expect(expansion.npcCivicRecords[npcInput.npcId]).toBeUndefined()
+    })
   })
 
   describe('civ-evo-construction: decideCivEvoConstructionInitiate', () => {
     const lowEconomyArea = { resources: { food: 70, safety: 72, economy: 30 } }
     const richArea = { resources: { food: 80, safety: 80, economy: 85 } }
     const empty = createInitialLifeExpansionState()
+    const viableNeed = {
+      constructionDemand: 80,
+      availableGold: CIV_EVO_CONSTRUCTION_GOLD_COST
+    }
 
     it('emits a fresh decision when economy is below the proxy threshold and tile is empty', () => {
       const decision = decideCivEvoConstructionInitiate({
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: empty
+        lifeExpansion: empty,
+        ...viableNeed
       })
       expect(decision).toEqual({
         npcId: 'central.broker.gui',
         tileId: 't_central',
         buildingId: 'b_civ_evo_t_central',
-        duration: 24
+        duration: 24,
+        goldCost: CIV_EVO_CONSTRUCTION_GOLD_COST
       })
     })
 
-    it('returns null when economy is at or above the proxy threshold', () => {
+    it('returns null when the NPC has no construction demand', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: empty,
+        constructionDemand: 20,
+        availableGold: CIV_EVO_CONSTRUCTION_GOLD_COST
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('returns null when the NPC cannot pay the start cost', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: empty,
+        constructionDemand: 80,
+        availableGold: CIV_EVO_CONSTRUCTION_GOLD_COST - 1
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('requires stronger personal demand when economy is healthy', () => {
       const decision = decideCivEvoConstructionInitiate({
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: richArea,
-        lifeExpansion: empty
+        lifeExpansion: empty,
+        ...viableNeed
       })
       expect(decision).toBeNull()
+    })
+
+    it('can initiate on a healthy-economy tile when personal demand is severe and funded', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: richArea,
+        lifeExpansion: empty,
+        constructionDemand: 90,
+        availableGold: CIV_EVO_CONSTRUCTION_GOLD_COST
+      })
+
+      expect(decision?.tileId).toBe('t_central')
+      expect(decision?.goldCost).toBe(CIV_EVO_CONSTRUCTION_GOLD_COST)
     })
 
     it('returns null on the legacy salt-marsh tile (its own progress engine still runs)', () => {
@@ -300,7 +381,8 @@ describe('city life projection', () => {
         npcId: 'central.broker.gui',
         tile: SALT_MARSH_TILE_ID,
         areaState: lowEconomyArea,
-        lifeExpansion: empty
+        lifeExpansion: empty,
+        ...viableNeed
       })
       expect(decision).toBeNull()
     })
@@ -318,7 +400,8 @@ describe('city life projection', () => {
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: expansion
+        lifeExpansion: expansion,
+        ...viableNeed
       })
       expect(decision).toBeNull()
     })
@@ -336,7 +419,8 @@ describe('city life projection', () => {
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: expansion
+        lifeExpansion: expansion,
+        ...viableNeed
       })
       expect(decision).toBeNull()
     })
@@ -351,7 +435,8 @@ describe('city life projection', () => {
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: expansion
+        lifeExpansion: expansion,
+        ...viableNeed
       })
       expect(decision).not.toBeNull()
     })
@@ -387,7 +472,8 @@ describe('city life projection', () => {
         npcId: 'central.broker.gui',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: expansion
+        lifeExpansion: expansion,
+        ...viableNeed
       })
       expect(decision).not.toBeNull()
     })
@@ -427,7 +513,8 @@ describe('city life projection', () => {
         npcId: 'central.builder.next',
         tile: 't_central',
         areaState: lowEconomyArea,
-        lifeExpansion: expansion
+        lifeExpansion: expansion,
+        ...viableNeed
       })
 
       expect(decision).toBeNull()

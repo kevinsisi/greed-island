@@ -443,6 +443,19 @@ export class SimulationRuntime {
       .filter((def): def is BuildingDef => def !== null)
   }
 
+  private constructionDemandForNpc(npcId: string, profile: NpcProfile | null, tileId: string, tick: number): number {
+    const state = this.npcEngine.getState(npcId)
+    if (!profile || !state) return 0
+    const life = deriveNpcLifeView({
+      profile,
+      state,
+      areaState: this.getAreaState(tileId),
+      lifeExpansion: this.lifeExpansion,
+      tick
+    })
+    return life.goal.kind === 'build_city' || life.goal.kind === 'secure_home' ? life.goal.pressure : 0
+  }
+
   private cappedCompletedConstructionProjects(): readonly ConstructionProjectRow[] {
     const countsByTile = new Map<string, number>()
     return this.constructionProjects
@@ -930,7 +943,9 @@ export class SimulationRuntime {
             npcId: event.npcId,
             tile: event.tile,
             areaState: this.getAreaState(event.tile),
-            lifeExpansion: this.lifeExpansion
+            lifeExpansion: this.lifeExpansion,
+            constructionDemand: this.constructionDemandForNpc(event.npcId, profile ?? null, event.tile, nextTick),
+            availableGold: this.lifeExpansion.npcCivicRecords[event.npcId]?.gold ?? 0
           })
           if (decision) {
             commands.push(
@@ -945,7 +960,8 @@ export class SimulationRuntime {
                   tileId: decision.tileId,
                   buildingId: decision.buildingId,
                   duration: decision.duration,
-                  narration: `${profile?.name.zh ?? event.npcId}決定在${event.tile}開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
+                  goldCost: decision.goldCost,
+                  narration: `${profile?.name.zh ?? event.npcId}因生活建設需求在${event.tile}支付 ${decision.goldCost} 金開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
                 }
               )
             )
@@ -1322,12 +1338,14 @@ export class SimulationRuntime {
             tileId: string
             buildingId: string
             duration: number
+            goldCost?: number
           }
           this.lifeExpansion = withConstructionInitiated(this.lifeExpansion, {
             npcId: payload.npcId,
             tileId: payload.tileId,
             buildingId: payload.buildingId,
             duration: payload.duration,
+            ...(payload.goldCost !== undefined ? { goldCost: payload.goldCost } : {}),
             tick: nextTick
           })
           lifeExpansionChanged = true

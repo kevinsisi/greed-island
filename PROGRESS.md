@@ -29,6 +29,11 @@ developer. Keep latest status at the top.
   per tile. This stops repeated same-tile "自主設施" speculation and caps the
   runtime/API projection so existing live history no longer renders dozens of
   duplicate building icons.
+- Follow-up realism fix: autonomous construction now requires both real NPC
+  construction demand and enough personal gold (`CIV_EVO_CONSTRUCTION_GOLD_COST`).
+  `CONSTRUCTION_INITIATE` carries `goldCost`, and the lifeExpansion projection
+  deducts the initiating NPC's gold exactly once. Healthy-economy tiles are not
+  permanently excluded; they require stronger personal demand.
 
 ### Verification
 
@@ -49,6 +54,7 @@ developer. Keep latest status at the top.
   props, and hiring slots.
 - Follow-up focused tests: `npm run test -w @greed-island/server -- buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 10 tests.
 - Hotfix focused tests: `npm run test -w @greed-island/server -- cityLife buildingRuntime dynamicConstruction buildingsRouter runtimeExpansion` passed: 30 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
+- Demand/cost focused tests: `npm run test -w @greed-island/server -- cityLife livingWorld runtimeExpansion` passed: 64 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 

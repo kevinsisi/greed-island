@@ -133,6 +133,7 @@ export type ConstructionInitiateCmd = Readonly<{
   tileId: string
   buildingId: string
   duration: number
+  goldCost?: number
   motivation?: ConstructionMotivation
   narration: string
 }>
@@ -447,6 +448,9 @@ const VALIDATORS: Readonly<
     if (typeof p.duration !== 'number' || !Number.isFinite(p.duration)) return 'duration required'
     if (!Number.isInteger(p.duration) || p.duration < 1 || p.duration > 1000) {
       return 'duration must be an integer in [1, 1000]'
+    }
+    if (p.goldCost !== undefined && (typeof p.goldCost !== 'number' || !Number.isFinite(p.goldCost) || p.goldCost < 0)) {
+      return 'goldCost must be a non-negative number'
     }
     if (p.motivation !== undefined) {
       const err = validateConstructionMotivation(p.motivation)

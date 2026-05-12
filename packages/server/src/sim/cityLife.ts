@@ -11,6 +11,9 @@ export const SALT_MARSH_BUILDING_ID = 'b_salt_marsh_field_station'
 export const SALT_MARSH_PROJECT_TARGET = 12
 export const CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD = 80
 export const CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE = 3
+export const CIV_EVO_CONSTRUCTION_GOLD_COST = 24
+export const CIV_EVO_CONSTRUCTION_DEMAND_THRESHOLD = 70
+export const CIV_EVO_CONSTRUCTION_HIGH_ECONOMY_DEMAND_THRESHOLD = 85
 export const NPC_PRODUCTIVE_XP_PER_DELTA = 5
 export const NPC_PRODUCTIVE_SKILL_BONUS_XP_STEP = 25
 export const NPC_PRODUCTIVE_SKILL_BONUS_MAX = 3
@@ -318,6 +321,7 @@ export function withConstructionInitiated(
     buildingId: string
     duration: number
     tick: number
+    goldCost?: number
     rulesetVersion?: string
   }
 ): LifeExpansionState {
@@ -331,8 +335,20 @@ export function withConstructionInitiated(
     ...(input.rulesetVersion !== undefined ? { rulesetVersion: input.rulesetVersion } : {})
   })
   if (state.constructionProjects[projectId]) return state
+  const goldCost = Math.max(0, Math.floor(input.goldCost ?? 0))
+  const civicBefore = state.npcCivicRecords[input.npcId] ?? createNpcCivicRecord(input.npcId)
+  if (civicBefore.gold < goldCost) return state
   return {
     ...state,
+    npcCivicRecords: goldCost > 0
+      ? {
+        ...state.npcCivicRecords,
+        [input.npcId]: {
+          ...civicBefore,
+          gold: civicBefore.gold - goldCost
+        }
+      }
+      : state.npcCivicRecords,
     constructionProjects: {
       ...state.constructionProjects,
       [projectId]: {
@@ -364,10 +380,9 @@ export function withConstructionInitiated(
  * Gating rules:
  *   1. Tile must NOT be the legacy salt-marsh expansion tile (its own
  *      progress engine still runs the salt-marsh fixed project).
- *   2. `areaState.resources.economy < CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD`
- *      is the Slice-3 demo proxy for the
- *      §11.8 "infrastructure" resource that is not yet modelled. A
- *      future slice will introduce a dedicated `infrastructure` field.
+ *   2. Tile economy changes the required demand threshold: low-economy
+ *      tiles can start at the normal demand threshold, while healthy-economy
+ *      tiles require severe demand instead of being permanently excluded.
  *   3. Same-tile-race: skip if any open civ-evo project already
  *      exists on this tile (first NPC wins; collaboration is future
  *      work). Salt-marsh's own settlement does NOT count.
@@ -376,6 +391,8 @@ export function withConstructionInitiated(
  *      event log, but NPCs must stop opening endless same-tile projects.
  *   5. No double-bookkeeping: skip if this NPC already has an open
  *      civ-evo project anywhere.
+ *   6. The builder must have real demand pressure and enough personal gold
+ *      to pay the construction start cost.
  *
  * Building id is `b_civ_evo_${tile}` so the slice does not depend on
  * the building catalog — Slice 6 wires the projection to the frontend.
@@ -387,15 +404,22 @@ export function decideCivEvoConstructionInitiate(input: {
   tile: string
   areaState: { resources: { food: number; safety: number; economy: number } } | null
   lifeExpansion: LifeExpansionState
+  constructionDemand: number
+  availableGold: number
 }): {
   npcId: string
   tileId: string
   buildingId: string
   duration: number
+  goldCost: number
 } | null {
   if (input.tile === SALT_MARSH_TILE_ID) return null
   const economy = input.areaState?.resources.economy ?? 100
-  if (economy >= CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD) return null
+  const requiredDemand = economy >= CIV_EVO_CONSTRUCTION_DEMO_ECONOMY_THRESHOLD
+    ? CIV_EVO_CONSTRUCTION_HIGH_ECONOMY_DEMAND_THRESHOLD
+    : CIV_EVO_CONSTRUCTION_DEMAND_THRESHOLD
+  if (input.constructionDemand < requiredDemand) return null
+  if (input.availableGold < CIV_EVO_CONSTRUCTION_GOLD_COST) return null
   let sameTileAutonomousProjects = 0
   for (const project of Object.values(input.lifeExpansion.constructionProjects)) {
     if (project.projectId === SALT_MARSH_PROJECT_ID) continue
@@ -410,7 +434,8 @@ export function decideCivEvoConstructionInitiate(input: {
     npcId: input.npcId,
     tileId: input.tile,
     buildingId: `b_civ_evo_${input.tile}`,
-    duration: 24
+    duration: 24,
+    goldCost: CIV_EVO_CONSTRUCTION_GOLD_COST
   }
 }
 
