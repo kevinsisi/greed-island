@@ -83,6 +83,12 @@ export type ServerNpc = {
   greetLine?: { zh: string; en: string }
   // v0.15.28+：server-authoritative short summary of the current NPC task
   intentLine?: { zh: string; en: string }
+  // v0.15.32+：deterministic needs and long-term life goal projection
+  life?: {
+    needs: Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>
+    goal: { kind: string; pressure: number; narration: string }
+    householdId: string | null
+  }
 }
 
 export type ServerCardCategory =
@@ -399,6 +405,35 @@ export type ServerCatchUpSummary = {
     domain: string
     metric: string
     delta: number
+    narration: string
+  }>
+  constructionProgress: Array<{
+    tick: number
+    projectId: string
+    targetTileId: string
+    progressAfter: number
+    targetProgress: number
+    narration: string
+  }>
+  expansions: Array<{
+    tick: number
+    kind: 'building' | 'map_tile'
+    id: string
+    tileId: string
+    narration: string
+  }>
+  households: Array<{
+    tick: number
+    kind: 'formed' | 'child_born'
+    householdId: string
+    narration: string
+  }>
+  lifeGoals: Array<{
+    tick: number
+    npcId: string
+    tile: string
+    goalKind: string
+    pressure: number
     narration: string
   }>
   interactions: Array<{

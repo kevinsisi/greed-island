@@ -17,7 +17,7 @@ import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { shiftFor, DAILY_SHIFT_COOLDOWN_TICKS } from '../buildings/playerJobsStore.js'
 import type { Shift } from '../buildings/types.js'
 import { REST_RESTORATION } from '../buildings/types.js'
-import { findBuildingById, listAllBuildings } from '../buildings/catalog.js'
+import { listAllBuildings } from '../buildings/catalog.js'
 import { requireAuth, type AuthConfig } from './auth.js'
 
 const VALID_SHIFTS: readonly Shift[] = ['morning', 'afternoon', 'night']
@@ -30,6 +30,9 @@ export function createBuildingsRouter(input: {
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+  const findVisibleBuilding = (id: string) => {
+    return input.runtime.getAllBuildings().find((v) => v.def.id === id) ?? null
+  }
 
   router.get('/buildings', (req: Request, res: Response) => {
     const tileId = typeof req.query.tileId === 'string' ? req.query.tileId : null
@@ -40,22 +43,21 @@ export function createBuildingsRouter(input: {
   })
 
   router.get('/buildings/:id', (req: Request, res: Response) => {
-    const def = findBuildingById(req.params.id ?? '')
-    if (!def) {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
-    const views = input.runtime.getAllBuildings()
-    const view = views.find((v) => v.def.id === def.id)
-    res.json({ building: view ?? { def, occupants: [] } })
+    res.json({ building: view })
   })
 
   router.post('/buildings/:id/apply', auth, (req: Request, res: Response) => {
-    const def = findBuildingById(req.params.id ?? '')
-    if (!def) {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
+    const def = view.def
     const accountId = req.auth!.sub
     const body = (req.body ?? {}) as { shift?: unknown }
     const shift = body.shift
@@ -92,11 +94,12 @@ export function createBuildingsRouter(input: {
   })
 
   router.post('/buildings/:id/quit', auth, (req: Request, res: Response) => {
-    const def = findBuildingById(req.params.id ?? '')
-    if (!def) {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
+    const def = view.def
     const accountId = req.auth!.sub
     const body = (req.body ?? {}) as { shift?: unknown }
     const shift = body.shift
@@ -109,11 +112,12 @@ export function createBuildingsRouter(input: {
   })
 
   router.post('/buildings/:id/work', auth, (req: Request, res: Response) => {
-    const def = findBuildingById(req.params.id ?? '')
-    if (!def) {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
+    const def = view.def
     const accountId = req.auth!.sub
     const currentTick = input.runtime.getCurrentTick()
     const currentShift = shiftFor(currentTick)
@@ -155,11 +159,12 @@ export function createBuildingsRouter(input: {
   })
 
   router.post('/buildings/:id/rest', auth, (req: Request, res: Response) => {
-    const def = findBuildingById(req.params.id ?? '')
-    if (!def) {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
+    const def = view.def
     if (!def.restorative) {
       res.status(400).json({ error: 'NOT_RESTORATIVE' })
       return

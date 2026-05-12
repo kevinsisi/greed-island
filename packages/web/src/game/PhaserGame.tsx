@@ -14,6 +14,7 @@ export interface PhaserGameProps {
   onPositionChange?: (pos: { x: number; y: number; z: number }) => void
   /** v0.14.0：每 tile 的派系 / 治安 / 經濟 overlay。空陣列 = 無 overlay。 */
   areaOverlays?: MapAreaOverlay[]
+  activeDistrictIds?: DistrictId[]
   controlsEnabled?: boolean
 }
 
@@ -64,6 +65,7 @@ export function PhaserGame({
   onNpcInteract,
   onPositionChange,
   areaOverlays,
+  activeDistrictIds,
   controlsEnabled = true
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -125,6 +127,7 @@ export function PhaserGame({
       controlsEnabled
     }
     if (areaOverlays) init.areaOverlays = areaOverlays
+    if (activeDistrictIds) init.activeDistrictIds = activeDistrictIds
     game.scene.start(MapScene.KEY, init)
 
     // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
@@ -179,6 +182,7 @@ export function PhaserGame({
       controlsEnabled
     }
     if (areaOverlays) update.areaOverlays = areaOverlays
+    if (activeDistrictIds) update.activeDistrictIds = activeDistrictIds
     const apply = () => {
       const game = gameRef.current
       if (!game) return
@@ -196,7 +200,7 @@ export function PhaserGame({
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [npcs, players, playerName, locale, hudStrings, areaOverlays, controlsEnabled])
+  }, [npcs, players, playerName, locale, hudStrings, areaOverlays, activeDistrictIds, controlsEnabled])
 
   return (
     <div

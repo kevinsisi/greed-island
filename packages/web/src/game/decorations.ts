@@ -86,6 +86,11 @@ export const CITY_DECORATIONS: Readonly<Record<DistrictId, readonly CellDecorati
     { col: 7, row: 14, glyph: '🪝', size: 20 },
     { col: 15, row: 14, glyph: '🪝', size: 20 },
   ],
+  t_salt_marsh: [
+    { col: 16, row: 13, glyph: '🌾', size: 22 },
+    { col: 18, row: 13, glyph: '🛖', size: 22 },
+    { col: 17, row: 14, glyph: '🪵', size: 20 },
+  ],
   t_road: [],
 }
 
@@ -285,6 +290,22 @@ export const AREA_DECORATIONS: Readonly<Record<DistrictId, AreaDecorationSet>> =
       { col: 5, row: 8, glyph: '⛵', size: 22 },
       { col: 9, row: 9, glyph: '🐚', size: 22 },
       { col: 13, row: 8, glyph: '🪝', size: 22 },
+    ],
+    roadCells: [
+      ...lineCells(0, 5, 14, 5),
+      ...lineCells(7, 0, 7, 9),
+    ],
+  },
+  t_salt_marsh: {
+    props: [
+      { col: 1, row: 1, glyph: '🌾', size: 22 },
+      { col: 3, row: 2, glyph: '🌿', size: 22 },
+      { col: 6, row: 1, glyph: '🛖', size: 24 },
+      { col: 9, row: 3, glyph: '📦', size: 22 },
+      { col: 12, row: 2, glyph: '🪵', size: 22 },
+      { col: 2, row: 8, glyph: '🐚', size: 20 },
+      { col: 8, row: 8, glyph: '🌾', size: 22 },
+      { col: 13, row: 7, glyph: '🪧', size: 20 },
     ],
     roadCells: [
       ...lineCells(0, 5, 14, 5),

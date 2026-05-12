@@ -69,6 +69,42 @@ describe('living-world rule engine', () => {
         delta: 2,
         narration: '...'
       }),
+      makeLivingWorldCommand('NPC_HOUSEHOLD_FORMED', 'household-a', 'system', 3, 3, {
+        householdId: 'household-a',
+        partnerNpcIds: ['npc-a', 'npc-b'],
+        homeTileId: 't_market',
+        narration: '...'
+      }),
+      makeLivingWorldCommand('NPC_CHILD_BORN', 'child-a', 'system', 3, 3, {
+        householdId: 'household-a',
+        childId: 'child-a',
+        nameZh: '潮生',
+        nameEn: 'Tideborn',
+        narration: '...'
+      }),
+      makeLivingWorldCommand('CONSTRUCTION_PROJECT_PROGRESS', 'npc-a', 'npc', 3, 3, {
+        projectId: 'project-a',
+        kind: 'settlement',
+        targetTileId: 't_salt_marsh',
+        buildingId: 'building-a',
+        npcId: 'npc-a',
+        delta: 2,
+        progressAfter: 2,
+        targetProgress: 12,
+        narration: '...'
+      }),
+      makeLivingWorldCommand('MAP_TILE_UNLOCKED', 'system', 'system', 3, 3, {
+        projectId: 'project-a',
+        tileId: 't_salt_marsh',
+        adjacentTo: ['t_dock', 't_ruin'],
+        narration: '...'
+      }),
+      makeLivingWorldCommand('BUILDING_CONSTRUCTED', 'system', 'system', 3, 3, {
+        projectId: 'project-a',
+        buildingId: 'building-a',
+        tileId: 't_salt_marsh',
+        narration: '...'
+      }),
       makeLivingWorldCommand('AREA_PRESSURE', 'system', 'system', 4, 4, {
         tileId: 't_market',
         kind: 'pressure.food_shortage',

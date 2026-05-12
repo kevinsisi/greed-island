@@ -17,6 +17,7 @@ export type DistrictId =
   | 't_central'  // 夜潮區
   | 't_ruin'     // 鏽灣區
   | 't_dock'     // 碼頭區
+  | 't_salt_marsh' // 鹽沼外環
   | 't_road'     // 中性連通帶 (不是「街區」，純粹給玩家走的路)
 
 export interface DistrictDef {
@@ -117,6 +118,16 @@ export const DISTRICTS: Readonly<Record<DistrictId, DistrictDef>> = {
     anchor: { col: 9, row: 13 },
     walkable: true
   },
+  t_salt_marsh: {
+    id: 't_salt_marsh',
+    nameZh: '鹽沼外環',
+    nameEn: 'Salt-Marsh Rim',
+    color: 0x789a9a,
+    shade: 0x5e7c7c,
+    border: 0x3c5555,
+    anchor: { col: 17, row: 14 },
+    walkable: true
+  },
   t_road: {
     id: 't_road',
     nameZh: '街道',
@@ -171,7 +182,8 @@ function districtAt(col: number, row: number): DistrictId {
   if (inRect(col, row, 0, 9, 4, 12)) return 't_desert'     // 潮聲區 左下
   if (inRect(col, row, 6, 9, 12, 12)) return 't_central'   // 夜潮區 中下
   if (inRect(col, row, 14, 9, 19, 12)) return 't_ruin'     // 鏽灣區 右下
-  if (inRect(col, row, 0, 13, 19, 14)) return 't_dock'     // 碼頭區 最下
+  if (inRect(col, row, 15, 13, 19, 14)) return 't_salt_marsh' // 鹽沼外環 擴張區
+  if (inRect(col, row, 0, 13, 14, 14)) return 't_dock'     // 碼頭區 最下
   // 其他空隙都是街道
   return 't_road'
 }
@@ -187,7 +199,8 @@ export const DISTRICT_IDS: DistrictId[] = [
   't_desert',
   't_central',
   't_ruin',
-  't_dock'
+  't_dock',
+  't_salt_marsh'
 ]
 
 export function isDistrict(id: DistrictId): boolean {

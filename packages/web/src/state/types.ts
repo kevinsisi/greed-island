@@ -71,6 +71,12 @@ export interface NpcSummary {
   greetLine?: { zh: string; en: string }
   /** Server-authoritative short summary of current deterministic NPC task (v0.15.28+) */
   intentLine?: { zh: string; en: string }
+  /** Deterministic life pressure and long-term goal projection (v0.15.32+) */
+  life?: {
+    needs: Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>
+    goal: { kind: string; pressure: number; narration: string }
+    householdId: string | null
+  }
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'

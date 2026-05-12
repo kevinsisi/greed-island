@@ -24,7 +24,13 @@ export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
 export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MOVE',
   'NPC_ACTIVITY_CHANGE',
+  'NPC_LIFE_GOAL_SET',
+  'NPC_HOUSEHOLD_FORMED',
+  'NPC_CHILD_BORN',
   'NPC_PRODUCTIVE_ACTION',
+  'CONSTRUCTION_PROJECT_PROGRESS',
+  'BUILDING_CONSTRUCTED',
+  'MAP_TILE_UNLOCKED',
   'NPC_INTERACT',
   'AREA_PRESSURE',
   'WEATHER_CHANGE',
@@ -67,6 +73,29 @@ export type NpcActivityChangeCmd = Readonly<{
   narration: string | null
 }>
 
+export type NpcLifeGoalSetCmd = Readonly<{
+  npcId: string
+  tile: string
+  needs: Readonly<Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>>
+  goal: Readonly<{ kind: string; pressure: number; narration: string }>
+  narration: string
+}>
+
+export type NpcHouseholdFormedCmd = Readonly<{
+  householdId: string
+  partnerNpcIds: readonly [string, string]
+  homeTileId: string
+  narration: string
+}>
+
+export type NpcChildBornCmd = Readonly<{
+  householdId: string
+  childId: string
+  nameZh: string
+  nameEn: string
+  narration: string
+}>
+
 export type NpcProductiveActionCmd = Readonly<{
   npcId: string
   tile: string
@@ -74,6 +103,32 @@ export type NpcProductiveActionCmd = Readonly<{
   domain: 'build' | 'learn' | 'trade' | 'service'
   metric: 'infrastructure' | 'knowledge' | 'economy' | 'safety' | 'supply'
   delta: number
+  narration: string
+}>
+
+export type ConstructionProjectProgressCmd = Readonly<{
+  projectId: string
+  kind: 'settlement'
+  targetTileId: string
+  buildingId: string
+  npcId: string
+  delta: number
+  progressAfter: number
+  targetProgress: number
+  narration: string
+}>
+
+export type BuildingConstructedCmd = Readonly<{
+  projectId: string
+  buildingId: string
+  tileId: string
+  narration: string
+}>
+
+export type MapTileUnlockedCmd = Readonly<{
+  projectId: string
+  tileId: string
+  adjacentTo: readonly string[]
   narration: string
 }>
 
@@ -219,7 +274,13 @@ export type CombatResolveCmd = Readonly<{
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
+  | NpcLifeGoalSetCmd
+  | NpcHouseholdFormedCmd
+  | NpcChildBornCmd
   | NpcProductiveActionCmd
+  | ConstructionProjectProgressCmd
+  | BuildingConstructedCmd
+  | MapTileUnlockedCmd
   | NpcInteractCmd
   | AreaPressureCmd
   | WeatherChangeCmd
@@ -276,6 +337,42 @@ const VALIDATORS: Readonly<
     if (typeof p.to !== 'string') return 'to required'
     return null
   },
+  NPC_LIFE_GOAL_SET: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (!isRecord(p.needs)) return 'needs required'
+    for (const key of ['food', 'rest', 'money', 'housing', 'safety']) {
+      const value = p.needs[key]
+      if (typeof value !== 'number' || !Number.isFinite(value)) return `${key} need required`
+    }
+    if (!isRecord(p.goal)) return 'goal required'
+    if (typeof p.goal.kind !== 'string' || p.goal.kind.length === 0) return 'goal kind required'
+    if (typeof p.goal.pressure !== 'number' || !Number.isFinite(p.goal.pressure)) return 'goal pressure required'
+    if (typeof p.goal.narration !== 'string') return 'goal narration required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_HOUSEHOLD_FORMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (!Array.isArray(p.partnerNpcIds) || p.partnerNpcIds.length !== 2) return 'partnerNpcIds tuple required'
+    const [a, b] = p.partnerNpcIds as readonly unknown[]
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length === 0 || b.length === 0) return 'partner npc ids required'
+    if (a === b) return 'partner npc ids must differ'
+    if (typeof p.homeTileId !== 'string' || p.homeTileId.length === 0) return 'homeTileId required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_CHILD_BORN: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (typeof p.childId !== 'string' || p.childId.length === 0) return 'childId required'
+    if (typeof p.nameZh !== 'string' || p.nameZh.length === 0) return 'nameZh required'
+    if (typeof p.nameEn !== 'string' || p.nameEn.length === 0) return 'nameEn required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
   NPC_PRODUCTIVE_ACTION: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
@@ -294,6 +391,35 @@ const VALIDATORS: Readonly<
       return 'invalid metric'
     }
     if (typeof p.delta !== 'number' || !Number.isFinite(p.delta)) return 'delta required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  CONSTRUCTION_PROJECT_PROGRESS: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
+    if (p.kind !== 'settlement') return 'invalid kind'
+    if (typeof p.targetTileId !== 'string' || p.targetTileId.length === 0) return 'targetTileId required'
+    if (typeof p.buildingId !== 'string' || p.buildingId.length === 0) return 'buildingId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.delta !== 'number' || !Number.isFinite(p.delta) || p.delta <= 0) return 'delta required'
+    if (typeof p.progressAfter !== 'number' || !Number.isFinite(p.progressAfter)) return 'progressAfter required'
+    if (typeof p.targetProgress !== 'number' || !Number.isFinite(p.targetProgress)) return 'targetProgress required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  BUILDING_CONSTRUCTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
+    if (typeof p.buildingId !== 'string' || p.buildingId.length === 0) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  MAP_TILE_UNLOCKED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!Array.isArray(p.adjacentTo) || !p.adjacentTo.every((v) => typeof v === 'string')) return 'adjacentTo required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

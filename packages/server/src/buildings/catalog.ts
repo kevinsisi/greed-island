@@ -442,6 +442,36 @@ const ALL_BUILDINGS: BuildingDef[] = [
   }
 ]
 
+export const EXPANSION_BUILDINGS: ReadonlyArray<BuildingDef> = [
+  {
+    id: 'b_salt_marsh_field_station',
+    tileId: 't_salt_marsh',
+    nameZh: '鹽沼拓荒站',
+    nameEn: 'Salt-Marsh Field Station',
+    descriptionZh: '由工匠、商人與巡衛合力搭起的外環據點，先有倉棚、藥草架與一張公共餐桌。',
+    type: 'landmark',
+    placement: { col: 7, row: 4, glyph: '🛖', size: 24 },
+    interior: {
+      cols: 10,
+      rows: 6,
+      props: [
+        { col: 1, row: 1, glyph: '📦', label: '拓荒補給' },
+        { col: 3, row: 1, glyph: '🌿', label: '藥草架' },
+        { col: 5, row: 2, glyph: '🗺', label: '外環地圖' },
+        { col: 7, row: 3, glyph: '🪵', label: '修建木料' },
+        { col: 4, row: 4, glyph: '🍲', label: '公共餐桌' }
+      ]
+    },
+    ownerNpcId: null,
+    hiring: [
+      { shift: 'morning', capacity: 2, wage: 16, taskZh: '整理拓荒補給' },
+      { shift: 'afternoon', capacity: 2, wage: 18, taskZh: '巡查鹽沼路標' }
+    ],
+    enterable: true,
+    restorative: true
+  }
+]
+
 const BUILDINGS_BY_TILE: Map<string, BuildingDef[]> = (() => {
   const map = new Map<string, BuildingDef[]>()
   for (const b of ALL_BUILDINGS) {
@@ -461,16 +491,24 @@ const BUILDING_BY_ID: Map<string, BuildingDef> = (() => {
   return map
 })()
 
-export function listAllBuildings(): readonly BuildingDef[] {
-  return ALL_BUILDINGS
+export function listAllBuildings(unlockedBuildingIds: readonly string[] = []): readonly BuildingDef[] {
+  const unlocked = new Set(unlockedBuildingIds)
+  return [
+    ...ALL_BUILDINGS,
+    ...EXPANSION_BUILDINGS.filter((building) => unlocked.has(building.id))
+  ]
 }
 
-export function listBuildingsForTile(tileId: string): readonly BuildingDef[] {
-  return BUILDINGS_BY_TILE.get(tileId) ?? []
+export function listBuildingsForTile(tileId: string, unlockedBuildingIds: readonly string[] = []): readonly BuildingDef[] {
+  const unlocked = new Set(unlockedBuildingIds)
+  return [
+    ...(BUILDINGS_BY_TILE.get(tileId) ?? []),
+    ...EXPANSION_BUILDINGS.filter((building) => building.tileId === tileId && unlocked.has(building.id))
+  ]
 }
 
 export function findBuildingById(id: string): BuildingDef | null {
-  return BUILDING_BY_ID.get(id) ?? null
+  return BUILDING_BY_ID.get(id) ?? EXPANSION_BUILDINGS.find((building) => building.id === id) ?? null
 }
 
 export function findOwnerBuilding(npcId: string): BuildingDef | null {

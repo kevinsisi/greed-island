@@ -93,6 +93,8 @@ export interface MapSceneInit {
   initialPosition?: { x: number; y: number } | null
   /** v0.14.0：每 district 的派系 / 治安 / 經濟 overlay。 */
   areaOverlays?: MapAreaOverlay[]
+  /** District ids returned by `/api/map`; expansion districts are locked until present. */
+  activeDistrictIds?: DistrictId[]
   /** Guests can browse the world, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
@@ -141,6 +143,7 @@ export class MapScene extends Phaser.Scene {
   private locale: 'zh' | 'en' = 'zh'
   private hudStrings: MapSceneInit['hudStrings'] = { interact: '', enterArea: '' }
   private controlsEnabled = true
+  private activeDistrictIds = new Set<DistrictId>(DISTRICT_IDS)
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -180,6 +183,7 @@ export class MapScene extends Phaser.Scene {
     this.hudStrings = data.hudStrings
     this.initialPosition = data.initialPosition ?? null
     this.controlsEnabled = data.controlsEnabled ?? true
+    this.activeDistrictIds = new Set(data.activeDistrictIds ?? DISTRICT_IDS)
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -211,7 +215,7 @@ export class MapScene extends Phaser.Scene {
     // 如果玩家從還原的座標一開始就站在某街區裡，立刻同步給 React 端，
     // 否則「進入 XXX →」按鈕得等到玩家踏出街區再走回來才會出現。
     // 不放 banner — banner 是「剛走進」的通知，重整頁面時不該再演一次。
-    if (this.controlsEnabled && isDistrict(this.currentDistrict)) {
+    if (this.controlsEnabled && this.isActiveDistrict(this.currentDistrict)) {
       this.callbacks.onAreaEnter(this.currentDistrict)
     }
 
@@ -230,6 +234,7 @@ export class MapScene extends Phaser.Scene {
     locale?: 'zh' | 'en'
     hudStrings?: MapSceneInit['hudStrings']
     areaOverlays?: MapAreaOverlay[]
+    activeDistrictIds?: DistrictId[]
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -239,7 +244,7 @@ export class MapScene extends Phaser.Scene {
         this.pointerTarget = null
         this.player?.setVelocity(0, 0)
         this.interactPrompt?.setVisible(false)
-      } else if (!wasControlsEnabled && isDistrict(this.currentDistrict)) {
+      } else if (!wasControlsEnabled && this.isActiveDistrict(this.currentDistrict)) {
         this.callbacks.onAreaEnter(this.currentDistrict)
       }
     }
@@ -264,6 +269,7 @@ export class MapScene extends Phaser.Scene {
       this.areaOverlays = payload.areaOverlays
       this.refreshAreaOverlay()
     }
+    if (payload.activeDistrictIds) this.activeDistrictIds = new Set(payload.activeDistrictIds)
     this.redrawDistrictLabels()
   }
 
@@ -291,13 +297,18 @@ export class MapScene extends Phaser.Scene {
         const def = DISTRICTS[id]
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
+        const active = id === 't_road' || this.isActiveDistrict(id)
         // 棋盤格紋路：偶數格用主色，奇數格略深，做出像素風的小變化
         const checker = (col + row) % 2 === 0
-        g.fillStyle(checker ? def.color : def.shade, 1)
+        g.fillStyle(active ? (checker ? def.color : def.shade) : 0x1f2429, 1)
         g.fillRect(x, y, TILE_SIZE, TILE_SIZE)
         // 街區內側細邊框 (讓街區整體看起來像一個方塊)
-        g.lineStyle(1, def.border, 0.35)
+        g.lineStyle(1, active ? def.border : 0x3b4248, active ? 0.35 : 0.55)
         g.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
+        if (!active && (col + row) % 3 === 0) {
+          g.fillStyle(0xf6c560, 0.2)
+          g.fillRect(x + 6, y + TILE_SIZE / 2 - 1, TILE_SIZE - 12, 2)
+        }
         // 街道再加上中央車道虛線，讓「可走的路」一眼就分辨出來
         if (id === 't_road') {
           g.fillStyle(0xfff5b8, 0.55)
@@ -336,7 +347,7 @@ export class MapScene extends Phaser.Scene {
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let col = 0; col < GRID_COLS; col += 1) {
         const id = DISTRICT_GRID[row]![col]!
-        if (!isDistrict(id)) continue
+        if (!this.isActiveDistrict(id)) continue
         const existing = boxes.get(id)
         if (!existing) {
           boxes.set(id, { id, minCol: col, minRow: row, maxCol: col, maxRow: row })
@@ -385,6 +396,7 @@ export class MapScene extends Phaser.Scene {
    */
   private drawDecorations(): void {
     for (const id of DISTRICT_IDS) {
+      if (!this.isActiveDistrict(id)) continue
       const list = CITY_DECORATIONS[id]
       if (!list) continue
       for (const deco of list) {
@@ -505,7 +517,7 @@ export class MapScene extends Phaser.Scene {
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let col = 0; col < GRID_COLS; col += 1) {
         const here = DISTRICT_GRID[row]![col]!
-        if (!isDistrict(here)) continue
+        if (!this.isActiveDistrict(here)) continue
         const x = col * TILE_SIZE
         const y = row * TILE_SIZE
         // 跟相鄰格子比較：如果鄰居是不同街區 (或地圖外)，畫一條邊
@@ -569,7 +581,12 @@ export class MapScene extends Phaser.Scene {
   }
 
   private labelFor(def: DistrictDef): string {
+    if (!this.isActiveDistrict(def.id)) return this.locale === 'zh' ? '施工中' : 'Under construction'
     return this.locale === 'zh' ? def.nameZh : def.nameEn
+  }
+
+  private isActiveDistrict(id: DistrictId): boolean {
+    return isDistrict(id) && this.activeDistrictIds.has(id)
   }
 
   // ---------- 玩家 / NPC sprite ----------
@@ -1182,7 +1199,7 @@ export class MapScene extends Phaser.Scene {
     const here = districtAtPixel(this.player.x, this.player.y)
     if (here !== this.currentDistrict) {
       this.currentDistrict = here
-      if (isDistrict(here)) {
+      if (this.isActiveDistrict(here)) {
         this.showDistrictBanner(here)
         this.callbacks.onAreaEnter(here)
       }

@@ -23,7 +23,8 @@ const TILE_NAME_ZH: Readonly<Record<string, string>> = {
   t_desert: '潮聲區',
   t_central: '夜潮區',
   t_ruin: '鏽灣區',
-  t_dock: '碼頭區'
+  t_dock: '碼頭區',
+  t_salt_marsh: '鹽沼外環'
 }
 
 const PRESSURE_LABEL: Readonly<Record<string, string>> = {
@@ -68,6 +69,10 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
         !!w &&
         (w.pressureMoments.length > 0 ||
           (w.productiveActions?.length ?? 0) > 0 ||
+          (w.constructionProgress?.length ?? 0) > 0 ||
+          (w.expansions?.length ?? 0) > 0 ||
+          (w.households?.length ?? 0) > 0 ||
+          (w.lifeGoals?.length ?? 0) > 0 ||
           w.worldEvents.length > 0 ||
           w.weatherChanges.length > 0 ||
           w.seasonChanges.length > 0 ||
@@ -91,6 +96,10 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
 
   const pressureMoments = world?.pressureMoments ?? []
   const productiveActions = world?.productiveActions ?? []
+  const constructionProgress = world?.constructionProgress ?? []
+  const expansions = world?.expansions ?? []
+  const households = world?.households ?? []
+  const lifeGoals = world?.lifeGoals ?? []
   const worldEvents = world?.worldEvents ?? []
   const weatherChanges = world?.weatherChanges ?? []
 
@@ -173,6 +182,77 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
                         tick {a.tick} | {TILE_NAME_ZH[a.tile] ?? a.tile} | {a.domain}/{a.metric} +{a.delta}
                       </div>
                       <div className="leading-snug">{a.narration}</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {(constructionProgress.length > 0 || expansions.length > 0) && (
+            <Section title="建設 / 擴張">
+              <ul className="flex flex-col gap-1.5">
+                {expansions.slice(0, 6).map((a, idx) => (
+                  <li key={`exp-${a.tick}-${a.id}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => goToArea(a.tileId)}
+                      className="w-full text-left border border-ground-800 hover:border-ember-700 rounded-sharp p-2 text-[12px] text-ground-200 hover:bg-ground-800/50 transition-colors"
+                    >
+                      <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500 mb-1">
+                        tick {a.tick} | {TILE_NAME_ZH[a.tileId] ?? a.tileId} | {a.kind}
+                      </div>
+                      <div className="leading-snug">{a.narration}</div>
+                    </button>
+                  </li>
+                ))}
+                {constructionProgress.slice(0, 6).map((a, idx) => (
+                  <li key={`build-${a.tick}-${a.projectId}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => goToArea(a.targetTileId)}
+                      className="w-full text-left border border-ground-800 hover:border-moss-700 rounded-sharp p-2 text-[12px] text-ground-200 hover:bg-ground-800/50 transition-colors"
+                    >
+                      <div className="font-display text-[10px] uppercase tracking-tightest text-moss-500 mb-1">
+                        tick {a.tick} | {TILE_NAME_ZH[a.targetTileId] ?? a.targetTileId} | {a.progressAfter}/{a.targetProgress}
+                      </div>
+                      <div className="leading-snug">{a.narration}</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {households.length > 0 && (
+            <Section title="家庭 / 新生">
+              <ul className="flex flex-col gap-1.5">
+                {households.slice(0, 6).map((h, idx) => (
+                  <li key={`${h.tick}-${h.householdId}-${idx}`} className="border border-ground-800 rounded-sharp p-2 text-[12px] text-ground-200">
+                    <div className="font-display text-[10px] uppercase tracking-tightest text-ember-500 mb-1">
+                      tick {h.tick} | {h.kind}
+                    </div>
+                    <div className="leading-snug">{h.narration}</div>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {lifeGoals.length > 0 && (
+            <Section title="生活目標">
+              <ul className="flex flex-col gap-1.5">
+                {lifeGoals.slice(0, 6).map((g, idx) => (
+                  <li key={`${g.tick}-${g.npcId}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => goToArea(g.tile)}
+                      className="w-full text-left border border-ground-800 hover:border-moss-700 rounded-sharp p-2 text-[12px] text-ground-200 hover:bg-ground-800/50 transition-colors"
+                    >
+                      <div className="font-display text-[10px] uppercase tracking-tightest text-moss-500 mb-1">
+                        tick {g.tick} | {TILE_NAME_ZH[g.tile] ?? g.tile} | {g.goalKind} {g.pressure}
+                      </div>
+                      <div className="leading-snug">{g.narration}</div>
                     </button>
                   </li>
                 ))}

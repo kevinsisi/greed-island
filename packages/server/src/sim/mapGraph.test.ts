@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAP_ADJACENCY, MAP_TILES, nextStepTowards } from './mapGraph.js'
+import { MAP_ADJACENCY, MAP_TILES, getMapAdjacency, listMapTiles, nextStepTowards } from './mapGraph.js'
 
 describe('mapGraph', () => {
   it('every tile is in adjacency map', () => {
@@ -40,5 +40,14 @@ describe('mapGraph', () => {
 
   it('nextStepTowards returns null when target is unknown', () => {
     expect(nextStepTowards('t_central', 't_nope')).toBeNull()
+  })
+
+  it('keeps expansion tiles locked until unlocked', () => {
+    expect(listMapTiles().map((tile) => tile.id)).not.toContain('t_salt_marsh')
+    expect(listMapTiles(['t_salt_marsh']).map((tile) => tile.id)).toContain('t_salt_marsh')
+    expect(getMapAdjacency().t_salt_marsh).toBeUndefined()
+    expect(getMapAdjacency(['t_salt_marsh']).t_dock).toContain('t_salt_marsh')
+    expect(nextStepTowards('t_dock', 't_salt_marsh')).toBeNull()
+    expect(nextStepTowards('t_dock', 't_salt_marsh', ['t_salt_marsh'])).toBe('t_salt_marsh')
   })
 })

@@ -7,9 +7,15 @@ import { hashCanonicalJson } from './canonicalJson.js'
 import type { Event } from './types.js'
 import type {
   AreaPressureCmd,
+  BuildingConstructedCmd,
   BuildingEnterCmd,
+  ConstructionProjectProgressCmd,
   LivingWorldEventPayload,
+  MapTileUnlockedCmd,
+  NpcChildBornCmd,
+  NpcHouseholdFormedCmd,
   NpcInteractCmd,
+  NpcLifeGoalSetCmd,
   NpcMoveCmd,
   NpcProductiveActionCmd,
   SeasonChangeCmd,
@@ -45,6 +51,35 @@ export type CatchUpSummary = Readonly<{
     domain: string
     metric: string
     delta: number
+    narration: string
+  }>
+  constructionProgress: ReadonlyArray<{
+    tick: number
+    projectId: string
+    targetTileId: string
+    progressAfter: number
+    targetProgress: number
+    narration: string
+  }>
+  expansions: ReadonlyArray<{
+    tick: number
+    kind: 'building' | 'map_tile'
+    id: string
+    tileId: string
+    narration: string
+  }>
+  households: ReadonlyArray<{
+    tick: number
+    kind: 'formed' | 'child_born'
+    householdId: string
+    narration: string
+  }>
+  lifeGoals: ReadonlyArray<{
+    tick: number
+    npcId: string
+    tile: string
+    goalKind: string
+    pressure: number
     narration: string
   }>
   interactions: ReadonlyArray<{
@@ -86,6 +121,35 @@ export function summarizeWindow(
     domain: string
     metric: string
     delta: number
+    narration: string
+  }> = []
+  const constructionProgress: Array<{
+    tick: number
+    projectId: string
+    targetTileId: string
+    progressAfter: number
+    targetProgress: number
+    narration: string
+  }> = []
+  const expansions: Array<{
+    tick: number
+    kind: 'building' | 'map_tile'
+    id: string
+    tileId: string
+    narration: string
+  }> = []
+  const households: Array<{
+    tick: number
+    kind: 'formed' | 'child_born'
+    householdId: string
+    narration: string
+  }> = []
+  const lifeGoals: Array<{
+    tick: number
+    npcId: string
+    tile: string
+    goalKind: string
+    pressure: number
     narration: string
   }> = []
   const interactions: Array<{
@@ -134,6 +198,58 @@ export function summarizeWindow(
           delta: d.delta,
           narration: d.narration
         })
+        break
+      }
+      case 'NPC_LIFE_GOAL_SET': {
+        const d = data as NpcLifeGoalSetCmd
+        byNpc[d.npcId] = (byNpc[d.npcId] ?? 0) + 1
+        byArea[d.tile] = (byArea[d.tile] ?? 0) + 1
+        lifeGoals.push({
+          tick,
+          npcId: d.npcId,
+          tile: d.tile,
+          goalKind: d.goal.kind,
+          pressure: d.goal.pressure,
+          narration: d.narration
+        })
+        break
+      }
+      case 'CONSTRUCTION_PROJECT_PROGRESS': {
+        const d = data as ConstructionProjectProgressCmd
+        byNpc[d.npcId] = (byNpc[d.npcId] ?? 0) + 1
+        byArea[d.targetTileId] = (byArea[d.targetTileId] ?? 0) + 1
+        constructionProgress.push({
+          tick,
+          projectId: d.projectId,
+          targetTileId: d.targetTileId,
+          progressAfter: d.progressAfter,
+          targetProgress: d.targetProgress,
+          narration: d.narration
+        })
+        break
+      }
+      case 'BUILDING_CONSTRUCTED': {
+        const d = data as BuildingConstructedCmd
+        byArea[d.tileId] = (byArea[d.tileId] ?? 0) + 1
+        expansions.push({ tick, kind: 'building', id: d.buildingId, tileId: d.tileId, narration: d.narration })
+        break
+      }
+      case 'MAP_TILE_UNLOCKED': {
+        const d = data as MapTileUnlockedCmd
+        byArea[d.tileId] = (byArea[d.tileId] ?? 0) + 1
+        expansions.push({ tick, kind: 'map_tile', id: d.tileId, tileId: d.tileId, narration: d.narration })
+        break
+      }
+      case 'NPC_HOUSEHOLD_FORMED': {
+        const d = data as NpcHouseholdFormedCmd
+        households.push({ tick, kind: 'formed', householdId: d.householdId, narration: d.narration })
+        for (const npcId of d.partnerNpcIds) byNpc[npcId] = (byNpc[npcId] ?? 0) + 1
+        byArea[d.homeTileId] = (byArea[d.homeTileId] ?? 0) + 1
+        break
+      }
+      case 'NPC_CHILD_BORN': {
+        const d = data as NpcChildBornCmd
+        households.push({ tick, kind: 'child_born', householdId: d.householdId, narration: d.narration })
         break
       }
       case 'BUILDING_ENTER': {
@@ -185,6 +301,10 @@ export function summarizeWindow(
     seasonChanges,
     pressureMoments,
     productiveActions,
+    constructionProgress,
+    expansions,
+    households,
+    lifeGoals,
     interactions
   }
   const digest = hashCanonicalJson(summary)

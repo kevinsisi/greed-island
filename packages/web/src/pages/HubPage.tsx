@@ -16,17 +16,6 @@ import type { FactionLeanId, MapAreaOverlay, MapNpc, MapPlayer } from '../game/M
 import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
 
-const KNOWN_DISTRICTS = new Set<DistrictId>([
-  't_forest',
-  't_mountain',
-  't_temple',
-  't_dimai',
-  't_desert',
-  't_central',
-  't_ruin',
-  't_dock'
-])
-
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
 type HubPosition = { x: number; y: number; z: number }
@@ -40,7 +29,7 @@ type HubPosition = { x: number; y: number; z: number }
  */
 export function HubPage() {
   const { t, locale } = useI18n()
-  const { npcs } = useWorldState()
+  const { npcs, map } = useWorldState()
   const { token, account } = useAuth()
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
@@ -71,9 +60,15 @@ export function HubPage() {
     }
   }, [])
 
+  const activeDistrictIds = useMemo<DistrictId[]>(() => {
+    return map.tiles.map((tile) => tile.id).filter((id): id is DistrictId => isDistrict(id as DistrictId))
+  }, [map.tiles])
+
+  const activeDistrictSet = useMemo(() => new Set(activeDistrictIds), [activeDistrictIds])
+
   const areaOverlays = useMemo<MapAreaOverlay[]>(() => {
     return areaStates
-      .filter((a) => KNOWN_DISTRICTS.has(a.tileId as DistrictId))
+      .filter((a) => activeDistrictSet.has(a.tileId as DistrictId))
       .map((a) => ({
         districtId: a.tileId as DistrictId,
         safety: a.resources.safety,
@@ -81,7 +76,7 @@ export function HubPage() {
         food: a.resources.food,
         dominantFaction: (a.dominantFaction as FactionLeanId | null) ?? null
       }))
-  }, [areaStates])
+  }, [activeDistrictSet, areaStates])
 
   // 主地圖是世界總覽：只顯示跨區移動中的 NPC route。
   // 已落在某個區域或建築內的 NPC 只在該子層地圖渲染，避免同一 NPC 分身。
@@ -146,8 +141,9 @@ export function HubPage() {
   const handleAreaEnter = useCallback((districtId: DistrictId) => {
     if (!token) return
     if (!isDistrict(districtId)) return
+    if (!activeDistrictSet.has(districtId)) return
     setCurrentDistrict(districtId)
-  }, [token])
+  }, [activeDistrictSet, token])
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
@@ -198,6 +194,7 @@ export function HubPage() {
           onNpcInteract={handleNpcInteract}
           onPositionChange={handleHubPositionChange}
           areaOverlays={areaOverlays}
+          activeDistrictIds={activeDistrictIds}
           controlsEnabled={!!token}
         />
 

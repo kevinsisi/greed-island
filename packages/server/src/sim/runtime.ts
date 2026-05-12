@@ -50,7 +50,7 @@ import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { MAP_TILES, TILE_NAME_BY_ID } from './mapGraph.js'
+import { MAP_TILES, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -66,9 +66,26 @@ import {
 } from './areaStateEngine.js'
 import { BuildingRuntime } from '../buildings/buildingRuntime.js'
 import type { BuildingRuntimeView } from '../buildings/types.js'
-import { findBuildingById, listBuildingsForTile } from '../buildings/catalog.js'
+import { findBuildingById, listAllBuildings, listBuildingsForTile } from '../buildings/catalog.js'
 import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
+import {
+  LIFE_EXPANSION_FACT_KEY,
+  SALT_MARSH_BUILDING_ID,
+  SALT_MARSH_PROJECT_ID,
+  SALT_MARSH_PROJECT_TARGET,
+  SALT_MARSH_TILE_ID,
+  createInitialLifeExpansionState,
+  deriveNpcLifeView,
+  hydrateLifeExpansionState,
+  householdIdForNpc,
+  withChildBorn,
+  withConstructionProgress,
+  withHouseholdFormed,
+  withUnlockedExpansion,
+  type LifeExpansionState,
+  type NpcLifeView
+} from './cityLife.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -132,6 +149,8 @@ export type SimNpcState = Readonly<{
   greetLine: { zh: string; en: string }
   /** Deterministic public summary of the NPC's current task/intent. */
   intentLine: NpcIntentLine
+  /** Deterministic life pressure and current long-term goal. */
+  life: NpcLifeView
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -186,6 +205,7 @@ export class SimulationRuntime {
   private npcMemory: SqliteNpcMemoryStore | null = null
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
+  private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -326,7 +346,8 @@ export class SimulationRuntime {
         rareWindowOpen: this.rareWindowOpen,
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
         activeEvents: this.eventEngine.getActive(),
-        areaStates: this.areaEngine.snapshotAll()
+        areaStates: this.getAreaStates(),
+        lifeExpansion: this.lifeExpansion
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -339,19 +360,44 @@ export class SimulationRuntime {
   }
 
   getAreaStates(): readonly AreaState[] {
-    return this.areaEngine.snapshotAll()
+    return [
+      ...this.areaEngine.snapshotAll(),
+      ...this.lifeExpansion.unlockedTileIds
+        .filter((tileId) => !this.areaEngine.getState(tileId))
+        .map((tileId) => makeExpansionAreaState(tileId, this.currentTick))
+    ]
   }
 
   getAreaState(tileId: string): AreaState | null {
-    return this.areaEngine.getState(tileId)
+    return this.areaEngine.getState(tileId) ?? (
+      this.lifeExpansion.unlockedTileIds.includes(tileId)
+        ? makeExpansionAreaState(tileId, this.currentTick)
+        : null
+    )
   }
 
   getBuildingsOnTile(tileId: string): readonly BuildingRuntimeView[] {
-    return this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
+    return this.mergeUnlockedBuildings(
+      tileId,
+      this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
+    )
   }
 
   getAllBuildings(): readonly BuildingRuntimeView[] {
-    return this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())
+    const existing = this.buildingRuntime.snapshotAll(this.npcEngine.snapshotAll())
+    const byId = new Map(existing.map((view) => [view.def.id, view] as const))
+    for (const def of listAllBuildings(this.lifeExpansion.unlockedBuildingIds)) {
+      if (!byId.has(def.id)) byId.set(def.id, { def, occupants: [] })
+    }
+    return [...byId.values()]
+  }
+
+  private mergeUnlockedBuildings(tileId: string, existing: readonly BuildingRuntimeView[]): readonly BuildingRuntimeView[] {
+    const byId = new Map(existing.map((view) => [view.def.id, view] as const))
+    for (const def of listBuildingsForTile(tileId, this.lifeExpansion.unlockedBuildingIds)) {
+      if (!byId.has(def.id)) byId.set(def.id, { def, occupants: [] })
+    }
+    return [...byId.values()]
   }
 
   getCurrentWeather(): string {
@@ -429,6 +475,13 @@ export class SimulationRuntime {
         color: deriveNpcColor(profile.id, s.faction),
         greetLine: derivePersonalityGreetLine(profile),
         intentLine: deriveNpcIntentLine(s),
+        life: deriveNpcLifeView({
+          profile,
+          state: s,
+          areaState: this.getAreaState(s.tile),
+          lifeExpansion: this.lifeExpansion,
+          tick: this.currentTick
+        })
       }
     })
   }
@@ -450,7 +503,7 @@ export class SimulationRuntime {
     }>
   }> {
     // 室內 NPC 不算在 area scene 上 — 玩家進建築才看到
-    const tiles = MAP_TILES.map((tile) => ({
+    const tiles = listMapTiles(this.lifeExpansion.unlockedTileIds).map((tile) => ({
       ...tile,
       npcIds: this.profiles
         .filter((p) => {
@@ -461,7 +514,7 @@ export class SimulationRuntime {
         })
         .map((p) => p.id)
     }))
-    return { width: 8, height: 6, tiles }
+    return { width: 9, height: 6, tiles }
   }
 
   /** 此 NPC 是否在某棟建築內？回傳建築 id 或 null。 */
@@ -638,6 +691,11 @@ export class SimulationRuntime {
       rareWindowOpen: this.rareWindowOpen,
       npcsInsideBuildings
     })
+    const saltMarshProject = this.lifeExpansion.constructionProjects[SALT_MARSH_PROJECT_ID]
+    let plannedSaltMarshProgress = saltMarshProject?.progress ?? 0
+    let plannedSaltMarshCompleted =
+      this.lifeExpansion.unlockedTileIds.includes(SALT_MARSH_TILE_ID) ||
+      plannedSaltMarshProgress >= SALT_MARSH_PROJECT_TARGET
     for (const event of npcResult.events) {
       const profile = this.profiles.find((p) => p.id === ('npcId' in event ? event.npcId : ''))
       if (event.kind === 'move') {
@@ -704,6 +762,61 @@ export class SimulationRuntime {
             }
           )
         )
+        if (!plannedSaltMarshCompleted && isExpansionProductiveDomain(event.domain)) {
+          const delta = event.domain === 'build' ? 2 : 1
+          plannedSaltMarshProgress = Math.min(SALT_MARSH_PROJECT_TARGET, plannedSaltMarshProgress + delta)
+          commands.push(
+            makeLivingWorldCommand(
+              'CONSTRUCTION_PROJECT_PROGRESS',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                projectId: SALT_MARSH_PROJECT_ID,
+                kind: 'settlement',
+                targetTileId: SALT_MARSH_TILE_ID,
+                buildingId: SALT_MARSH_BUILDING_ID,
+                npcId: event.npcId,
+                delta,
+                progressAfter: plannedSaltMarshProgress,
+                targetProgress: SALT_MARSH_PROJECT_TARGET,
+                narration: `城市建設隊把${event.npcId}的成果記入鹽沼外環拓荒工程：${plannedSaltMarshProgress}/${SALT_MARSH_PROJECT_TARGET}。`
+              }
+            )
+          )
+          if (plannedSaltMarshProgress >= SALT_MARSH_PROJECT_TARGET) {
+            plannedSaltMarshCompleted = true
+            commands.push(
+              makeLivingWorldCommand(
+                'MAP_TILE_UNLOCKED',
+                SIM_ACTOR_WORLD,
+                'system',
+                nextTick,
+                submittedAt,
+                {
+                  projectId: SALT_MARSH_PROJECT_ID,
+                  tileId: SALT_MARSH_TILE_ID,
+                  adjacentTo: ['t_dock', 't_ruin'],
+                  narration: '鹽沼外環的步道終於打通，潮鳴市的地圖向外多了一片可抵達的新邊界。'
+                }
+              ),
+              makeLivingWorldCommand(
+                'BUILDING_CONSTRUCTED',
+                SIM_ACTOR_WORLD,
+                'system',
+                nextTick,
+                submittedAt,
+                {
+                  projectId: SALT_MARSH_PROJECT_ID,
+                  buildingId: SALT_MARSH_BUILDING_ID,
+                  tileId: SALT_MARSH_TILE_ID,
+                  narration: '鹽沼拓荒站掛上第一盞燈，工匠、巡衛與商販有了新的落腳處。'
+                }
+              )
+            )
+          }
+        }
       } else if (event.kind === 'interact') {
         const [a, b] = event.participants
         commands.push(
@@ -723,6 +836,12 @@ export class SimulationRuntime {
           )
         )
       }
+    }
+    for (const command of this.planHouseholdCommands(nextTick, submittedAt)) {
+      commands.push(command)
+    }
+    for (const command of this.planLifeGoalCommands(nextTick, submittedAt)) {
+      commands.push(command)
     }
     // 把 NPC state 變更寫回 FACT_SET，讓重啟可 hydrate
     for (const change of npcResult.changedStates) {
@@ -989,10 +1108,41 @@ export class SimulationRuntime {
     // ---- Compile commands → typed event drafts via the Rule Engine ----
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
+    let lifeExpansionChanged = false
     for (const cmd of commands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
         for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
+          const payload = cmd.payload as { delta: number }
+          this.lifeExpansion = withConstructionProgress(this.lifeExpansion, {
+            tick: nextTick,
+            delta: payload.delta
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'MAP_TILE_UNLOCKED' || cmd.commandType === 'BUILDING_CONSTRUCTED') {
+          this.lifeExpansion = withUnlockedExpansion(this.lifeExpansion)
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'NPC_HOUSEHOLD_FORMED') {
+          const payload = cmd.payload as { householdId: string; partnerNpcIds: readonly [string, string]; homeTileId: string }
+          this.lifeExpansion = withHouseholdFormed(this.lifeExpansion, {
+            householdId: payload.householdId,
+            partnerNpcIds: payload.partnerNpcIds,
+            homeTileId: payload.homeTileId,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'NPC_CHILD_BORN') {
+          const payload = cmd.payload as { householdId: string; childId: string; nameZh: string; nameEn: string }
+          this.lifeExpansion = withChildBorn(this.lifeExpansion, {
+            householdId: payload.householdId,
+            childId: payload.childId,
+            nameZh: payload.nameZh,
+            nameEn: payload.nameEn,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        }
         if (cmd.commandType === 'NPC_INTERACT') {
           const accepted = readAcceptedNpcInteraction(cmd.payload)
           if (accepted) {
@@ -1019,6 +1169,11 @@ export class SimulationRuntime {
             `from ${result.rejection.actorId}: ${result.rejection.reason}`
         )
       }
+    }
+    if (lifeExpansionChanged) {
+      postAcceptedStateDrafts.push(
+        this.factSetDraft(LIFE_EXPANSION_FACT_KEY, this.lifeExpansion, SIM_ACTOR_WORLD, nextTick)
+      )
     }
 
     // Append in one transaction. Normal state snapshots stay before typed events;
@@ -1127,6 +1282,107 @@ export class SimulationRuntime {
     }
   }
 
+  private planHouseholdCommands(nextTick: number, submittedAt: number): LivingWorldCommand[] {
+    const commands: LivingWorldCommand[] = []
+    const households = Object.values(this.lifeExpansion.households)
+    if (nextTick % 30 === 0) {
+      const candidates = this.profiles
+        .map((profile) => ({ profile, state: this.npcEngine.getState(profile.id) }))
+        .filter((item): item is { profile: NpcProfile; state: NpcRuntimeState } => item.state !== null)
+        .filter((item) => !householdIdForNpc(this.lifeExpansion, item.profile.id))
+        .sort((a, b) => a.profile.id.localeCompare(b.profile.id))
+      for (let i = 0; i < candidates.length; i += 1) {
+        for (let j = i + 1; j < candidates.length; j += 1) {
+          const a = candidates[i]!
+          const b = candidates[j]!
+          if (a.state.tile !== b.state.tile) continue
+          const area = this.getAreaState(a.state.tile)
+          if (!area || area.resources.food < 50 || area.resources.safety < 50 || area.resources.economy < 45) continue
+          const lifeA = deriveNpcLifeView({ profile: a.profile, state: a.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
+          const lifeB = deriveNpcLifeView({ profile: b.profile, state: b.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
+          if (lifeA.goal.kind !== 'form_family' && lifeB.goal.kind !== 'form_family') continue
+          const householdId = `household.${a.profile.id}.${b.profile.id}`.replace(/[^a-zA-Z0-9_.-]/g, '_')
+          commands.push(
+            makeLivingWorldCommand(
+              'NPC_HOUSEHOLD_FORMED',
+              householdId,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                householdId,
+                partnerNpcIds: [a.profile.id, b.profile.id],
+                homeTileId: a.state.tile,
+                narration: `${a.profile.name.zh}和${b.profile.name.zh}決定合組家庭，把生活壓力變成共同計畫。`
+              }
+            )
+          )
+          return commands
+        }
+      }
+    }
+
+    for (const household of households) {
+      if (household.childIds.length > 0) continue
+      if (nextTick - household.formedAtTick < 90) continue
+      const childId = `${household.householdId}.child.1`
+      commands.push(
+        makeLivingWorldCommand(
+          'NPC_CHILD_BORN',
+          childId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            householdId: household.householdId,
+            childId,
+            nameZh: '潮生',
+            nameEn: 'Tideborn',
+            narration: '一個孩子在新的家庭裡出生，潮鳴市多了一份必須被照顧的未來。'
+          }
+        )
+      )
+      return commands
+    }
+    return commands
+  }
+
+  private planLifeGoalCommands(nextTick: number, submittedAt: number): LivingWorldCommand[] {
+    if (nextTick % 30 !== 0) return []
+    return this.profiles
+      .map((profile) => {
+        const state = this.npcEngine.getState(profile.id)
+        if (!state) return null
+        const life = deriveNpcLifeView({
+          profile,
+          state,
+          areaState: this.getAreaState(state.tile),
+          lifeExpansion: this.lifeExpansion,
+          tick: nextTick
+        })
+        return { profile, state, life }
+      })
+      .filter((item): item is { profile: NpcProfile; state: NpcRuntimeState; life: NpcLifeView } => item !== null)
+      .sort((a, b) => b.life.goal.pressure - a.life.goal.pressure || a.profile.id.localeCompare(b.profile.id))
+      .slice(0, 8)
+      .map(({ profile, state, life }) =>
+        makeLivingWorldCommand(
+          'NPC_LIFE_GOAL_SET',
+          profile.id,
+          'npc',
+          nextTick,
+          submittedAt,
+          {
+            npcId: profile.id,
+            tile: state.tile,
+            needs: life.needs,
+            goal: life.goal,
+            narration: `${profile.name.zh}把眼前生活目標定為：${life.goal.narration}`
+          }
+        )
+      )
+  }
+
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
     this.eventCount = state.eventCount
@@ -1183,6 +1439,8 @@ export class SimulationRuntime {
     const buildingFact = state.facts[FACT_BUILDING_OCCUPANTS]
     if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
 
+    this.lifeExpansion = hydrateLifeExpansionState(state.facts[LIFE_EXPANSION_FACT_KEY])
+
     const activeEventsFact = state.facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
       const restored: ActiveWorldEvent[] = []
@@ -1216,6 +1474,27 @@ export class SimulationRuntime {
 function pickFromCycle<T>(values: readonly T[], step: number): T {
   const i = ((step % values.length) + values.length) % values.length
   return values[i]!
+}
+
+function isExpansionProductiveDomain(domain: string): boolean {
+  return domain === 'build' || domain === 'service' || domain === 'trade' || domain === 'learn'
+}
+
+function makeExpansionAreaState(tileId: string, tick: number): AreaState {
+  return {
+    tileId,
+    factionControl: {
+      tide_hunters: 12,
+      free_runners: 8,
+      guild: 18,
+      civilian: 34
+    },
+    dominantFaction: null,
+    resources: { food: 58, safety: 54, economy: 42 },
+    lastUpdatedTick: tick,
+    recentEvents: [],
+    pressureCooldowns: {}
+  }
 }
 
 function readNarrativePayload(payload: unknown): NarrativeEventPayload | null {

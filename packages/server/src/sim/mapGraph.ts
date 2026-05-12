@@ -23,7 +23,13 @@ export const MAP_TILES: ReadonlyArray<MapTileDef> = [
   { id: 't_dimai', name: '地脈層', x: 4, y: 2, biome: 'ruin' }
 ]
 
-export const TILE_BY_ID: Readonly<Record<string, MapTileDef>> = MAP_TILES.reduce(
+export const EXPANSION_TILES: ReadonlyArray<MapTileDef> = [
+  { id: 't_salt_marsh', name: '鹽沼外環', x: 8, y: 5, biome: 'water' }
+]
+
+const ALL_KNOWN_TILES: ReadonlyArray<MapTileDef> = [...MAP_TILES, ...EXPANSION_TILES]
+
+export const TILE_BY_ID: Readonly<Record<string, MapTileDef>> = ALL_KNOWN_TILES.reduce(
   (acc, tile) => {
     acc[tile.id] = tile
     return acc
@@ -31,7 +37,7 @@ export const TILE_BY_ID: Readonly<Record<string, MapTileDef>> = MAP_TILES.reduce
   {} as Record<string, MapTileDef>
 )
 
-export const TILE_NAME_BY_ID: Readonly<Record<string, string>> = MAP_TILES.reduce(
+export const TILE_NAME_BY_ID: Readonly<Record<string, string>> = ALL_KNOWN_TILES.reduce(
   (acc, tile) => {
     acc[tile.id] = tile.name
     return acc
@@ -52,19 +58,43 @@ export const MAP_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
   t_ruin: ['t_temple', 't_central', 't_dock']
 }
 
+export const EXPANSION_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
+  t_salt_marsh: ['t_dock', 't_ruin']
+}
+
+export function listMapTiles(unlockedTileIds: readonly string[] = []): ReadonlyArray<MapTileDef> {
+  const unlocked = new Set(unlockedTileIds)
+  return [
+    ...MAP_TILES,
+    ...EXPANSION_TILES.filter((tile) => unlocked.has(tile.id))
+  ]
+}
+
+export function getMapAdjacency(unlockedTileIds: readonly string[] = []): Readonly<Record<string, readonly string[]>> {
+  const unlocked = new Set(unlockedTileIds)
+  if (!unlocked.has('t_salt_marsh')) return MAP_ADJACENCY
+  return {
+    ...MAP_ADJACENCY,
+    t_dock: [...(MAP_ADJACENCY.t_dock ?? []), 't_salt_marsh'],
+    t_ruin: [...(MAP_ADJACENCY.t_ruin ?? []), 't_salt_marsh'],
+    t_salt_marsh: EXPANSION_ADJACENCY.t_salt_marsh ?? []
+  }
+}
+
 /**
  * BFS：從 origin 找到 target 路徑上的下一格 tile id。
  * - origin === target 回傳 null（已抵達）
  * - 找不到路徑（例如 target 不在 graph）也回傳 null
  */
-export function nextStepTowards(originId: string, targetId: string): string | null {
+export function nextStepTowards(originId: string, targetId: string, unlockedTileIds: readonly string[] = []): string | null {
+  const adjacency = getMapAdjacency(unlockedTileIds)
   if (originId === targetId) return null
-  if (!MAP_ADJACENCY[originId] || !MAP_ADJACENCY[targetId]) return null
+  if (!adjacency[originId] || !adjacency[targetId]) return null
 
   const visited = new Set<string>([originId])
   const queue: Array<{ id: string; firstStep: string }> = []
 
-  for (const neighbor of MAP_ADJACENCY[originId] ?? []) {
+  for (const neighbor of adjacency[originId] ?? []) {
     if (visited.has(neighbor)) continue
     visited.add(neighbor)
     if (neighbor === targetId) return neighbor
@@ -73,7 +103,7 @@ export function nextStepTowards(originId: string, targetId: string): string | nu
 
   while (queue.length > 0) {
     const head = queue.shift()!
-    for (const neighbor of MAP_ADJACENCY[head.id] ?? []) {
+    for (const neighbor of adjacency[head.id] ?? []) {
       if (visited.has(neighbor)) continue
       visited.add(neighbor)
       if (neighbor === targetId) return head.firstStep

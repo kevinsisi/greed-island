@@ -297,6 +297,12 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
                 {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
               </div>
             )}
+            {npc.life && (
+              <div className="mt-1 text-[12px] leading-snug text-moss-300">
+                {t('npc.lifeGoal')}：{npc.life.goal.narration} {t('npc.lifePressure')} {npc.life.goal.pressure}
+                {npc.life.householdId ? ` · ${t('npc.household')} ${npc.life.householdId}` : ''}
+              </div>
+            )}
             <h2 className="font-display font-extrabold text-2xl tracking-tightest text-ground-100">
               {npc.name}
             </h2>
