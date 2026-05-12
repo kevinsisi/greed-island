@@ -162,6 +162,42 @@ describe('living-world rule engine', () => {
     if (!result.accepted) expect(result.rejection.code).toBe('INVALID_PAYLOAD')
   })
 
+  it('rejects malformed motivation payloads', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 3, 3, {
+      npcId: 'npc-a',
+      tile: 't_market',
+      activity: 'work',
+      domain: 'build',
+      metric: 'infrastructure',
+      delta: 2,
+      motivation: { projectPurpose: 'missing explanation' },
+      narration: '...'
+    } as never)
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toContain('motivation explanation')
+  })
+
+  it('preserves valid motivation payloads', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 3, 3, {
+      npcId: 'npc-a',
+      tile: 't_market',
+      activity: 'work',
+      domain: 'build',
+      metric: 'infrastructure',
+      delta: 2,
+      motivation: { explanation: '住房壓力高，所以修路。', projectPurpose: '基礎建設' },
+      narration: '...'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(true)
+    if (result.accepted) {
+      expect((result.events[0]!.payload.data as { motivation?: { explanation: string } }).motivation?.explanation).toContain('住房')
+    }
+  })
+
   it('isLivingWorldCommandType filters correctly', () => {
     expect(isLivingWorldCommandType('NPC_MOVE')).toBe(true)
     expect(isLivingWorldCommandType('NOT_REAL')).toBe(false)

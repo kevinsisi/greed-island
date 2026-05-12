@@ -33,6 +33,7 @@ import {
   isLivingWorldCommandType,
   makeLivingWorldCommand,
   type ConstructionMotivation,
+  type EventMotivation,
   type LivingWorldCommand,
   type LivingWorldEventPayload
 } from '../kernel/livingWorldCommands.js'
@@ -721,6 +722,11 @@ export class SimulationRuntime {
               to: event.to,
               activity: event.activity,
               reachedDest,
+              motivation: makeMotivation(
+                reachedDest
+                  ? `${name}依照排程或目標抵達${toName}，讓 server-authoritative presence 反映新的所在位置。`
+                  : `${name}離開${fromName}前往${toName}，通常是排程、職責或生活需求把人帶往下一個區域。`
+              ),
               narration
             }
           )
@@ -740,6 +746,7 @@ export class SimulationRuntime {
               tile: event.tile,
               from: event.from,
               to: event.to,
+              motivation: makeMotivation(`${name}的日程或生活需求把活動從 ${event.from} 調整為 ${event.to}，地點是${tileName}。`),
               narration: `${name}在${tileName}${activityVerb(event.to)}。`
             }
           )
@@ -759,6 +766,14 @@ export class SimulationRuntime {
               domain: event.domain,
               metric: event.metric,
               delta: event.delta,
+              motivation: this.buildProductiveActionMotivation(
+                event.npcId,
+                profile ?? null,
+                this.npcEngine.getState(event.npcId),
+                event.domain,
+                event.metric,
+                nextTick
+              ),
               narration: event.narration
             }
           )
@@ -841,6 +856,11 @@ export class SimulationRuntime {
               participants: [a, b],
               positions: event.positions,
               mode: event.mode,
+              motivation: makeMotivation(
+                event.mode === 'argue'
+                  ? '兩位 NPC 同處一地，派系、資源或情緒壓力浮上檯面，因此互動變成爭執。'
+                  : '兩位 NPC 同處一地，透過交談交換情報、協調關係或維持日常社交網絡。'
+              ),
               narration: event.narration
             }
           )
@@ -885,6 +905,7 @@ export class SimulationRuntime {
                 npcId: delta.npcId,
                 buildingId: delta.to,
                 tileId: def.tileId,
+                motivation: makeMotivation(`${name}因工作、休息、交易或路線目的進入${def.nameZh}，室內 presence 由同一份 server 狀態投影。`),
                 narration: `${name}走進了${def.nameZh}。`
               }
             )
@@ -904,6 +925,7 @@ export class SimulationRuntime {
                 npcId: delta.npcId,
                 buildingId: delta.from,
                 tileId: def.tileId,
+                motivation: makeMotivation(`${name}在${def.nameZh}的室內任務結束或下一段行程開始，因此離開建築回到區域流動。`),
                 narration: `${name}從${def.nameZh}走了出來。`
               }
             )
@@ -945,6 +967,7 @@ export class SimulationRuntime {
             tileId: pe.tileId,
             kind: pe.kind,
             detail: pe.detail,
+            motivation: makeMotivation(areaPressureMotivation(pe.kind)),
             narration: pe.narration
           }
         )
@@ -964,7 +987,12 @@ export class SimulationRuntime {
             'system',
             nextTick,
             submittedAt,
-            { from: before, to: next, narration: `天空從${before}轉為${next}。` }
+            {
+              from: before,
+              to: next,
+              motivation: makeMotivation('世界天氣週期推進到新的階段，後續會影響 NPC 行為、區域狀態與事件生成。'),
+              narration: `天空從${before}轉為${next}。`
+            }
           )
         )
         this.weather = next
@@ -986,6 +1014,7 @@ export class SimulationRuntime {
             {
               from: before,
               to: next,
+              motivation: makeMotivation('世界季節週期推進到新的階段，作為長週期背景壓力影響城市生活。'),
               narration: `${before}悄然遠去，${next}降臨貪婪之島。`
             }
           )
@@ -1016,6 +1045,7 @@ export class SimulationRuntime {
           {
             windowId: 'tide_festival',
             closesAtTick: this.rareWindowClosesAtTick,
+            motivation: makeMotivation('稀有窗口依世界週期開啟，短時間改變卡牌與城市事件機會。'),
             narration: '潮汐節的窗口開啟了，碼頭區會在二十分鐘內進入慶典。'
           }
         )
@@ -1034,6 +1064,7 @@ export class SimulationRuntime {
           submittedAt,
           {
             windowId: 'tide_festival',
+            motivation: makeMotivation('稀有窗口時間耗盡，世界回到日常生成規則。'),
             narration: '潮汐節的窗口悄然閉合，碼頭區回歸日常喧囂。'
           }
         )
@@ -1060,6 +1091,7 @@ export class SimulationRuntime {
               type: event.type,
               scope: stringifyScope(event.scope),
               endsAtTick: event.endsAtTick,
+              motivation: makeMotivation('世界事件引擎依照時間、地區與模板條件觸發事件，讓城市承受非 NPC 個體行為的外部壓力。'),
               narration: event.text.zh,
               data: event.payload as Record<string, unknown>
             }
@@ -1108,7 +1140,8 @@ export class SimulationRuntime {
               worldEventId: event.id,
               templateId: event.templateId,
               type: event.type,
-              scope: stringifyScope(event.scope)
+              scope: stringifyScope(event.scope),
+              motivation: makeMotivation('世界事件達到結束 tick，暫時性壓力或窗口從 active projection 中移除。')
             }
           )
         )
@@ -1323,6 +1356,10 @@ export class SimulationRuntime {
                 householdId,
                 partnerNpcIds: [a.profile.id, b.profile.id],
                 homeTileId: a.state.tile,
+                motivation: makeMotivation(
+                  `${a.profile.name.zh}與${b.profile.name.zh}在同一區域達到成家條件；食物、安全與經濟門檻足夠，且至少一方的生活目標是建立家庭。`,
+                  `穩定 ${TILE_NAME_BY_ID[a.state.tile] ?? a.state.tile} 的家庭與照護網絡`
+                ),
                 narration: `${a.profile.name.zh}和${b.profile.name.zh}決定合組家庭，把生活壓力變成共同計畫。`
               }
             )
@@ -1348,6 +1385,7 @@ export class SimulationRuntime {
             childId,
             nameZh: '潮生',
             nameEn: 'Tideborn',
+            motivation: makeMotivation('既有家庭經過足夠時間後新增被照顧者，讓人口壓力與家庭責任進入世界狀態。'),
             narration: '一個孩子在新的家庭裡出生，潮鳴市多了一份必須被照顧的未來。'
           }
         )
@@ -1387,10 +1425,42 @@ export class SimulationRuntime {
             tile: state.tile,
             needs: life.needs,
             goal: life.goal,
+            motivation: makeMotivation(
+              `${profile.name.zh}的食物、休息、收入、住房與安全需求重新計算後，最高壓力把生活目標推向「${life.goal.narration}」。`,
+              `目標壓力 ${life.goal.pressure}`
+            ),
             narration: `${profile.name.zh}把眼前生活目標定為：${life.goal.narration}`
           }
         )
       )
+  }
+
+  private buildProductiveActionMotivation(
+    npcId: string,
+    profile: NpcProfile | null,
+    state: NpcRuntimeState | null,
+    domain: string,
+    metric: string,
+    tick: number
+  ): EventMotivation {
+    const fallbackTile = state?.tile ?? profile?.defaultLocation ?? 't_central'
+    const fallbackProfile = profile ?? makeFallbackProfile(npcId, fallbackTile)
+    const fallbackState = state ?? makeFallbackNpcState(fallbackTile, tick)
+    const life = deriveNpcLifeView({
+      profile: fallbackProfile,
+      state: fallbackState,
+      areaState: this.getAreaState(fallbackTile),
+      lifeExpansion: this.lifeExpansion,
+      tick
+    })
+    const primary = strongestNeed(life.needs)
+    const tileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
+    const purpose = metricPurpose(metric)
+    const domainText = productiveDomainText(domain)
+    return makeMotivation(
+      `${fallbackProfile.name.zh}在${tileName}的生活目標是「${life.goal.narration}」，目前最高壓力是${needLabel(primary.key)} ${primary.value}；這次${domainText}把個人目標轉成城市進展。`,
+      purpose
+    )
   }
 
   private buildSaltMarshConstructionMotivation(
@@ -1400,28 +1470,8 @@ export class SimulationRuntime {
     tick: number
   ): ConstructionMotivation {
     const fallbackTile = state?.tile ?? profile?.defaultLocation ?? 't_central'
-    const fallbackProfile = profile ?? {
-      id: npcId,
-      name: { zh: npcId, en: npcId },
-      role: { zh: '居民', en: 'Resident' },
-      defaultLocation: fallbackTile,
-      routine: [],
-      triggers: [],
-      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
-      personality: { factionLean: 'civilian' }
-    } satisfies NpcProfile
-    const fallbackState = state ?? ({
-      tile: fallbackTile,
-      mood: 60,
-      health: 80,
-      activity: 'work',
-      faction: 'civilian',
-      targetTile: fallbackTile,
-      lastActedTick: tick,
-      subCol: 7,
-      subRow: 5,
-      subZ: 0
-    } as NpcRuntimeState)
+    const fallbackProfile = profile ?? makeFallbackProfile(npcId, fallbackTile)
+    const fallbackState = state ?? makeFallbackNpcState(fallbackTile, tick)
     const life = deriveNpcLifeView({
       profile: fallbackProfile,
       state: fallbackState,
@@ -1539,6 +1589,65 @@ function pickFromCycle<T>(values: readonly T[], step: number): T {
 
 function isExpansionProductiveDomain(domain: string): boolean {
   return domain === 'build' || domain === 'service' || domain === 'trade' || domain === 'learn'
+}
+
+function makeMotivation(explanation: string, projectPurpose?: string): EventMotivation {
+  return projectPurpose ? { explanation, projectPurpose } : { explanation }
+}
+
+function makeFallbackProfile(npcId: string, fallbackTile: string): NpcProfile {
+  return {
+    id: npcId,
+    name: { zh: npcId, en: npcId },
+    role: { zh: '居民', en: 'Resident' },
+    defaultLocation: fallbackTile,
+    routine: [],
+    triggers: [],
+    memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+    personality: { factionLean: 'civilian' }
+  }
+}
+
+function makeFallbackNpcState(fallbackTile: string, tick: number): NpcRuntimeState {
+  return {
+    tile: fallbackTile,
+    mood: 60,
+    health: 80,
+    activity: 'work',
+    faction: 'civilian',
+    targetTile: fallbackTile,
+    lastActedTick: tick,
+    subCol: 7,
+    subRow: 5,
+    subZ: 0
+  } as NpcRuntimeState
+}
+
+function productiveDomainText(domain: string): string {
+  switch (domain) {
+    case 'build': return '建設與修補'
+    case 'service': return '公共服務'
+    case 'trade': return '交易與供應調節'
+    case 'learn': return '知識與技能累積'
+    default: return '生產性行動'
+  }
+}
+
+function metricPurpose(metric: string): string | undefined {
+  switch (metric) {
+    case 'infrastructure': return '基礎建設'
+    case 'knowledge': return '知識 / 技能'
+    case 'economy': return '經濟 / 收入'
+    case 'safety': return '安全 / 秩序'
+    case 'supply': return '補給 / 物資'
+    default: return undefined
+  }
+}
+
+function areaPressureMotivation(kind: string): string {
+  if (kind.includes('faction')) return '派系影響力跨過門檻，代表街區權力平衡改變並可能影響 NPC 行為。'
+  if (kind.includes('resource')) return '區域資源指標跨過壓力門檻，世界把它記成後續行動會回應的公共壓力。'
+  return '區域狀態達到壓力或回穩門檻，因此被寫入公共編年史。'
 }
 
 function strongestNeed(needs: NpcLifeView['needs']): { key: ConstructionMotivation['primaryPressure']; value: number } {

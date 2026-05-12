@@ -31,6 +31,12 @@ describe('SimulationRuntime life goals and expansion', () => {
       const constructionData = (constructionEvent?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
       const mapUnlockData = (events.find((event) => event.eventType === 'MAP_TILE_UNLOCKED')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
       const buildingData = (events.find((event) => event.eventType === 'BUILDING_CONSTRUCTED')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const productiveData = (events.find((event) => event.eventType === 'NPC_PRODUCTIVE_ACTION')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const lifeGoalData = (events.find((event) => event.eventType === 'NPC_LIFE_GOAL_SET')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const householdData = (householdEvents[0]?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const areaPressureData = (events.find((event) => event.eventType === 'AREA_PRESSURE')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const weatherData = (events.find((event) => event.eventType === 'WEATHER_CHANGE')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
+      const worldEventData = (events.find((event) => event.eventType === 'WORLD_EVENT_SPAWN')?.payload as { data?: { motivation?: { explanation?: string; projectPurpose?: string } } } | undefined)?.data
       const world = runtime.getSnapshot()
       const map = runtime.getMap()
       const saltMarshBuildings = runtime.getBuildingsOnTile(SALT_MARSH_TILE_ID)
@@ -45,6 +51,12 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(map.tiles.map((tile) => tile.id)).toContain(SALT_MARSH_TILE_ID)
       expect(saltMarshBuildings.map((view) => view.def.id)).toContain(SALT_MARSH_BUILDING_ID)
       expect(householdEvents.length).toBeGreaterThanOrEqual(2)
+      expect(productiveData?.motivation?.explanation).toContain('生活目標')
+      expect(lifeGoalData?.motivation?.explanation).toContain('需求')
+      expect(householdData?.motivation?.explanation).toContain('成家條件')
+      expect(areaPressureData?.motivation?.explanation).toContain('門檻')
+      expect(weatherData?.motivation?.explanation).toContain('天氣週期')
+      expect(worldEventData?.motivation?.explanation).toContain('世界事件引擎')
       expect(constructionData?.motivation?.projectPurpose).toContain('住房')
       expect(constructionData?.motivation?.explanation).toContain('目標')
       expect(constructionData?.motivation?.explanation).toContain('夜潮區')

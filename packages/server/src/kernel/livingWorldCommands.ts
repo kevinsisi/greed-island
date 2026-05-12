@@ -62,6 +62,7 @@ export type NpcMoveCmd = Readonly<{
   to: string
   activity: string
   reachedDest: boolean
+  motivation?: EventMotivation
   narration: string | null
 }>
 
@@ -70,6 +71,7 @@ export type NpcActivityChangeCmd = Readonly<{
   tile: string
   from: string
   to: string
+  motivation?: EventMotivation
   narration: string | null
 }>
 
@@ -78,6 +80,7 @@ export type NpcLifeGoalSetCmd = Readonly<{
   tile: string
   needs: Readonly<Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>>
   goal: Readonly<{ kind: string; pressure: number; narration: string }>
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -85,6 +88,7 @@ export type NpcHouseholdFormedCmd = Readonly<{
   householdId: string
   partnerNpcIds: readonly [string, string]
   homeTileId: string
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -93,6 +97,7 @@ export type NpcChildBornCmd = Readonly<{
   childId: string
   nameZh: string
   nameEn: string
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -103,7 +108,13 @@ export type NpcProductiveActionCmd = Readonly<{
   domain: 'build' | 'learn' | 'trade' | 'service'
   metric: 'infrastructure' | 'knowledge' | 'economy' | 'safety' | 'supply'
   delta: number
+  motivation?: EventMotivation
   narration: string
+}>
+
+export type EventMotivation = Readonly<{
+  explanation: string
+  projectPurpose?: string
 }>
 
 export type ConstructionMotivation = Readonly<{
@@ -150,6 +161,7 @@ export type NpcInteractCmd = Readonly<{
   participants: readonly [string, string]
   positions?: Readonly<Record<string, { subCol: number; subRow: number; subZ: number }>>
   mode: 'chat' | 'argue'
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -157,18 +169,21 @@ export type AreaPressureCmd = Readonly<{
   tileId: string
   kind: string
   detail: Record<string, string | number>
+  motivation?: EventMotivation
   narration: string
 }>
 
 export type WeatherChangeCmd = Readonly<{
   from: string
   to: string
+  motivation?: EventMotivation
   narration: string
 }>
 
 export type SeasonChangeCmd = Readonly<{
   from: string
   to: string
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -178,6 +193,7 @@ export type WorldEventSpawnCmd = Readonly<{
   type: string
   scope: string
   endsAtTick: number
+  motivation?: EventMotivation
   narration: string
   data: Record<string, unknown>
 }>
@@ -187,12 +203,14 @@ export type WorldEventEndCmd = Readonly<{
   templateId: string
   type: string
   scope: string
+  motivation?: EventMotivation
 }>
 
 export type BuildingEnterCmd = Readonly<{
   npcId: string
   buildingId: string
   tileId: string
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -200,17 +218,20 @@ export type BuildingLeaveCmd = Readonly<{
   npcId: string
   buildingId: string
   tileId: string
+  motivation?: EventMotivation
   narration: string
 }>
 
 export type RareWindowOpenCmd = Readonly<{
   windowId: string
   closesAtTick: number
+  motivation?: EventMotivation
   narration: string
 }>
 
 export type RareWindowCloseCmd = Readonly<{
   windowId: string
+  motivation?: EventMotivation
   narration: string
 }>
 
@@ -626,6 +647,10 @@ export class LivingWorldRuleEngine {
     if (errMsg !== null) {
       return reject(command, 'INVALID_PAYLOAD', errMsg)
     }
+    if (isRecord(command.payload) && 'motivation' in command.payload) {
+      const motivationErr = validateEventMotivation(command.payload.motivation)
+      if (motivationErr !== null) return reject(command, 'INVALID_PAYLOAD', motivationErr)
+    }
     try {
       toCanonicalJson(command.payload)
     } catch (err) {
@@ -730,6 +755,13 @@ function validateConstructionMotivation(value: unknown): string | null {
   if (typeof value.sourceNpcId !== 'string' || value.sourceNpcId.length === 0) return 'motivation sourceNpcId required'
   if (typeof value.sourceTileId !== 'string' || value.sourceTileId.length === 0) return 'motivation sourceTileId required'
   if (typeof value.explanation !== 'string' || value.explanation.length === 0) return 'motivation explanation required'
+  return null
+}
+
+function validateEventMotivation(value: unknown): string | null {
+  if (!isRecord(value)) return 'motivation must be object'
+  if (typeof value.explanation !== 'string' || value.explanation.length === 0) return 'motivation explanation required'
+  if (value.projectPurpose !== undefined && typeof value.projectPurpose !== 'string') return 'motivation projectPurpose must be string'
   return null
 }
 
