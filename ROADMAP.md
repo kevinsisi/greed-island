@@ -4,6 +4,24 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.43 🚧 in progress — 2026-05-12
+
+**主題：civ-evo-construction Slice 3 — NPC autonomous policy**
+
+- ✅ `cityLife.ts`：新增 `decideCivEvoConstructionInitiate()` 純函式策略。
+  Gating：非 salt-marsh tile、`area.resources.economy < 50`（Slice-3 對
+  §11.8 infrastructure 資源的 proxy，尚未真正建模）、同 tile 無 open
+  civ-evo 案、同 NPC 無 open civ-evo 案。
+- ✅ `runtime.ts`：productive-build event 後叫策略，命中就 push
+  `CONSTRUCTION_INITIATE` 進 commands。原 salt-marsh 進度引擎不動。
+- ✅ `npcEngine.ts`：`NpcAgentTaskKind` 加 `'build'` 預留（projection
+  Slice 用），權威記錄仍在 `lifeExpansion.constructionProjects[].initiatedByNpcId`。
+- ✅ `cityLife.test.ts`：7 個新 Slice-3 policy 測試覆蓋每一條 gate。
+- ✅ 本機：`npm test`（server 189 / web 28）、`npm run build`、
+  `openspec validate civ-evo-construction --strict` 通過。
+- 🚧 還沒做：commit / push / docker rebuild。Live deploy 後低 economy
+  區應該開始出現單一 open civ-evo 案。
+
 ## v0.15.42 🚧 in progress — 2026-05-12
 
 **主題：civ-evo-construction Slice 2 — event reducer + deterministic projectId**

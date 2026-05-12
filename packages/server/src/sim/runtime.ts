@@ -79,6 +79,7 @@ import {
   SALT_MARSH_TILE_ID,
   createInitialLifeExpansionState,
   deriveNpcLifeView,
+  decideCivEvoConstructionInitiate,
   hydrateLifeExpansionState,
   householdIdForNpc,
   withChildBorn,
@@ -838,6 +839,38 @@ export class SimulationRuntime {
                   tileId: SALT_MARSH_TILE_ID,
                   motivation,
                   narration: `鹽沼拓荒站掛上第一盞燈，工匠、巡衛與商販有了新的落腳處。原因：${motivation.explanation}`
+                }
+              )
+            )
+          }
+        }
+        // v0.15.43 civ-evo-construction Slice 3: every productive build
+        // event is also an opportunity for the NPC to autonomously start a
+        // brand-new project on their current tile (not salt-marsh). The
+        // pure decision function gates on Slice-3 rules; idempotency on
+        // the reducer side (`withConstructionInitiated`) makes repeated
+        // ticks safe.
+        if (event.domain === 'build') {
+          const decision = decideCivEvoConstructionInitiate({
+            npcId: event.npcId,
+            tile: event.tile,
+            areaState: this.getAreaState(event.tile),
+            lifeExpansion: this.lifeExpansion
+          })
+          if (decision) {
+            commands.push(
+              makeLivingWorldCommand(
+                'CONSTRUCTION_INITIATE',
+                event.npcId,
+                'npc',
+                nextTick,
+                submittedAt,
+                {
+                  npcId: decision.npcId,
+                  tileId: decision.tileId,
+                  buildingId: decision.buildingId,
+                  duration: decision.duration,
+                  narration: `${profile?.name.zh ?? event.npcId}決定在${event.tile}開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
                 }
               )
             )

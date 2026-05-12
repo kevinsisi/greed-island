@@ -37,6 +37,11 @@ export type NpcAgentTaskKind =
   | 'local-activity'
   | 'social-interaction'
   | 'player-dialog'
+  // v0.15.43+ civ-evo-construction Slice 3: reserved for future projection
+  // of "NPC is autonomously building" intent. Not yet emitted by
+  // deriveAgentTask — the deterministic record lives in
+  // `lifeExpansion.constructionProjects[…].initiatedByNpcId`.
+  | 'build'
 
 export type NpcAgentTask = Readonly<{
   kind: NpcAgentTaskKind

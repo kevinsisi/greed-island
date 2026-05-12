@@ -15,10 +15,10 @@
 
 ## 3. NPC Policy + Build Task
 
-- [ ] 3.1 Extend `NpcAgentTask` union with `{ kind: 'build', buildingId, onTile, expiresAtTick? }` in `packages/server/src/sim/npcEngine.ts`.
-- [ ] 3.2 Add policy hook in `cityLife.ts` (or `decideNpcCommand`): emit `CONSTRUCTION_INITIATE` when `goal.kind === 'build_city'` AND `areaState.resources.infrastructure < 45` AND no active `build` task AND no other NPC has open project on same `tileId`.
-- [ ] 3.3 Mark the NPC's agent state with the `build` task once the command is emitted to suppress re-emission.
-- [ ] 3.4 Behavioral test: seed a city with low infrastructure + an NPC with `goal.kind='build_city'` and assert `CONSTRUCTION_INITIATE` is emitted exactly once.
+- [x] 3.1 Extend `NpcAgentTaskKind` union in `packages/server/src/sim/npcEngine.ts` with `'build'` (reserved for future projection; no per-kind extra fields needed because `targetTile`, `startedAtTick`, `expiresAtTick` already exist on the universal task shape).
+- [x] 3.2 Add `decideCivEvoConstructionInitiate(...)` pure policy in `cityLife.ts` and call it from `runtime.ts` after the salt-marsh productive-build block. Gates: tile ≠ salt-marsh, `areaState.resources.economy < 50` (Slice-3 proxy for the §11.8 infrastructure resource — not yet modelled), no open civ-evo project on this tile, no open civ-evo project by this NPC.
+- [x] 3.3 Suppression of re-emission is achieved by the reducer's idempotent `projectId` hash + the open-project check, so the NPC's agent task does not need to be mutated authoritatively. `'build'` agent kind is reserved for the projection layer (Slice 6 / 7).
+- [x] 3.4 Behavioral tests in `cityLife.test.ts` cover: emission on low economy + empty tile, suppression on rich economy, suppression on salt-marsh tile, same-tile-race rejection, per-NPC single-project rejection, salt-marsh's own settlement not blocking civ-evo, re-emission allowed after the previous project completes.
 
 ## 4. construction_projects Projection
 

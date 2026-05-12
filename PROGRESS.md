@@ -3,6 +3,59 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.43 civ-evo-construction Slice 3: NPC Policy
+
+### Completed This Session
+
+- First user-visible slice of `openspec/changes/civ-evo-construction/`.
+  NPCs in low-economy districts will now autonomously submit
+  `CONSTRUCTION_INITIATE` commands through the existing
+  productive-build event path; the §11.8 first autonomous-civilization
+  loop is now closed end-to-end (Command → Rule Engine → Event →
+  Projection).
+  - `packages/server/src/sim/cityLife.ts`: added pure
+    `decideCivEvoConstructionInitiate(input)`. Returns the command
+    payload to emit, or `null` when policy says "skip this tick". Gating
+    rules per `openspec/changes/civ-evo-construction/tasks.md` Slice 3:
+    not salt-marsh, `areaState.resources.economy < 50` (Slice-3 proxy
+    for the §11.8 infrastructure resource that is not yet modelled),
+    no open civ-evo project on this tile, no open civ-evo project by
+    this NPC. Building id is `b_civ_evo_${tile}`, duration is a fixed
+    `24` ticks.
+  - `packages/server/src/sim/runtime.ts`: every productive-build event
+    is now also evaluated for civ-evo initiation. Salt-marsh's existing
+    progress engine is unchanged.
+  - `packages/server/src/sim/npcEngine.ts`: reserved a new
+    `NpcAgentTaskKind = 'build'` value for the projection layer to
+    advertise "this NPC is autonomously building" later (Slices 6 / 7);
+    the deterministic record lives in
+    `lifeExpansion.constructionProjects[…].initiatedByNpcId`.
+  - `packages/server/src/sim/cityLife.test.ts`: 7 new tests pinning
+    each gate (low economy, salt-marsh, same-tile race, per-NPC single
+    open project, salt-marsh project not blocking civ-evo on other
+    tiles, re-emission allowed after completion).
+- Bumped app version from `0.15.42` to `0.15.43`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- cityLife` passed: 14 tests
+  (was 7 — added 7 Slice-3 policy cases).
+- `npm test` passed: server 22 files / 189 tests, web 10 files / 28
+  tests.
+- `npm run build:server` and `npm run build:web` passed.
+- `openspec validate civ-evo-construction --strict` still passes.
+
+### Still Open
+
+- Docker rebuild + browser smoke after deploy: a low-economy district
+  should produce a single open civ-evo project per tile.
+- Slice 4 next: `construction_projects` projection table with
+  `rebuildFromEvents` + canonical-hash test (closes §11.7 partially for
+  this domain).
+- Open question: whether to introduce a real `infrastructure` resource
+  on `AreaState` (currently proxied by `economy`). Defer to a later
+  slice — the policy boundary is the only call site.
+
 ## 2026-05-12 — v0.15.42 civ-evo-construction Slice 2: Event Reducer
 
 ### Completed This Session

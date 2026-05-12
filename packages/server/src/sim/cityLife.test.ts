@@ -7,6 +7,7 @@ import {
   SALT_MARSH_PROJECT_ID,
   SALT_MARSH_TILE_ID,
   createInitialLifeExpansionState,
+  decideCivEvoConstructionInitiate,
   deriveConstructionInitiateProjectId,
   deriveNpcLifeView,
   hydrateLifeExpansionState,
@@ -188,6 +189,134 @@ describe('city life projection', () => {
       })
       expect(replayed.constructionProjects[projectId]!.initiatedByNpcId).toBe(npcInput.npcId)
       expect(replayed.constructionProjects[projectId]!.targetProgress).toBe(npcInput.duration)
+    })
+  })
+
+  describe('civ-evo-construction: decideCivEvoConstructionInitiate', () => {
+    const lowEconomyArea = { resources: { food: 70, safety: 72, economy: 30 } }
+    const richArea = { resources: { food: 80, safety: 80, economy: 75 } }
+    const empty = createInitialLifeExpansionState()
+
+    it('emits a fresh decision when economy is below the proxy threshold and tile is empty', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: empty
+      })
+      expect(decision).toEqual({
+        npcId: 'central.broker.gui',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 24
+      })
+    })
+
+    it('returns null when economy is at or above the proxy threshold', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: richArea,
+        lifeExpansion: empty
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('returns null on the legacy salt-marsh tile (its own progress engine still runs)', () => {
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: SALT_MARSH_TILE_ID,
+        areaState: lowEconomyArea,
+        lifeExpansion: empty
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('skips when another open civ-evo project already exists on the same tile', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.tailor.zhuang_wan_rong',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 24,
+        tick: 50
+      })
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: expansion
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('skips when this NPC already has an open civ-evo project on any tile', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.broker.gui',
+        tileId: 't_dock',
+        buildingId: 'b_civ_evo_t_dock',
+        duration: 24,
+        tick: 40
+      })
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: expansion
+      })
+      expect(decision).toBeNull()
+    })
+
+    it('emits when the only open project on this tile is the legacy salt-marsh settlement', () => {
+      // Salt-marsh's fixed project id sits at SALT_MARSH_PROJECT_ID and
+      // targets SALT_MARSH_TILE_ID. It must not block civ-evo from
+      // initiating on a different tile.
+      const expansion = withConstructionProgress(createInitialLifeExpansionState(), { tick: 1, delta: 5 })
+      expect(expansion.constructionProjects[SALT_MARSH_PROJECT_ID]).toBeDefined()
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: expansion
+      })
+      expect(decision).not.toBeNull()
+    })
+
+    it('allows the NPC to start a new project once the previous one completes', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.broker.gui',
+        tileId: 't_dock',
+        buildingId: 'b_civ_evo_t_dock',
+        duration: 24,
+        tick: 40
+      })
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: 'central.broker.gui',
+        tileId: 't_dock',
+        buildingId: 'b_civ_evo_t_dock',
+        startedAtTick: 40
+      })
+      // mark the first project completed
+      expansion = {
+        ...expansion,
+        constructionProjects: {
+          ...expansion.constructionProjects,
+          [projectId]: {
+            ...expansion.constructionProjects[projectId]!,
+            progress: 24,
+            completedAtTick: 64
+          }
+        }
+      }
+      const decision = decideCivEvoConstructionInitiate({
+        npcId: 'central.broker.gui',
+        tile: 't_central',
+        areaState: lowEconomyArea,
+        lifeExpansion: expansion
+      })
+      expect(decision).not.toBeNull()
     })
   })
 })

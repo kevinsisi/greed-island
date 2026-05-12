@@ -309,6 +309,59 @@ export function withConstructionInitiated(
   }
 }
 
+/**
+ * civ-evo-construction Slice 3: deterministic decision whether an NPC
+ * should submit a `CONSTRUCTION_INITIATE` command this tick.
+ *
+ * Pure function of `(npcId, tile, areaState, lifeExpansion, tick)` —
+ * does not touch any actor state. Returns the command payload to emit,
+ * or `null` if the policy says "skip this tick".
+ *
+ * Gating rules:
+ *   1. Tile must NOT be the legacy salt-marsh expansion tile (its own
+ *      progress engine still runs the salt-marsh fixed project).
+ *   2. `areaState.resources.economy < 50` is the Slice-3 proxy for the
+ *      §11.8 "infrastructure" resource that is not yet modelled. A
+ *      future slice will introduce a dedicated `infrastructure` field.
+ *   3. Same-tile-race: skip if any open civ-evo project already
+ *      exists on this tile (first NPC wins; collaboration is future
+ *      work). Salt-marsh's own settlement does NOT count.
+ *   4. No double-bookkeeping: skip if this NPC already has an open
+ *      civ-evo project anywhere.
+ *
+ * Building id is `b_civ_evo_${tile}` so the slice does not depend on
+ * the building catalog — Slice 6 wires the projection to the frontend.
+ * Duration is a fixed 24 ticks (~2 minutes) for v1; a per-building
+ * or skill-derived model is one of the design.md Open Questions.
+ */
+export function decideCivEvoConstructionInitiate(input: {
+  npcId: string
+  tile: string
+  areaState: { resources: { food: number; safety: number; economy: number } } | null
+  lifeExpansion: LifeExpansionState
+}): {
+  npcId: string
+  tileId: string
+  buildingId: string
+  duration: number
+} | null {
+  if (input.tile === SALT_MARSH_TILE_ID) return null
+  const economy = input.areaState?.resources.economy ?? 100
+  if (economy >= 50) return null
+  for (const project of Object.values(input.lifeExpansion.constructionProjects)) {
+    if (project.completedAtTick !== null) continue
+    if (project.projectId === SALT_MARSH_PROJECT_ID) continue
+    if (project.targetTileId === input.tile) return null
+    if (project.initiatedByNpcId === input.npcId) return null
+  }
+  return {
+    npcId: input.npcId,
+    tileId: input.tile,
+    buildingId: `b_civ_evo_${input.tile}`,
+    duration: 24
+  }
+}
+
 export function withUnlockedExpansion(state: LifeExpansionState): LifeExpansionState {
   return {
     ...state,
