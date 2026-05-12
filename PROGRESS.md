@@ -72,6 +72,7 @@ developer. Keep latest status at the top.
 - Chronicle clarity focused tests: `npm run test -w @greed-island/server -- livingWorld chronicleRenderer` passed: 50 tests. `npm run test -w @greed-island/web -- eventVisibility TimelinePage` passed: 6 tests. Server and web typechecks passed.
 - World agenda focused tests: `npm run test -w @greed-island/server -- worldAgenda runtimeExpansion livingWorld` passed: 43 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. `npx openspec validate world-agenda-directives --strict` passed.
 - Agenda priority focused tests: `npm run test -w @greed-island/server -- worldAgenda runtimeExpansion` passed: 5 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. Full `npm test` passed: 213 server tests + 31 web tests. `npm run build:server` passed. `npm run build:web` passed with only the known Vite chunk-size warning. `npx openspec validate world-agenda-directives --strict` passed.
+- Commit `4796868` (`fix(world): prefer event agenda over civilian dominance`) passed CI run `25749417496` and Deploy Dev run `25749417500`; both only reported the known Node.js 20 actions deprecation annotation. Live `/healthz` returned version `0.15.47` at tick `102493`. Live `/api/events?limit=12` after deploy showed newest productive motivations using `民生配給會` resource governance or `島嶼主宰的暗流` world-event pressure; remaining `平民地方支部` examples were older pre-deploy history.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
