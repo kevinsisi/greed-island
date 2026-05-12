@@ -3,6 +3,31 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.47e Completed NPC Buildings Persist
+
+### Implemented
+
+- Added `packages/server/src/buildings/dynamicConstruction.ts`.
+- Completed NPC-initiated construction projects now project into permanent
+  `BuildingRuntimeView` rows instead of disappearing when `completedAtTick` is
+  set.
+- Runtime now merges completed NPC buildings into:
+  - `getBuildingsOnTile(tileId)`
+  - `getAllBuildings()`
+  - `/api/buildings?tileId=X`
+  - `/api/buildings/:id`
+- Completed dynamic building IDs are project-specific, e.g.
+  `b_civ_evo_t_central.abcdef12`, so repeated autonomous projects on the same
+  tile do not collide.
+- Completed buildings are enterable `landmark` buildings, retain
+  `ownerNpcId = initiatedByNpcId`, and expose basic hiring slots.
+
+### Verification
+
+- `npx tsc -p packages/server/tsconfig.json --noEmit` passed.
+- `npm run test -w @greed-island/server -- dynamicConstruction buildingsRouter runtimeExpansion` passed: 7 tests.
+- Pending: full suite/build/OpenSpec, commit/push/deploy, live API verification.
+
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
 ### 2026-05-12 Follow-up — Skill XP Affects Productive Output

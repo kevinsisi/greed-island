@@ -59,3 +59,10 @@
   - Version: `0.15.47` already set.
   - Projection payload-fix: `buildRowsFromEvents` now reads from `payload.data` (rule-engine wrapper) with fallback to direct `payload` (test-fixture format). Deployed and live-verified.
   - E2E live verification: NPC-initiated mountain project progressed 0→24/24, emitted `BUILDING_CONSTRUCTED`, set `completedAtTick`. Multiple subsequent NPC projects started autonomously (5 total in world history).
+
+## 9. Completed Project Persistence
+
+- [x] 9.1 Add completed NPC construction projection to permanent `BuildingRuntimeView`.
+- [x] 9.2 Completed NPC buildings use project-specific IDs to avoid collisions when the same tile gets repeated autonomous projects.
+- [x] 9.3 Expose completed NPC buildings through `getBuildingsOnTile()`, `getAllBuildings()`, and `/api/buildings` detail routes.
+- [x] 9.4 Tests cover completed dynamic construction views and buildings API exposure.

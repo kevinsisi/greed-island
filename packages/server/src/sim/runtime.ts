@@ -68,6 +68,7 @@ import {
 } from './areaStateEngine.js'
 import { BuildingRuntime } from '../buildings/buildingRuntime.js'
 import type { BuildingRuntimeView } from '../buildings/types.js'
+import { completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
 import { findBuildingById, listAllBuildings, listBuildingsForTile } from '../buildings/catalog.js'
 import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
@@ -388,9 +389,12 @@ export class SimulationRuntime {
   }
 
   getBuildingsOnTile(tileId: string): readonly BuildingRuntimeView[] {
-    return this.mergeUnlockedBuildings(
+    return this.mergeCompletedConstructionBuildings(
       tileId,
-      this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
+      this.mergeUnlockedBuildings(
+        tileId,
+        this.buildingRuntime.snapshotForTile(tileId, this.npcEngine.snapshotAll())
+      )
     )
   }
 
@@ -405,7 +409,25 @@ export class SimulationRuntime {
     for (const def of listAllBuildings(this.lifeExpansion.unlockedBuildingIds)) {
       if (!byId.has(def.id)) byId.set(def.id, { def, occupants: [] })
     }
+    for (const view of this.completedConstructionBuildingViews()) {
+      if (!byId.has(view.def.id)) byId.set(view.def.id, view)
+    }
     return [...byId.values()]
+  }
+
+  private mergeCompletedConstructionBuildings(tileId: string, existing: readonly BuildingRuntimeView[]): readonly BuildingRuntimeView[] {
+    const byId = new Map(existing.map((view) => [view.def.id, view] as const))
+    for (const view of this.completedConstructionBuildingViews()) {
+      if (view.def.tileId === tileId && !byId.has(view.def.id)) byId.set(view.def.id, view)
+    }
+    return [...byId.values()]
+  }
+
+  private completedConstructionBuildingViews(): readonly BuildingRuntimeView[] {
+    return this.constructionProjects
+      .list()
+      .map((project) => completedConstructionBuildingView(project))
+      .filter((view): view is BuildingRuntimeView => view !== null)
   }
 
   private mergeUnlockedBuildings(tileId: string, existing: readonly BuildingRuntimeView[]): readonly BuildingRuntimeView[] {

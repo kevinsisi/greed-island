@@ -113,6 +113,65 @@ describe('buildings router', () => {
     }
   })
 
+  it('returns completed NPC-initiated construction projects as permanent buildings', async () => {
+    const db = new Database(':memory:')
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const jobs = new PlayerJobsStore(db)
+    const runtime = {
+      getCurrentTick: () => 120,
+      getBuildingsOnTile: () => [{
+        def: {
+          id: 'b_civ_evo_t_central.abcdef12',
+          tileId: 't_central',
+          nameZh: '自主設施',
+          nameEn: 'Autonomous Facility',
+          descriptionZh: '由 central.builder 發起的 NPC 自主建案，已於 tick 110 完工。',
+          type: 'landmark',
+          placement: { col: 4, row: 4, glyph: '🏠', size: 24 },
+          interior: { cols: 9, rows: 7, props: [] },
+          ownerNpcId: 'central.builder',
+          hiring: [{ shift: 'morning', capacity: 1, wage: 12, taskZh: '整理自主設施' }],
+          enterable: true,
+          restorative: false
+        },
+        occupants: []
+      }],
+      getAllBuildings: () => [],
+      getInProgressConstructionProjects: () => [],
+      getAreaState: () => null,
+      getAmbientNarrator: () => null,
+    } as unknown as SimulationRuntime
+    const app = express()
+    app.use(express.json())
+    app.use(createBuildingsRouter({ runtime, jobs, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const response = await fetch(`http://127.0.0.1:${address.port}/buildings?tileId=t_central`)
+      const payload = (await response.json()) as {
+        buildings: Array<{ def: { id: string; type: string; enterable: boolean; ownerNpcId: string | null } }>
+        inProgress: unknown[]
+      }
+
+      expect(response.status).toBe(200)
+      expect(payload.inProgress).toEqual([])
+      expect(payload.buildings).toEqual([
+        expect.objectContaining({
+          def: expect.objectContaining({
+            id: 'b_civ_evo_t_central.abcdef12',
+            type: 'landmark',
+            enterable: true,
+            ownerNpcId: 'central.builder'
+          })
+        })
+      ])
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
+
   it('returns constructed expansion buildings by id before they have occupants', async () => {
     const db = new Database(':memory:')
     const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
