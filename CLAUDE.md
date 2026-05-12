@@ -4,6 +4,27 @@ This repository is a GitHub template. When a new project is generated from it, t
 
 Edit this file freely to add stack-, domain-, or team-specific rules for your project. Keep the Skill Activation section so the bundled `skills/` and `.github/skills/` stay wired in.
 
+## Local Dev / Docker — Read Before Restarting The Stack
+
+This workstation needs a few non-obvious flags when rebuilding the local
+docker stack. **Read [`deploy/README.md` → "Local Dev Workflow"](./deploy/README.md#local-dev-workflow-this-workstation)
+before invoking `docker compose`.** TL;DR:
+
+- Always prefix compose commands with `DOCKER_BUILDKIT=0` on this machine.
+- `deploy/.env` must keep `JWT_SECRET=local-development-secret-0-15-24`
+  (matches the existing container's env, so browser JWT cookies survive
+  a rebuild).
+- `docker compose down` keeps `deploy/data/` (the SQLite EventLog).
+  `down -v` destroys it — use only when you actually want a fresh world.
+
+Standard rebuild flow:
+
+```bash
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml down
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml up -d --build
+curl -s http://127.0.0.1:8100/healthz   # confirm new version is up
+```
+
 ## Greed Island — Project Architecture Source of Truth
 
 This codebase is **Greed Island**, an AI-driven living-world game. The following documents are mandatory reading before non-trivial changes, in this order:

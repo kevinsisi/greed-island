@@ -55,6 +55,60 @@ docker compose logs -f --tail=200
 4. `cd /home/kevin/DockerCompose/caddy && docker compose restart`
 5. Add the URL routing entry to the project's CLAUDE.md URL Routing Table.
 
+## Local Dev Workflow (this workstation)
+
+When iterating on this Windows desktop the same compose file works, but a
+few quirks matter — captured here so future AIs (and humans) can rebuild
+the stack without rediscovering them:
+
+- **Always invoke compose with `DOCKER_BUILDKIT=0`.** BuildKit on this
+  machine fails to pull the `docker/dockerfile:1.7` syntax frontend from
+  Docker Hub (`x509: certificate signed by unknown authority`). The
+  Dockerfiles compile fine under the legacy builder. The npm `strict-ssl`
+  workaround in `packages/{server,web}/Dockerfile` is already in place.
+- `deploy/.env` must exist before compose; the local copy uses
+  `TAILSCALE_BIND_ADDR=0.0.0.0`, `GREED_ISLAND_HOST_PORT=8100`,
+  `JWT_SECRET=local-development-secret-0-15-24`. **Do not rotate
+  `JWT_SECRET`** when only rebuilding the image — existing JWT cookies
+  in your browser tab will all invalidate. (The value matches the env
+  var baked into earlier running containers.)
+- Bind-mount `deploy/data/` holds the SQLite EventLog (currently ~140 MB
+  / 140k events). `docker compose down` keeps it; `down -v` destroys it.
+  When wiping is wanted, do it explicitly — never via `--force`.
+
+### Stop + remove old containers
+```bash
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml down
+```
+Stops both containers and removes them and the user-defined network.
+The bind-mounted `deploy/data/` is untouched.
+
+### Rebuild + start fresh
+```bash
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml up -d --build
+```
+Builds `kevin950805/greed-island-server:dev` and
+`kevin950805/greed-island-web:dev` from the current worktree and runs
+them detached. The first `--build` after a code change typically takes
+60–90 s; subsequent rebuilds reuse most cached layers.
+
+### Probe the live stack
+```bash
+curl -s http://127.0.0.1:8100/healthz       # { ok, version, tick }
+curl -s http://127.0.0.1:8100/api/version   # { version }
+docker compose -f deploy/docker-compose.yml ps
+docker logs --tail 30 greed-island-server
+```
+
+### Notes on API shapes (gotchas)
+- `GET /api/npcs` returns a **JSON array** directly, NOT
+  `{ npcs: [...] }`. Parse as `Array<NpcSummary>`.
+- `GET /api/world` returns `{ tick, lastSequence, eventCount, npcCount,
+  facts, worldConfig, generatedAt }`. The salt-marsh + civ-evo
+  construction projects live under `facts.lifeExpansion.constructionProjects`.
+- `GET /api/map` returns `{ tiles: [...] }`. **Use this**, not the
+  frontend `fixtureMap`, when verifying which districts are unlocked.
+
 ## Daily Operations
 
 ```bash
