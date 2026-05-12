@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.38 Cross-District Traveller Visibility
+
+### Completed Locally
+
+- Root cause: after restoring the one-NPC-one-map rule in `v0.15.37`, legal Hub
+  travellers were still too rare visually because each cross-district route was
+  visible for only one 5-second tick.
+- Added a server-side route visibility hold: cross-tile `travelRoute` state now
+  remains visible for 4 ticks (about 20 seconds) before the NPC resumes local
+  area presence or continues the next route segment.
+- Preserved the parent/child layer rule: Hub still only renders routed
+  cross-district travellers, never child area outdoor NPCs.
+- Added `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS` coverage so the route visibility
+  window cannot silently shrink back to a single tick.
+- Bumped app version from `0.15.37` to `0.15.38`.
+
+### Local Verification
+
+- `npm run test -w @greed-island/server -- npcEngine` passed: 28 tests.
+- `npm test` passed: server 22 files / 164 tests, web 10 files / 28 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed, with the existing Vite chunk-size warning.
+
+### Still Open
+
+- Gemini review, commit, push, CI/CD, and live evidence are in progress.
+
 ## 2026-05-12 — v0.15.37 Hub Parent/Child NPC Layer Fix
 
 ### Completed Locally

@@ -68,6 +68,8 @@ const SUB_INNER_MIN_ROW = 1
 const SUB_INNER_MAX_ROW = AREA_SUB_ROWS - 2 // 8
 // 子格錨點刷新節奏：每 6 個 tick (≈30 秒) 換一個目標子格。
 export const NPC_LOCAL_WAYPOINT_REFRESH_TICKS = 6
+// Cross-tile routes stay visible long enough for the Hub traveller layer.
+export const NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS = 4
 
 export type NpcRuntimeState = {
   tile: string
@@ -653,13 +655,90 @@ function decideNextState(
   }
   const targetTile = personalityOverride?.targetTile ?? scheduleTarget
 
+  const finish = (
+    nextTile: string,
+    activity: NpcActivity,
+    travelRoute: NonNullable<NpcRuntimeState['travelRoute']> | null,
+    effectiveTargetTile: string
+  ): NpcRuntimeState => {
+    const drift = ACTIVITY_DRIFT[activity]
+    const mood = clamp(before.mood + drift.mood, MOOD_MIN, MOOD_MAX)
+    const health = clamp(before.health + drift.health, HEALTH_MIN, HEALTH_MAX)
+    let subCol: number
+    let subRow: number
+    if (nextTile !== before.tile) {
+      const entry = entrySubTile(profile.id, before.tile, nextTile, currentTick)
+      subCol = entry.col
+      subRow = entry.row
+    } else {
+      const anchor = subAnchor(profile.id, nextTile, activity, currentTick)
+      subCol = stepToward(before.subCol, anchor.col)
+      subRow = stepToward(before.subRow, anchor.row)
+    }
+    return {
+      tile: nextTile,
+      targetTile: effectiveTargetTile,
+      activity,
+      mood,
+      health,
+      faction: before.faction,
+      lastActedTick:
+        activity === 'idle' &&
+        nextTile === before.tile &&
+        subCol === before.subCol &&
+        subRow === before.subRow
+          ? before.lastActedTick
+          : currentTick,
+      subCol,
+      subRow,
+      subZ: before.subZ,
+      personalityOverride,
+      travelRoute,
+      agent: buildNextAgentState({
+        profile,
+        previous: before.agent,
+        activity,
+        targetTile: effectiveTargetTile,
+        scheduleTarget,
+        personalityOverride,
+        currentTick,
+        isTraveling: activity === 'move' && travelRoute !== null
+      })
+    }
+  }
+
+  if (before.activity === 'move' && before.travelRoute) {
+    const routeAge = currentTick - before.travelRoute.startedAtTick
+    if (routeAge > 0 && routeAge < NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS) {
+      return finish(before.tile, 'move', before.travelRoute, before.travelRoute.targetTile)
+    }
+    const arrivedTile = before.travelRoute.toTile
+    if (arrivedTile !== targetTile) {
+      const step = nextStepTowards(arrivedTile, targetTile)
+      if (step) {
+        return finish(
+          arrivedTile,
+          'move',
+          {
+            fromTile: arrivedTile,
+            toTile: step,
+            targetTile,
+            startedAtTick: currentTick
+          },
+          targetTile
+        )
+      }
+    }
+    return finish(arrivedTile, slot?.activity ?? 'idle', null, targetTile)
+  }
+
   let nextTile = before.tile
   let activity: NpcActivity
-  let travelRoute: NpcRuntimeState['travelRoute'] = null
+  let travelRoute: NonNullable<NpcRuntimeState['travelRoute']> | null = null
   if (before.tile !== targetTile) {
     const step = nextStepTowards(before.tile, targetTile)
     if (step) {
-      nextTile = step
+      nextTile = before.tile
       activity = 'move'
       travelRoute = {
         fromTile: before.tile,
@@ -674,56 +753,7 @@ function decideNextState(
   } else {
     activity = slot?.activity ?? 'idle'
   }
-
-  const drift = ACTIVITY_DRIFT[activity]
-  const mood = clamp(before.mood + drift.mood, MOOD_MIN, MOOD_MAX)
-  const health = clamp(before.health + drift.health, HEALTH_MIN, HEALTH_MAX)
-
-  // ---- 子格座標：tile 換了 → 從邊緣進入；同 tile → 一格走向 deterministic 錨點 ----
-  let subCol: number
-  let subRow: number
-  if (nextTile !== before.tile) {
-    const entry = entrySubTile(profile.id, before.tile, nextTile, currentTick)
-    subCol = entry.col
-    subRow = entry.row
-  } else {
-    const anchor = subAnchor(profile.id, nextTile, activity, currentTick)
-    subCol = stepToward(before.subCol, anchor.col)
-    subRow = stepToward(before.subRow, anchor.row)
-    // 子格抖動：x 跟 y 任一達到錨點時，下一個錨點要靠 refreshIdx 換新；
-    // 期間其餘子格只動一軸，避免兩軸同時跳。
-  }
-
-  return {
-    tile: nextTile,
-    targetTile,
-    activity,
-    mood,
-    health,
-    faction: before.faction,
-    lastActedTick:
-      activity === 'idle' &&
-      nextTile === before.tile &&
-      subCol === before.subCol &&
-      subRow === before.subRow
-        ? before.lastActedTick
-        : currentTick,
-    subCol,
-    subRow,
-    subZ: before.subZ,
-    personalityOverride,
-    travelRoute,
-    agent: buildNextAgentState({
-      profile,
-      previous: before.agent,
-      activity,
-      targetTile,
-      scheduleTarget,
-      personalityOverride,
-      currentTick,
-      isTraveling: before.tile !== targetTile && nextTile !== before.tile
-    })
-  }
+  return finish(nextTile, activity, travelRoute, targetTile)
 }
 
 function initialAgentState(profile: NpcProfile): NpcAgentState {

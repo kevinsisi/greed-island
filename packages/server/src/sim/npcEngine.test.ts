@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NpcEngine,
+  NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS,
   NPC_INTERACT_COOLDOWN_TICKS,
   NPC_LOCAL_WAYPOINT_REFRESH_TICKS,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -45,7 +46,7 @@ describe('NpcEngine', () => {
     expect(state!.tile).toBe('t_central')
   })
 
-  it('moves one tile per tick toward the target slot location', () => {
+  it('moves along the path toward the target slot location', () => {
     // 'mover' starts at t_dock but afternoon slot pulls it to t_mountain.
     const profile = makeProfile({
       id: 'mover',
@@ -62,7 +63,7 @@ describe('NpcEngine', () => {
     const engine = new NpcEngine([profile])
     const seenTiles: string[] = ['t_dock']
     let lastTile = 't_dock'
-    for (let t = 1; t <= 6; t += 1) {
+    for (let t = 1; t <= NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS * 6; t += 1) {
       engine.tick(t)
       const cur = engine.getState('mover')!.tile
       if (cur !== lastTile) seenTiles.push(cur)
@@ -74,7 +75,7 @@ describe('NpcEngine', () => {
     expect(seenTiles[seenTiles.length - 1]).toBe('t_mountain')
   })
 
-  it('emits NPC_MOVE for each tile change', () => {
+  it('starts a visible route before emitting NPC_MOVE on arrival', () => {
     const profile = makeProfile({
       id: 'walker',
       defaultLocation: 't_dock',
@@ -83,15 +84,10 @@ describe('NpcEngine', () => {
       ]
     })
     const engine = new NpcEngine([profile])
-    const result = engine.tick(1)
-    const moveEvents = result.events.filter((e) => e.kind === 'move')
-    expect(moveEvents.length).toBe(1)
-    const ev = moveEvents[0]!
-    if (ev.kind === 'move') {
-      expect(ev.from).toBe('t_dock')
-      expect(ev.to).toBe('t_central')
-    }
+    const routeStart = engine.tick(1)
+    expect(routeStart.events.filter((e) => e.kind === 'move')).toHaveLength(0)
     const state = engine.getState('walker')!
+    expect(state.tile).toBe('t_dock')
     expect(state.activity).toBe('move')
     expect(state.travelRoute).toEqual({
       fromTile: 't_dock',
@@ -99,6 +95,18 @@ describe('NpcEngine', () => {
       targetTile: 't_central',
       startedAtTick: 1
     })
+
+    let arrival = routeStart
+    for (let tick = 2; tick <= 1 + NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS; tick += 1) {
+      arrival = engine.tick(tick)
+    }
+    const moveEvents = arrival.events.filter((e) => e.kind === 'move')
+    expect(moveEvents).toHaveLength(1)
+    const ev = moveEvents[0]!
+    if (ev.kind === 'move') {
+      expect(ev.from).toBe('t_dock')
+      expect(ev.to).toBe('t_central')
+    }
   })
 
   it('emits productive city actions beyond social arguments', () => {
@@ -169,7 +177,7 @@ describe('NpcEngine', () => {
     expect(productive!.narration).not.toMatch(/[{}]/)
   })
 
-  it('clears travelRoute after the NPC arrives and resumes local presence', () => {
+  it('keeps a cross-tile route visible before resuming local presence', () => {
     const profile = makeProfile({
       id: 'arrival',
       defaultLocation: 't_dock',
@@ -183,7 +191,15 @@ describe('NpcEngine', () => {
     expect(engine.getState('arrival')!.activity).toBe('move')
     expect(engine.getState('arrival')!.travelRoute).not.toBeNull()
 
-    engine.tick(2)
+    for (let tick = 2; tick < 1 + NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS; tick += 1) {
+      engine.tick(tick)
+    }
+    const visible = engine.getState('arrival')!
+    expect(visible.tile).toBe('t_dock')
+    expect(visible.activity).toBe('move')
+    expect(visible.travelRoute).not.toBeNull()
+
+    engine.tick(1 + NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS)
     const state = engine.getState('arrival')!
     expect(state.tile).toBe('t_central')
     expect(state.activity).toBe('idle')
@@ -211,9 +227,11 @@ describe('NpcEngine', () => {
     const engine = new NpcEngine([makeProfile()])
     engine.hydrate('test.npc', { tile: 't_temple' })
     // schedule pulls back to t_central (or t_dock); the engine should pathfind
-    engine.tick(1)
+    for (let tick = 1; tick <= NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS + 1; tick += 1) {
+      engine.tick(tick)
+    }
     const s = engine.getState('test.npc')!
-    // moved one tile from t_temple toward target
+    // moved one tile from t_temple toward target after the visible route segment
     expect(s.tile).not.toBe('t_temple')
   })
 
@@ -301,7 +319,7 @@ describe('NpcEngine', () => {
     })
     const engine = new NpcEngine([priest])
 
-    for (let t = TICKS_PER_DAY / 2; t <= TICKS_PER_DAY / 2 + 6; t += 1) {
+    for (let t = TICKS_PER_DAY / 2; t <= TICKS_PER_DAY / 2 + NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS * 4; t += 1) {
       engine.tick(t)
     }
 
@@ -610,6 +628,10 @@ describe('NpcEngine', () => {
     expect(NPC_LOCAL_WAYPOINT_REFRESH_TICKS).toBe(6)
   })
 
+  it('keeps cross-district routes visible long enough for the Hub layer', () => {
+    expect(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS).toBe(4)
+  })
+
   it('marks NPC interaction participants with bounded social agent tasks', () => {
     const A = makeProfile({
       id: 'social.A',
@@ -686,8 +708,14 @@ describe('NpcEngine', () => {
     expect(engine.getState('dialog.hold')!.tile).toBe('t_central')
     expect(engine.getState('dialog.hold')!.agent.activeTask.kind).toBe('player-dialog')
 
-    engine.tick(10 + NPC_PLAYER_DIALOG_HOLD_TICKS)
+    const departureTick = 10 + NPC_PLAYER_DIALOG_HOLD_TICKS
+    engine.tick(departureTick)
     expect(engine.getState('dialog.hold')!.agent.activeTask.kind).toBe('travel')
+    expect(engine.getState('dialog.hold')!.tile).toBe('t_central')
+
+    for (let tick = departureTick + 1; tick <= departureTick + NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS; tick += 1) {
+      engine.tick(tick)
+    }
     expect(engine.getState('dialog.hold')!.tile).not.toBe('t_central')
   })
 
