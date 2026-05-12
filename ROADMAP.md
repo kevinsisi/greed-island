@@ -4,6 +4,19 @@
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 
+## v0.15.45 🚧 in progress — 2026-05-12
+
+**主題：Hub mount latch + since-panel session memory**
+
+- ✅ HubPage：把 v0.15.44 的 `source === 'server'` gate 換成單向 latch
+  `hasServerWorld`。一旦掛上，SSE/poll 暫斷不會再 unmount Phaser scene。
+  修正 v0.15.44 引發的「卡住要頻繁重整」。
+- ✅ HubPage：「不在時的潮鳴市」面板的關閉狀態存進 sessionStorage
+  (`gi:hub:since-panel-dismissed:v1`)，本 tab 關過就不再跳；關 tab 重開
+  才會再出現，符合「離線重新進入世界才看」的預期。
+- ✅ 本機：`npm test` 全綠（server 189 / web 28）、`npm run build` 通過。
+- 🚧 還沒做：commit / push / docker rebuild + live 驗證。
+
 ## v0.15.44 🚧 in progress — 2026-05-12
 
 **主題：Hub traveller sprite 真的會動 + 區塊標籤閃 "施工中" 修正**

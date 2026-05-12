@@ -19,6 +19,7 @@ import { constructionActivitiesFor } from './constructionActivity'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
+const SINCE_PANEL_DISMISSED_KEY = 'gi:hub:since-panel-dismissed:v1'
 type HubPosition = { x: number; y: number; z: number }
 
 /**
@@ -32,10 +33,40 @@ export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs, map, events, source } = useWorldState()
   const { token, account } = useAuth()
+  // v0.15.45: one-way latch. Once we have seen authoritative server data
+  // once, keep the Phaser canvas mounted forever — even if SSE/poll
+  // briefly flips `source` back to 'fixture' on a transient error.
+  // Without this latch, every short network blip tears down + recreates
+  // the entire scene, which is what the user saw as "卡住、要頻繁重整".
+  const [hasServerWorld, setHasServerWorld] = useState(false)
+  useEffect(() => {
+    if (source === 'server' && !hasServerWorld) setHasServerWorld(true)
+  }, [hasServerWorld, source])
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [currentDistrict, setCurrentDistrict] = useState<DistrictId | null>(null)
-  const [showSincePanel, setShowSincePanel] = useState(true)
+  // v0.15.45: only show 不在時的潮鳴市 panel when the user actually returns
+  // after being offline — not on every HubPage mount, route change, or
+  // forced reload. The dismissal latches into sessionStorage, which is
+  // cleared when the tab closes, so a fresh "re-enter the world" still
+  // shows the catch-up panel.
+  const [showSincePanel, setShowSincePanel] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      return window.sessionStorage.getItem(SINCE_PANEL_DISMISSED_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+  const dismissSincePanel = useCallback(() => {
+    setShowSincePanel(false)
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(SINCE_PANEL_DISMISSED_KEY, '1')
+    } catch {
+      // sessionStorage may be unavailable in some embedded webviews — non-fatal.
+    }
+  }, [])
   const [areaStates, setAreaStates] = useState<ServerAreaState[]>([])
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
@@ -203,7 +234,11 @@ export function HubPage() {
       </div>
 
       <div className="relative w-full">
-        {source === 'server' ? (
+        {hasServerWorld ? (
+          // v0.15.45: once mounted, stay mounted. `hasServerWorld` is a
+          // one-way latch — transient SSE/poll failures cannot tear the
+          // scene down. Per-prop updates still flow through
+          // `applyExternalUpdate` so NPC / map updates land normally.
           <PhaserGame
             npcs={mapNpcs}
             players={mapPlayers}
@@ -219,10 +254,6 @@ export function HubPage() {
             controlsEnabled={!!token}
           />
         ) : (
-          // v0.15.44: don't mount the Phaser canvas until /api/world has
-          // delivered an authoritative tile list. The fixture only has 8
-          // districts (no t_salt_marsh), which causes "施工中" labels to
-          // flicker into real names the moment the server response lands.
           <div className="w-full max-w-[800px] mx-auto aspect-[4/3] rounded-sharp border border-ground-700 bg-ground-900 flex items-center justify-center text-ground-400 text-sm">
             {locale === 'zh' ? '載入潮鳴市…' : 'Loading Tide Hum City…'}
           </div>
@@ -254,7 +285,7 @@ export function HubPage() {
       )}
 
       {token && showSincePanel && (
-        <SinceLastVisitPanel token={token} onClose={() => setShowSincePanel(false)} />
+        <SinceLastVisitPanel token={token} onClose={dismissSincePanel} />
       )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />

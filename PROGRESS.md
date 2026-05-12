@@ -3,6 +3,46 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.45 Hub Mount Latch + Since-Panel Session Memory
+
+### Completed This Session
+
+- Two regressions reported by the user during live v0.15.44 testing:
+  - Hub map kept flipping between "施工中 / 載入中" placeholder and the
+    populated map, requiring frequent reloads. Root cause: the v0.15.44
+    gate `source === 'server'` unmounted / remounted the entire Phaser
+    scene whenever SSE briefly fell back to `'fixture'` on a transient
+    error.
+  - The "不在時的潮鳴市" (Since-Last-Visit) panel popped up on every
+    HubPage mount, route change, or reload — not just when the user
+    actually returned after being offline.
+- Fixes:
+  - `HubPage`: replaced the live `source === 'server'` gate with a
+    one-way `hasServerWorld` latch held in `useState`. Once true, the
+    Phaser canvas stays mounted forever — transient SSE/poll failures
+    no longer tear the scene down.
+  - `HubPage`: `showSincePanel` now hydrates from `sessionStorage`
+    (key `gi:hub:since-panel-dismissed:v1`). Dismissal persists for
+    the tab session; closing the tab and reopening still surfaces the
+    catch-up panel, matching the user-reported expectation
+    "只有離線重新進入世界才跳".
+- Bumped app version from `0.15.44` to `0.15.45`.
+
+### Local Verification
+
+- `npm test` passed: server 22 files / 189 tests, web 10 files / 28
+  tests.
+- `npm run build:server` and `npm run build:web` passed.
+
+### Still Open
+
+- Live browser smoke after docker rebuild:
+  - Hub map should stay mounted across network blips (the scene must
+    not "reset" while panning / moving).
+  - Closing the catch-up panel should keep it closed for the rest of
+    the tab session.
+- civ-evo-construction Slice 4+ continues to wait.
+
 ## 2026-05-12 — v0.15.44 Hub Traveller Sprite + Fixture Flicker Fix
 
 ### Completed This Session
