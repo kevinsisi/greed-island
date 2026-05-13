@@ -7,6 +7,21 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase E0.2 — deterministic wildlife spawning + `animal_population` projection**
+
+OpenSpec: `ecosystem-animal-spawning/`。
+
+- ✅ 新增 `ANIMAL_SPAWNED` command/event 與 validator，payload 帶具體 `Animal` + `spawnedAtTick`。
+- ✅ 新增 `packages/server/src/ecosystem/animalSpawning.ts`：固定 cadence、每 cadence 只評估一個 active eligible tile、用 canonical hash 決定 species / animal id / sub-tile position。
+- ✅ 明確只映射 documented ecosystem regions：`forest` / `mountain` / `desert` / `ruin` / explicit `t_salt_marsh`；generic `grass`、generic `water` 不產生假 species。
+- ✅ 新增 `AnimalPopulationProjection`，以 `(speciesId, tileId)` 聚合 `ANIMAL_SPAWNED`，支援 rebuild / incremental project / canonical hash。
+- ✅ `SimulationRuntime` 每 spawn cadence push `ANIMAL_SPAWNED` 進 Rule Engine，accepted event fan-out 到 projection，boot 從 EventLog rebuild，`WorldSnapshot.facts.animalPopulation` 可讀。
+- ✅ `ANIMAL_SPAWNED` 不進 public recent-event / SSE / chronicle surfaces。
+- ✅ Focused tests 49 passed；full `npm test` 287 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（21 passed）全綠。
+- 🚧 Commit / push / CI / Deploy Dev verification pending.
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase 1 §33.2 — NPC state 從 FACT_SET 轉向 typed projection**
 
 OpenSpec: `npc-state-typed-projection/`。

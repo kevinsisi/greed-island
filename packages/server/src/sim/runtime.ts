@@ -66,6 +66,7 @@ import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
+import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -111,6 +112,7 @@ import {
 } from './cityLife.js'
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { NpcStateProjection } from '../projections/npcState.js'
+import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -285,6 +287,7 @@ export class SimulationRuntime {
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
+  private readonly animalPopulationProjection = new AnimalPopulationProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -426,7 +429,8 @@ export class SimulationRuntime {
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
         activeEvents: this.eventEngine.getActive(),
         areaStates: this.getAreaStates(),
-        lifeExpansion: this.lifeExpansion
+        lifeExpansion: this.lifeExpansion,
+        animalPopulation: this.animalPopulationProjection.list()
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -610,6 +614,11 @@ export class SimulationRuntime {
   /** Phase 1 §33.4 — single settlement by id. */
   getSettlementById(id: string): SettlementRow | null {
     return this.settlementsProjection.getById(id)
+  }
+
+  /** Phase E0.2 — current animal population projection (Layer 2.5). */
+  getAnimalPopulation(): readonly AnimalPopulationRow[] {
+    return this.animalPopulationProjection.list()
   }
 
   getManualNpcIds(): readonly string[] {
@@ -801,6 +810,8 @@ export class SimulationRuntime {
       if (this.npcMemory) this.npcMemory.project(ev)
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
+      this.npcStateProjection.project(ev)
+      this.animalPopulationProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -1243,6 +1254,35 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Phase E0.2: deterministic wildlife spawning ----
+    // Routine animal spawns are typed EventLog truth and projection material,
+    // not public narration. The planner evaluates one active eligible tile per
+    // cadence tick so ecosystem work remains budget-bounded.
+    for (const spawn of planAnimalSpawns({
+      tick: nextTick,
+      tiles: listMapTiles(this.lifeExpansion.unlockedTileIds),
+      getPopulation: (speciesId, tileId) => this.animalPopulationProjection.countSpeciesOnTile(speciesId, tileId),
+    })) {
+      const tileName = TILE_NAME_BY_ID[spawn.animal.tileId] ?? spawn.animal.tileId
+      commands.push(
+        makeLivingWorldCommand(
+          'ANIMAL_SPAWNED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            animal: spawn.animal,
+            spawnedAtTick: spawn.spawnedAtTick,
+            motivation: makeMotivation(
+              `${spawn.animal.speciesId} spawned on ${tileName} by deterministic Layer 2.5 biome policy.`
+            ),
+            narration: null,
+          }
+        )
+      )
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -1663,6 +1703,7 @@ export class SimulationRuntime {
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
         this.npcStateProjection.project(ev)
+        this.animalPopulationProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2031,6 +2072,7 @@ export class SimulationRuntime {
     if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
       const allEvents = this.store.readEvents()
       this.npcStateProjection.rebuildFromEvents(allEvents)
+      this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
 
@@ -2253,7 +2295,7 @@ function readAcceptedNpcInteraction(payload: unknown): {
 function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEvent | null {
   const tick = typeof ev.tick === 'number' ? ev.tick : fallbackTick
 
-  if (ev.eventType === 'NPC_STATE_RECORDED') return null
+  if (ev.eventType === 'NPC_STATE_RECORDED' || ev.eventType === 'ANIMAL_SPAWNED') return null
 
   if (isLivingWorldCommandType(ev.eventType)) {
     const lw = ev.payload as LivingWorldEventPayload | undefined

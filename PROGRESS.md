@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase E0.2 animal spawning + animal_population projection
+
+### Implemented
+
+- Started `docs/WORLD_CAPABILITIES.md` Phase E0.2 with new OpenSpec change `ecosystem-animal-spawning`.
+- Added `ANIMAL_SPAWNED` to the living-world command/event catalog.
+- Added `AnimalSpawnedCmd { animal, spawnedAtTick, motivation?, narration }` and Rule Engine validation for concrete `Animal` payloads.
+- Added deterministic spawn policy in `packages/server/src/ecosystem/animalSpawning.ts`:
+  - fixed cadence via `ECOSYSTEM_SPAWN_CADENCE_TICKS`
+  - one active eligible tile per cadence tick
+  - explicit tile-to-region mapping for documented ecosystem regions
+  - generic `grass` and generic `water` tiles do not invent species
+  - legendary species are deferred for future mythic ecology behavior
+  - animal id / position / pack id derive from canonical hashes of species, tile, and tick
+- Added `AnimalPopulationProjection` in `packages/server/src/projections/animalPopulation.ts`:
+  - `rebuildFromEvents(events)`
+  - `project(event)`
+  - `countSpeciesOnTile(speciesId, tileId)`
+  - `getBySpeciesAndTile(speciesId, tileId)`
+  - `list()`
+  - `canonicalHash()`
+- `SimulationRuntime` now plans animal spawns each cadence tick, submits them through the Rule Engine, fans accepted events into `AnimalPopulationProjection`, rebuilds the projection on boot, and exposes `facts.animalPopulation` plus `getAnimalPopulation()`.
+- `ANIMAL_SPAWNED` is suppressed from public recent-event / SSE / chronicle surfaces so routine wildlife births do not spam narrative feeds.
+
+### Honest scope
+
+- This is E0.2 spawning only. No hunting, fishery depletion, migration, reproduction, predator/prey balancing, starvation, extinction, carcass, or goods extraction yet.
+- `animal_population` is in-memory projection material rebuilt from EventLog, matching current settlement/NPC-state projection style.
+- Generic water tiles (`t_dock`, `t_temple`) remain non-spawning until a documented coastal/fishery region policy exists; salt-marsh spawning is explicit to `t_salt_marsh` once unlocked.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- ecosystem/animalSpawning projections/animalPopulation kernel/livingWorld sim/runtimeAnimalSpawning` passed: 49 tests.
+- Full suite: `npm test` passed: **287 server** + 34 web tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- `npx openspec validate ecosystem-animal-spawning --strict` passed.
+- `npx openspec validate --all --strict` passed: 21 passed, 0 failed.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev verification pending.
+- Next E0 slice: E0.3 simple hunting (`ANIMAL_HUNT_STARTED`, `ANIMAL_HUNT_RESOLVED`, `ANIMAL_KILLED`, `CARCASS_CREATED`, `MEAT_HARVESTED`) and first population reduction path.
+
 ## 2026-05-13 — Phase 1 §33.2 NPC state typed projection
 
 ### Implemented

@@ -77,6 +77,20 @@ export const NPC_PARTITION_PERIOD = 4
 export const SETTLEMENT_FORMATION_MIN_NPCS = 3
 export const SETTLEMENT_FORMATION_MIN_TICKS = 12
 
+// Phase E0.2 — Wildlife spawning (Layer 2.5 Ecosystem Runtime).
+// The wildlife planner evaluates on a fixed cadence and only one active
+// eligible tile per cadence tick, so ecosystem growth stays bounded under
+// the Phase 1 per-tick command budget.
+export const ECOSYSTEM_SPAWN_CADENCE_TICKS = TICKS_PER_MINUTE
+export const ECOSYSTEM_MAX_SPAWNS_PER_ACTIVE_TILE = 1
+
+// Animal positions are deterministic sub-tile coordinates derived from
+// hashSeed(speciesId, tileId, tick). Keep these named so rendering scale can
+// change later without hiding magic numbers inside the spawn policy.
+export const ECOSYSTEM_ANIMAL_SUBGRID_COLUMNS = 16
+export const ECOSYSTEM_ANIMAL_SUBGRID_ROWS = 16
+export const ECOSYSTEM_TILE_CARRYING_CAPACITY_DIVISOR = 12
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

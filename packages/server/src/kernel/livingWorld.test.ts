@@ -148,6 +148,29 @@ describe('living-world rule engine', () => {
         from: '晴',
         to: '霧雨',
         narration: '...'
+      }),
+      makeLivingWorldCommand('ANIMAL_SPAWNED', 'system', 'system', 6, 6, {
+        animal: {
+          id: 'animal.t_forest.forest_deer.abc',
+          speciesId: 'forest_deer',
+          tileId: 't_forest',
+          biomeRegion: 'forest',
+          position: { subCol: 1, subRow: 2, subZ: 0 },
+          state: 'idle',
+          hunger: 0,
+          health: 100,
+          fear: 75,
+          aggression: 5,
+          packId: 'pack.t_forest.forest_deer.abc',
+          migrationTarget: null,
+          currentTarget: null,
+          reproductionCooldown: 0,
+          lifecycleStage: 'adult',
+          ownerSettlementId: null,
+          domesticatedBy: null,
+        },
+        spawnedAtTick: 6,
+        narration: null,
       })
     ]
     for (const cmd of samples) {

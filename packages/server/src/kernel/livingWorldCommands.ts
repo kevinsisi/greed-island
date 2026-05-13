@@ -17,6 +17,7 @@ import {
   type RuleRejection,
   type RuleResult
 } from './types.js'
+import type { Animal } from '../ecosystem/species.js'
 
 export const LIVING_WORLD_ACTOR_TYPES = ['player', 'npc', 'system'] as const
 export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
@@ -51,7 +52,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'COMBAT_PLAYER_ACTION',
   'COMBAT_RESOLVE',
   // Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime)
-  'SETTLEMENT_FORMED'
+  'SETTLEMENT_FORMED',
+  // Phase E0.2 — Ecosystem Runtime (Layer 2.5)
+  'ANIMAL_SPAWNED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -338,6 +341,13 @@ export type SettlementFormedCmd = Readonly<{
   narration: string
 }>
 
+export type AnimalSpawnedCmd = Readonly<{
+  animal: Animal
+  spawnedAtTick: number
+  motivation?: EventMotivation
+  narration: string | null
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -367,6 +377,7 @@ export type LivingWorldCommandPayload =
   | CombatPlayerActionCmd
   | CombatResolveCmd
   | SettlementFormedCmd
+  | AnimalSpawnedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -715,6 +726,17 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
+  },
+  ANIMAL_SPAWNED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (!isRecord(p.animal)) return 'animal required'
+    const err = validateAnimal(p.animal)
+    if (err) return err
+    if (typeof p.spawnedAtTick !== 'number' || !Number.isInteger(p.spawnedAtTick) || p.spawnedAtTick < 0) {
+      return 'spawnedAtTick must be non-negative integer'
+    }
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
   }
 }
 
@@ -879,6 +901,38 @@ function validateNpcStateSnapshot(value: Record<string, unknown>): string | null
   }
   if (value.agent !== undefined && !isRecord(value.agent)) return 'state.agent must be object when present'
   return null
+}
+
+function validateAnimal(value: Record<string, unknown>): string | null {
+  if (typeof value.id !== 'string' || value.id.length === 0) return 'animal.id required'
+  if (typeof value.speciesId !== 'string' || value.speciesId.length === 0) return 'animal.speciesId required'
+  if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'animal.tileId required'
+  if (!isEcosystemRegionId(value.biomeRegion)) return 'animal.biomeRegion invalid'
+  if (!isRecord(value.position)) return 'animal.position required'
+  if (typeof value.position.subCol !== 'number' || !Number.isInteger(value.position.subCol) || value.position.subCol < 0) {
+    return 'animal.position.subCol must be non-negative integer'
+  }
+  if (typeof value.position.subRow !== 'number' || !Number.isInteger(value.position.subRow) || value.position.subRow < 0) {
+    return 'animal.position.subRow must be non-negative integer'
+  }
+  if (typeof value.position.subZ !== 'number' || !Number.isInteger(value.position.subZ) || value.position.subZ < 0) {
+    return 'animal.position.subZ must be non-negative integer'
+  }
+  if (typeof value.state !== 'string' || value.state.length === 0) return 'animal.state required'
+  for (const key of ['hunger', 'health', 'fear', 'aggression', 'reproductionCooldown']) {
+    if (typeof value[key] !== 'number' || !Number.isFinite(value[key])) return `animal.${key} required`
+  }
+  if (value.packId !== undefined && value.packId !== null && typeof value.packId !== 'string') return 'animal.packId must be string or null'
+  if (value.migrationTarget !== undefined && value.migrationTarget !== null && typeof value.migrationTarget !== 'string') return 'animal.migrationTarget must be string or null'
+  if (value.currentTarget !== undefined && value.currentTarget !== null && typeof value.currentTarget !== 'string') return 'animal.currentTarget must be string or null'
+  if (typeof value.lifecycleStage !== 'string' || value.lifecycleStage.length === 0) return 'animal.lifecycleStage required'
+  if (value.ownerSettlementId !== undefined && value.ownerSettlementId !== null && typeof value.ownerSettlementId !== 'string') return 'animal.ownerSettlementId must be string or null'
+  if (value.domesticatedBy !== undefined && value.domesticatedBy !== null && typeof value.domesticatedBy !== 'string') return 'animal.domesticatedBy must be string or null'
+  return null
+}
+
+function isEcosystemRegionId(value: unknown): boolean {
+  return value === 'salt_marsh' || value === 'forest' || value === 'mountain' || value === 'desert' || value === 'ruin'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

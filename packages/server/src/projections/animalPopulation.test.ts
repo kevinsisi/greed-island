@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest'
+import { AnimalPopulationProjection } from './animalPopulation.js'
+import type { Animal } from '../ecosystem/species.js'
+import type { Event } from '../kernel/types.js'
+
+describe('AnimalPopulationProjection', () => {
+  it('projects ANIMAL_SPAWNED into species/tile population rows', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
+      spawnedEvent(2, animal('animal-b', 'forest_deer', 't_forest', 'forest'), 24),
+    ])
+
+    const row = projection.getBySpeciesAndTile('forest_deer', 't_forest')
+    expect(row?.count).toBe(2)
+    expect(row?.animalIds).toEqual(['animal-a', 'animal-b'])
+    expect(row?.lastSpawnedAtTick).toBe(24)
+    expect(projection.countSpeciesOnTile('forest_deer', 't_forest')).toBe(2)
+  })
+
+  it('deduplicates duplicate animal ids', () => {
+    const projection = new AnimalPopulationProjection()
+    const same = animal('animal-a', 'forest_deer', 't_forest', 'forest')
+    projection.rebuildFromEvents([
+      spawnedEvent(1, same, 12),
+      spawnedEvent(2, same, 12),
+    ])
+    expect(projection.getBySpeciesAndTile('forest_deer', 't_forest')?.count).toBe(1)
+  })
+
+  it('rebuilds to an identical canonical hash', () => {
+    const events = [
+      spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
+      spawnedEvent(2, animal('animal-b', 'cliff_goat', 't_mountain', 'mountain'), 24),
+    ]
+    const a = new AnimalPopulationProjection()
+    const b = new AnimalPopulationProjection()
+    a.rebuildFromEvents(events)
+    b.rebuildFromEvents(events)
+    expect(a.canonicalHash()).toBe(b.canonicalHash())
+  })
+})
+
+function spawnedEvent(sequence: number, animalValue: Animal, spawnedAtTick: number): Event {
+  return {
+    sequence,
+    eventId: `event-${sequence}`,
+    eventType: 'ANIMAL_SPAWNED',
+    occurredAt: 0,
+    actorId: 'system',
+    payload: {
+      actorType: 'system',
+      data: { animal: animalValue, spawnedAtTick, narration: null },
+      narration: null,
+    },
+    deterministicKey: `key-${sequence}`,
+    version: 1,
+    tick: spawnedAtTick,
+  }
+}
+
+function animal(id: string, speciesId: string, tileId: string, biomeRegion: Animal['biomeRegion']): Animal {
+  return {
+    id,
+    speciesId,
+    tileId,
+    biomeRegion,
+    position: { subCol: 1, subRow: 2, subZ: 0 },
+    state: 'idle',
+    hunger: 0,
+    health: 100,
+    fear: 50,
+    aggression: 5,
+    packId: null,
+    migrationTarget: null,
+    currentTarget: null,
+    reproductionCooldown: 0,
+    lifecycleStage: 'adult',
+    ownerSettlementId: null,
+    domesticatedBy: null,
+  }
+}
