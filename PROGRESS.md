@@ -3,6 +3,57 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase E0.1 ecosystem foundation (species catalog + Animal substrate)
+
+### Implemented
+
+- Started Phase E0 with the first real Layer 2.5 substrate slice: new OpenSpec change `ecosystem-foundation`.
+- Added `packages/server/src/ecosystem/species.ts`.
+- Defined canonical Layer 2.5 domain types:
+  - `EcosystemRegionId`
+  - `SpeciesCategory`, `SpeciesDietType`, `SpeciesPackBehavior`, `SpeciesActivityWindow`, `SpeciesMigrationPattern`, `SpeciesRarity`
+  - `AnimalLifecycleStage`, `AnimalState`
+  - `Species`
+  - `Animal`
+- Encoded the initial 22-species catalog from `docs/WORLD_CAPABILITIES.md` §6.4 across the 5 regions:
+  - salt_marsh: 5
+  - forest: 5
+  - mountain: 4
+  - desert: 4
+  - ruin: 4
+- Added deterministic read-only helpers:
+  - `listSpecies()`
+  - `getSpecies(id)`
+  - `requireSpecies(id)`
+  - `listSpeciesByRegion(region)`
+  - `listSpeciesByCategory(category)`
+- This slice is substrate only: no wildlife engine, no `ANIMAL_SPAWNED`, no projections, no runtime tick integration yet.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- ecosystem/species settlements` passed: 15 tests.
+- Full suite: `npm test` passed: **273 server** + 34 web tests.
+- `npx tsc -p packages/server/tsconfig.json --noEmit` passed.
+- `npm run build:server` + `npm run build:web` passed (web only reported the known Vite chunk-size warning).
+- `npx openspec validate ecosystem-foundation --strict` passed.
+- `npx openspec validate settlement-domain --strict` passed.
+- `npx openspec validate --all --strict` passed: 19 passed, 0 failed.
+
+### Outstanding
+
+- Commit + push + CI/Deploy Dev green for E0.1.
+- Next E0 slice: `ANIMAL_SPAWNED` + `animal_population` projection + deterministic per-biome spawn policy.
+- 33.2 NPC FACT_SET -> typed-event migration still not started.
+
+## 2026-05-13 — Settlement Domain follow-up verification
+
+### Verified after follow-up fix
+
+- Commit `8c86c59` (`feat(civ): Settlement Domain - first Layer 3 entity`) passed CI run `25790844474` and Deploy Dev run `25790844483`.
+- Follow-up fix commit `463341d` (`fix(civ): wire settlementsProjection into runTick fan-out`) passed CI run `25791885567` and Deploy Dev run `25791885547`.
+- Live `/api/settlements` now returns real runtime-projected settlements immediately after formation without waiting for reboot/hydration. Sample live rows included `settlement.t_central.6be1e1b95a6535b0`, `settlement.t_dock.622154c6d982dca8`, and `settlement.t_forest.e59f205c55e7ca3f`.
+- Live `/healthz` at the same verification window returned `{"ok":true,"version":"0.16.0","tick":114886}`.
+
 ## 2026-05-13 — Phase 1 NPC partition slice 3b (active-set gating)
 
 ### Implemented

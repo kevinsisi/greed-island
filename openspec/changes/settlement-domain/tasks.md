@@ -42,6 +42,6 @@
 - [x] 6.2 `npm run build:server` + `npm run build:web` pass.
 - [x] 6.3 `npx openspec validate settlement-domain --strict` passes.
 - [x] 6.4 `npx openspec validate --all --strict` passes.
-- [ ] 6.5 Commit + push + CI/Deploy Dev green.
-- [ ] 6.6 Update `PROGRESS.md` and `ROADMAP.md`.
+- [x] 6.5 Commit + push + CI/Deploy Dev green (commit `8c86c59`, CI `25790844474`, Deploy `25790844483`; follow-up fix `463341d`, CI `25791885567`, Deploy `25791885547`).
+- [x] 6.6 Update `PROGRESS.md` and `ROADMAP.md`.
 - [ ] 6.7 Local docker rebuild + `curl /api/settlements` returns empty array (no NPC co-presence yet at runtime startup, or some settlements if existing live tick history qualifies).

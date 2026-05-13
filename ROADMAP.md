@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase E0.1 — 第一個 Layer 2.5 substrate 進 codebase（species catalog + Animal domain）**
+
+OpenSpec: `ecosystem-foundation/`。
+
+- ✅ 新增 `packages/server/src/ecosystem/species.ts`。
+- ✅ 把 `WORLD_CAPABILITIES.md` §6.4 的 22 種 species 正式編碼成 canonical catalog（5 salt_marsh / 5 forest / 4 mountain / 4 desert / 4 ruin）。
+- ✅ 定義 `Species` / `Animal` 與 supporting unions（category / diet / pack behavior / activity window / migration pattern / rarity / lifecycle stage / animal state）。
+- ✅ 提供 deterministic read-only helpers：`listSpecies` / `getSpecies` / `requireSpecies` / `listSpeciesByRegion` / `listSpeciesByCategory`。
+- ✅ 這一刀不碰 runtime tick、不碰 `ANIMAL_SPAWNED`、不碰 projection；它是 E0 的 substrate slice，不假裝 wildlife engine 已存在。
+- ✅ Focused tests 15 passed；full `npm test` 273 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（19 passed）全綠。
+- 🚧 待 commit / push / CI / Deploy Dev。
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase 1 budget gate slice 3b — active/background partition 開始真正影響 NPC 行為**
 
 OpenSpec: `simulation-budget-enforcement/`。
@@ -18,6 +32,15 @@ OpenSpec: `simulation-budget-enforcement/`。
 - ✅ 補測試：`npcEngine.test.ts` 新增 4 個 slice 3b cases；`runtimePresence.test.ts` 更新以適應分群後的 event cadence。
 - ✅ `npm test` 266 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（18 passed）全綠。
 - ✅ Commit `23cfca6` pushed；CI run `25791664215` passed；Deploy Dev run `25791664183` passed；live `/healthz` = `0.16.0` @ tick `114629`.
+
+## v0.15.47k ✅ shipped — 2026-05-13
+
+**主題：Settlement Domain follow-up verification + projection fan-out fix**
+
+- ✅ Follow-up fix `463341d` wires `settlementsProjection.project(ev)` into `runTick()` accepted-event fan-out, so newly formed settlements appear immediately in runtime/API instead of waiting for reboot hydration.
+- ✅ `8c86c59` (settlement domain ship) passed CI `25790844474` + Deploy `25790844483`。
+- ✅ `463341d` (fan-out fix) passed CI `25791885567` + Deploy `25791885547`。
+- ✅ Live `/api/settlements` returns real settlement rows (e.g. `t_central`, `t_dock`, `t_forest`) under `0.16.0`.
 
 ## v0.15.48 🚧 in progress — 2026-05-13
 
