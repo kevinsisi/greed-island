@@ -3,36 +3,36 @@
 > **Single source of truth** for what Greed Island is, what it must
 > become, and how to bridge the two.
 >
-> Five parts (continuous section numbering 1–38):
+> Five parts (continuous section numbering 1–43):
 >
-> - **Part I — Runtime Constitution & Civilization Program** (§1–§11,
+> - **Part I — Runtime Constitution & Civilization Program** (§1–§12,
 >   user-authored): non-negotiable world laws + civilization vision +
->   engineering priorities + recommended phase order.
-> - **Part II — Current Verified Baseline** (§12–§26, v0.15.47):
+>   ecosystem vision + engineering priorities + recommended phase order.
+> - **Part II — Current Verified Baseline** (§13–§28, v0.15.47):
 >   what the world actually does today, verified against
 >   `packages/server/src/` and `packages/web/src/`. ❌ marks are real
 >   gaps, not aspirations.
-> - **Part III — Operational Crosswalk** (§27–§28): each Part I
+> - **Part III — Operational Crosswalk** (§29–§30): each Part I
 >   principle mapped to specific Commands, projections, and runtime
 >   hooks the implementation will need.
-> - **Part IV — Six-Phase Plan** (§29–§36): release-sized phases with
->   dependencies, sub-deliverables, and honest sizing
->   (≈16–25 releases, 6–12 months at realistic pace).
-> - **Part V — Program Acceptance & Meta** (§37–§38): success
+> - **Part IV — Phased Plan** (§31–§41): release-sized phases with
+>   dependencies, sub-deliverables, and honest sizing. Civilization
+>   phases (0–6) interleaved with ecosystem phases (E0–E4).
+> - **Part V — Program Acceptance & Meta** (§42–§43): success
 >   criteria and update protocol.
 >
 > **What this is not:** not `ARCHITECTURE.md` (engine-level world laws),
 > not `ROADMAP.md` (release history), not `PROGRESS.md` (handoff state),
 > not `COMBAT_ARCHITECTURE.md` (combat sub-runtime). Architecture §11.X
 > references inside this doc point to `ARCHITECTURE.md` §11 backlog
-> items, not to this doc's own §11.
+> items, not to this doc's own sections.
 
 ---
 
 ═══════════════════════════════════════════════════════════════
 ## Part I — Runtime Constitution & Civilization Program
 
-(User-authored. Greed Island 的核心法則與文明演化目標。)
+(User-authored. Greed Island 的核心法則、文明演化目標，與生態 substrate。)
 ═══════════════════════════════════════════════════════════════
 
 一個 deterministic、event-sourced、civilization-driven 的世界模擬系統。
@@ -58,6 +58,7 @@
 - 「為什麼這個 NPC 可以瞬移運貨？」
 - 「為什麼 AI 突然知道不存在的人？」
 - 「為什麼 settlement 根本只是換名字的 tile？」
+- 「為什麼漁夫一直在抓魚，魚卻永遠不會少？」
 
 然後整個 deterministic simulation 就開始腐爛。
 
@@ -79,7 +80,8 @@ Greed Island 的本質：
 
 Greed Island 是：
 
-> 一個會自行演化的 deterministic civilization simulation。
+> 一個會自行演化的 deterministic civilization simulation，
+> 並且這個文明 trapped inside a living planet。
 
 玩家只是世界中的 actor。
 不是世界的中心。
@@ -87,6 +89,7 @@ Greed Island 是：
 世界不會等待玩家。
 NPC 不會因為玩家離線停止存在。
 文明不會因為 client 關掉而停止演化。
+生態系也不會因為沒人觀察就停止崩潰或恢復。
 
 這是最重要的原則。
 
@@ -183,6 +186,7 @@ AI 不可以：
 - 提交 event
 - 修改 world state
 - 發明不存在的人
+- 發明不存在的物種
 - 修改規則
 
 AI 是 observer。
@@ -192,27 +196,36 @@ AI 是 observer。
 
 ## 3. Runtime Layer Model
 
-整個世界分成五層。
+整個世界分成六層。
 
 每層只能透過 Command interaction。
 不能直接改下一層 state。
 
 ```text
-Layer 5 — Perception Runtime
-  AI narration / dialog / rumors / history
+Layer 5    — Perception Runtime
+             AI narration / dialog / rumors / history
 
-Layer 4 — Combat Runtime
-  Combat / card operators / tactical resolution
+Layer 4    — Combat Runtime
+             Combat / card operators / tactical resolution
 
-Layer 3 — Civilization Runtime
-  Settlement / economy / logistics / territory
+Layer 3    — Civilization Runtime
+             Settlement / economy / logistics / territory
 
-Layer 2 — Living World Runtime
-  NPC routines / movement / weather / world events
+Layer 2.5  — Ecosystem Runtime
+             Species / wildlife / predation / migration /
+             fishery / forest / domestication / biome recovery
 
-Layer 1 — Simulation Kernel
-  Deterministic event runtime
+Layer 2    — Living World Runtime
+             NPC routines / movement / weather / world events
+
+Layer 1    — Simulation Kernel
+             Deterministic event runtime
 ```
+
+Layer 2.5 sits below Civilization Runtime by design: civilization
+consumes ecosystems, not the other way around. Without Layer 2.5,
+Layer 3's metabolism (§5.2) is decorative — `economy` becomes a
+scalar with no biological substrate.
 
 ---
 
@@ -240,7 +253,7 @@ Layer 1 — Simulation Kernel
 
 而是：
 
-上層文明系統幾乎還不存在。
+上層文明系統與生態 substrate 幾乎都還不存在。
 
 ### Partially Complete Layers
 
@@ -274,7 +287,7 @@ Layer 1 — Simulation Kernel
 
 而不是 civilization citizen。
 
-### Weakest Layer
+### Weakest Layers
 
 **Layer 3 — Civilization Runtime**
 
@@ -308,7 +321,29 @@ Layer 1 — Simulation Kernel
 
 不是代謝系統。
 
-這是接下來最大的工程區塊。
+**Layer 2.5 — Ecosystem Runtime**
+
+> **完全不存在於 codebase。**
+
+沒有：
+
+- species 目錄
+- animal entity
+- BioNode（魚群 / 樹林 / 苔蘚 / 菇類）
+- EcosystemRegion 狀態
+- wildlife engine
+- 預捕食模型
+- 遷徙模型
+- 漁場 / 森林再生
+- 馴化系統
+
+`food` 是一個 0–100 的純量，不是來自任何動植物。
+
+獵人空有 archetype 卻沒有獵物。
+
+漁夫的網裡沒有魚。
+
+這是最大的工程區塊。
 
 ---
 
@@ -374,6 +409,8 @@ Goods 必須是可追蹤實體。
 
 不是資料表裡有幾個數字。
 
+**這條原則依賴 Layer 2.5**。沒有 ecosystem 提供 fish 與 ore 的真實來源，metabolism 仍然會退化成 scalar 偽裝。
+
 ### 5.3 Logistics Is Civilization
 
 沒有 logistics。
@@ -422,17 +459,313 @@ Goods 必須是可追蹤實體。
 
 ---
 
-## 6. Combat Reframing
+## 6. Ecosystem Runtime Vision
+
+> Civilization does not emerge from UI.
+> Civilization emerges from metabolism.
+> Metabolism emerges from ecology.
+>
+> If the world has hunters but no animals, fishermen but no fish,
+> winter but no migration — then the simulation is only performing
+> civilization.
+
+Ecosystem Runtime is **not decoration**. It is the substrate that
+civilization consumes.
+
+### 6.1 Why This Layer Exists
+
+Living World Runtime (L2) answers:
+
+- What NPCs do
+- What weather exists
+- What events occur
+
+Civilization Runtime (L3) answers:
+
+- How settlements grow
+- How goods flow
+- How economies emerge
+
+But neither answers:
+
+- Where food comes from
+- Why one biome is rich
+- Why scarcity exists
+- Why migration happens
+- Why settlements collapse after overhunting
+
+Ecosystem Runtime (L2.5) provides:
+
+- renewable biological resources
+- ecological pressure
+- predator/prey cycles
+- regional biodiversity
+- seasonal population changes
+- natural hazards
+- biome identity
+- resource exhaustion and recovery
+
+Without it:
+
+- economy becomes fake
+- logistics become cosmetic
+- scarcity becomes scripted
+- survival becomes arbitrary
+
+### 6.2 Core Principles
+
+#### 6.2.1 Ecosystem Autonomy Principle
+
+Animals, plants, and ecological systems evolve without player presence.
+
+The world continues:
+
+- migrating
+- reproducing
+- starving
+- hunting
+- collapsing
+
+without observation.
+
+#### 6.2.2 Biological Scarcity Principle
+
+Food is not generated from nowhere.
+
+Every edible resource MUST originate from:
+
+- animals
+- plants
+- fisheries
+- fungal growth
+- domesticated livestock
+- agriculture
+
+All biological production MUST have:
+
+- carrying capacity
+- reproduction rate
+- environmental dependency
+- extinction risk
+
+#### 6.2.3 Predation Principle
+
+Life consumes life.
+
+- Predators affect prey populations.
+- Prey scarcity affects predators.
+- Civilization affects both.
+
+No infinite prey generation.
+
+#### 6.2.4 Migration Principle
+
+Species are not static map props.
+
+Migration depends on:
+
+- season
+- food density
+- predator density
+- weather
+- rare windows
+- civilization expansion
+
+#### 6.2.5 Civilization Pressure Principle
+
+Civilization damages ecosystems.
+
+Examples:
+
+- overfishing
+- forest depletion
+- overhunting
+- road fragmentation
+- industrial waste
+- faction warfare
+
+Civilization growth MUST alter ecosystem state.
+
+#### 6.2.6 Recovery Principle
+
+Nature can recover.
+
+If pressure decreases:
+
+- fish return
+- forests regrow
+- predator populations stabilize
+- biodiversity recovers
+
+Recovery speed depends on biome and species.
+
+### 6.3 Domain Model
+
+```text
+Species {
+  id, category, biomeAffinity[], dietType, aggression, fear,
+  intelligence, packBehavior, activityWindow, migrationPattern,
+  reproductionRate, carryingCapacity, predatorTargets[],
+  preyTargets[], edibleYield, byproducts[], rarity,
+  climateTolerance, civilizationTolerance, extinctionThreshold
+}
+
+Animal {
+  id, speciesId, tileId, biomeRegion, position, state,
+  hunger, health, fear, aggression, packId?,
+  migrationTarget?, currentTarget?, reproductionCooldown,
+  lifecycleStage, ownerSettlementId?, domesticatedBy?
+}
+
+BioNode {
+  id, kind, tileId, growthState, yieldAmount,
+  regenerationRate, seasonalModifier, harvestDifficulty,
+  depletionThreshold
+}
+
+EcosystemRegion {
+  tileId, biodiversity, predatorPressure, preyDensity,
+  fishDensity, forestCoverage, pollution, fertility,
+  migrationPressure, extinctionRisk
+}
+```
+
+Species categories: `fish / herbivore / predator / scavenger / insect / livestock / mythical / avian / fungal`.
+
+Animals are runtime actors with **limited memory, simpler behavior trees, ecosystem-driven decisions, no civilization ideology** — they are not NPCs.
+
+### 6.4 Initial Species Catalog (by region)
+
+| Region | Species | Role |
+|---|---|---|
+| Salt Marsh | `marsh_fish` | staple food |
+| Salt Marsh | `salt_crab` | tide-cycle harvest |
+| Salt Marsh | `reed_eel` | nocturnal predator |
+| Salt Marsh | `marsh_heron` | migratory avian |
+| Salt Marsh | `white_marsh_leviathan` | rare world-event creature |
+| Forest | `forest_deer` | herbivore |
+| Forest | `moss_boar` | aggressive prey |
+| Forest | `fog_wolf` | pack predator |
+| Forest | `ember_owl` | night avian |
+| Forest | `bark_mantis` | insect regulator |
+| Mountain | `cliff_goat` | prey |
+| Mountain | `iron_beak_vulture` | scavenger |
+| Mountain | `stone_lizard` | cave species |
+| Mountain | `mountain_bear` | apex predator |
+| Desert | `dune_lizard` | prey |
+| Desert | `ash_serpent` | ambush predator |
+| Desert | `sand_runner` | migratory herbivore |
+| Desert | `mirage_hawk` | aerial predator |
+| Ruin | `ruin_rat` | scavenger |
+| Ruin | `mimic_mold` | fungal colony |
+| Ruin | `iron_hound` | hostile mutated predator |
+| Ruin | `lantern_moth` | rare nocturnal species |
+
+### 6.5 Ecosystem Commands
+
+**Biological lifecycle**
+`ANIMAL_SPAWNED`, `ANIMAL_MIGRATED`, `ANIMAL_REPRODUCED`, `ANIMAL_STARVED`, `ANIMAL_DIED`, `SPECIES_POPULATION_SHIFTED`, `SPECIES_EXTINCTION_WARNING`, `SPECIES_EXTINCT`, `SPECIES_RECOVERED`.
+
+**Hunting / predation**
+`ANIMAL_HUNT_STARTED`, `ANIMAL_HUNT_RESOLVED`, `ANIMAL_KILLED`, `CARCASS_CREATED`, `MEAT_HARVESTED`, `HIDE_COLLECTED`, `BONE_COLLECTED`.
+
+**Ecological pressure**
+`FOREST_DEPLETED`, `FISHERY_COLLAPSED`, `BIOME_RECOVERED`, `POLLUTION_INCREASED`, `POLLUTION_RECOVERED`, `MIGRATION_WAVE_STARTED`.
+
+**Domestication**
+`ANIMAL_DOMESTICATED`, `LIVESTOCK_BRED`, `MOUNT_ASSIGNED`, `LIVESTOCK_SLAUGHTERED`.
+
+### 6.6 Runtime Systems (five engines)
+
+1. **Wildlife Engine** — runs every K ticks. Population spawning, migration, predator/prey balancing, starvation, reproduction, pack coordination. All outcomes derive from `hashSeed(speciesId, tileId, tick, pressure)`.
+2. **Predation Engine** — predators search nearby prey. Low prey density → predator starvation, migration pressure, aggression. Predators may attack prey / livestock / NPC carriers / isolated players.
+3. **Fishery Engine** — fish density tracked per coastal tile. Fishing reduces local density and reproduction. Overfishing → `fishDensity ↓ → foodPrice ↑ → settlementInstability ↑ → crime ↑`.
+4. **Forest Regrowth Engine** — tree density regenerates slowly. Roads and buildings reduce regrowth, biodiversity, animal spawn rate. Heavy logging may permanently alter biome identity.
+5. **Migration Engine** — species periodically migrate. Triggers: winter, low food, predator density, pollution, rare windows, civilization expansion. Affects hunting opportunities, market prices, settlement growth, faction patrol demand.
+
+### 6.7 Integration With Other Layers
+
+**With Civilization Runtime (L3)**
+
+Goods MUST originate from ecosystem events:
+
+```text
+Correct:    forest_deer killed → carcass → butcher → meat → cooked food → consumption
+Incorrect:  GOODS_EXTRACTED: meat
+```
+
+Logistics: `fog_wolf attacks carrier → GOODS_TRANSPORT_LOST → market shortage → food price spike`. Roads and guards then matter naturally.
+
+Settlement pressure: `population ↑ → food demand ↑ → hunting pressure ↑ → biodiversity ↓ → migration changes`.
+
+Faction ideology shapes ecological behaviour:
+
+| Faction | Ecosystem behaviour |
+|---|---|
+| `tide_hunters` | sustainable fishing bonus |
+| `free_runners` | low civilization footprint |
+| `guild` | aggressive industrial expansion |
+| `hidden_overseer` | ritual ecosystem manipulation |
+
+**With Combat Runtime (L4)**
+
+Not all combat is civilization conflict. Wildlife combat: `mountain_bear attacks hunter`, `ash_serpent ambushes caravan`, `fog_wolf pack surrounds player`.
+
+Rare creature events: `WORLD_EVENT: "The White Marsh Leviathan Emerges"` → settlements panic / hunters gather / faction conflict / market spike / chronicle updates.
+
+**With Perception Runtime (L5)**
+
+NPC dialog must reference ecosystems: `"The marsh has gone quiet. Even the herons left early this season."` AI can interpret ecology; AI cannot invent species, animals, or extinction events.
+
+**With History System (Part V §42)**
+
+Ecological events become history arcs:
+
+- *Ecological Collapse Arc*: overfishing → fish decline → starvation → unrest → faction violence → settlement decline.
+- *Great Migration Arc*: winter pressure → `sand_runner` migration → desert trade boom → new roads → settlement expansion.
+- *Extinction Arc*: `fog_wolf` hunted heavily → extinction warning → species extinct → prey overpopulation → forest imbalance.
+
+History becomes ecological, not just political.
+
+### 6.8 Domestication (Late Runtime)
+
+Future civilization depth depends on domestication.
+
+- **Livestock**: ranches, breeding, milk/wool/meat economy, guard animals.
+- **Mounts** (`marsh yak / dune crawler / cliff ram / salt hound`): travel speed, logistics capacity, combat mobility, migration range.
+
+### 6.9 Technical Constraints
+
+Ecosystem simulation MUST obey runtime budgets:
+
+- Inactive regions: aggregate simulation, low-frequency updates, statistical balancing.
+- Active regions: individual animal entities, pack simulation, detailed encounters.
+
+Determinism: no non-deterministic randomness. Replay must reproduce identical ecosystems.
+
+Required projections (each with `rebuildFromEvents` + canonical-hash replay tests):
+
+- `animal_population`
+- `ecosystem_region`
+- `migration_routes`
+- `livestock_registry`
+- `carcass_registry`
+
+---
+
+## 7. Combat Reframing
 
 Combat 不是 mini-game。
 
 Combat 是 civilization pressure resolution。
+而且部分 combat 是 ecological pressure（人對獸、獸對人）。
 
 因此 combat 必須：
 
 - 影響 faction dominance
 - 改變 territory
 - 影響 settlement stability
+- 影響 species population（被獵殺、被馴化、被滅絕）
 - 被 NPC 記憶
 - 被歷史記錄
 - 改變 supply chain
@@ -449,7 +782,7 @@ combat 只是 detached interaction loop。
 
 ---
 
-## 7. Cards Reframing
+## 8. Cards Reframing
 
 Card 不應該只是 item。
 
@@ -479,9 +812,11 @@ Card
 
 不是數值。
 
+可能的規則操縱包含：經濟、生態、戰鬥、文明壓力 — 例如「祈雨」card 可暫時提升 forest regrowth、「血潮」card 可暫時驅趕 prey species。
+
 ---
 
-## 8. Player Philosophy
+## 9. Player Philosophy
 
 玩家是 civilization actor。
 
@@ -497,6 +832,7 @@ Card
 - lead faction
 - alter logistics
 - change history
+- 過度狩獵、保護生態、馴化動物、見證文明衰退
 
 但玩家不應該：
 
@@ -518,11 +854,11 @@ Card
 
 ---
 
-## 9. Engineering Priorities
+## 10. Engineering Priorities
 
 ### Priority 1 — Budget Enforcement
 
-在 civilization runtime 擴張前。
+在 civilization runtime 與 ecosystem runtime 擴張前。
 必須先完成：
 
 - command cap
@@ -530,7 +866,7 @@ Card
 - regional throttling
 - replay-safe projection rebuild
 
-否則 NPC 一多。
+否則 NPC 與 wildlife 一多。
 整個 tick runtime 會開始爆炸。
 
 然後人類就會開始：
@@ -558,7 +894,21 @@ Card
 
 所有 state 都必須可由事件還原。
 
-### Priority 3 — Civilization Runtime
+### Priority 3 — Ecosystem Foundation
+
+> civilization metabolism cannot be honest without an ecological substrate.
+
+在開始做 Goods + Logistics + Market 之前。
+必須至少先有：
+
+- species catalog
+- 動物 runtime entity
+- wildlife engine
+- 漁場密度 + 簡單狩獵
+
+否則 Goods 永遠是憑空產生，metabolism (§5.2) 永遠假裝。
+
+### Priority 4 — Civilization Runtime
 
 真正的大工程其實現在才開始。
 
@@ -570,19 +920,28 @@ AI 對話只是 perception illusion。
 
 文明代謝才是真正的世界。
 
+而 ecology 是文明代謝的 substrate。
+
 ---
 
-## 10. Recommended Development Order
+## 11. Recommended Development Order
 
-| Phase | Theme |
-|---|---|
-| **Phase 0** | Architecture Formalization |
-| **Phase 1** | Budget Gate + Settlement Runtime |
-| **Phase 2** | Goods + Logistics + Market |
-| **Phase 3** | Culture + Humanity + Rumor + Mentorship |
-| **Phase 4** | Cards as Rule Operators |
-| **Phase 5** | Persistent Combat Consequences |
-| **Phase 6** | Player Civilization Integration |
+文明 phase 與生態 phase 必須**交錯**進行 — civilization 不能在 ecosystem 還沒有最小可信形式時就 ship goods/logistics/market。
+
+| Phase | Theme | Civilization or Ecosystem |
+|---|---|---|
+| **Phase 0** | Architecture Formalization (含 Layer 2.5) | both |
+| **Phase 1** | Budget Gate + Settlement Runtime | civilization |
+| **Phase E0** | Ecosystem Foundation (species / wildlife engine / fish density / 簡單狩獵) | ecosystem |
+| **Phase 2** | Goods + Logistics + Market (sourced from ecosystem) | civilization |
+| **Phase E1** | Predator/Prey + Migration + 飢餓 + 生態平衡 | ecosystem |
+| **Phase 3** | Culture + Humanity + Rumor + Mentorship | civilization |
+| **Phase E2** | Civilization Pressure (overfishing / forest depletion / pollution / 崩潰) | ecosystem |
+| **Phase 4** | Cards as Rule Operators | civilization |
+| **Phase 5** | Persistent Combat Consequences | civilization |
+| **Phase E3** | Domestication (livestock / mounts / breeding / mounted logistics) | ecosystem |
+| **Phase 6** | Player Civilization Integration | civilization |
+| **Phase E4** | Mythic Ecology (rare species / ecosystem world events / faction ecological conflict) | ecosystem |
 
 這個順序不能亂。
 
@@ -590,7 +949,9 @@ AI 對話只是 perception illusion。
 
 - 沒 budget gate 前不能擴 simulation
 - 沒 settlement 前不能做 economy
+- 沒 ecosystem foundation (E0) 前 goods 與 logistics 是假的
 - 沒 logistics 前 market 是假的
+- 沒 ecology pressure (E2) 前 combat 對生態的後果是假的
 - 沒 history 前 combat 沒意義
 - 沒 event-sourced player 前 civilization interaction 會不一致
 
@@ -602,7 +963,7 @@ AI 對話只是 perception illusion。
 
 ---
 
-## 11. Final Objective
+## 12. Final Objective
 
 Greed Island 的最終目標不是：
 
@@ -614,7 +975,7 @@ Greed Island 的最終目標不是：
 
 真正的目標是：
 
-> 建立一個即使沒有玩家存在，也會持續演化、記憶、衰退、重建、擴張的 civilization simulation。
+> 建立一個即使沒有玩家存在，也會持續演化、記憶、衰退、重建、擴張、捕食、遷徙、絕種、復原的 civilization-trapped-inside-a-living-planet。
 
 當某個 NPC 死亡。
 後代會記得他。
@@ -630,6 +991,12 @@ Greed Island 的最終目標不是：
 
 甚至已經變成另一個文明時代。
 
+當玩家過度狩獵 `fog_wolf`。
+牠們會先絕種警告，再真的絕種；幾代之後 `forest_deer` 過剩，森林失衡，moss 與 mantis 結構崩盤；接下來 `forest_deer` 自己也飢荒。
+
+當 `marsh_heron` 提前遷走。
+NPC 會聊起來，市集裡的魚會貴一些，沒人能解釋為什麼但每個人都感覺到了。
+
 那時候。
 Greed Island 才真正成立。
 
@@ -644,22 +1011,25 @@ Verified against `packages/server/src/` and `packages/web/src/`.
 ✅ = shipped. ❌ = real gap.
 ═══════════════════════════════════════════════════════════════
 
-## 12. Headline Numbers
+## 13. Headline Numbers
 
 | Surface | Count |
 |---|---|
 | Named map tiles | **9** (`t_central`, `t_forest`, `t_mountain`, `t_temple`, `t_dock`, `t_desert`, `t_ruin`, `t_dimai`, `t_salt_marsh`) |
 | NPC profiles configured | **50** unique IDs across 17 profile files |
 | Factions | **4** (`tide_hunters` 潮獵會, `free_runners` 自由潮感者, `guild` 公會, `civilian` 平民) |
+| **Species catalogued** | **0** (Layer 2.5 not implemented) |
+| **Animals in runtime** | **0** |
+| **BioNodes in runtime** | **0** |
 | Static building catalog entries | **~17** across 8 tiles + 1 dynamic salt-marsh seed |
-| Living-world Command types | **26** (see §14) |
+| Living-world Command types | **26** (see §15) — zero are ecosystem commands |
 | Card catalog | **100** cards (`greed-island-card-catalog@0.2.0`) |
-| Frontend page views | **13** (Hub / Area / Building / Codex / Timeline / Account / Profile / Settings / Admin / Social / 3 auth pages) |
+| Frontend page views | **14** (Hub / Area / Building / Codex / Timeline / Account / Profile / Settings / Admin / Admin-NPCs / Social / 3 auth pages) |
 | Tick cadence | One simulation tick every **5 seconds** (one in-world hour ≈ 5s × 720 = 1 h) |
 
 ---
 
-## 13. Kernel Guarantees (Architecture §0–§6)
+## 14. Kernel Guarantees (Architecture §0–§6)
 
 The simulation is **deterministic, event-sourced, append-only**. Verified by `eventStore`, `ruleEngine`, `pipeline`, `kernel.test.ts`, `livingWorld.test.ts`.
 
@@ -677,7 +1047,7 @@ The simulation is **deterministic, event-sourced, append-only**. Verified by `ev
 
 ---
 
-## 14. Living-World Command Catalog (`livingWorldCommands.ts`)
+## 15. Living-World Command Catalog (`livingWorldCommands.ts`)
 
 Every state change goes through one of these 26 Commands:
 
@@ -702,11 +1072,11 @@ Every state change goes through one of these 26 Commands:
 **Combat (Phase B single-shot, v0.15.0)**
 `COMBAT_INITIATE`, `COMBAT_PLAYER_ACTION`, `COMBAT_RESOLVE`
 
-❌ Conspicuously **missing** Command types (need new design): production-chain, trade/market, settlement-formation, faction-war/territory-takeover, culture/tradition, mentorship/skill-transfer, player-hire-NPC, player-sponsor-construction, road/bridge-build, goods-extracted/transported/stored/consumed.
+❌ Conspicuously **missing** Command types (need new design): all 20+ ecosystem commands (§6.5), production-chain, trade/market, settlement-formation, faction-war/territory-takeover, culture/tradition, mentorship/skill-transfer, player-hire-NPC, player-sponsor-construction, road/bridge-build, goods-extracted/transported/stored/consumed.
 
 ---
 
-## 15. World Physics
+## 16. World Physics
 
 - ✅ **Tick** advances every 5 s. Audit `occurredAt` allowed; deterministic logic uses integer tick + EventLog only.
 - ✅ **Weather** transitions per tick window via `WEATHER_CHANGE` events.
@@ -719,10 +1089,11 @@ Every state change goes through one of these 26 Commands:
 ❌ No **resource transport** between tiles — `food` decays locally, doesn't flow.
 ❌ No **production chain** — `economy` is a single scalar, not raw→intermediate→finished goods.
 ❌ No **scarcity-driven price formation** — there is no market price.
+❌ No **ecological substrate** — `food` decays but has no biological source; weather/season don't trigger migrations because no animals exist.
 
 ---
 
-## 16. Map & Districts
+## 17. Map & Districts
 
 9 named tiles with biomes (`mapGraph.ts`):
 
@@ -741,28 +1112,31 @@ Every state change goes through one of these 26 Commands:
 - ✅ **Hub view** (parent map): district overview, traveller sprites for routed cross-tile NPCs.
 - ✅ **Area view** (15×10 cell canvas): server-authoritative NPC sub-position rendering via `subCol` / `subRow` / `subZ`.
 - ✅ **Building interior view**: enter via building marker, NPCs derived from same authoritative presence tuple.
-- ✅ **Map expansion** mechanism proven by `t_salt_marsh` (locked → construction → unlocked → enterable). Currently driven by legacy fixed project; NPC-initiated expansion not yet shipped.
+- ✅ **Map expansion** mechanism proven by `t_salt_marsh`. NPC-initiated expansion not yet shipped.
 
+❌ Biomes are labels only — no biome-driven species spawn, no biome-driven regrowth, no biome-driven fishery density.
 ❌ No **roads / bridges / defenses** as buildable map features.
 ❌ No **new tile creation** beyond the predefined catalog.
 
 ---
 
-## 17. NPC Population & Configuration
+## 18. NPC Population & Configuration
 
 50 NPCs across 17 profile files. Each profile has:
 
 - ✅ **Bilingual identity** (`name.zh` / `name.en`, `role.zh` / `role.en`)
-- ✅ **Daily routine** — time-of-day windows mapping to locations + activity labels (e.g. "morning stock check", "running edition to the docks")
+- ✅ **Daily routine** — time-of-day windows mapping to locations + activity labels
 - ✅ **Personality** — `{ archetype, patience, greed, trustBase, talkativeness, factionLean, calmness? }`
-- ✅ **Triggers** — conditional command emissions (e.g. `relationshipAbove:any:55` → `NPC_GREET`)
+- ✅ **Triggers** — conditional command emissions
 - ✅ **Memory profile** — `consultsEventTypes`, `decayFn`, `decayParam`
 
 Sample roles: 雜貨店老闆娘 / 報童 / 公會行政員 / 通勤上班族 / 漁場仲介 / 沙漠守墓人 / 寺院住持 / 港口接待 / 自由商人 / 神殿牧師 / 衝浪手 / 公會會長 / 山林獵人.
 
+❌ Roles like 「山林獵人」、「漁場仲介」 today have **no animals to hunt or fish to broker** — the archetype exists but the substrate doesn't.
+
 ---
 
-## 18. NPC Inner State (per NPC, projection of EventLog)
+## 19. NPC Inner State (per NPC, projection of EventLog)
 
 What an NPC "is" at any tick:
 
@@ -772,179 +1146,159 @@ What an NPC "is" at any tick:
 | `activity` | `NPC_ACTIVITY_CHANGE` events | ✅ 11 kinds: `idle`, `work`, `eat`, `sleep`, `trade`, `patrol`, `move`, `build`, `learn`, `service`, `rest` |
 | `mood`, `health` | derived from interactions, productive actions, events | ✅ |
 | `factionLean` | profile config + emergent shift | ✅ |
-| `lifeGoal` (kind + pressure + narration) | `NPC_LIFE_GOAL_SET` | ✅ (kinds: low_food / low_rest / low_money / low_housing / low_safety / wealth / connection / legacy / knowledge) |
+| `lifeGoal` (kind + pressure + narration) | `NPC_LIFE_GOAL_SET` | ✅ |
 | `household`, `children` | `NPC_HOUSEHOLD_FORMED`, `NPC_CHILD_BORN` | ✅ (existence + linkage; no shared economy yet) |
-| `civic.gold` | productive action rewards | ✅ (build=×1, trade=×3, service=×2, learn=×0) |
+| `civic.gold` | productive action rewards | ✅ |
 | `civic.skillXp` | productive actions × 5 per accepted delta | ✅ 4 domains: `construction` / `knowledge` / `commerce` / `civic` |
-| `lastInteractedAt`, `lastProductiveTick` | event-derived | ✅ |
-| `memory` rows | `npc_memory` projection (event-decay) | ✅ (per-NPC, decays over ticks) |
+| `memory` rows | `npc_memory` projection (event-decay) | ✅ |
 | `relationships` rows | `npc_relationships` projection (trust scalar) | ✅ |
 | `travelRoute` | `NPC_MOVE` routed traveller (4-tick visibility hold) | ✅ |
-| `dialogHold` | `NPC_DIALOG_HOLD` (bounded tick window) | ✅ — player dialog freezes NPC schedule |
+| `dialogHold` | `NPC_DIALOG_HOLD` (bounded tick window) | ✅ |
 
 ❌ Missing:
-- **Knowledge boundary** — NPC's known-person graph, alias memory, faction knowledge — not surfaced in dialog grounding (ARCHITECTURE.md §11.9)
-- **Household shared economy** — household exists as relationship, not as joint income/decision unit
-- **Long-term life-stage memory weights** — decay is linear, no episodic salience or generational memory
-- **Skill transfer / mentorship** — XP gains from doing only, not from learning-from-others
+- **Knowledge boundary** — NPC's known-person graph, alias memory, faction knowledge (ARCHITECTURE.md §11.9)
+- **Household shared economy** — no joint income / decisions
+- **Long-term life-stage memory weights** — linear decay only
+- **Skill transfer / mentorship** — XP only from doing
 - **Culture / tradition** — no festival, no rite, no inherited belief
+- **Ecological awareness** — NPCs cannot reference animals, species, migrations, extinctions
 
 ---
 
-## 19. NPC Autonomous Behavior (per tick)
+## 20. NPC Autonomous Behavior (per tick)
 
 What NPCs do **without any player action** (`npcEngine.ts`, `cityLife.ts`, `worldAgenda.ts`):
 
-- ✅ **Routine-following**: time-of-day window picks `defaultLocation`, label-pattern-matched activity (eat / sleep / work / trade / patrol).
-- ✅ **Ambient cross-district errands**: deterministic policy generates `NPC_MOVE` to neighboring district every few ticks; surfaces as Hub traveller sprite for ~20s.
-- ✅ **Productive actions**: per accepted `NPC_PRODUCTIVE_ACTION`, NPC gains gold + skill XP. High skill grants up to +3 productive delta (every 25 XP = +1, capped).
-- ✅ **Autonomous construction initiation** (civ-evo slice 1): non-`t_salt_marsh` tile with `economy < 80` AND personal demand AND personal gold ≥ `CIV_EVO_CONSTRUCTION_GOLD_COST` → emit `CONSTRUCTION_INITIATE`. Capped at 3 completed/open facilities per tile.
-- ✅ **Construction progress**: productive `build` actions on a tile advance the relevant project, deterministic completion event.
-- ✅ **Household formation**: relationship-driven, emits `NPC_HOUSEHOLD_FORMED`.
-- ✅ **Children**: `NPC_CHILD_BORN` from formed households.
-- ✅ **Interactions**: co-located NPCs (same tile, 3D proximity) trigger `NPC_INTERACT` events; cooldown via deterministic `(tick, npcA, npcB)` hash; updates trust + memory.
-- ✅ **Life goal updates**: derived from current needs (`food / rest / money / housing / safety`); emits `NPC_LIFE_GOAL_SET` when pressure crosses.
-- ✅ **World agenda interpretation** (v0.15.47): per area, resource shortfalls + faction dominance + active world events compose a `WorldAgendaDirective` (sponsor: city_council / hidden_overseer / faction_bloc). NPC's role text is interpreted into the directive (guards patrol, merchants stabilize prices, etc.). Active world events outrank local civilian dominance.
+- ✅ **Routine-following**, **ambient cross-district errands**, **productive actions** (build/learn/trade/service), **autonomous construction initiation**, **construction progress**, **household formation**, **children**, **interactions**, **life goal updates**, **world agenda interpretation**.
 
-❌ Missing autonomous behaviors (recurring world-shape):
-- **Trade between NPCs** (no NPC sells to another NPC; gold accumulates only)
-- **Settlement formation / decline** (NPCs cluster informally; no settlement-as-entity)
-- **Faction war / territorial takeover** (factions shift dominance scalar; no claimed territory event)
-- **Knowledge / culture transmission** (XP grows from work, never from teaching)
-- **Cross-tile resource transport** (NPC may move; goods don't follow)
-- **Migration** (NPC may errand cross-tile; never permanently relocates)
+❌ Missing autonomous behaviors:
+- Hunting / fishing as actual ecology-affecting actions (no animals exist)
+- Trade between NPCs (no NPC sells to another NPC)
+- Settlement formation / decline (no settlement-as-entity)
+- Faction war / territorial takeover
+- Knowledge / culture transmission
+- Cross-tile resource transport
+- Migration (NPC or animal)
 
 ---
 
-## 20. Construction / Buildings
+## 21. Construction / Buildings
 
 - ✅ **Static catalog** (`buildings/catalog.ts`): ~17 named buildings across 8 tiles + dynamic seed.
-- ✅ **Player work/rest at buildings**: `POST /api/buildings/:id/apply|quit|work|rest` (NOT event-sourced — ARCHITECTURE.md §11.3 gap).
-- ✅ **Dynamic NPC-completed buildings** (v0.15.47e): completed NPC-initiated projects project into permanent `BuildingRuntimeView` rows with project-specific IDs (`b_civ_evo_<tile>.<8char>`).
-- ✅ **Monotonic state invariant** (v0.15.47e): construction progress never regresses; completed buildings never look partially built again.
-- ✅ **Per-tile visibility cap**: 3 autonomous completed/open buildings per tile (earliest `startedAtTick` window).
-- ✅ **Construction site rendering**: progress overlays on Hub map.
+- ✅ **Player work/rest at buildings**: `POST /api/buildings/:id/apply|quit|work|rest` (NOT event-sourced — ARCHITECTURE.md §11.3).
+- ✅ **Dynamic NPC-completed buildings** (v0.15.47e).
+- ✅ **Monotonic state invariant** (v0.15.47e).
+- ✅ **Per-tile visibility cap**: 3 autonomous completed/open buildings per tile.
 
-❌ Buildings are **not upgradeable, damageable, abandonable, repairable, capturable** — Architecture §0.17 names these as required; only "buildable" exists.
+❌ Buildings are **not upgradeable, damageable, abandonable, repairable, capturable**.
+❌ No **ecosystem-aware building types** — no ranch, no warehouse-of-meat, no smokehouse, no fishery dock.
 
 ---
 
-## 21. Combat (Phase B single-shot — v0.15.0 shipped)
-
-`combat/ruleEngine.ts` + `combat/commands.ts` + `combatRouter.ts`:
+## 22. Combat (Phase B single-shot — v0.15.0 shipped)
 
 - ✅ Player initiates → same-tile NPC → fixed `COMBAT_INITIAL_HP = 100`.
-- ✅ Player actions: attack / defend / flee / use-card (card use is Phase B placeholder).
-- ✅ Deterministic damage formula: `base + greedBoost - patienceMitigation`, crit @ 12% via `hashSeed(combatId, actorId, round) % 100`.
-- ✅ NPC AI: `hashSeed(combatId, npcId, round) % 3` → attack / defend / idle-glare. NPCs never flee.
-- ✅ Flee always succeeds (design decision).
+- ✅ Player actions: attack / defend / flee / use-card.
+- ✅ Deterministic damage formula, crit @ 12% via `hashSeed`.
+- ✅ NPC AI: `hashSeed % 3` → attack / defend / idle-glare.
+- ✅ Flee always succeeds.
 - ✅ Player loss: `energy → 0`. NPC loss: incapacitated for 1 world tick (5 s).
-- ✅ All randomness `hashSeed`-based, replay-safe.
 - ✅ Combat events: `COMBAT_DAMAGE`, `COMBAT_DEFEND`, `COMBAT_FLEE`, `COMBAT_RESOLVE`.
 
-❌ **Phase C real-time sub-tick** (`combat-phase-c-realtime-subtick` OpenSpec exists) — not yet applied.
-❌ **ARCHITECTURE.md §11.4** — combat session/log store and defeat side-effects partially bypass canonical EventLog.
-❌ Combat outcomes do **not** persist into faction / territory / economy / history.
+❌ **Phase C real-time sub-tick** — not yet applied.
+❌ **ARCHITECTURE.md §11.4** — combat session/log store partially bypasses canonical EventLog.
+❌ Combat outcomes do **not** persist into faction / territory / economy / history / **species population**.
+❌ No **wildlife combat** — players cannot fight animals because animals don't exist.
 
 ---
 
-## 22. Card System (Architecture §0.12)
+## 23. Card System (Architecture §0.12)
 
-- ✅ **Catalog**: 100 cards (`cards/catalog.json` v0.2.0).
-- ✅ **World card drops**: deterministic spawn via `hashSeed(tick, tileId, rollPurpose, …)` (v0.15.5 hardened, ARCHITECTURE.md §11.1 closed).
-- ✅ **Player operations**: pickup, store, release, codex materialize, trade propose/accept/reject/cancel.
-- ✅ **Codex**: per-player card library with materialize-from-collected.
-- ✅ **Techniques shop**: `/api/shop/techniques` + `/api/me/techniques` + buy.
+- ✅ **Catalog**: 100 cards.
+- ✅ **World card drops**: deterministic spawn (v0.15.5 hardened, ARCHITECTURE.md §11.1 closed).
+- ✅ **Player operations**: pickup, store, release, codex materialize, trade.
+- ✅ **Codex**: per-player card library.
+- ✅ **Techniques shop**.
 
 ❌ **ARCHITECTURE.md §11.2** — card events live in `card_action_log` separate from canonical `event_log`.
-❌ Cards today are **effects/items**, not **World Rule Operators** as Part I §7 demands.
+❌ Cards today are **effects/items**, not **World Rule Operators** as Part I §8 demands.
 
 ---
 
-## 23. Player Capabilities
+## 24. Player Capabilities
 
 What a logged-in player can do (HTTP endpoints, verified in `packages/server/src/http/`):
 
-**Identity / account**
-`POST /register`, `POST /login`, `POST /forgot-password`, `POST /reset-password`, `GET /me`, profile router (`/profile`).
+**Identity / account**, **World view**, **Identity-bound world view**, **Wallet / jobs / buildings**, **Cards**, **NPC dialog & intervention**, **Combat** (Phase B), **Social**, **Techniques**, **Admin / GM** including new **`/admin/npc-stats`** GM dashboard (v0.15.48).
 
-**World view (no auth needed)**
-`GET /api/world`, `/api/npcs`, `/api/events`, `/api/map`, `/api/dashboard`, `/api/world-events`, `/api/world/catch-up`, `/api/world/chronicle`, `/api/cards`, `/api/buildings`, `/api/areas`, `/api/buildings-catalog`, `/api/version`, `/healthz`, SSE `/api/events/stream`.
-
-**Identity-bound world view**
-`GET /api/world/since-last-visit`, `/api/cards/since-last-visit`, `/api/npc/:id/memory`, `/api/npc/:id/relationships`, `/api/npc/:id/emotion`.
-
-**Wallet / jobs / buildings**
-`GET /api/wallet`, `POST /api/buildings/:id/apply|quit|work|rest` (❌ NOT event-sourced — ARCHITECTURE.md §11.3).
-
-**Cards**
-pickup / store / release / codex / codex-materialize / trade propose|accept|reject|cancel.
-
-**NPC dialog & intervention**
-`POST /api/npc/:npcId/dialog-hold`, `POST /api/npc/:npcId/interact` (Gemini-rendered dialog grounded in memory/relationships), `POST /api/npc/intervene` (basic), `GET /api/npc/:npcId/greet|history`.
-
-**Combat**
-`GET /api/combat/active`, `GET /api/combat/:id`, `POST /api/combat/initiate`, `POST /api/combat/:id/action` (Phase B).
-
-**Social (orthogonal store, not part of simulation EventLog)**
-Friends, friend-requests, messages, conversations, presence, nearby, alliance create/invite/leave, SSE stream.
-
-**Techniques**
-`GET /api/shop/techniques`, `/api/me/techniques`, `POST /api/shop/techniques/:id/buy`.
-
-**Admin / GM**
-`/admin/users`, `/admin/users/:userId/role`, `/admin/...`, `/settings/health|keys|...`.
-
-❌ Player **cannot**: hire NPC, sponsor / donate to NPC construction, join / lead a faction, claim or transfer land, carry goods between tiles, found a settlement, place a building, affect world economy beyond own wallet, or leave a permanent mark NPCs remember across long timespans. `player-intervene-and-combat` OpenSpec drafted but **not fully applied**.
+❌ Player **cannot**: hire NPC, sponsor / donate to NPC construction, join / lead a faction, claim or transfer land, carry goods between tiles, found a settlement, place a building, affect world economy beyond own wallet, hunt animals, fish, domesticate creatures, witness or trigger migrations, or leave a permanent ecological mark NPCs remember. `player-intervene-and-combat` OpenSpec drafted but **not fully applied**.
 
 ---
 
-## 24. AI / Narration Layer (Architecture §9, §0.13)
+## 25. AI / Narration Layer (Architecture §9, §0.13)
 
-- ✅ **Gemini integration** for NPC dialog (`npcs/aiDialog.ts`, `npcs/geminiClient.ts`).
-- ✅ **Ambient narrator** per-tile (`ambientNarrator.ts`).
-- ✅ **Chronicle renderer** (`chronicleRenderer.ts`).
-- ✅ **Anti-hallucination guardrail** (v0.15.3+): AI prompts must declare named-NPC list + named-building list; out-of-list invention rejected.
-- ✅ **AI output never re-enters EventLog as a world Event** — only as separate `WORLD_EVENT_AI_NARRATION` view artifact ignored by reducer.
-- ✅ **AI failure / latency cannot block tick** (`aiSnapshot.ts` fire-and-forget).
+- ✅ **Gemini integration** for NPC dialog.
+- ✅ **Ambient narrator** per-tile.
+- ✅ **Chronicle renderer**.
+- ✅ **Anti-hallucination guardrail** (v0.15.3+).
+- ✅ **AI output never re-enters EventLog as a world Event**.
+- ✅ **AI failure / latency cannot block tick**.
 - ✅ **Server-authored motivation payloads** (v0.15.34).
 
-❌ **ARCHITECTURE.md §11.9** — NPC personal dialog not fully grounded in memory: no full known-person graph, alias memory, household state, or long-term social history queries before answering.
+❌ **ARCHITECTURE.md §11.9** — NPC personal dialog not fully grounded in memory.
 ❌ No **rumor propagation** between NPCs.
+❌ No **ecological perception** — AI cannot reference animals or migrations (no source data).
 
 ---
 
-## 25. Observability Surfaces
+## 26. Observability Surfaces
 
 | Page | What it shows |
 |---|---|
-| `HubPage.tsx` | Parent overview map, district sprites, routed travellers, construction activity markers, "不在時的潮鳴市" since-last-visit panel |
+| `HubPage.tsx` | Parent overview map, district sprites, routed travellers, construction activity markers, since-last-visit panel |
 | `AreaPage.tsx` | 15×10 cell canvas of one tile, server-authoritative NPC sprites, building markers, ambient narration |
 | `BuildingPage.tsx` | Building interior, occupants, hiring slots, work/rest UI |
 | `CodexPage.tsx` | Player's collected cards |
-| `TimelinePage.tsx` | Event chronicle (server motivations + AI narration) |
-| `AccountPage.tsx`, `ProfilePage.tsx`, `SettingsPage.tsx` | Player identity |
-| `AdminPage.tsx`, `SettingsPage.tsx` | GM controls (Gemini key pool, user roles) |
-| `SocialPage.tsx` | Friends, messages, alliance |
-| Auth pages | Login / Register / ForgotPassword / ResetPassword |
+| `TimelinePage.tsx` | Event chronicle |
+| `AdminNpcsPage.tsx` | **NEW v0.15.48** — GM/admin NPC origin, births, households, deaths placeholder |
+| Other pages | Account / Profile / Settings / Admin / Social / Auth |
 
-**APIs as data product** — every world surface above is replayable from `/api/world`, `/api/npcs`, `/api/events`, `/api/map`, `/api/buildings`, `/api/world/chronicle`.
+**APIs as data product**, **SSE stream** at `/api/events/stream`.
 
-**SSE stream** — `/api/events/stream` pushes new events to the client.
+❌ No **ecosystem dashboard** — no animal counts, no migration tracker, no extinction-risk panel.
 
 ---
 
-## 26. Persistence
+## 27. Ecosystem Runtime Baseline (Layer 2.5)
 
-- ✅ **`event_log`** — canonical SQLite table; single source of world truth; append-only with global sequence + tick + deterministic key + ruleset version.
-- ✅ **`rejected_command_log`** — audit log; explicitly excluded from WorldState reduction.
+**Status: completely empty (0% implemented).**
+
+- ❌ No species catalog file.
+- ❌ No animal entity runtime (`Animal {...}` not defined anywhere).
+- ❌ No BioNode runtime (`BioNode {...}` not defined).
+- ❌ No EcosystemRegion projection.
+- ❌ No Wildlife / Predation / Fishery / Forest Regrowth / Migration engines.
+- ❌ Zero of the ~22 ecosystem Commands listed in §6.5 exist in `livingWorldCommands.ts`.
+- ❌ No goods chain — meat/fish/fungus/livestock are concepts not entities.
+- ❌ No biome-derived spawn or scarcity logic.
+- ❌ No domestication path.
+
+This is the largest gap in the codebase relative to the constitutional target. Phase E0 (§37) is the first concrete slice.
+
+---
+
+## 28. Persistence
+
+- ✅ **`event_log`** — canonical SQLite table; single source of world truth.
+- ✅ **`rejected_command_log`** — audit log.
 - ✅ **Projection tables**: `npc_memory`, `npc_relationships`, `construction_projects` (rebuild-from-events + canonical-hash tests).
 - ✅ **FACT_SET snapshots** (transitional ARCHITECTURE.md §11.5).
-- ✅ **Hydration on boot**: `hydrateFromEventLog` reduces full EventLog → in-memory caches reproducible across restarts.
-- ✅ **Restart-safe expansion** (v0.15.36): `t_salt_marsh` + `b_salt_marsh_field_station` survive restart via latest-fact hydration.
-- ✅ **Orthogonal stores** (not part of simulation): accounts, password resets, friend graph, messages, alliances, player codex, card trades, player jobs, wallet, settings.
+- ✅ **Hydration on boot**.
+- ✅ **Restart-safe expansion** (v0.15.36).
+- ✅ **Orthogonal stores**: accounts, password resets, friend graph, messages, alliances, player codex, card trades, player jobs, wallet, settings.
 
-❌ **ARCHITECTURE.md §11.7** — projection rebuild contract incomplete: not every projection has a `rebuildFromEvents` method + canonical-hash replay test.
+❌ **ARCHITECTURE.md §11.7** — projection rebuild contract incomplete.
+❌ No ecosystem projections (`animal_population`, `ecosystem_region`, `migration_routes`, `livestock_registry`, `carcass_registry`) — they do not exist yet.
 
 ---
 
@@ -955,402 +1309,409 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 27. Layer-by-Layer Status
+## 29. Layer-by-Layer Status
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|
-| **1. Simulation Kernel** | ✅ Strongest (Part I §4) | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity | ARCHITECTURE.md §11.5 / §11.6 / §11.7 (FACT_SET migration / budget / rebuild contracts) |
+| **1. Simulation Kernel** | ✅ Strongest (Part I §4) | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity | ARCHITECTURE.md §11.5 / §11.6 / §11.7 |
 | **2. Living World Runtime** | 🟡 Partial (Part I §4) | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / life-goals / household / children, ambient errands, world agenda directives, productive actions, skill XP, autonomous construction (slice 1) | Rumor propagation, NPC migration, NPC trade, mentorship, cross-tile schedule |
-| **3. Civilization Runtime** | 🔴 Weakest (Part I §4) | Construction initiate→progress→complete pipeline; faction dominance scalar; area resource scalars (food/safety/economy); single map expansion proof | **Everything else**: settlement as entity, goods, logistics, production chains, market formation, faction territory, faction war, settlement decline, map evolution |
-| **4. Combat Runtime** | 🟡 Partial | Phase B single-shot, deterministic formulas, replay-safe hashSeed | ARCHITECTURE.md §11.4 full event-sourcing, Phase C real-time sub-tick, persistent consequences, cards as combat rule operators |
-| **5. Perception Runtime** | 🟡 Partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | ARCHITECTURE.md §11.9 dialog grounding, rumor propagation, history projection as interpreted arcs, regional perception |
+| **2.5. Ecosystem Runtime** | 🔴 **0% implemented** (Part I §4) | nothing | Everything: species catalog, animal entities, BioNodes, EcosystemRegions, all 5 engines, all 22 commands, all 5 projections |
+| **3. Civilization Runtime** | 🔴 Weakest (Part I §4) | Construction initiate→progress→complete pipeline; faction dominance scalar; area resource scalars (food/safety/economy); single map expansion proof | Everything else: settlement, goods, logistics, production chains, market, faction territory/war, settlement decline, map evolution |
+| **4. Combat Runtime** | 🟡 Partial | Phase B single-shot, deterministic formulas, replay-safe hashSeed | ARCHITECTURE.md §11.4, Phase C real-time sub-tick, persistent consequences, wildlife combat, cards as combat rule operators |
+| **5. Perception Runtime** | 🟡 Partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | ARCHITECTURE.md §11.9 dialog grounding, rumor propagation, history projection as interpreted arcs, ecological perception, regional perception |
 
-Most Phase 1–6 work lands on Layer 3. The vision (Part I §4) is explicit: "看起來像 civilization 的 placeholder。"
+Most Phase 1–6 work lands on Layer 3; all of Phase E0–E4 lands on Layer 2.5. The vision (Part I §4) is explicit: "看起來像 civilization 的 placeholder" + "完全不存在於 codebase".
 
 ---
 
-## 28. Principles → Required New Capabilities
+## 30. Principles → Required New Capabilities
 
 What each Part I principle demands as new Commands, projections, runtime hooks.
 
-### 28.1 Settlement Is a Real Entity (Part I §5.1)
+### 30.1 Settlement Is a Real Entity (Part I §5.1)
 
-**New domain object:** `Settlement` — `{ id, tileId, sourceTilesOccupied[], population[], storage, economyState, territory, factionAlignment, stability, productionCapacity[], defense, expansionPressure, tradeRoutes[] }`.
+**Domain:** `Settlement` — `{ id, tileId, population[], storage, economyState, territory, factionAlignment, stability, productionCapacity[], defense, expansionPressure, tradeRoutes[] }`.
 
-**New Commands:**
-- `SETTLEMENT_FORMED` — when ≥ N NPCs share a tile + recurring co-presence + shared economic activity for K ticks
-- `SETTLEMENT_POPULATION_CHANGE` — birth / death / migration in/out
-- `SETTLEMENT_GROW` — population × economy threshold crossed
-- `SETTLEMENT_DECLINE` — resource starvation / safety collapse / faction defeat
-- `SETTLEMENT_SPLIT` — population overflow + territory pressure
-- `SETTLEMENT_MIGRATE` — settlement-level move (rare)
-- `SETTLEMENT_DESTROYED` — defeat / resource exhaustion
-- `SETTLEMENT_TAKEN_OVER` — faction shift / conquest
+**Commands:** `SETTLEMENT_FORMED`, `_POPULATION_CHANGE`, `_GROW`, `_DECLINE`, `_SPLIT`, `_MIGRATE`, `_DESTROYED`, `_TAKEN_OVER`.
 
-**New projection:** `settlements` table — rebuild-from-events.
+**Projection:** `settlements`.
 
-**Runtime hook:** Layer 3 `SettlementEngine` consults living-world NPC presence + economy + faction state every K ticks; emits Commands accordingly.
+**Runtime hook:** Layer 3 `SettlementEngine`.
 
-### 28.2 Economy Must Become Metabolism (Part I §5.2)
+### 30.2 Economy Must Become Metabolism (Part I §5.2)
 
-**New domain object:** `Goods` — `{ kind: 'raw'|'intermediate'|'finished', species, quantity, location }`. Species examples: `salt_marsh_brine`, `mountain_ore`, `forest_lumber`, `refined_salt`, `iron_ingot`, `bread`.
+**Domain:** `Goods` — `{ kind: 'raw'|'intermediate'|'finished', species, quantity, location }`.
 
-**New Commands:**
-- `GOODS_EXTRACTED` (raw goods produced by NPC at extraction site)
-- `GOODS_STORED` (deposited into warehouse / settlement storage)
-- `GOODS_PROCESSED` (intermediate → finished at production building)
-- `GOODS_CONSUMED` (consumed by NPC / settlement / faction)
-- `GOODS_DESTROYED` (decay, attack, accident)
+**Commands:** `GOODS_EXTRACTED`, `_STORED`, `_PROCESSED`, `_CONSUMED`, `_DESTROYED`.
 
-**New projection:** `goods_inventory` per (settlement, building, NPC). Rebuild-from-events.
+**Projection:** `goods_inventory` per (settlement, building, NPC).
 
-**Runtime hook:** Layer 3 `EconomyEngine` runs every tick (or every K ticks for inactive regions).
+**Runtime hook:** Layer 3 `EconomyEngine`. **Dependency on Layer 2.5**: raw goods MUST originate from ecosystem events (`ANIMAL_KILLED → CARCASS_CREATED → MEAT_HARVESTED → GOODS_EXTRACTED`), never out of thin air.
 
-### 28.3 Logistics Is Civilization (Part I §5.3)
+### 30.3 Logistics Is Civilization (Part I §5.3)
 
-**New domain object:** `TradeRoute` — `{ id, fromSettlementId, toSettlementId, carriersAssigned, goodsSpecies, capacity, hazards }`.
-**New NPC archetype:** `carrier` (needs runtime behavior).
-**New building types:** `warehouse`, `port`, `road_segment`, `bridge`.
+**Domain:** `TradeRoute`, `carrier` NPC archetype, `warehouse / port / road_segment / bridge` building types.
 
-**New Commands:**
-- `GOODS_TRANSPORT_STARTED` (carrier picks up cargo)
-- `GOODS_TRANSPORT_ARRIVED` (carrier deposits)
-- `GOODS_TRANSPORT_LOST` (hazard, attack, decay)
-- `TRADE_ROUTE_OPENED` / `TRADE_ROUTE_CLOSED`
+**Commands:** `GOODS_TRANSPORT_STARTED`, `_ARRIVED`, `_LOST`, `TRADE_ROUTE_OPENED`, `_CLOSED`.
 
-**No instant teleport** — goods location updates per carrier NPC tick.
+No instant teleport. Carrier loss (incl. predator attack from §30.13) cascades.
 
-### 28.4 Construction & Map Evolution (derives from Part I §5.1 + §5.3)
+### 30.4 Construction & Map Evolution (Part I §5.1 + §5.3)
 
-**Existing:** `CONSTRUCTION_INITIATE` / `_PROGRESS` / `BUILDING_CONSTRUCTED` / `MAP_TILE_UNLOCKED`.
+**Commands:** existing construction + `BUILDING_UPGRADED`, `_DAMAGED`, `_ABANDONED`, `_REPAIRED`, `_CAPTURED`, `ROAD_BUILT`, `BRIDGE_BUILT`, `WALL_BUILT`, `MAP_FEATURE_DECAYED`.
 
-**New Commands:**
-- `BUILDING_UPGRADED` (tier-up)
-- `BUILDING_DAMAGED` (combat, accident, decay)
-- `BUILDING_ABANDONED` (owner left, no operators)
-- `BUILDING_REPAIRED`
-- `BUILDING_CAPTURED` (faction takeover)
-- `ROAD_BUILT` / `BRIDGE_BUILT` / `WALL_BUILT` (new map features)
-- `MAP_FEATURE_DECAYED`
+### 30.5 Learning As Historical Accumulation (Part I §5.4)
 
-**Map becomes a projection of civilization Events** — frontend reads `/api/map` and gets whatever civilization has built, not a static catalog.
+**Commands:** `NPC_OBSERVED_SKILL`, `NPC_MENTORSHIP_STARTED/_COMPLETED`, `NPC_KNOWLEDGE_INHERITED`.
 
-### 28.5 Learning As Historical Accumulation (Part I §5.4 culture + Phase 3 mentorship)
+Skill XP carries `lineage`.
 
-**New Commands:**
-- `NPC_OBSERVED_SKILL` (NPC watched another NPC do a productive action; partial XP gain)
-- `NPC_MENTORSHIP_STARTED` / `_COMPLETED` (formal teaching; large XP gain)
-- `NPC_KNOWLEDGE_INHERITED` (parent → child via household)
+### 30.6 Culture Must Emerge (Part I §5.4)
 
-**Skill XP semantics shift:** from "amount of work done" to "amount of work done + observed + taught". XP record may carry `lineage` = who taught whom.
+**Domain:** `CulturalElement` — `{ kind: 'tradition'|'belief'|'festival'|'ritual'|'ideology'|'norm', scope, participants[], originatingEvent }`.
 
-### 28.6 Culture Must Emerge (Part I §5.4)
+**Commands:** `CULTURAL_ELEMENT_FORMED`, `_OBSERVED`, `_FORGOTTEN`.
 
-**New domain object:** `CulturalElement` — `{ id, kind: 'tradition'|'belief'|'festival'|'ritual'|'ideology'|'norm', scope: 'region'|'faction'|'household', participants[], originatingEvent }`.
+### 30.7 Combat As Civilization Pressure Resolution (Part I §7)
 
-**New Commands:**
-- `CULTURAL_ELEMENT_FORMED` (e.g. annual festival emerges from rare-window pattern)
-- `CULTURAL_ELEMENT_OBSERVED` (NPC participates → strengthen)
-- `CULTURAL_ELEMENT_FORGOTTEN` (no participants for K ticks)
+**Commands (on top of Phase C):** `FACTION_DOMINANCE_SHIFTED`, `TERRITORY_CLAIM_CHANGED`, `NPC_INCAPACITATED_LONG`, `NPC_DECEASED`, `COMBAT_WITNESS_RECORDED`.
 
-**Faction ideology** = aggregate of factional cultural elements; influences NPC behavior weights.
+Combat events feed history projection (§30.9). Wildlife combat events feed species population (§30.13).
 
-### 28.7 Combat As Civilization Pressure Resolution (Part I §6)
+### 30.8 Cards As World Rule Operators (Part I §8)
 
-**Existing:** `COMBAT_INITIATE` / `_PLAYER_ACTION` / `_RESOLVE` + Phase B events.
+**Reframe:** cards modify rule evaluation for a bounded scope.
 
-**New Commands (on top of Phase C):**
-- `FACTION_DOMINANCE_SHIFTED` (after combat resolves in faction-relevant context)
-- `TERRITORY_CLAIM_CHANGED` (after combat over contested tile/settlement)
-- `NPC_INCAPACITATED_LONG` (severe defeat; longer than 1 tick)
-- `NPC_DECEASED` (permanent removal, rare — design carefully)
-- `COMBAT_WITNESS_RECORDED` (other NPCs present update memory/relationships)
+**Examples:** `"潮汐倒退"` lowers food cost at `t_dock`; `"石脈共鳴"` doubles `GOODS_EXTRACTED` for `mountain_ore`; `"血潮"` temporarily drives prey species to migrate.
 
-**Combat events feed history projection** (§28.9).
+**Implementation:** `ruleOperatorScope`, `ruleOperatorEffect`, `durationTicks`, `permittedInvokers`. Closes ARCHITECTURE.md §11.2.
 
-### 28.8 Cards As World Rule Operators (Part I §7)
+### 30.9 Emergent History Projection (Part I §12)
 
-**Reframe:** cards stop being effects/items. A card is a *named Command that the player or NPC submits which modifies the rule layer for a bounded scope*.
+**Projection:** `history_chronicle` — narrative arcs from event sequences:
 
-**Examples:**
-- `CARD_PLAYED: "潮汐倒退"` = submit a Command that lowers `food` resource cost for fishing NPCs in `t_dock` for 60 ticks
-- `CARD_PLAYED: "石脈共鳴"` = submit a Command that doubles `GOODS_EXTRACTED` rate for `mountain_ore` in `t_mountain` for 30 ticks
+- Settlement formation arc
+- Faction war arc
+- Founder / hero arc
+- Decline arc
+- Ecological collapse arc
+- Great migration arc
+- Extinction arc
 
-**Implementation:**
-- Card catalog gains `ruleOperatorScope`, `ruleOperatorEffect`, `durationTicks`, `permittedInvokers` (player / specific NPC archetypes / faction)
-- Rule Engine evaluates active card-operator effects when validating subsequent Commands
-- Unify card events into canonical `event_log` (closes ARCHITECTURE.md §11.2)
+### 30.10 Player As Civilization Actor (Part I §9)
 
-### 28.9 Emergent History Projection (Part I §11 success criteria)
+**Commands:** `PLAYER_HIRED_NPC`, `_DISMISSED_NPC`, `_SPONSORED_CONSTRUCTION`, `_FOUNDED_SETTLEMENT`, `_CLAIMED_TERRITORY`, `_JOINED_FACTION`, `_LEFT_FACTION`, `_LED_FACTION`, `_TRADED_GOODS`, `_PLAYED_CARD`, **plus ecosystem-facing actions** `_HUNTED_ANIMAL`, `_FISHED`, `_DOMESTICATED_ANIMAL`, `_PROTECTED_REGION`.
 
-**New projection:** `history_chronicle` — derives narrative arcs from event sequences:
-- Settlement formation arc (`SETTLEMENT_FORMED` → first `BUILDING_CONSTRUCTED` → first `GOODS_PROCESSED`)
-- Faction war arc (territory contest events + combat events + dominance shifts)
-- Founder / hero arc (NPC's significant productive actions + inheritance + memory by others)
-- Decline arc (resource starvation + population loss + settlement decline)
+Closes ARCHITECTURE.md §11.3 and applies `player-intervene-and-combat`.
 
-**Distinguished from Timeline:** Timeline is event list. Chronicle is interpreted arcs. Built by Layer 5 Perception (AI may help phrase, never invents).
+### 30.11 Engineering Priorities — Architectural Cross-Cutting (Part I §10)
 
-### 28.10 Player As Civilization Actor (Part I §8)
+Part I §10 names four priorities:
 
-**New Commands:**
+- **P1 Budget Enforcement** = ARCHITECTURE.md §11.6.
+- **P2 Typed Event Migration** = ARCHITECTURE.md §11.5.
+- **P3 Ecosystem Foundation** — new — Layer 2.5 minimum viable (§30.12–§30.18). Required before honest civilization metabolism.
+- **P4 Civilization Runtime** = ARCHITECTURE.md §11.8 expanded.
+
+### 30.12 Ecosystem Autonomy (Part I §6.2.1)
+
+**Domain:** `Animal`, `Species`, `BioNode`, `EcosystemRegion` (see §6.3).
+
+**Wildlife Engine** runs every K ticks. Determines spawn, migration, predator/prey balancing, starvation, reproduction, pack coordination. All outcomes derive from `hashSeed(speciesId, tileId, tick, pressure)`.
+
+### 30.13 Predator / Prey + Hunting (Part I §6.2.3)
+
+**Commands:** `ANIMAL_SPAWNED`, `_MIGRATED`, `_REPRODUCED`, `_STARVED`, `_DIED`, `_HUNT_STARTED`, `_HUNT_RESOLVED`, `_KILLED`, `CARCASS_CREATED`, `MEAT_HARVESTED`, `HIDE_COLLECTED`, `BONE_COLLECTED`, `SPECIES_POPULATION_SHIFTED`.
+
+**Projection:** `animal_population` per `(speciesId, tileId)`. Rebuild + canonical hash.
+
+Predators may target prey, livestock, NPC carriers, isolated players.
+
+### 30.14 Fishery (Part I §6.2.2 + §6.6.3)
+
+**Fishery Engine** tracks `fishDensity` per coastal tile.
+
+`FISHERY_COLLAPSED` Command/Event when density crosses extinction threshold. Civilization Runtime reads `fishDensity` to set local fish-goods price.
+
+### 30.15 Forest Regrowth (Part I §6.6.4)
+
+**Forest Regrowth Engine** regenerates tree density slowly. Roads and buildings reduce regrowth + animal spawn rate.
+
+`FOREST_DEPLETED`, `BIOME_RECOVERED` Commands. Heavy logging may permanently alter biome identity.
+
+### 30.16 Migration (Part I §6.2.4)
+
+**Migration Engine** triggers `ANIMAL_MIGRATED`, `MIGRATION_WAVE_STARTED` on winter / low food / predator density / pollution / rare windows / civilization expansion.
+
+**Projection:** `migration_routes`.
+
+### 30.17 Civilization Pressure → Pollution + Collapse (Part I §6.2.5)
+
+**Commands:** `POLLUTION_INCREASED`, `POLLUTION_RECOVERED`, `SPECIES_EXTINCTION_WARNING`, `SPECIES_EXTINCT`, `SPECIES_RECOVERED`.
+
+`EcosystemRegion.pollution` rises with industrial buildings + faction expansion; lowers naturally over many ticks if pressure drops.
+
+### 30.18 Domestication (Part I §6.8)
+
+**Commands:** `ANIMAL_DOMESTICATED`, `LIVESTOCK_BRED`, `MOUNT_ASSIGNED`, `LIVESTOCK_SLAUGHTERED`.
+
+**Projection:** `livestock_registry` per settlement. Mounts feed back into logistics capacity and travel speed.
+
+---
+
+═══════════════════════════════════════════════════════════════
+## Part IV — Phased Plan
+
+Release-sized phases. Each phase closes at least one
+ARCHITECTURE.md §11 backlog item OR delivers a constitutional
+substrate. Sequence is dependency-locked per Part I §11.
+═══════════════════════════════════════════════════════════════
+
+## 31. Phase Overview & Honest Sizing
+
+| Phase | Theme (Part I §11) | Part I §10 priority | Releases | Closes ARCHITECTURE.md §11 |
+|---|---|---|---|---|
+| **0** | Architecture Formalization (doc only) | — | 1 | none |
+| **1** | Budget Gate + Settlement Runtime | **P1 + P2 + P4 start** | 4–6 | 11.5, 11.6, 11.7 (NPC + areas), 11.8 starts |
+| **E0** | Ecosystem Foundation | **P3 start** | 2–4 | (new substrate) |
+| **2** | Goods + Logistics + Market | P4 continues | 3–5 | 11.8 expands |
+| **E1** | Predator/Prey + Migration | P3 continues | 2–3 | (new substrate) |
+| **3** | Culture + Humanity + Rumor + Mentorship | Layer 2 / 5 humanity | 3–4 | 11.9 |
+| **E2** | Civilization Pressure (overfishing / depletion / pollution) | P3 + P4 | 2–3 | (closes feedback loop) |
+| **4** | Cards as Rule Operators | — | 1–2 | 11.2 |
+| **5** | Persistent Combat Consequences (incl. wildlife) | — | 2–3 | 11.4 |
+| **E3** | Domestication | — | 2–3 | (extends substrate) |
+| **6** | Player Civilization Integration | — | 2–4 | 11.3, `player-intervene-and-combat` applied |
+| **E4** | Mythic Ecology (rare species / ecosystem world events / faction ecological conflict) | — | 2–3 | (ecological history) |
+| **Total** | | | **≈26–43 releases** | All §11 items closed |
+
+**Dependency rule:** Phase 1's budget gate (P1) must complete before any later phase grows per-tick load. Phase E0 (P3 ecosystem foundation) must complete before Phase 2 (goods/logistics/market) — otherwise metabolism is fake. Phase 2 must complete before Phase E1 — predator/prey have nothing to disrupt without goods existing. And so on. The interleaving in §31 is not negotiable.
+
+**At v0.15.34→47 cadence** this is ~6 months optimistic, ~12–24 months realistic for the full 12-phase program.
+
+---
+
+## 32. Phase 0 — Architecture Formalization
+
+**Goal:** Lock the six-layer vocabulary into the documentation system.
+
+**Concrete deliverables:**
+- Add `ARCHITECTURE.md` §12 "Six Runtime Layers" — definitions (including Layer 2.5 Ecosystem), inter-layer rule, mapping of existing §0–§11 to layers.
+- Update `DEVELOPMENT_CONSTITUTION.md` with vision pointer.
+- Update `ROADMAP.md` — v0.16.0 entry naming Phase 0.
+- No code change.
+
+**Definition of done:**
+- All six docs cross-reference each other consistently.
+- ARCHITECTURE.md §12 names which layer each existing module belongs to.
+
+**Release:** v0.16.0.
+
+---
+
+## 33. Phase 1 — Budget Gate + Settlement Runtime
+
+**Goal:** Make Layer 3 a real layer and prepay budget / typed-event / rebuild-contract debt.
+
+**33.1 Budget gate (closes ARCHITECTURE.md §11.6)** — 1–2 releases. Per-tick command cap, NPC partitioning, regional activation, `/api/dashboard` exposes tick cost histogram. Load test at 200 NPCs.
+
+**33.2 NPC FACT_SET → typed events (closes ARCHITECTURE.md §11.5 for NPC state)** — 1 release. New `npc_state` projection with rebuild + canonical-hash.
+
+**33.3 Projection rebuild contract sweep (closes ARCHITECTURE.md §11.7)** — 1 release. Area state, building occupants, weather/season, active world events, rare windows, household/children all gain rebuild+hash tests.
+
+**33.4 Settlement domain object (opens §30.1)** — 1–2 releases. `settlement-domain` OpenSpec change. Visible behavior: ≥ 3 NPCs co-located + recurring co-presence for K ticks → `SETTLEMENT_FORMED`; Hub map shows "聚落: <name>". Salt-marsh becomes the first NPC-formed settlement.
+
+**Definition of done:** tick cost bounded at 200 NPCs; NPC state replayable from typed events; salt-marsh = real settlement entity; new projections have rebuild + canonical-hash tests.
+
+**Releases:** v0.16.1 → v0.16.6 (approximately).
+
+---
+
+## 34. Phase E0 — Ecosystem Foundation
+
+**Goal:** Make Layer 2.5 a real layer with minimum viable wildlife and fishery, so Phase 2 metabolism can be honest.
+
+**E0.1 Species catalog + Animal entity (opens §30.12)** — 1 release.
+- New file `packages/server/src/ecosystem/species.ts` with the §6.4 catalog (22 species across 5 regions).
+- `Animal` runtime entity type with fields from §6.3.
+- `Species` lookup helpers.
+
+**E0.2 Wildlife Engine + spawning** — 1 release.
+- `ANIMAL_SPAWNED` Command + projection.
+- Deterministic per-biome spawn rate via `hashSeed(speciesId, tileId, tick)`.
+- `animal_population` projection per `(speciesId, tileId)` with rebuild + canonical-hash.
+- Active vs background region throttling per Phase 1 budget gate.
+
+**E0.3 Simple hunting** — 1 release.
+- `ANIMAL_HUNT_STARTED`, `ANIMAL_HUNT_RESOLVED`, `ANIMAL_KILLED`, `CARCASS_CREATED`, `MEAT_HARVESTED` Commands.
+- NPC hunter archetype actually emits hunt commands when nearby prey + low household food.
+- `MEAT_HARVESTED` feeds NPC `civic.gold` and household storage (placeholder for Phase 2 Goods).
+
+**E0.4 Fishery density** — 1 release.
+- Coastal tile `fishDensity` projection.
+- NPC fisher archetype reduces local density on `work` actions.
+- `FISHERY_COLLAPSED` warning when density crosses extinction threshold.
+
+**Definition of done:**
+- Forest hunters actually hunt `forest_deer` and reduce population.
+- Salt-marsh fishers actually reduce `marsh_fish` density.
+- Stopping all hunting on a tile for K ticks → population recovers deterministically.
+- All ecosystem commands and projections have rebuild + canonical-hash tests.
+
+**Releases:** v0.17.0 → v0.17.3 (approximately). **MUST land before Phase 2.**
+
+---
+
+## 35. Phase 2 — Goods + Logistics + Market
+
+**Goal:** Layer 3 starts metabolizing goods sourced from ecosystem events. `economy` stops being a scalar.
+
+**35.1 Goods primitives (§30.2)** — 1 release. Catalog ~10 goods species (brine, lumber, ore, fish, grain, refined salt, iron ingot, bread, cloth, tools). Commands `GOODS_EXTRACTED`, `_STORED`, `_PROCESSED`, `_CONSUMED`, `_DESTROYED`. `goods_inventory` projection per (settlement, building, NPC). **First behavior:** `MEAT_HARVESTED` from Phase E0 promotes to `GOODS_EXTRACTED:meat`. Forest hunters / mountain miners / salt-marsh fishers emit `GOODS_EXTRACTED` on accepted productive actions.
+
+**35.2 Logistics (§30.3)** — 1–2 releases. Carrier NPCs, warehouses, ports, abstract roads. `GOODS_TRANSPORT_STARTED`, `_ARRIVED`, `_LOST`, `TRADE_ROUTE_OPENED`, `_CLOSED`.
+
+**35.3 Production chains (§30.4)** — 1 release. Production buildings consume input goods, emit `GOODS_PROCESSED`. Example: `salt_marsh_brine → refined_salt → central market`.
+
+**35.4 Market formation (§30.2 finishing)** — 1–2 releases. Local supply/demand per goods species per settlement. `MARKET_PRICE_DISCOVERED` Command/Event.
+
+**Definition of done:** salt-marsh supplies refined salt to central market via real carrier NPCs; carrier route disruption causes shortage; settlement prices respond to supply.
+
+**Releases:** v0.18.0 → v0.18.4 (approximately).
+
+---
+
+## 36. Phase E1 — Predator/Prey + Migration
+
+**Goal:** Layer 2.5 ecosystem balances itself. Predators eat prey; migrations happen; populations breathe.
+
+**E1.1 Predation Engine** — 1 release. Predator behavior: hunt nearby prey, starve if scarce, migrate if hopeless. `ANIMAL_STARVED`, `_DIED`, predator-on-prey hunt resolution.
+
+**E1.2 Reproduction + carrying capacity** — 1 release. `ANIMAL_REPRODUCED` deterministic per `Species.reproductionRate`. Carrying capacity caps population.
+
+**E1.3 Migration Engine (§30.16)** — 1 release. `ANIMAL_MIGRATED`, `MIGRATION_WAVE_STARTED` triggered by season / low food / predator density / pollution / rare windows / civilization expansion. `migration_routes` projection.
+
+**Definition of done:**
+- `fog_wolf` population fluctuates with `forest_deer` population (Lotka-Volterra-ish).
+- `marsh_heron` migrates seasonally between `t_salt_marsh` and `t_temple`.
+- Forest pressure (heavy NPC activity) reduces local `forest_deer` spawn, drives migration.
+
+**Releases:** v0.18.5 → v0.18.7 (approximately).
+
+---
+
+## 37. Phase 3 — Culture + Humanity + Rumor + Mentorship
+
+**Goal:** Layer 2 + Layer 5 close the humanity gap. NPCs become people, not predictable role-actors.
+
+**37.1 Dialog grounding (closes ARCHITECTURE.md §11.9)** — 1–2 releases. AI prompts gain query interface to known-person graph, alias memory, household state, faction knowledge, recent events, **and ecological awareness** ("we haven't seen `marsh_heron` for two seasons"). Anti-hallucination rejects out-of-graph names and out-of-catalog species.
+
+**37.2 Learning from history (§30.5)** — 1 release. `NPC_OBSERVED_SKILL`, `NPC_MENTORSHIP_STARTED/_COMPLETED`.
+
+**37.3 Culture (§30.6)** — 1–2 releases. `CulturalElement` domain. First emergent: festival around recurring rare-window event; faction-specific ritual; regional norm (e.g. salt-marsh fishing prayer).
+
+**37.4 Household shared economy** — 1 release. Household members pool gold; joint decisions. Inheritance on `NPC_DECEASED`.
+
+**Definition of done:** NPCs refuse to "know" people they have never met; NPCs reference ecology in dialog; skill XP shows lineage; at least one regional festival visible in chronicle.
+
+**Releases:** v0.19.0 → v0.19.4 (approximately).
+
+---
+
+## 38. Phase E2 — Civilization Pressure on Ecosystem
+
+**Goal:** Civilization visibly damages ecosystems. Player choices have ecological consequences.
+
+**E2.1 Overhunting + Overfishing detection** — 1 release. Sustained `ANIMAL_KILLED` rate above carrying-capacity threshold emits `SPECIES_EXTINCTION_WARNING`. Sustained fishing emits `FISHERY_COLLAPSED`.
+
+**E2.2 Pollution + Forest depletion** — 1 release. Industrial-type buildings raise `EcosystemRegion.pollution`. Heavy construction raises `FOREST_DEPLETED`. Both reduce nearby `animal_population` regen.
+
+**E2.3 Recovery loops** — 1 release. If pressure drops for K ticks, `POLLUTION_RECOVERED`, `BIOME_RECOVERED`, `SPECIES_RECOVERED` emit deterministically.
+
+**E2.4 Settlement feedback** — 1 release. `EcosystemRegion` state feeds back into Settlement Runtime: food shortage → unrest → faction shift → in extreme case `SETTLEMENT_DECLINE`.
+
+**Definition of done:** disrupting `salt_marsh_brine` extraction via overfishing collapses local market price, drives NPC migration, settlement declines if unaddressed.
+
+**Releases:** v0.20.0 → v0.20.3 (approximately).
+
+---
+
+## 39. Phase 4 — Cards as Rule Operators
+
+**Goal:** Layer 4 (and player) treats cards as rule-operators, not effects. Closes ARCHITECTURE.md §11.2.
+
+**39.1 Unify card events into canonical EventLog** — 1 release.
+
+**39.2 Cards as rule operators** — 1 release. Catalog gains `ruleOperatorScope` / `ruleOperatorEffect` / `durationTicks` / `permittedInvokers`. Ecology-affecting cards now operable: `"祈雨"` boosts forest regrowth, `"血潮"` drives prey migration.
+
+**Definition of done:** playing a card changes how subsequent Commands are validated; every card play is in `event_log` and replayable.
+
+**Releases:** v0.20.4 → v0.20.5 (approximately).
+
+---
+
+## 40. Phase 5 — Persistent Combat Consequences
+
+**Goal:** Layer 4 ships Phase C; combat outcomes ripple into Layer 3 + Layer 2 + Layer 2.5 + Layer 5.
+
+**40.1 Combat Phase C** — 1–2 releases. 10Hz sub-tick + 5-phase rule engine + 紋卡 priority table + SSE `CombatProjection`. Closes ARCHITECTURE.md §11.4.
+
+**40.2 Wildlife combat support** — 1 release. Animals as combat actors. `mountain_bear` can fight a hunter; `fog_wolf` pack can attack a carrier.
+
+**40.3 Persistent consequences (§30.7 + §30.13)** — 1 release. `FACTION_DOMINANCE_SHIFTED`, `TERRITORY_CLAIM_CHANGED`, `NPC_INCAPACITATED_LONG`, `NPC_DECEASED`, `COMBAT_WITNESS_RECORDED`. Wildlife combat outcomes feed `SPECIES_POPULATION_SHIFTED`.
+
+**40.4 History projection (§30.9)** — 1 release. `history_chronicle` projection identifies arcs (Settlement formation, faction war, founder, decline, **ecological collapse, great migration, extinction**). Layer 5 (AI) phrases the arcs.
+
+**Definition of done:** losing combat over contested settlement changes faction control; witnesses remember combats; chronicle page shows interpreted arcs; an extinction event surfaces as a named historical arc.
+
+**Releases:** v0.21.0 → v0.21.4 (approximately).
+
+---
+
+## 41. Phase E3 — Domestication
+
+**Goal:** Civilization integrates ecosystems through livestock and mounts.
+
+**E3.1 Domestication primitives (§30.18)** — 1 release. `ANIMAL_DOMESTICATED`, `LIVESTOCK_BRED`, `LIVESTOCK_SLAUGHTERED`. `livestock_registry` per settlement.
+
+**E3.2 Mounts** — 1 release. `MOUNT_ASSIGNED`. Mounts feed back into NPC travel speed, carrier logistics capacity.
+
+**E3.3 Ranch building type** — 1 release. New building consumes feed (raw goods) and produces livestock + byproducts (milk / wool / meat). Closes the loop with Phase 2 goods.
+
+**Definition of done:** a settlement can run a `marsh_yak` ranch supplying milk to neighboring towns; mounted NPC carriers move goods faster than walking.
+
+**Releases:** v0.22.0 → v0.22.2 (approximately).
+
+---
+
+## 42. Phase 6 — Player Civilization Integration + Phase E4 Mythic Ecology
+
+These are the last two phases, can partially parallel.
+
+### 42.1 Phase 6 — Player Civilization Integration
+
+**Closes ARCHITECTURE.md §11.3; applies `player-intervene-and-combat`.**
+
 - `PLAYER_HIRED_NPC` / `_DISMISSED_NPC`
 - `PLAYER_SPONSORED_CONSTRUCTION`
 - `PLAYER_FOUNDED_SETTLEMENT`
 - `PLAYER_CLAIMED_TERRITORY`
 - `PLAYER_JOINED_FACTION` / `_LEFT_FACTION` / `_LED_FACTION`
 - `PLAYER_TRADED_GOODS`
-- `PLAYER_PLAYED_CARD` (rule-operator semantics from §28.8)
+- `PLAYER_HUNTED_ANIMAL` / `_FISHED` / `_DOMESTICATED_ANIMAL` / `_PROTECTED_REGION`
+- `PLAYER_PLAYED_CARD`
 
-**Closes:** ARCHITECTURE.md §11.3 (player wallet/jobs event-sourced), `player-intervene-and-combat` OpenSpec applied.
+Player wallet/jobs event-sourced; every player Command produces an Event visible to nearby NPCs; long-absent player still appears in NPC dialog + history projection.
 
-**Constraint:** every player Command produces an Event NPCs can observe and remember. Player intervention shows up in history projection.
+### 42.2 Phase E4 — Mythic Ecology
 
-### 28.11 Engineering Priorities — Architectural Cross-Cutting (Part I §9)
+- Rare species behavior (`white_marsh_leviathan`, `iron_hound`).
+- Ecosystem-level `WORLD_EVENT_SPAWN`: "The White Marsh Leviathan Emerges" → settlements panic, hunters gather, faction conflict.
+- Faction ecological conflict: `guild` clear-cuts forest; `tide_hunters` enforce fishing quotas; `free_runners` sabotage industrial sites; `hidden_overseer` performs ritual ecosystem manipulation.
+- Legendary hunts as multi-NPC arcs that update `history_chronicle`.
 
-Part I §9 names three priorities that absorb the ARCHITECTURE.md §11 backlog:
+**Definition of done:** the world runs identically whether the player is online or not (verifies Architecture §0.1); legendary creature events surface in chronicle; faction ecological ideology shifts visible faction behavior.
 
-- **P1 Budget Enforcement** = ARCHITECTURE.md §11.6. Command cap, active/background partition, regional throttling, replay-safe projection rebuild. Must complete before civilization runtime expands; otherwise the temptation chain "先暫時 cache 一下啦 / 先 shortcut 一下啦 / 這邊直接 mutate 比較快" destroys architecture integrity.
-- **P2 Typed Event Migration** = ARCHITECTURE.md §11.5. `FACT_SET` must disappear; long-term it causes replay ambiguity, projection inconsistency, hidden truth, rebuild impossibility.
-- **P3 Civilization Runtime** = ARCHITECTURE.md §11.8 expanded. Settlement / goods / logistics / market / production chains. Part I §9: "civilization simulation 的難度遠高於 NPC AI。AI 對話只是 perception illusion。文明代謝才是真正的世界。"
-
-Each phase **must** close at least one ARCHITECTURE.md §11 item. P1 + P2 land entirely in Phase 1; P3 begins in Phase 1 (Settlement) and continues through Phase 2 (metabolism).
-
----
-
-═══════════════════════════════════════════════════════════════
-## Part IV — Six-Phase Plan
-
-Release-sized phases. Each phase closes at least one
-ARCHITECTURE.md §11 backlog item. Sequence is dependency-locked
-per Part I §10 ("這個順序不能亂").
-═══════════════════════════════════════════════════════════════
-
-## 29. Phase Overview & Honest Sizing
-
-| Phase | Theme (Part I §10) | Part I §9 priority | Releases | Closes ARCHITECTURE.md §11 |
-|---|---|---|---|---|
-| **0** | Architecture Formalization (doc only) | — | 1 | none |
-| **1** | Budget Gate + Settlement Runtime | **P1 + P2 + P3 start** | 4–6 | 11.5, 11.6, 11.7 (NPC + areas), 11.8 starts |
-| **2** | Goods + Logistics + Market | P3 continues | 3–5 | 11.8 expands |
-| **3** | Culture + Humanity + Rumor + Mentorship | Layer 2 / 5 humanity | 3–4 | 11.9 |
-| **4** | Cards as Rule Operators | — | 1–2 | 11.2 |
-| **5** | Persistent Combat Consequences | — | 2–3 | 11.4 |
-| **6** | Player Civilization Integration | — | 2–4 | 11.3, `player-intervene-and-combat` applied |
-| **Total** | | | **16–25 releases** | All §11 items closed |
-
-**Dependency rule:** Phase 1's budget gate must complete before Phases 2+ add per-tick load. Phases 2/3 can partially parallel after Phase 1 lands; Phases 4/5/6 may parallel once their dependencies are done.
-
-**At v0.15.34→47 cadence** (13 slices/week in May 2026) this is ~3 months optimistic, ~6–12 months realistic once slices get heavier and live verification + OpenSpec validation per slice slow throughput.
-
----
-
-## 30. Phase 0 — Architecture Formalization
-
-**Goal:** Lock the five-layer vocabulary into the documentation system so every subsequent OpenSpec change can reference layer + principle without re-arguing them.
-
-**Concrete deliverables:**
-- Add `ARCHITECTURE.md` §12 "Five Runtime Layers" — definitions, inter-layer rule, mapping of existing §0–§11 to layers.
-- Update `DEVELOPMENT_CONSTITUTION.md`:
-  - Add "Civilization Evolution Constitution" reference to the five layers
-  - Add a "Vision document" pointer to `docs/WORLD_CAPABILITIES.md` Part I
-- Update `ROADMAP.md` — v0.16.0 entry naming Phase 0.
-- No code change.
-
-**Definition of done:**
-- All five docs cross-reference each other consistently.
-- ARCHITECTURE.md §12 names which layer each existing module belongs to (`kernel/`, `sim/`, `combat/`, `npcs/aiDialog.ts`, etc.).
-- One commit, one CI pass, one Deploy Dev no-op pass.
-
-**Release:** v0.16.0.
-
----
-
-## 31. Phase 1 — Budget Gate + Settlement Runtime
-
-**Goal:** Make Layer 3 (Civilization Runtime) a real layer with a first domain (Settlement) and prepay the budget/typed-event/rebuild-contract debt that everything afterwards depends on.
-
-**31.1 Budget gate (closes ARCHITECTURE.md §11.6)** — 1–2 releases.
-- Implement per-tick command cap with overflow deferral
-- NPC partitioning: active set (player-relevant + recent activity) vs background set (cheaper policy)
-- Regional activation: tiles with no player presence and no flagged world rule run low-frequency drift
-- Observable metric: `/api/dashboard` exposes tick cost histogram + active/background counts
-- Tests: load test 200 NPCs at 5s tick
-
-**31.2 NPC FACT_SET → typed events (closes ARCHITECTURE.md §11.5 for NPC state)** — 1 release.
-- Drop `npc.state.<id>` FACT_SET path; replace with typed-event projection from `NPC_MOVE` / `NPC_ACTIVITY_CHANGE` / etc.
-- Add `npc_state` projection table with `rebuildFromEvents` + canonical-hash test
-- Migration path: replay existing FACT_SET history into typed events on boot once, then never write FACT_SET for NPC state again
-
-**31.3 Projection rebuild contract sweep (closes ARCHITECTURE.md §11.7)** — 1 release.
-- Audit all current projection-like stores
-- Add `rebuildFromEvents` + canonical-hash replay test for: area state, building occupants, world weather/season, active world events, rare windows, household/children
-
-**31.4 Settlement domain object (opens §28.1)** — 1–2 releases.
-- New OpenSpec change: `settlement-domain`
-- Commands: `SETTLEMENT_FORMED`, `SETTLEMENT_POPULATION_CHANGE`, `SETTLEMENT_GROW`, `SETTLEMENT_DECLINE`, `SETTLEMENT_DESTROYED`, `SETTLEMENT_TAKEN_OVER`, `SETTLEMENT_SPLIT`
-- Projection: `settlements` table
-- First visible behavior: when ≥ 3 NPCs spend ≥ N ticks co-located at a tile sharing productive actions, emit `SETTLEMENT_FORMED`; visible in Hub map as new district label "聚落: <name>"
-- Frontend: `/api/settlements` + Hub overlay
-- Salt-marsh becomes the first NPC-formed settlement (rather than legacy hard-coded expansion)
-
-**Definition of done for Phase 1:**
-- Tick cost stays bounded at 200 NPCs
-- All NPC state replayable from typed events
-- Salt-marsh visible as a real settlement entity, not a legacy fixed project
-- All new projections have rebuild + canonical-hash tests
-
-**Releases:** v0.16.1 → v0.16.6 (approximately).
-
----
-
-## 32. Phase 2 — Goods + Logistics + Market
-
-**Goal:** Layer 3 starts metabolizing goods. `economy` stops being a scalar.
-
-**32.1 Goods primitives (§28.2)** — 1 release.
-- Catalog goods species (initial ~10: brine, lumber, ore, fish, grain, refined salt, iron ingot, bread, cloth, tools)
-- Commands: `GOODS_EXTRACTED`, `GOODS_STORED`, `GOODS_PROCESSED`, `GOODS_CONSUMED`, `GOODS_DESTROYED`
-- Projection: `goods_inventory` per (settlement, building, NPC)
-- First behavior: NPCs at extraction-eligible buildings (forest hunters, mountain miners, salt-marsh fishers) emit `GOODS_EXTRACTED` on productive `build`/`work` actions
-
-**32.2 Logistics (§28.3)** — 1–2 releases.
-- New NPC archetype: `carrier`. Some existing NPCs (port concierge, paperboy) gain carrier runtime behavior.
-- New building types: `warehouse`, `port`, `road_segment` (Phase 2 keeps roads abstract; settlement infra adds real geometry later).
-- Commands: `GOODS_TRANSPORT_STARTED`, `_ARRIVED`, `_LOST`, `TRADE_ROUTE_OPENED`, `_CLOSED`
-- Goods location changes only with carrier ticks; no teleport
-
-**32.3 Production chains (§28.4)** — 1 release.
-- Buildings of type `production` consume input goods → emit `GOODS_PROCESSED` with output species
-- Example chain: `salt_marsh_brine` → `refined_salt` (at salt works building) → consumed at central market
-
-**32.4 Market formation (§28.2 finishing)** — 1–2 releases.
-- Settlements track local supply/demand per goods species
-- `MARKET_PRICE_DISCOVERED` Command/Event emitted on transaction
-- NPCs prefer goods from settlements with surplus + lower price (deterministic preference function)
-
-**Definition of done for Phase 2:**
-- Salt-marsh can supply refined salt to central market via real carrier NPCs
-- Disrupting a carrier's route causes downstream goods shortage
-- Settlement market prices respond to local supply
-
-**Releases:** v0.17.0 → v0.17.4 (approximately).
-
----
-
-## 33. Phase 3 — Culture + Humanity + Rumor + Mentorship
-
-**Goal:** Layer 2 + Layer 5 close the humanity gap. NPCs become people, not predictable role-actors.
-
-**33.1 Dialog grounding (closes ARCHITECTURE.md §11.9)** — 1–2 releases.
-- AI prompts gain query interface to: known-person graph, alias memory, household state, faction knowledge, recent participated events
-- Anti-hallucination rejects out-of-graph names with explicit "我沒聽過這個人" / "你說的是哪一位？"
-- Rumor propagation: when NPCs interact, partial memory transfers with attenuation
-
-**33.2 Learning from history (§28.5)** — 1 release.
-- `NPC_OBSERVED_SKILL` emitted when NPC is co-located with another performing the same skill domain
-- Observed XP gain is partial (e.g. 25% of doing it directly)
-- `NPC_MENTORSHIP_STARTED` for explicit teaching events
-
-**33.3 Culture (§28.6)** — 1–2 releases.
-- `CulturalElement` domain
-- First emergent culture: festival around recurring rare-window event; faction-specific ritual; regional norm (e.g. salt-marsh fishing prayer)
-- Faction ideology aggregates active cultural elements; influences `factionLean` shift weights
-
-**33.4 Household shared economy** — 1 release.
-- Household members pool gold; joint decision for major purchases (Sponsor child education / large meal / shelter upgrade)
-- `HOUSEHOLD_DECISION_MADE` Command
-- Inheritance: on `NPC_DECEASED` (designed in Phase 5), household assets transfer
-
-**Definition of done for Phase 3:**
-- NPCs refuse to "know" people they have never met
-- Skill XP shows lineage (taught by whom, observed where)
-- At least one regional festival visible in chronicle
-- Household decisions visible in chronicle
-
-**Releases:** v0.18.0 → v0.18.4 (approximately).
-
----
-
-## 34. Phase 4 — Cards as Rule Operators
-
-**Goal:** Layer 4 (and player) treats cards as rule-operators, not effects. Closes ARCHITECTURE.md §11.2.
-
-**34.1 Unify card events into canonical EventLog** — 1 release.
-- Merge `card_action_log` into `event_log` with new event types `CARD_PICKED_UP`, `CARD_STORED`, `CARD_PLAYED`, `CARD_MATERIALIZED`, `CARD_TRADED`
-- Projection-only reads from `world_card_drops` table; truth lives in `event_log`
-
-**34.2 Cards as rule operators** — 1 release.
-- Catalog gains `ruleOperatorScope` (which Commands the card modifies), `ruleOperatorEffect` (multiplier / threshold shift / forbid / allow), `durationTicks`, `permittedInvokers`
-- Rule Engine consults active card-operator effects when validating subsequent Commands
-- Example: "潮汐倒退" reduces `GOODS_EXTRACTED` cost at `t_dock` fishing buildings for 60 ticks
-- NPCs may also play certain cards (faction-aligned cards)
-
-**Definition of done for Phase 4:**
-- Playing a card changes how subsequent NPC commands are validated, not just who has what item
-- Every card play is in `event_log` and replayable
-
-**Releases:** v0.19.0 → v0.19.1 (approximately).
-
----
-
-## 35. Phase 5 — Persistent Combat Consequences
-
-**Goal:** Layer 4 ships Phase C; combat outcomes ripple into Layer 3 + Layer 2 + Layer 5.
-
-**35.1 Combat Phase C (existing OpenSpec `combat-phase-c-realtime-subtick`)** — 1–2 releases.
-- 10Hz sub-tick + 5-phase rule engine + 紋卡 priority table + SSE `CombatProjection` + reconcile-on-reject
-- CombatStore becomes EventLog read-only projection (closes ARCHITECTURE.md §11.4)
-
-**35.2 Persistent consequences (§28.7)** — 1 release.
-- `FACTION_DOMINANCE_SHIFTED` emitted on combat resolution in faction-relevant context
-- `TERRITORY_CLAIM_CHANGED` on combat over contested settlement
-- `NPC_INCAPACITATED_LONG` / `NPC_DECEASED` (designed with care — permanent removal must be rare and consequential)
-- `COMBAT_WITNESS_RECORDED` updates witness NPCs' memory + relationships
-
-**35.3 History projection (§28.9)** — 1 release.
-- `history_chronicle` projection identifies narrative arcs from event sequences (Settlement formation, faction war, founder, decline)
-- Layer 5 (AI) phrases the arcs; never invents events
-
-**Definition of done for Phase 5:**
-- Losing combat over a contested settlement actually changes faction control of that tile
-- Witnesses remember combats in their `npc_memory`
-- Chronicle page shows interpreted arcs alongside raw timeline
-
-**Releases:** v0.20.0 → v0.20.3 (approximately).
-
----
-
-## 36. Phase 6 — Player Civilization Integration
-
-**Goal:** Architecture §0.1 / Part I §8 Player Philosophy. Closes ARCHITECTURE.md §11.3.
-
-**36.1 Player wallet + jobs event-sourced (closes ARCHITECTURE.md §11.3)** — 1 release.
-- `POST /api/buildings/:id/apply|quit|work|rest` route to Commands (`PLAYER_HIRED_AT`, `PLAYER_QUIT_JOB`, `PLAYER_WORKED`, `PLAYER_RESTED`)
-- Wallet derived from event log
-
-**36.2 Player intervention (`player-intervene-and-combat` applied)** — 1 release.
-- The existing OpenSpec change lands; player can intervene in NPC combat, NPC interaction, faction event
-
-**36.3 Player as civilization actor** — 1–2 releases.
-- `PLAYER_HIRED_NPC` (player employs an NPC for a task; NPC's productive output flows to player)
-- `PLAYER_SPONSORED_CONSTRUCTION` (donate gold/goods to NPC construction; affects priority and ownership)
-- `PLAYER_FOUNDED_SETTLEMENT` (player can initiate settlement formation directly, with full Civilization Runtime validation)
-- `PLAYER_CLAIMED_TERRITORY` (over contested tile + faction backing)
-- `PLAYER_JOINED_FACTION` / `_LEFT_FACTION` / `_LED_FACTION`
-- `PLAYER_TRADED_GOODS` (real goods, not just gold)
-
-**36.4 Player marks history** — 1 release.
-- Every player Command produces an Event visible to nearby NPCs
-- History projection includes player arcs alongside NPC arcs
-- Player long-absence does not erase player's mark; NPCs remember (subject to memory decay)
-
-**Definition of done for Phase 6:**
-- Player can hire an NPC, sponsor construction, found a settlement, lead a faction, trade goods, all via Commands → Events
-- Long-absent player's name still appears in NPC dialog and history projection
-- World runs identically whether player is online or not (verifies Architecture §0.1)
-
-**Releases:** v0.21.0 → v0.21.3 (approximately).
+**Releases:** v0.23.0 → v0.23.4 (approximately).
 
 ---
 
@@ -1358,24 +1719,40 @@ per Part I §10 ("這個順序不能亂").
 ## Part V — Program Acceptance & Meta
 ═══════════════════════════════════════════════════════════════
 
-## 37. Program Success Criteria (Part I §11)
+## 43. Program Success Criteria (Part I §12)
 
-The program is **not done** when phases 0–6 ship. It is done when these four
-emergent behaviours can be observed in a live deployment. They are the
-acceptance test for "Greed Island 才真正成立。"
+The program is **not done** when phases 0–6 + E0–E4 ship. It is done when these emergent behaviours can be observed in a live deployment. They are the acceptance test for "Greed Island 才真正成立" + "civilization trapped inside a living planet".
 
-| Criterion (Part I §11) | Verifiable by |
+### 43.1 Civilization criteria (Part I §12 ¶1)
+
+| Criterion | Verifiable by |
 |---|---|
-| 「當某個 NPC 死亡。後代會記得他。」 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. (Closes the ARCHITECTURE.md §11.9 grounding loop with Phase 5 `NPC_DECEASED`.) |
-| 「當某 settlement 飢荒。周邊價格會上升。」 | Disrupting a `salt_marsh_brine` supply route via `GOODS_TRANSPORT_LOST` causes neighbouring settlements' `MARKET_PRICE_DISCOVERED` events to shift upward within K ticks. End-to-end verifies Phase 1 Settlement + Phase 2 Goods/Logistics/Market. |
-| 「當 faction 戰敗。道路與物流會崩潰。」 | A losing-faction settlement's roads and trade routes show `TRADE_ROUTE_CLOSED` + `BUILDING_DAMAGED`/`_ABANDONED` after `FACTION_DOMINANCE_SHIFTED` + `TERRITORY_CLAIM_CHANGED`. End-to-end verifies Phase 5 Persistent Combat Consequences plumbing back into Phase 2 logistics. |
-| 「當玩家離開數個月。世界仍然繼續。甚至已經變成另一個文明時代。」 | After K weeks of no player activity, EventLog continues to accumulate civilization-level events (`SETTLEMENT_GROW`, `SETTLEMENT_DECLINE`, `BUILDING_CONSTRUCTED`, `CULTURAL_ELEMENT_FORMED`, `FACTION_DOMINANCE_SHIFTED`), and the world's `history_chronicle` projection shows distinct arc deltas from before-absence to after-absence. Verifies Architecture §0.10 Offline Continuity. |
+| 「當某個 NPC 死亡，後代會記得他。」 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. |
+| 「當某 settlement 飢荒，周邊價格會上升。」 | Disrupting a `salt_marsh_brine` supply route via `GOODS_TRANSPORT_LOST` causes neighbouring settlements' `MARKET_PRICE_DISCOVERED` events to shift upward within K ticks. |
+| 「當 faction 戰敗，道路與物流會崩潰。」 | A losing-faction settlement's roads and trade routes show `TRADE_ROUTE_CLOSED` + `BUILDING_DAMAGED`/`_ABANDONED` after `FACTION_DOMINANCE_SHIFTED` + `TERRITORY_CLAIM_CHANGED`. |
+| 「當玩家離開數個月，世界仍然繼續，甚至已經變成另一個文明時代。」 | After K weeks of no player activity, EventLog continues to accumulate civilization-level events; `history_chronicle` shows distinct arc deltas from before-absence to after-absence. |
 
-If any of the four criteria still cannot be demonstrated after Phase 6 ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
+### 43.2 Ecosystem criteria (Part I §12 ¶2 + WITH_ECO §13)
+
+| Criterion | Verifiable by |
+|---|---|
+| Witness migration | Live observation of `MIGRATION_WAVE_STARTED` events surfaced in chronicle, with `ANIMAL_MIGRATED` events showing animals crossing tiles. |
+| Overhunt a species | Sustained `ANIMAL_KILLED` events on a single species emit `SPECIES_EXTINCTION_WARNING`, then `SPECIES_EXTINCT`. |
+| Protect an ecosystem | Reduced civilization pressure for K ticks emits `BIOME_RECOVERED` / `SPECIES_RECOVERED`. |
+| Cause ecological collapse | Player or faction behavior triggers `FISHERY_COLLAPSED` / `FOREST_DEPLETED` with cascading economic consequences (price spike, NPC migration). |
+| Stabilize a region | Conservation actions (e.g. card play, settlement policy) reverse a decline arc visible in `history_chronicle`. |
+| Domesticate creatures | `ANIMAL_DOMESTICATED` + `LIVESTOCK_BRED` events; livestock produces goods via Phase E3 ranches. |
+| Lose a settlement to famine | `SETTLEMENT_DECLINE` triggered by sustained food shortage caused by ecological collapse. |
+| Factions fight over biological resources | `FACTION_DOMINANCE_SHIFTED` + combat events scoped to a specific contested resource (fishery, forest, rare animal). |
+| NPCs discuss disappearing animals | Anti-hallucination-safe NPC dialog references `marsh_heron` / `fog_wolf` etc., grounded by recent `SPECIES_POPULATION_SHIFTED` / `_EXTINCTION_WARNING` events. |
+| Extinct species visible only in old chronicles | After `SPECIES_EXTINCT`, the species no longer spawns; `history_chronicle` retains the extinction arc as historical record. |
+| The world is a civilization trapped inside a living planet | All of the above co-occur in the same persistent EventLog without GM scripting. |
+
+If any criterion still cannot be demonstrated after the full phase program ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
 
 ---
 
-## 38. Update Protocol & Document Scope
+## 44. Update Protocol & Document Scope
 
 **This document is:**
 - The integrated constitution + current-state + path picture for Greed Island.
@@ -1387,11 +1764,11 @@ If any of the four criteria still cannot be demonstrated after Phase 6 ships, th
 - Not a substitute for `ROADMAP.md` (release-by-release history).
 - Not a substitute for `PROGRESS.md` (latest handoff state).
 - Not a substitute for `COMBAT_ARCHITECTURE.md` (combat sub-runtime spec).
-- Not a sprint backlog — Part IV is **6–12 months of work** at realistic pace.
+- Not a sprint backlog — Part IV is **6 months – 2 years of work** at realistic pace.
 
 **Update protocol per Part:**
-- **Part I** (Part I §1–§11, user-authored constitution): updates only when the user redefines world identity / laws / vision. Treat as authoritative source.
-- **Part II** (§12–§26, baseline): updates whenever a capability ships, breaks, or is removed. Tag each entry with the release that introduced/removed it.
-- **Part III** (§27–§28, crosswalk): updates whenever Part I or Part II changes.
-- **Part IV** (§29–§36, plan): updates whenever a phase boundary is crossed, a dependency is invalidated, or a sub-deliverable is re-scoped.
-- **Part V** (§37–§38, acceptance + meta): §37 only updates when Part I §11 is rewritten; §38 only when this doc's own scope changes.
+- **Part I** (§1–§12, user-authored constitution + ecosystem vision): updates only when the user redefines world identity / laws / vision. Treat as authoritative source.
+- **Part II** (§13–§28, baseline): updates whenever a capability ships, breaks, or is removed. Tag each entry with the release that introduced/removed it.
+- **Part III** (§29–§30, crosswalk): updates whenever Part I or Part II changes.
+- **Part IV** (§31–§42, plan): updates whenever a phase boundary is crossed, a dependency is invalidated, or a sub-deliverable is re-scoped.
+- **Part V** (§43–§44, acceptance + meta): §43 only updates when Part I §12 is rewritten; §44 only when this doc's own scope changes.
