@@ -17,7 +17,7 @@ OpenSpec: `npc-state-typed-projection/`。
 - ✅ boot hydrate 現在優先讀 typed `NpcStateProjection`；舊 `npc.state.<id>` facts 只留 backward-compatible fallback。
 - ✅ `NPC_STATE_RECORDED` 不進 public recent-event / chronicle narrative surface。
 - ✅ Focused tests 45 passed；full `npm test` 279 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（20 passed）全綠。
-- 🚧 待 commit / push / CI / Deploy Dev。
+- ✅ Commit `c3068f1` pushed；CI run `25794738289` passed；Deploy Dev run `25794738301` passed；live `/healthz` = `0.16.0` @ tick `115399`.
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 

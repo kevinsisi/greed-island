@@ -38,10 +38,12 @@ developer. Keep latest status at the top.
 - `npm run build:server` + `npm run build:web` passed (web only reported the known Vite chunk-size warning).
 - `npx openspec validate npc-state-typed-projection --strict` passed.
 - `npx openspec validate --all --strict` passed: 20 passed, 0 failed.
+- Commit `c3068f1` (`feat(sim): persist NPC state as typed events`) pushed to `main`.
+- CI run `25794738289` passed; Deploy Dev run `25794738301` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":115399}`.
 
 ### Outstanding
 
-- Commit + push + CI/Deploy Dev green.
 - Follow-up 33.2 decision: whether to archive this slice after CI or keep it open until a future SQLite-backed `npc_state` table exists.
 - 33.3 projection rebuild contract sweep for the other FACT_SET-backed domains remains open.
 
