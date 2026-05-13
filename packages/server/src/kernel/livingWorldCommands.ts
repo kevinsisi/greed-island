@@ -54,7 +54,13 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime)
   'SETTLEMENT_FORMED',
   // Phase E0.2 — Ecosystem Runtime (Layer 2.5)
-  'ANIMAL_SPAWNED'
+  'ANIMAL_SPAWNED',
+  // Phase E0.3 — Simple hunting
+  'ANIMAL_HUNT_STARTED',
+  'ANIMAL_HUNT_RESOLVED',
+  'ANIMAL_KILLED',
+  'CARCASS_CREATED',
+  'MEAT_HARVESTED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -348,6 +354,67 @@ export type AnimalSpawnedCmd = Readonly<{
   narration: string | null
 }>
 
+export type AnimalHuntStartedCmd = Readonly<{
+  huntId: string
+  npcId: string
+  tileId: string
+  targetSpeciesId: string
+  targetAnimalId: string
+  startedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type AnimalHuntResolvedCmd = Readonly<{
+  huntId: string
+  npcId: string
+  tileId: string
+  targetSpeciesId: string
+  targetAnimalId: string
+  outcome: 'success' | 'failed'
+  resolvedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type AnimalKilledCmd = Readonly<{
+  huntId: string
+  animalId: string
+  speciesId: string
+  tileId: string
+  killedByNpcId: string
+  killedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type CarcassCreatedCmd = Readonly<{
+  huntId: string
+  carcassId: string
+  animalId: string
+  speciesId: string
+  tileId: string
+  edibleYield: number
+  byproducts: readonly string[]
+  createdAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type MeatHarvestedCmd = Readonly<{
+  huntId: string
+  carcassId: string
+  animalId: string
+  speciesId: string
+  tileId: string
+  npcId: string
+  quantity: number
+  goldValue: number
+  harvestedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -378,6 +445,11 @@ export type LivingWorldCommandPayload =
   | CombatResolveCmd
   | SettlementFormedCmd
   | AnimalSpawnedCmd
+  | AnimalHuntStartedCmd
+  | AnimalHuntResolvedCmd
+  | AnimalKilledCmd
+  | CarcassCreatedCmd
+  | MeatHarvestedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -737,6 +809,61 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
+  },
+  ANIMAL_HUNT_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateHuntCommon(p)
+    if (err) return err
+    if (typeof p.startedAtTick !== 'number' || !Number.isInteger(p.startedAtTick) || p.startedAtTick < 0) return 'startedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ANIMAL_HUNT_RESOLVED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateHuntCommon(p)
+    if (err) return err
+    if (p.outcome !== 'success' && p.outcome !== 'failed') return 'outcome invalid'
+    if (typeof p.resolvedAtTick !== 'number' || !Number.isInteger(p.resolvedAtTick) || p.resolvedAtTick < 0) return 'resolvedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ANIMAL_KILLED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.huntId !== 'string' || p.huntId.length === 0) return 'huntId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.killedByNpcId !== 'string' || p.killedByNpcId.length === 0) return 'killedByNpcId required'
+    if (typeof p.killedAtTick !== 'number' || !Number.isInteger(p.killedAtTick) || p.killedAtTick < 0) return 'killedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  CARCASS_CREATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.huntId !== 'string' || p.huntId.length === 0) return 'huntId required'
+    if (typeof p.carcassId !== 'string' || p.carcassId.length === 0) return 'carcassId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.edibleYield !== 'number' || !Number.isFinite(p.edibleYield) || p.edibleYield < 0) return 'edibleYield required'
+    if (!Array.isArray(p.byproducts) || !p.byproducts.every((value) => typeof value === 'string')) return 'byproducts required'
+    if (typeof p.createdAtTick !== 'number' || !Number.isInteger(p.createdAtTick) || p.createdAtTick < 0) return 'createdAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  MEAT_HARVESTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.huntId !== 'string' || p.huntId.length === 0) return 'huntId required'
+    if (typeof p.carcassId !== 'string' || p.carcassId.length === 0) return 'carcassId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity required'
+    if (typeof p.goldValue !== 'number' || !Number.isFinite(p.goldValue) || p.goldValue < 0) return 'goldValue required'
+    if (typeof p.harvestedAtTick !== 'number' || !Number.isInteger(p.harvestedAtTick) || p.harvestedAtTick < 0) return 'harvestedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
   }
 }
 
@@ -933,6 +1060,15 @@ function validateAnimal(value: Record<string, unknown>): string | null {
 
 function isEcosystemRegionId(value: unknown): boolean {
   return value === 'salt_marsh' || value === 'forest' || value === 'mountain' || value === 'desert' || value === 'ruin'
+}
+
+function validateHuntCommon(value: Record<string, unknown>): string | null {
+  if (typeof value.huntId !== 'string' || value.huntId.length === 0) return 'huntId required'
+  if (typeof value.npcId !== 'string' || value.npcId.length === 0) return 'npcId required'
+  if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
+  if (typeof value.targetSpeciesId !== 'string' || value.targetSpeciesId.length === 0) return 'targetSpeciesId required'
+  if (typeof value.targetAnimalId !== 'string' || value.targetAnimalId.length === 0) return 'targetAnimalId required'
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

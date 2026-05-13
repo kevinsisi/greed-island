@@ -171,6 +171,57 @@ describe('living-world rule engine', () => {
         },
         spawnedAtTick: 6,
         narration: null,
+      }),
+      makeLivingWorldCommand('ANIMAL_HUNT_STARTED', 'forest.hunter.lyra', 'npc', 7, 7, {
+        huntId: 'hunt.t_forest.abc',
+        npcId: 'forest.hunter.lyra',
+        tileId: 't_forest',
+        targetSpeciesId: 'forest_deer',
+        targetAnimalId: 'animal.t_forest.forest_deer.abc',
+        startedAtTick: 7,
+        narration: 'hunt started'
+      }),
+      makeLivingWorldCommand('ANIMAL_HUNT_RESOLVED', 'forest.hunter.lyra', 'npc', 7, 7, {
+        huntId: 'hunt.t_forest.abc',
+        npcId: 'forest.hunter.lyra',
+        tileId: 't_forest',
+        targetSpeciesId: 'forest_deer',
+        targetAnimalId: 'animal.t_forest.forest_deer.abc',
+        outcome: 'success',
+        resolvedAtTick: 7,
+        narration: 'hunt resolved'
+      }),
+      makeLivingWorldCommand('ANIMAL_KILLED', 'forest.hunter.lyra', 'npc', 7, 7, {
+        huntId: 'hunt.t_forest.abc',
+        animalId: 'animal.t_forest.forest_deer.abc',
+        speciesId: 'forest_deer',
+        tileId: 't_forest',
+        killedByNpcId: 'forest.hunter.lyra',
+        killedAtTick: 7,
+        narration: 'animal killed'
+      }),
+      makeLivingWorldCommand('CARCASS_CREATED', 'system', 'system', 7, 7, {
+        huntId: 'hunt.t_forest.abc',
+        carcassId: 'carcass.t_forest.abc',
+        animalId: 'animal.t_forest.forest_deer.abc',
+        speciesId: 'forest_deer',
+        tileId: 't_forest',
+        edibleYield: 4,
+        byproducts: ['hide', 'bone'],
+        createdAtTick: 7,
+        narration: 'carcass created'
+      }),
+      makeLivingWorldCommand('MEAT_HARVESTED', 'forest.hunter.lyra', 'npc', 7, 7, {
+        huntId: 'hunt.t_forest.abc',
+        carcassId: 'carcass.t_forest.abc',
+        animalId: 'animal.t_forest.forest_deer.abc',
+        speciesId: 'forest_deer',
+        tileId: 't_forest',
+        npcId: 'forest.hunter.lyra',
+        quantity: 4,
+        goldValue: 8,
+        harvestedAtTick: 7,
+        narration: 'meat harvested'
       })
     ]
     for (const cmd of samples) {

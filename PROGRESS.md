@@ -3,6 +3,47 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase E0.3 simple hunting
+
+### Implemented
+
+- Started `docs/WORLD_CAPABILITIES.md` Phase E0.3 with new OpenSpec change `ecosystem-simple-hunting`.
+- Added typed ecosystem hunting commands/events:
+  - `ANIMAL_HUNT_STARTED`
+  - `ANIMAL_HUNT_RESOLVED`
+  - `ANIMAL_KILLED`
+  - `CARCASS_CREATED`
+  - `MEAT_HARVESTED`
+- Added validators and command catalog coverage for the full hunting chain.
+- Added deterministic simple hunting policy in `packages/server/src/ecosystem/hunting.ts`:
+  - only hunter-role NPCs qualify
+  - food need must be at least `ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60`
+  - prey must be an edible same-tile `animal_population` row
+  - hunt id, target animal choice, and carcass id derive from canonical hashes
+  - duplicate same-tick hunts reserve animal ids to avoid double targeting
+- Extended `AnimalPopulationProjection` so `ANIMAL_KILLED` removes the killed animal id and duplicate kills cannot reduce count below zero.
+- Added `withMeatHarvestedRecorded(...)` so accepted `MEAT_HARVESTED` credits NPC `civic.gold` and civic XP as the Phase 2 goods placeholder bridge.
+- `SimulationRuntime` now plans the simple hunting chain from hunter productive actions and reduces accepted meat harvests into `LifeExpansionState`.
+
+### Honest scope
+
+- This is one-tick simple hunting only. No injury, failed hunt consequences, combat sub-runtime, carcass inventory, true goods inventory, fishery density, migration, reproduction, or extinction logic yet.
+- Meat harvest currently credits NPC civic economy, not household storage/goods tables; true storage lands in Phase 2 goods/logistics.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- ecosystem/hunting projections/animalPopulation kernel/livingWorld sim/cityLife` passed: 75 tests.
+- Full suite: `npm test` passed: **292 server** + 34 web tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- `npx openspec validate ecosystem-simple-hunting --strict` passed.
+- `npx openspec validate --all --strict` passed: 22 passed, 0 failed.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev verification pending.
+- E0.4 fishery density remains next if continuing Phase E0.
+
 ## 2026-05-13 — Phase E0.2 animal spawning + animal_population projection
 
 ### Implemented

@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase E0.3 — simple hunting turns wildlife into ecosystem/economy events**
+
+OpenSpec: `ecosystem-simple-hunting/`。
+
+- ✅ 新增 `ANIMAL_HUNT_STARTED` / `ANIMAL_HUNT_RESOLVED` / `ANIMAL_KILLED` / `CARCASS_CREATED` / `MEAT_HARVESTED` command/event + validators。
+- ✅ 新增 `packages/server/src/ecosystem/hunting.ts`：hunter-role + food pressure + same-tile edible prey 才會規劃狩獵；hunt id / carcass id / target animal 由 canonical hash 決定。
+- ✅ `AnimalPopulationProjection` 支援 `ANIMAL_KILLED` 扣除 animal id；duplicate kill 不會扣到負數。
+- ✅ `MEAT_HARVESTED` 經 `withMeatHarvestedRecorded` 轉成 NPC civic gold + civic XP，作為 Phase 2 Goods 前的 placeholder bridge。
+- ✅ `SimulationRuntime` 從 hunter productive actions 規劃 simple hunting chain，accepted events fan-out 到 projection/state。
+- ✅ Focused tests 75 passed；full `npm test` 292 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（22 passed）全綠。
+- 🚧 Commit / push / CI / Deploy Dev verification pending.
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase E0.2 — deterministic wildlife spawning + `animal_population` projection**
 
 OpenSpec: `ecosystem-animal-spawning/`。

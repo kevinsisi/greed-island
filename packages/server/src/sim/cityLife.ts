@@ -522,6 +522,31 @@ export function withNpcProductiveActionRecorded(
   }
 }
 
+export function withMeatHarvestedRecorded(
+  state: LifeExpansionState,
+  input: { npcId: string; quantity: number; goldValue: number; tick: number }
+): LifeExpansionState {
+  const before = state.npcCivicRecords[input.npcId] ?? createNpcCivicRecord(input.npcId)
+  const quantity = Math.max(1, Math.floor(input.quantity))
+  const goldGain = Math.max(0, Math.floor(input.goldValue))
+  const xpGain = NPC_PRODUCTIVE_XP_PER_DELTA * quantity
+  return {
+    ...state,
+    npcCivicRecords: {
+      ...state.npcCivicRecords,
+      [input.npcId]: {
+        npcId: input.npcId,
+        gold: before.gold + goldGain,
+        skillXp: {
+          ...before.skillXp,
+          civic: before.skillXp.civic + xpGain
+        },
+        lastProductiveTick: input.tick
+      }
+    }
+  }
+}
+
 export function productiveDeltaWithNpcSkill(
   state: LifeExpansionState,
   input: { npcId: string; domain: NpcProductiveDomain; baseDelta: number }

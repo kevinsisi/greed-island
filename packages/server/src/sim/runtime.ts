@@ -67,6 +67,8 @@ import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
+import { planSimpleHunt } from '../ecosystem/hunting.js'
+import { requireSpecies } from '../ecosystem/species.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -100,6 +102,7 @@ import {
   hydrateLifeExpansionState,
   householdIdForNpc,
   productiveDeltaWithNpcSkill,
+  withMeatHarvestedRecorded,
   withChildBorn,
   withConstructionInitiated,
   withConstructionProgress,
@@ -907,6 +910,7 @@ export class SimulationRuntime {
     let plannedSaltMarshCompleted =
       this.lifeExpansion.unlockedTileIds.includes(SALT_MARSH_TILE_ID) ||
       plannedSaltMarshProgress >= SALT_MARSH_PROJECT_TARGET
+    const plannedHuntedAnimalIds = new Set<string>()
     for (const event of npcResult.events) {
       const profile = this.profiles.find((p) => p.id === ('npcId' in event ? event.npcId : ''))
       if (event.kind === 'move') {
@@ -992,6 +996,123 @@ export class SimulationRuntime {
             }
           )
         )
+        const lifeForHunt = profile ? deriveNpcLifeView({
+          profile,
+          state: this.npcEngine.getState(event.npcId) ?? makeFallbackNpcState(event.tile, nextTick),
+          areaState: this.getAreaState(event.tile),
+          lifeExpansion: this.lifeExpansion,
+          tick: nextTick,
+        }) : null
+        const hunt = profile && lifeForHunt ? planSimpleHunt({
+          tick: nextTick,
+          npcId: event.npcId,
+          tileId: event.tile,
+          roleZh: profile.role.zh,
+          roleEn: profile.role.en,
+          foodNeed: lifeForHunt.needs.food,
+          animalPopulation: this.animalPopulationProjection.list(),
+          reservedAnimalIds: plannedHuntedAnimalIds,
+        }) : null
+        if (hunt && profile && lifeForHunt) {
+          plannedHuntedAnimalIds.add(hunt.targetAnimalId)
+          const species = requireSpecies(hunt.targetSpeciesId)
+          const tileName = TILE_NAME_BY_ID[hunt.tileId] ?? hunt.tileId
+          const npcName = profile.name.zh
+          const motivation = makeMotivation(`${npcName}因食物壓力 ${lifeForHunt?.needs.food ?? 0} 在${tileName}追蹤 ${hunt.targetSpeciesId}，把巡獵工作轉成真實 ecosystem 事件。`)
+          commands.push(
+            makeLivingWorldCommand(
+              'ANIMAL_HUNT_STARTED',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                huntId: hunt.huntId,
+                npcId: hunt.npcId,
+                tileId: hunt.tileId,
+                targetSpeciesId: hunt.targetSpeciesId,
+                targetAnimalId: hunt.targetAnimalId,
+                startedAtTick: nextTick,
+                motivation,
+                narration: `${npcName}在${tileName}開始追蹤${hunt.targetSpeciesId}。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'ANIMAL_HUNT_RESOLVED',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                huntId: hunt.huntId,
+                npcId: hunt.npcId,
+                tileId: hunt.tileId,
+                targetSpeciesId: hunt.targetSpeciesId,
+                targetAnimalId: hunt.targetAnimalId,
+                outcome: 'success',
+                resolvedAtTick: nextTick,
+                motivation,
+                narration: `${npcName}在${tileName}完成一次成功狩獵。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'ANIMAL_KILLED',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                huntId: hunt.huntId,
+                animalId: hunt.targetAnimalId,
+                speciesId: hunt.targetSpeciesId,
+                tileId: hunt.tileId,
+                killedByNpcId: hunt.npcId,
+                killedAtTick: nextTick,
+                motivation,
+                narration: `${npcName}獵倒了一隻${hunt.targetSpeciesId}。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'CARCASS_CREATED',
+              SIM_ACTOR_WORLD,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                huntId: hunt.huntId,
+                carcassId: hunt.carcassId,
+                animalId: hunt.targetAnimalId,
+                speciesId: hunt.targetSpeciesId,
+                tileId: hunt.tileId,
+                edibleYield: hunt.quantity,
+                byproducts: species.byproducts,
+                createdAtTick: nextTick,
+                motivation,
+                narration: `${hunt.targetSpeciesId}的屍體留在${tileName}，可被採收。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'MEAT_HARVESTED',
+              event.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                huntId: hunt.huntId,
+                carcassId: hunt.carcassId,
+                animalId: hunt.targetAnimalId,
+                speciesId: hunt.targetSpeciesId,
+                tileId: hunt.tileId,
+                npcId: hunt.npcId,
+                quantity: hunt.quantity,
+                goldValue: hunt.goldValue,
+                harvestedAtTick: nextTick,
+                motivation,
+                narration: `${npcName}從${hunt.targetSpeciesId}取得 ${hunt.quantity} 份肉，換算 ${hunt.goldValue} 金的生活補給。`
+              }
+            )
+          )
+        }
         if (!plannedSaltMarshCompleted && isExpansionProductiveDomain(event.domain)) {
           const delta = productiveDeltaWithNpcSkill(this.lifeExpansion, {
             npcId: event.npcId,
@@ -1646,6 +1767,15 @@ export class SimulationRuntime {
             childId: payload.childId,
             nameZh: payload.nameZh,
             nameEn: payload.nameEn,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'MEAT_HARVESTED') {
+          const payload = cmd.payload as { npcId: string; quantity: number; goldValue: number }
+          this.lifeExpansion = withMeatHarvestedRecorded(this.lifeExpansion, {
+            npcId: payload.npcId,
+            quantity: payload.quantity,
+            goldValue: payload.goldValue,
             tick: nextTick
           })
           lifeExpansionChanged = true

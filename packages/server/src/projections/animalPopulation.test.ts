@@ -28,6 +28,20 @@ describe('AnimalPopulationProjection', () => {
     expect(projection.getBySpeciesAndTile('forest_deer', 't_forest')?.count).toBe(1)
   })
 
+  it('removes killed animal ids without double-counting duplicate kills', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
+      killedEvent(2, 'animal-a', 'forest_deer', 't_forest', 20),
+      killedEvent(3, 'animal-a', 'forest_deer', 't_forest', 20),
+    ])
+
+    const row = projection.getBySpeciesAndTile('forest_deer', 't_forest')
+    expect(row?.count).toBe(0)
+    expect(row?.animalIds).toEqual([])
+    expect(row?.lastKilledAtTick).toBe(20)
+  })
+
   it('rebuilds to an identical canonical hash', () => {
     const events = [
       spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
@@ -56,6 +70,32 @@ function spawnedEvent(sequence: number, animalValue: Animal, spawnedAtTick: numb
     deterministicKey: `key-${sequence}`,
     version: 1,
     tick: spawnedAtTick,
+  }
+}
+
+function killedEvent(sequence: number, animalId: string, speciesId: string, tileId: string, killedAtTick: number): Event {
+  return {
+    sequence,
+    eventId: `event-kill-${sequence}`,
+    eventType: 'ANIMAL_KILLED',
+    occurredAt: 0,
+    actorId: 'forest.hunter.lyra',
+    payload: {
+      actorType: 'npc',
+      data: {
+        huntId: 'hunt-a',
+        animalId,
+        speciesId,
+        tileId,
+        killedByNpcId: 'forest.hunter.lyra',
+        killedAtTick,
+        narration: 'animal killed',
+      },
+      narration: 'animal killed',
+    },
+    deterministicKey: `key-kill-${sequence}`,
+    version: 1,
+    tick: killedAtTick,
   }
 }
 

@@ -18,6 +18,7 @@ import {
   withConstructionInitiated,
   withConstructionProgress,
   withHouseholdFormed,
+  withMeatHarvestedRecorded,
   withNpcProductiveActionRecorded,
   withUnlockedExpansion
 } from './cityLife.js'
@@ -155,6 +156,27 @@ describe('city life projection', () => {
       domain: 'learn',
       baseDelta: 2
     })).toBe(2)
+  })
+
+  it('records harvested meat as civic gold and civic XP', () => {
+    const expansion = withMeatHarvestedRecorded(createInitialLifeExpansionState(), {
+      npcId: 'forest.hunter.lyra',
+      quantity: 4,
+      goldValue: 8,
+      tick: 120
+    })
+
+    expect(expansion.npcCivicRecords['forest.hunter.lyra']).toEqual({
+      npcId: 'forest.hunter.lyra',
+      gold: 8,
+      skillXp: {
+        construction: 0,
+        knowledge: 0,
+        commerce: 0,
+        civic: 20
+      },
+      lastProductiveTick: 120
+    })
   })
 
   it('caps productive skill delta bonus', () => {

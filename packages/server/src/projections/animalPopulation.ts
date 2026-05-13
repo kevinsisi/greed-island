@@ -9,10 +9,12 @@ export type AnimalPopulationRow = Readonly<{
   count: number
   animalIds: readonly string[]
   lastSpawnedAtTick: number
+  lastKilledAtTick: number | null
   lastSequence: number
 }>
 
 const ANIMAL_SPAWNED = 'ANIMAL_SPAWNED'
+const ANIMAL_KILLED = 'ANIMAL_KILLED'
 
 export class AnimalPopulationProjection {
   private rows = new Map<string, AnimalPopulationRow>()
@@ -25,23 +27,42 @@ export class AnimalPopulationProjection {
   }
 
   project(event: Event): void {
-    if (event.eventType !== ANIMAL_SPAWNED) return
-    const payload = readPayload(event)
-    if (!payload) return
-    const key = populationKey(payload.animal.speciesId, payload.animal.tileId)
-    const existing = this.rows.get(key)
-    if (existing?.animalIds.includes(payload.animal.id)) return
+    if (event.eventType === ANIMAL_SPAWNED) {
+      const payload = readSpawnPayload(event)
+      if (!payload) return
+      const key = populationKey(payload.animal.speciesId, payload.animal.tileId)
+      const existing = this.rows.get(key)
+      if (existing?.animalIds.includes(payload.animal.id)) return
 
-    const animalIds = [...(existing?.animalIds ?? []), payload.animal.id].sort()
-    this.rows.set(key, {
-      speciesId: payload.animal.speciesId,
-      tileId: payload.animal.tileId,
-      biomeRegion: payload.animal.biomeRegion,
-      count: animalIds.length,
-      animalIds,
-      lastSpawnedAtTick: payload.spawnedAtTick,
-      lastSequence: event.sequence,
-    })
+      const animalIds = [...(existing?.animalIds ?? []), payload.animal.id].sort()
+      this.rows.set(key, {
+        speciesId: payload.animal.speciesId,
+        tileId: payload.animal.tileId,
+        biomeRegion: payload.animal.biomeRegion,
+        count: animalIds.length,
+        animalIds,
+        lastSpawnedAtTick: payload.spawnedAtTick,
+        lastKilledAtTick: existing?.lastKilledAtTick ?? null,
+        lastSequence: event.sequence,
+      })
+      return
+    }
+
+    if (event.eventType === ANIMAL_KILLED) {
+      const payload = readKilledPayload(event)
+      if (!payload) return
+      const key = populationKey(payload.speciesId, payload.tileId)
+      const existing = this.rows.get(key)
+      if (!existing || !existing.animalIds.includes(payload.animalId)) return
+      const animalIds = existing.animalIds.filter((id) => id !== payload.animalId).sort()
+      this.rows.set(key, {
+        ...existing,
+        count: animalIds.length,
+        animalIds,
+        lastKilledAtTick: payload.killedAtTick,
+        lastSequence: event.sequence,
+      })
+    }
   }
 
   countSpeciesOnTile(speciesId: string, tileId: string): number {
@@ -63,7 +84,7 @@ export class AnimalPopulationProjection {
   }
 }
 
-function readPayload(event: Event): { animal: Animal; spawnedAtTick: number } | null {
+function readSpawnPayload(event: Event): { animal: Animal; spawnedAtTick: number } | null {
   const payload = (event.payload as { data?: unknown } | null)?.data
   if (!payload || typeof payload !== 'object') return null
   const p = payload as Record<string, unknown>
@@ -75,6 +96,17 @@ function readPayload(event: Event): { animal: Animal; spawnedAtTick: number } | 
   if (!isEcosystemRegionId(animal.biomeRegion)) return null
   if (typeof p.spawnedAtTick !== 'number' || !Number.isInteger(p.spawnedAtTick) || p.spawnedAtTick < 0) return null
   return { animal: animal as Animal, spawnedAtTick: p.spawnedAtTick }
+}
+
+function readKilledPayload(event: Event): { animalId: string; speciesId: string; tileId: string; killedAtTick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.animalId !== 'string' || p.animalId.length === 0) return null
+  if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return null
+  if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
+  if (typeof p.killedAtTick !== 'number' || !Number.isInteger(p.killedAtTick) || p.killedAtTick < 0) return null
+  return { animalId: p.animalId, speciesId: p.speciesId, tileId: p.tileId, killedAtTick: p.killedAtTick }
 }
 
 function populationKey(speciesId: string, tileId: string): string {
