@@ -30,4 +30,4 @@
 - [x] 5.2 Web build/test passes: `npm run build:web`; `npm run test -w @greed-island/web` (34 tests).
 - [x] 5.3 `npx openspec validate goods-primitives --strict` passes.
 - [x] 5.4 `npx openspec validate --all --strict` passes (24 passed, 0 failed).
-- [ ] 5.5 Commit, push, verify CI + Deploy Dev, and update handoff docs.
+- [x] 5.5 Commit `f9a3365`, push, verify CI `25804686088` + Deploy Dev `25804685682`, and update handoff docs.

@@ -35,10 +35,13 @@ developer. Keep latest status at the top.
 - Full suite: `npm test` passed: **301 server** + 34 web tests.
 - `npx openspec validate goods-primitives --strict` passed.
 - `npx openspec validate --all --strict` passed: 24 passed, 0 failed.
+- Commit `f9a3365` (`feat(goods): track ecosystem harvest inventory`) pushed to `main`.
+- CI run `25804686088` passed; Deploy Dev run `25804685682` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":117740}`.
+- Live `/api/world.facts.goodsInventory` exists; smoke samples at ticks `117740` and `117752` had 0 rows because no new post-deploy `MEAT_HARVESTED` or `FISHERY_HARVESTED` event had occurred yet. Pre-deploy ecosystem events are not retroactively converted into goods events.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev verification pending.
 - Next Phase 2 slice should be production/cooking or NPC exchange, so fish can move from inventory into meals and food-need reduction instead of stopping at held goods.
 
 ## 2026-05-13 — E0.4 GM visibility follow-up

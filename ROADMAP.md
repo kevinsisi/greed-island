@@ -17,8 +17,8 @@ OpenSpec: `goods-primitives/`。
 - ✅ accepted `FISHERY_HARVESTED` 會產生並存入 NPC 的 `fish` goods。
 - ✅ `WorldSnapshot.facts.goodsInventory` 可讀；`/admin/world` 顯示貨物、數量、持有者、地點、更新 tick。
 - ✅ Focused server tests 57 passed；full `npm test` 301 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（24 passed）全綠。
+- ✅ Commit `f9a3365` pushed；CI run `25804686088` passed；Deploy Dev run `25804685682` passed；live `/healthz` = `0.16.0` @ tick `117740`；`/api/world.facts.goodsInventory` exists but had 0 rows before any new post-deploy ecosystem harvest.
 - ⚠️ Honest scope：這是 goods substrate；NPC 尚未購買、烹調、吃飯、運輸或形成價格。
-- 🚧 Commit / push / CI / Deploy Dev verification pending.
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
