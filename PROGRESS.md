@@ -41,10 +41,13 @@ developer. Keep latest status at the top.
 - `npm run build:web` passed with the known Vite chunk-size warning.
 - `npx openspec validate ecosystem-animal-spawning --strict` passed.
 - `npx openspec validate --all --strict` passed: 21 passed, 0 failed.
+- Commit `4ddcdbc` (`feat(eco): spawn deterministic animal populations`) pushed to `main`.
+- CI run `25796560338` passed; Deploy Dev run `25796560331` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":115862}`.
+- Live `/api/world` exposes `facts.animalPopulation`; after the next spawn cadence it returned 1 population row at tick `115872`.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev verification pending.
 - Next E0 slice: E0.3 simple hunting (`ANIMAL_HUNT_STARTED`, `ANIMAL_HUNT_RESOLVED`, `ANIMAL_KILLED`, `CARCASS_CREATED`, `MEAT_HARVESTED`) and first population reduction path.
 
 ## 2026-05-13 — Phase 1 §33.2 NPC state typed projection

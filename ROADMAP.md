@@ -18,7 +18,7 @@ OpenSpec: `ecosystem-animal-spawning/`。
 - ✅ `SimulationRuntime` 每 spawn cadence push `ANIMAL_SPAWNED` 進 Rule Engine，accepted event fan-out 到 projection，boot 從 EventLog rebuild，`WorldSnapshot.facts.animalPopulation` 可讀。
 - ✅ `ANIMAL_SPAWNED` 不進 public recent-event / SSE / chronicle surfaces。
 - ✅ Focused tests 49 passed；full `npm test` 287 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（21 passed）全綠。
-- 🚧 Commit / push / CI / Deploy Dev verification pending.
+- ✅ Commit `4ddcdbc` pushed；CI run `25796560338` passed；Deploy Dev run `25796560331` passed；live `/healthz` = `0.16.0` @ tick `115862`；`/api/world.facts.animalPopulation` after next cadence had 1 row @ tick `115872`。
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
