@@ -33,10 +33,13 @@ developer. Keep latest status at the top.
 - Full suite: `npm test` passed: **319 server** + 34 web tests.
 - `npx openspec validate market-formation --strict` passed.
 - `npx openspec validate --all --strict` passed: 27 passed, 0 failed.
+- Commit `dcf659c` (`feat(goods): add market price formation`) pushed to `main`.
+- CI run `25815422835` passed; Deploy Dev run `25815423920` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":120083}`.
+- Live `/api/world` smoke at tick `120083`: `marketPrices = 4`, first row `fish` at `12` gold, `productionChains.recipes = 1`.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev/live smoke pending for this market slice.
 - Next likely phase after §35.4 is Phase E1 predator/prey + migration, unless we first add NPC purchase/meal consumption as a narrow follow-up OpenSpec.
 
 ## 2026-05-13 — Phase 2 §35.3 goods production chains
