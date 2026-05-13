@@ -38,10 +38,13 @@ developer. Keep latest status at the top.
 - `npm run build:web` passed with the known Vite chunk-size warning.
 - `npx openspec validate ecosystem-simple-hunting --strict` passed.
 - `npx openspec validate --all --strict` passed: 22 passed, 0 failed.
+- Commit `1e2c188` (`feat(eco): add simple hunting chain`) pushed to `main`.
+- CI run `25797518715` passed; Deploy Dev run `25797518707` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":116100}`.
+- Live `/api/world` still exposes `facts.animalPopulation`; smoke sample at tick `116100` had 1 population row.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev verification pending.
 - E0.4 fishery density remains next if continuing Phase E0.
 
 ## 2026-05-13 — Phase E0.2 animal spawning + animal_population projection

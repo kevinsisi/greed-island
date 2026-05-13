@@ -17,7 +17,7 @@ OpenSpec: `ecosystem-simple-hunting/`。
 - ✅ `MEAT_HARVESTED` 經 `withMeatHarvestedRecorded` 轉成 NPC civic gold + civic XP，作為 Phase 2 Goods 前的 placeholder bridge。
 - ✅ `SimulationRuntime` 從 hunter productive actions 規劃 simple hunting chain，accepted events fan-out 到 projection/state。
 - ✅ Focused tests 75 passed；full `npm test` 292 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（22 passed）全綠。
-- 🚧 Commit / push / CI / Deploy Dev verification pending.
+- ✅ Commit `1e2c188` pushed；CI run `25797518715` passed；Deploy Dev run `25797518707` passed；live `/healthz` = `0.16.0` @ tick `116100`。
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 

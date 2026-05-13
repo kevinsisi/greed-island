@@ -32,4 +32,4 @@
 - [x] 5.3 `npm run build:server` and `npm run build:web` pass (web only known Vite chunk-size warning).
 - [x] 5.4 `npx openspec validate ecosystem-simple-hunting --strict` passes.
 - [x] 5.5 `npx openspec validate --all --strict` passes (22 passed, 0 failed).
-- [ ] 5.6 Commit, push, verify CI + Deploy Dev, and update handoff docs.
+- [x] 5.6 Commit `1e2c188`, push, verify CI `25797518715` + Deploy Dev `25797518707`, and update handoff docs.
