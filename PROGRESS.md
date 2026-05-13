@@ -3,6 +3,36 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-12 — v0.15.47f OpenSpec Alignment + Worktree/Branch Convergence
+
+### Cleanup
+
+- Created `openspec/changes/world-agenda-directives/design.md` covering
+  deterministic directive derivation, sponsor precedence (civilian dominance fix),
+  pressureScore ranking, and runtime flow.
+- Backported monotonic invariant (section 10) and shared visibility cap (section 11)
+  to `openspec/changes/civ-evo-construction/tasks.md` so implementation tasks are
+  visible in all doc surfaces.
+- Removed 8 stale git worktrees from `.claude/worktrees/` (bold-solomon, brave-banach,
+  cranky-hawking, determined-yalow, dreamy-galileo, exciting-hugle, inspiring-goldberg,
+  mystifying-davinci).
+- Removed 1 external worktree at `greed-island-npc-humanity`.
+- Deleted 9 merged local branches (`claude/brave-banach`, `claude/cranky-hawking`,
+  `claude/determined-yalow`, `claude/dreamy-galileo`, `claude/exciting-hugle`,
+  `claude/frosty-sutherland`, `claude/inspiring-goldberg`, `claude/mystifying-davinci`,
+  `opencode/npc-humanity-ai-memory`).
+- Force-deleted 2 unmerged branches locally + remotely (`claude/bold-solomon-e77264`,
+  `claude/magical-maxwell-ae08a2`).
+- Deleted 9 merged remote branches (`origin/claude/*` stale branches +
+  `origin/opencode/npc-humanity-ai-memory`).
+- Final state: single worktree on `main`, single local+remote branch (`main`).
+
+### Verification
+
+- Commit `176c47c` (`docs: align OpenSpec docs with system`) passed
+  CI run `25775186467` and Deploy Dev run `25775186475`; both only reported
+  the known Node.js 20 actions deprecation annotation.
+
 ## 2026-05-12 — v0.15.47e Completed NPC Buildings Persist
 
 ### Implemented
