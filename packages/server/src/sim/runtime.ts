@@ -65,8 +65,9 @@ import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { MAP_TILES, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
+import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
+import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { requireSpecies } from '../ecosystem/species.js'
 import {
@@ -116,6 +117,7 @@ import {
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
+import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -291,6 +293,7 @@ export class SimulationRuntime {
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
+  private readonly fisheryDensityProjection = new FisheryDensityProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -433,7 +436,8 @@ export class SimulationRuntime {
         activeEvents: this.eventEngine.getActive(),
         areaStates: this.getAreaStates(),
         lifeExpansion: this.lifeExpansion,
-        animalPopulation: this.animalPopulationProjection.list()
+        animalPopulation: this.animalPopulationProjection.list(),
+        fisheryDensity: this.fisheryDensityProjection.list()
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -622,6 +626,11 @@ export class SimulationRuntime {
   /** Phase E0.2 — current animal population projection (Layer 2.5). */
   getAnimalPopulation(): readonly AnimalPopulationRow[] {
     return this.animalPopulationProjection.list()
+  }
+
+  /** Phase E0.4 — current fishery density projection (Layer 2.5). */
+  getFisheryDensity(): readonly FisheryDensityRow[] {
+    return this.fisheryDensityProjection.list()
   }
 
   getManualNpcIds(): readonly string[] {
@@ -815,6 +824,7 @@ export class SimulationRuntime {
       this.constructionProjects.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
+      this.fisheryDensityProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -1112,6 +1122,57 @@ export class SimulationRuntime {
               }
             )
           )
+        }
+        if (profile) {
+          const fishery = planFisheryHarvest({
+            tick: nextTick,
+            npcId: event.npcId,
+            roleZh: profile.role.zh,
+            roleEn: profile.role.en,
+            tile: TILE_BY_ID[event.tile] ?? null,
+            fishery: this.fisheryDensityProjection.getByTile(event.tile),
+          })
+          if (fishery) {
+            const tileName = TILE_NAME_BY_ID[fishery.tileId] ?? fishery.tileId
+            const motivation = makeMotivation(`${profile.name.zh}以${profile.role.zh}身分在${tileName}採收漁獲，直接降低該 tile 的 fisheryDensity。`)
+            commands.push(
+              makeLivingWorldCommand(
+                'FISHERY_HARVESTED',
+                event.npcId,
+                'npc',
+                nextTick,
+                submittedAt,
+                {
+                  tileId: fishery.tileId,
+                  npcId: fishery.npcId,
+                  delta: fishery.delta,
+                  densityBefore: fishery.densityBefore,
+                  densityAfter: fishery.densityAfter,
+                  harvestedAtTick: nextTick,
+                  motivation,
+                  narration: `${profile.name.zh}在${tileName}採收漁獲，漁場密度降到 ${fishery.densityAfter}。`
+                }
+              )
+            )
+            if (fishery.collapsed) {
+              commands.push(
+                makeLivingWorldCommand(
+                  'FISHERY_COLLAPSED',
+                  SIM_ACTOR_WORLD,
+                  'system',
+                  nextTick,
+                  submittedAt,
+                  {
+                    tileId: fishery.tileId,
+                    density: fishery.densityAfter,
+                    collapsedAtTick: nextTick,
+                    motivation,
+                    narration: `${tileName}的漁場密度跌破警戒線，漁獲暫時枯竭。`
+                  }
+                )
+              )
+            }
+          }
         }
         if (!plannedSaltMarshCompleted && isExpansionProductiveDomain(event.domain)) {
           const delta = productiveDeltaWithNpcSkill(this.lifeExpansion, {
@@ -1834,6 +1895,7 @@ export class SimulationRuntime {
         this.constructionProjects.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
+        this.fisheryDensityProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2203,6 +2265,7 @@ export class SimulationRuntime {
       const allEvents = this.store.readEvents()
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
+      this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
 

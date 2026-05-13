@@ -60,7 +60,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_HUNT_RESOLVED',
   'ANIMAL_KILLED',
   'CARCASS_CREATED',
-  'MEAT_HARVESTED'
+  'MEAT_HARVESTED',
+  // Phase E0.4 — Fishery density
+  'FISHERY_HARVESTED',
+  'FISHERY_COLLAPSED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -415,6 +418,25 @@ export type MeatHarvestedCmd = Readonly<{
   narration: string
 }>
 
+export type FisheryHarvestedCmd = Readonly<{
+  tileId: string
+  npcId: string
+  delta: number
+  densityBefore: number
+  densityAfter: number
+  harvestedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type FisheryCollapsedCmd = Readonly<{
+  tileId: string
+  density: number
+  collapsedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -450,6 +472,8 @@ export type LivingWorldCommandPayload =
   | AnimalKilledCmd
   | CarcassCreatedCmd
   | MeatHarvestedCmd
+  | FisheryHarvestedCmd
+  | FisheryCollapsedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -862,6 +886,26 @@ const VALIDATORS: Readonly<
     if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity required'
     if (typeof p.goldValue !== 'number' || !Number.isFinite(p.goldValue) || p.goldValue < 0) return 'goldValue required'
     if (typeof p.harvestedAtTick !== 'number' || !Number.isInteger(p.harvestedAtTick) || p.harvestedAtTick < 0) return 'harvestedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FISHERY_HARVESTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.delta !== 'number' || !Number.isFinite(p.delta) || p.delta <= 0) return 'delta required'
+    if (typeof p.densityBefore !== 'number' || !Number.isFinite(p.densityBefore)) return 'densityBefore required'
+    if (typeof p.densityAfter !== 'number' || !Number.isFinite(p.densityAfter)) return 'densityAfter required'
+    if (p.densityAfter > p.densityBefore) return 'densityAfter must not increase'
+    if (typeof p.harvestedAtTick !== 'number' || !Number.isInteger(p.harvestedAtTick) || p.harvestedAtTick < 0) return 'harvestedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FISHERY_COLLAPSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.density !== 'number' || !Number.isFinite(p.density)) return 'density required'
+    if (typeof p.collapsedAtTick !== 'number' || !Number.isInteger(p.collapsedAtTick) || p.collapsedAtTick < 0) return 'collapsedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   }

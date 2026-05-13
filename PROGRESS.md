@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase E0.4 fishery density
+
+### Implemented
+
+- Started `docs/WORLD_CAPABILITIES.md` Phase E0.4 with new OpenSpec change `ecosystem-fishery-density`.
+- Added `FISHERY_HARVESTED` and `FISHERY_COLLAPSED` typed commands/events with validators.
+- Added `packages/server/src/ecosystem/fishery.ts`:
+  - fisher-role detection for fisher/fishmonger/net-mender roles
+  - coastal fishery tile detection for `t_dock`, `t_temple`, and `t_salt_marsh`
+  - deterministic harvest planning with `FISHERY_HARVEST_DELTA = 12`
+  - collapse crossing at `FISHERY_COLLAPSE_THRESHOLD = 20`
+- Added `FisheryDensityProjection` keyed by tile id with replay/canonical-hash tests.
+- `SimulationRuntime` now plans fishery harvest from fisher productive actions, fans accepted fishery events into the projection, rebuilds it on boot, and exposes `facts.fisheryDensity`.
+
+### Honest scope
+
+- Tile-level fishery only. No species-specific fishery, recovery/regrowth, goods inventory, market pricing, or extinction history yet.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- ecosystem/fishery projections/fisheryDensity kernel/livingWorld` passed: 45 tests.
+- Full suite: `npm test` passed: **296 server** + 34 web tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- `npx openspec validate ecosystem-fishery-density --strict` passed.
+- `npx openspec validate --all --strict` passed: 23 passed, 0 failed.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev verification pending.
+
 ## 2026-05-13 — Phase E0.3 simple hunting
 
 ### Implemented

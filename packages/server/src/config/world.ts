@@ -96,6 +96,11 @@ export const ECOSYSTEM_TILE_CARRYING_CAPACITY_DIVISOR = 12
 export const ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60
 export const ECOSYSTEM_MEAT_GOLD_VALUE = 2
 
+// Phase E0.4 — tile-level fishery density.
+export const FISHERY_DEFAULT_DENSITY = 100
+export const FISHERY_HARVEST_DELTA = 12
+export const FISHERY_COLLAPSE_THRESHOLD = 20
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

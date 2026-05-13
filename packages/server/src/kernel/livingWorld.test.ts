@@ -222,6 +222,21 @@ describe('living-world rule engine', () => {
         goldValue: 8,
         harvestedAtTick: 7,
         narration: 'meat harvested'
+      }),
+      makeLivingWorldCommand('FISHERY_HARVESTED', 'temple.fisher.yu_yan_bin', 'npc', 8, 8, {
+        tileId: 't_temple',
+        npcId: 'temple.fisher.yu_yan_bin',
+        delta: 12,
+        densityBefore: 100,
+        densityAfter: 88,
+        harvestedAtTick: 8,
+        narration: 'fishery harvested'
+      }),
+      makeLivingWorldCommand('FISHERY_COLLAPSED', 'system', 'system', 8, 8, {
+        tileId: 't_temple',
+        density: 18,
+        collapsedAtTick: 8,
+        narration: 'fishery collapsed'
       })
     ]
     for (const cmd of samples) {

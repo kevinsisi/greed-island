@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase E0.4 — fishery density projection + collapse warning**
+
+OpenSpec: `ecosystem-fishery-density/`。
+
+- ✅ 新增 `FISHERY_HARVESTED` / `FISHERY_COLLAPSED` command/event + validators。
+- ✅ 新增 `FisheryDensityProjection`，以 coastal tile id 聚合 density / harvestedTotal / collapsed。
+- ✅ fisher/fishmonger/net-mender productive actions 會在 `t_dock` / `t_temple` / `t_salt_marsh` 降低 local fishery density。
+- ✅ density 跨過 `FISHERY_COLLAPSE_THRESHOLD = 20` 時 emit `FISHERY_COLLAPSED`。
+- ✅ `WorldSnapshot.facts.fisheryDensity` 可讀。
+- ✅ Focused tests 45 passed；full `npm test` 296 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（23 passed）全綠。
+- 🚧 Commit / push / CI / Deploy Dev verification pending.
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase E0.3 — simple hunting turns wildlife into ecosystem/economy events**
 
 OpenSpec: `ecosystem-simple-hunting/`。
