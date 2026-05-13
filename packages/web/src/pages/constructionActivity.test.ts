@@ -80,6 +80,24 @@ describe('construction activity projection', () => {
     ])
   })
 
+  it('lets authoritative project state suppress stale event progress', () => {
+    const activities = constructionActivitiesFor(
+      [event({ targetTileId: 't_salt_marsh', progressAfter: 7, targetProgress: 12, npcId: 'npc.a' }, 19)],
+      [npc('npc.a', '阿潮')],
+      [{
+        projectId: 'project.civ-evo.done',
+        targetTileId: 't_salt_marsh',
+        buildingId: 'b_civ_evo_t_salt_marsh',
+        progress: 12,
+        targetProgress: 12,
+        completedAtTick: 20,
+        initiatedByNpcId: 'npc.a'
+      }]
+    )
+
+    expect(activities).toEqual([])
+  })
+
   it('reads construction progress from rule-engine payload.data events', () => {
     const activities = constructionActivitiesFor(
       [event({

@@ -16,6 +16,7 @@ import type { FactionLeanId, MapAreaOverlay, MapConstructionActivity, MapNpc, Ma
 import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
 import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './constructionActivity'
+import { activeDistrictIdsForHub } from './hubDistricts'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
@@ -93,8 +94,8 @@ export function HubPage() {
   }, [])
 
   const activeDistrictIds = useMemo<DistrictId[]>(() => {
-    return map.tiles.map((tile) => tile.id).filter((id): id is DistrictId => isDistrict(id as DistrictId))
-  }, [map.tiles])
+    return activeDistrictIdsForHub(map, world.facts['lifeExpansion'])
+  }, [map, world.facts])
 
   const activeDistrictSet = useMemo(() => new Set(activeDistrictIds), [activeDistrictIds])
 

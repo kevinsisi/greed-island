@@ -20,6 +20,12 @@ export function constructionActivitiesFor(
 ): MapConstructionActivity[] {
   const npcNameById = new Map(npcs.map((npc) => [npc.id, npc.name]))
   const sortedEvents = [...events].sort((a, b) => (b.tick - a.tick) || (b.sequence - a.sequence))
+  const authoritativeProjectDistricts = new Set(
+    constructionProjects
+      .filter((project) => project.initiatedByNpcId.length > 0)
+      .filter((project) => project.targetTileId in DISTRICTS && isDistrict(project.targetTileId as DistrictId))
+      .map((project) => project.targetTileId as DistrictId)
+  )
   const completedDistricts = new Set<DistrictId>()
   const activities = new Map<DistrictId, {
     progressAfter: number
@@ -33,6 +39,7 @@ export function constructionActivitiesFor(
     const districtId = typeof payload.targetTileId === 'string' ? payload.targetTileId : null
     if (!districtId || !(districtId in DISTRICTS) || !isDistrict(districtId as DistrictId)) continue
     const district = districtId as DistrictId
+    if (authoritativeProjectDistricts.has(district)) continue
     if (completedDistricts.has(district)) continue
 
     const progressAfter = typeof payload.progressAfter === 'number' ? payload.progressAfter : 0
