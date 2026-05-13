@@ -1653,6 +1653,7 @@ export class SimulationRuntime {
         if (this.npcMemory) this.npcMemory.project(ev)
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
+        this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
