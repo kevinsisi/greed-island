@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.16.0 🚧 in progress — 2026-05-13
+
+**主題：Phase 1 budget gate slice 3b — active/background partition 開始真正影響 NPC 行為**
+
+OpenSpec: `simulation-budget-enforcement/`。
+
+- ✅ `SimulationRuntime` 每 tick 把 `npcPartition.active` 傳進 `NpcEngine.tick(...)`。
+- ✅ `NpcTickContext` 新增 `activeNpcSet`，Phase 2 productive actions 與 Phase 3 interactions 改為只看 active NPC。
+- ✅ Allow-list continuity overrides：`activity='move'`、active `player-dialog` hold、`personalityOverride.targetTile` 非空 → 不受 bucket 限制，仍視為 active。
+- ✅ 補 spec delta：productive gating、interaction gating、allow-list bypass 三個 scenarios。
+- ✅ 補測試：`npcEngine.test.ts` 新增 4 個 slice 3b cases；`runtimePresence.test.ts` 更新以適應分群後的 event cadence。
+- ✅ `npm test` 266 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（18 passed）全綠。
+- 🚧 待 commit / push / CI / Deploy Dev。
+
 ## v0.15.48 🚧 in progress — 2026-05-13
 
 **主題：Phase 0 Architecture Formalization — 六層 Runtime 正式進入 ARCHITECTURE.md**

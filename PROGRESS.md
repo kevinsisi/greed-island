@@ -3,6 +3,47 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 1 NPC partition slice 3b (active-set gating)
+
+### Implemented
+
+- Completed slice 3b of `simulation-budget-enforcement`: deterministic NPC partition is now wired into `NpcEngine` behavior, not only snapshot observability.
+- `NpcTickContext` gained optional `activeNpcSet`.
+- `SimulationRuntime.runTick()` now passes `npcPartition.active` into `NpcEngine.tick(...)` every tick.
+- `NpcEngine` now filters:
+  - Phase 2 productive-action candidates to active NPCs only
+  - Phase 3 interaction candidates to active NPCs only
+- Added slice 3b allow-list overrides via internal `isBudgetActiveNpc(...)`:
+  - `activity === 'move'`
+  - active `player-dialog` hold task
+  - non-null `personalityOverride.targetTile`
+  These NPCs stay active even when they are outside the round-robin bucket, preserving continuity-sensitive deterministic behavior.
+- `simulation-budget-enforcement` spec delta now includes the slice 3b behavior requirement and scenarios for productive gating, interaction gating, and allow-list bypass.
+- Tests updated for the new partitioned behavior:
+  - `npcEngine.test.ts`: productive gating, interaction gating, personality override bypass, player-dialog hold bypass
+  - `runtimePresence.test.ts`: no longer assumes an `NPC_INTERACT` event on the first tick under active/background filtering; still verifies authoritative indoor/outdoor presence behavior.
+
+### Honest scope
+
+- This is still **not** background-policy execution. Inactive NPCs continue to advance schedule/movement/state through Phase 1 of `NpcEngine.tick`; slice 3b only gates productive + interaction phases.
+- Slice 4 regional activation is still open.
+- Dashboard UI does not yet render `tickCommandStats` / `npcPartition` headroom.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- npcEngine runtimeBudget runtimePresence runtimeExpansion` passed: 43 tests.
+- Full suite: `npm test` passed: **266 server** + 34 web tests.
+- `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` passed.
+- `npm run build:server` + `npm run build:web` passed (web only reported the known Vite chunk-size warning).
+- `npx openspec validate simulation-budget-enforcement --strict` passed.
+- `npx openspec validate --all --strict` passed: 18 passed, 0 failed.
+
+### Outstanding
+
+- Commit + push + CI/Deploy Dev green.
+- Slice 4 regional activation.
+- Browser visual smoke of `/admin/npcs` rendering (carried over).
+
 ## 2026-05-13 — v0.16.0 release bump
 
 ### Bumped

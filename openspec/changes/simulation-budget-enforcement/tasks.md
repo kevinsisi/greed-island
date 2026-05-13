@@ -26,11 +26,11 @@
 
 ### Slice 3b — wire active set into NpcEngine filtering (next slice)
 
-- [ ] 3.5 Plumb `activeNpcSet` into `NpcEngine.tick` via `NpcTickContext`.
-- [ ] 3.6 Filter Phase 2 productive-action candidates to active NPCs only.
-- [ ] 3.7 Filter Phase 3 interaction candidates to active NPCs only.
-- [ ] 3.8 Add allow-list overrides: NPCs with `activity='move'`, `dialogHold`, or `personalityOverride.targetTile` are always active regardless of bucket.
-- [ ] 3.9 Update existing tests in `cityLife.test.ts` / `npcEngine.test.ts` / `runtimeExpansion.test.ts` / `runtimePresence.test.ts` for any productive/interaction-event count changes.
+- [x] 3.5 Plumb `activeNpcSet` into `NpcEngine.tick` via `NpcTickContext`.
+- [x] 3.6 Filter Phase 2 productive-action candidates to active NPCs only.
+- [x] 3.7 Filter Phase 3 interaction candidates to active NPCs only.
+- [x] 3.8 Add allow-list overrides: NPCs with `activity='move'`, `dialogHold`, or `personalityOverride.targetTile` are always active regardless of bucket.
+- [x] 3.9 Update existing tests in `cityLife.test.ts` / `npcEngine.test.ts` / `runtimeExpansion.test.ts` / `runtimePresence.test.ts` for any productive/interaction-event count changes.
 
 ## 4. Regional activation (later slice)
 
@@ -61,7 +61,16 @@
 - [x] 5.11 `npm test` passes (240 server + 34 web; +10 from `npcPartition.test.ts`, +2 from runtimeBudget partition tests, -2 from inline rewrite).
 - [x] 5.12 `npm run build:server` + `npm run build:web` pass.
 - [x] 5.13 `npx openspec validate simulation-budget-enforcement --strict` passes with the new partition requirements.
-- [ ] 5.14 Commit + push + CI/Deploy Dev green.
-- [ ] 5.15 Update `PROGRESS.md` and `ROADMAP.md`.
+- [x] 5.14 Commit + push + CI/Deploy Dev green.
+- [x] 5.15 Update `PROGRESS.md` and `ROADMAP.md`.
 
-### Slices 3b-4 verification still pending — re-use this section as each lands.
+### Slice 3b (this commit)
+
+- [x] 5.16 `npm run test -w @greed-island/server -- npcEngine runtimeBudget runtimePresence runtimeExpansion` passes.
+- [x] 5.17 `npm test` passes (266 server + 34 web).
+- [x] 5.18 `npm run build:server` + `npm run build:web` pass; `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` pass.
+- [x] 5.19 `npx openspec validate simulation-budget-enforcement --strict` and `npx openspec validate --all --strict` pass.
+- [ ] 5.20 Commit + push + CI/Deploy Dev green.
+- [ ] 5.21 Update `PROGRESS.md` and `ROADMAP.md`.
+
+### Slice 4 verification still pending — re-use this section when regional activation lands.

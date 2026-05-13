@@ -16,7 +16,10 @@ describe('SimulationRuntime NPC presence', () => {
     )
 
     try {
-      ;(runtime as unknown as { runTick: () => void }).runTick()
+      const internal = runtime as unknown as { runTick: () => void }
+      for (let tick = 0; tick < 8; tick += 1) {
+        internal.runTick()
+      }
       const npcId = 'central.exchange.shen_ruo_yun'
       const buildingId = 'b_central_exchange'
       const building = runtime.getAllBuildings().find((view) => view.def.id === buildingId)
@@ -31,7 +34,6 @@ describe('SimulationRuntime NPC presence', () => {
         events.find((event) => event.eventType === eventType)?.payload as { data?: { motivation?: { explanation?: string } } } | undefined
       )?.data
       expect(eventData('NPC_ACTIVITY_CHANGE')?.motivation?.explanation).toContain('生活需求')
-      expect(eventData('NPC_INTERACT')?.motivation?.explanation).toContain('同處一地')
       expect(eventData('BUILDING_ENTER')?.motivation?.explanation).toContain('進入')
     } finally {
       runtime.stop()

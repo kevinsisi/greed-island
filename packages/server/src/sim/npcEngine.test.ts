@@ -38,6 +38,19 @@ function makeProfile(overrides: Partial<NpcProfile> = {}): NpcProfile {
   }
 }
 
+function tickContext(overrides: {
+  activeNpcSet?: ReadonlySet<string>
+  npcsInsideBuildings?: ReadonlySet<string>
+} = {}) {
+  return {
+    areaSafety: new Map<string, number>(),
+    areaEconomy: new Map<string, number>(),
+    weather: '晴',
+    rareWindowOpen: false,
+    ...overrides
+  }
+}
+
 describe('NpcEngine', () => {
   it('initializes NPCs at their defaultLocation', () => {
     const engine = new NpcEngine([makeProfile()])
@@ -175,6 +188,36 @@ describe('NpcEngine', () => {
     expect(productive!.domain).toBe('build')
     expect(productive!.narration).toContain('夜潮區')
     expect(productive!.narration).not.toMatch(/[{}]/)
+  })
+
+  it('filters productive candidates to the activeNpcSet when provided', () => {
+    const profiles = [
+      makeProfile({
+        id: 'active.builder',
+        name: { zh: '活躍工匠', en: 'Active Builder' },
+        role: { zh: '鑄鐵工匠', en: 'Blacksmith' },
+        personality: { factionLean: 'guild', archetype: 'craftsman' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'forge work' }]
+      }),
+      makeProfile({
+        id: 'inactive.builder',
+        name: { zh: '背景工匠', en: 'Inactive Builder' },
+        role: { zh: '鑄鐵工匠', en: 'Blacksmith' },
+        personality: { factionLean: 'guild', archetype: 'craftsman' },
+        routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'forge work' }]
+      })
+    ]
+    const engine = new NpcEngine(profiles)
+    const seenProductiveNpcIds = new Set<string>()
+
+    for (let tick = 1; tick <= 240; tick += 1) {
+      for (const event of engine.tick(tick, tickContext({ activeNpcSet: new Set(['active.builder']) })).events) {
+        if (event.kind === 'productive') seenProductiveNpcIds.add(event.npcId)
+      }
+    }
+
+    expect(seenProductiveNpcIds.size).toBeGreaterThan(0)
+    expect(seenProductiveNpcIds).toEqual(new Set(['active.builder']))
   })
 
   it('keeps a cross-tile route visible before resuming local presence', () => {
@@ -590,6 +633,31 @@ describe('NpcEngine', () => {
     expect(interactCount).toBe(0)
   })
 
+  it('filters interaction candidates to the activeNpcSet when provided', () => {
+    const A = makeProfile({
+      id: 'active.social',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const B = makeProfile({
+      id: 'inactive.social',
+      defaultLocation: 't_central',
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'idle' }],
+      personality: { factionLean: 'civilian' }
+    })
+    const engine = new NpcEngine([A, B])
+    engine.hydrate('active.social', { tile: 't_central', targetTile: 't_central', activity: 'idle', subCol: 7, subRow: 5, subZ: 0, mood: 80 })
+    engine.hydrate('inactive.social', { tile: 't_central', targetTile: 't_central', activity: 'idle', subCol: 8, subRow: 5, subZ: 0, mood: 80 })
+
+    let interactCount = 0
+    for (let t = 1; t <= 240; t += 1) {
+      const r = engine.tick(t, tickContext({ activeNpcSet: new Set(['active.social']) }))
+      interactCount += r.events.filter((e) => e.kind === 'interact').length
+    }
+    expect(interactCount).toBe(0)
+  })
+
   it('moves at most one sub-cell per tick within the same tile', () => {
     const profile = makeProfile({
       id: 'wander',
@@ -785,6 +853,58 @@ describe('NpcEngine', () => {
       engine.tick(tick)
     }
     expect(engine.getState('dialog.hold')!.tile).not.toBe('t_central')
+  })
+
+  it('treats personalityOverride.targetTile as an always-active override for productive filtering', () => {
+    const profile = makeProfile({
+      id: 'override.builder',
+      role: { zh: '鑄鐵工匠', en: 'Blacksmith' },
+      personality: { factionLean: 'guild', archetype: 'craftsman' },
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'forge work' }]
+    })
+    const engine = new NpcEngine([profile])
+    engine.hydrate('override.builder', {
+      tile: 't_central',
+      targetTile: 't_central',
+      activity: 'work',
+      personalityOverride: { targetTile: 't_central', expiresAtTick: 500, reason: 'test override' }
+    })
+
+    let sawProductive = false
+    for (let tick = 1; tick <= 120; tick += 1) {
+      const found = engine.tick(tick, tickContext({ activeNpcSet: new Set() })).events.find((event) => event.kind === 'productive')
+      if (found?.kind === 'productive') {
+        sawProductive = true
+        expect(found.npcId).toBe('override.builder')
+        break
+      }
+    }
+
+    expect(sawProductive).toBe(true)
+  })
+
+  it('treats player-dialog hold as an always-active override for productive filtering', () => {
+    const profile = makeProfile({
+      id: 'dialog.builder',
+      role: { zh: '鑄鐵工匠', en: 'Blacksmith' },
+      personality: { factionLean: 'guild', archetype: 'craftsman' },
+      routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'forge work' }]
+    })
+    const engine = new NpcEngine([profile])
+    engine.tick(1)
+    engine.commitPlayerDialogHoldTask('dialog.builder', 2)
+
+    let productiveTick = 0
+    for (let tick = 3; tick <= 2 + NPC_PLAYER_DIALOG_HOLD_TICKS; tick += 1) {
+      const found = engine.tick(tick, tickContext({ activeNpcSet: new Set() })).events.find((event) => event.kind === 'productive')
+      if (found?.kind === 'productive') {
+        productiveTick = tick
+        expect(found.npcId).toBe('dialog.builder')
+        break
+      }
+    }
+
+    expect(productiveTick).toBeGreaterThan(0)
   })
 
   it('hydrates old persisted state without agent using the hydrated tile as fallback target', () => {

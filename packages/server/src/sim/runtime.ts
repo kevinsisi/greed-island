@@ -216,7 +216,7 @@ export type WorldSnapshot = Readonly<{
   }>
   /** Per-tick budget gate observability (Phase 1 simulation-budget-enforcement). */
   tickCommandStats: TickCommandStats
-  /** NPC active/background partition for the most recent tick (Phase 1 slice 3a — observability only, behaviour unchanged). */
+  /** NPC active/background partition for the most recent tick (Phase 1 slices 3a/3b). */
   npcPartition: NpcPartitionStats
   generatedAt: string
 }>
@@ -257,9 +257,9 @@ export class SimulationRuntime {
   private peakTickCommandCount = 0
   private softCapHitCount = 0
   private hardCapRejectedSinceBoot = 0
-  // Slice 3a: NPC active/background partition for the most recent tick.
-  // Computed each tick in runTick (cheap: O(N) char-code hash). Slice 3b
-  // will read this to filter productive/interaction phases.
+  // Phase 1 slices 3a/3b: NPC active/background partition for the most
+  // recent tick. Computed each tick in runTick (cheap: O(N) char-code
+  // hash) and fed into NpcEngine to gate productive/interaction phases.
   private lastActiveNpcCount = 0
   // Phase 1 §33.4 Settlement domain — first Layer 3 civilization entity.
   // The projection rebuilds from SETTLEMENT_FORMED events on boot; the
@@ -851,9 +851,9 @@ export class SimulationRuntime {
     // ---- Phase 1 slice 3a: NPC partition computation ----
     // Deterministic round-robin partition of NPCs into "active" (full
     // policy) vs "background" (cheap policy) buckets. This slice only
-    // computes + exposes the partition for GM observability; behaviour
-    // is unchanged. Slice 3b will read `activeNpcSet` in NpcEngine to
-    // filter productive + interaction phases.
+    // computes + exposes the partition for GM observability. Slice 3b
+    // wires `activeNpcSet` into productive + interaction phases while
+    // leaving movement / schedule progression deterministic for everyone.
     const npcPartition = partitionNpcsForTick(
       this.profiles.map((p) => p.id),
       nextTick,
@@ -884,6 +884,7 @@ export class SimulationRuntime {
       areaEconomy,
       weather: this.weather,
       rareWindowOpen: this.rareWindowOpen,
+      activeNpcSet: npcPartition.active,
       npcsInsideBuildings
     })
     const saltMarshProject = this.lifeExpansion.constructionProjects[SALT_MARSH_PROJECT_ID]

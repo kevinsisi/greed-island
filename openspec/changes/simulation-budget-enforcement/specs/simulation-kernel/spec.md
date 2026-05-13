@@ -88,8 +88,6 @@ When the per-tick command count exceeds `MAX_COMMANDS_PER_TICK_HARD_CAP`, the ru
 
 A configurable `NPC_PARTITION_PERIOD` MUST partition NPCs into K buckets by stable content-hash of NPC id. On tick T the active bucket is `T mod K`. This partition MUST be deterministic across replays (no wall-clock, no Math.random), MUST cover every NPC exactly once per period, and MUST be exposed on the world snapshot for GM observability.
 
-Behaviour change (filtering productive + interaction phases by active set) is **out of scope** for this slice; this requirement covers only the deterministic partition computation and snapshot exposure.
-
 #### Scenario: Every NPC is active exactly once per period
 
 - **GIVEN** the partition period is K
@@ -109,3 +107,28 @@ Behaviour change (filtering productive + interaction phases by active set) is **
 - **THEN** the snapshot MUST include `npcPartition.activeCount`, `npcPartition.totalCount`, and `npcPartition.period`
 - **AND** `npcPartition.totalCount` MUST equal the loaded profile count
 - **AND** `npcPartition.period` MUST equal the active `NPC_PARTITION_PERIOD` value
+
+### Requirement: Productive and interaction phases SHALL be filtered to the active NPC set
+
+When `activeNpcSet` is provided to `NpcEngine.tick`, Phase 2 productive-action candidates and Phase 3 interaction candidates MUST be restricted to NPCs in the active set, except for a small continuity allow-list: NPCs with `activity='move'`, an active player-dialog hold task, or a non-null `personalityOverride.targetTile` MUST be treated as active regardless of bucket.
+
+#### Scenario: Inactive NPCs do not emit productive actions
+
+- **GIVEN** two otherwise-eligible productive NPCs on the same tile
+- **AND** only one of them is in `activeNpcSet`
+- **WHEN** `NpcEngine.tick` runs with that active set
+- **THEN** only the active NPC MAY be chosen for a Phase 2 productive event
+
+#### Scenario: Interaction requires both participants to survive active filtering
+
+- **GIVEN** two nearby idle NPCs on the same tile
+- **AND** only one of them is in `activeNpcSet`
+- **WHEN** `NpcEngine.tick` runs with that active set
+- **THEN** no Phase 3 interaction event may be emitted for that pair
+
+#### Scenario: Continuity-sensitive NPCs bypass the bucket filter
+
+- **GIVEN** an NPC is not in `activeNpcSet`
+- **AND** the NPC either has `activity='move'`, an active player-dialog hold task, or a non-null `personalityOverride.targetTile`
+- **WHEN** `NpcEngine.tick` evaluates productive and interaction candidates
+- **THEN** the NPC MUST be treated as active for those candidate filters

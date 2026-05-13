@@ -209,6 +209,13 @@ export type NpcTickContext = Readonly<{
   weather: string
   rareWindowOpen: boolean
   /**
+   * Phase 1 simulation-budget-enforcement slice 3b:
+   * deterministic active/background partition. When provided, productive
+   * and interaction phases only consider NPCs in this active set, except
+   * the allow-list overrides handled by `isBudgetActiveNpc(...)`.
+   */
+  activeNpcSet?: ReadonlySet<string>
+  /**
    * v0.14.0：BuildingRuntime 知道哪些 NPC 目前在建築物內。NpcEngine 用這個
    * Set 在 Phase 2（同 tile 互動）排除這些 NPC，避免「在 X 區起爭執」事件
    * 的兩位 NPC 其實都在某棟建築內、AreaPage 地圖上根本看不到。
@@ -414,7 +421,9 @@ export class NpcEngine {
     // They are deterministic domain events, not AI narration and not renderer-only flavor.
     const productiveCandidatesByTile = new Map<string, string[]>()
     const indoorSet = context?.npcsInsideBuildings ?? null
+    const activeNpcSet = context?.activeNpcSet ?? null
     for (const [npcId, s] of this.state) {
+      if (!isBudgetActiveNpc(npcId, s, activeNpcSet)) continue
       if (!canEmitProductiveAction(s)) continue
       if (indoorSet && indoorSet.has(npcId)) continue
       const last = this.lastProductiveTickByNpc.get(npcId) ?? -PRODUCTIVE_ACTION_COOLDOWN_TICKS
@@ -457,6 +466,7 @@ export class NpcEngine {
     //   - 每個 tile 每 tick 最多 1 個互動事件，挑 pairRoll 最低的 pair
     const byTile = new Map<string, string[]>()
     for (const [npcId, s] of this.state) {
+      if (!isBudgetActiveNpc(npcId, s, activeNpcSet)) continue
       if (s.activity === 'move') continue // 路上不算「在場」
       if (indoorSet && indoorSet.has(npcId)) continue // 在建築內 → 主地圖看不到
       const arr = byTile.get(s.tile) ?? []
@@ -1328,6 +1338,23 @@ function isDutyAnchoredProfile(profile: NpcProfile): boolean {
 
 function canEmitProductiveAction(state: NpcRuntimeState): boolean {
   return state.activity === 'work' || state.activity === 'trade' || state.activity === 'patrol'
+}
+
+function isBudgetActiveNpc(
+  npcId: string,
+  state: NpcRuntimeState,
+  activeNpcSet: ReadonlySet<string> | null
+): boolean {
+  if (!activeNpcSet) return true
+  if (activeNpcSet.has(npcId)) return true
+  // Allow-list overrides from Phase 1 slice 3b. Even when an NPC is not in
+  // the round-robin bucket, we keep them "active" if they are in a
+  // continuity-sensitive state the user can observe or that the engine has
+  // already chosen deterministically.
+  if (state.activity === 'move') return true
+  if (state.agent.activeTask.kind === 'player-dialog') return true
+  if (state.personalityOverride?.targetTile) return true
+  return false
 }
 
 function productiveRoll(tick: number, npcId: string, tile: string): number {
