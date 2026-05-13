@@ -118,6 +118,7 @@ import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, 
 import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
+import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -294,6 +295,7 @@ export class SimulationRuntime {
   private readonly npcStateProjection = new NpcStateProjection()
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
+  private readonly goodsInventoryProjection = new GoodsInventoryProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -437,7 +439,8 @@ export class SimulationRuntime {
         areaStates: this.getAreaStates(),
         lifeExpansion: this.lifeExpansion,
         animalPopulation: this.animalPopulationProjection.list(),
-        fisheryDensity: this.fisheryDensityProjection.list()
+        fisheryDensity: this.fisheryDensityProjection.list(),
+        goodsInventory: this.goodsInventoryProjection.list()
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -633,6 +636,11 @@ export class SimulationRuntime {
     return this.fisheryDensityProjection.list()
   }
 
+  /** Phase 2 §35.1 — current goods inventory projection (Layer 3). */
+  getGoodsInventory(): readonly GoodsInventoryRow[] {
+    return this.goodsInventoryProjection.list()
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -825,6 +833,7 @@ export class SimulationRuntime {
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
+      this.goodsInventoryProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -1840,6 +1849,86 @@ export class SimulationRuntime {
             tick: nextTick
           })
           lifeExpansionChanged = true
+          const goodsPayload = cmd.payload as { huntId: string; npcId: string; quantity: number; tileId: string; motivation?: unknown }
+          const motivation = isEventMotivation(goodsPayload.motivation) ? goodsPayload.motivation : undefined
+          postAcceptedCommands.push(
+            makeLivingWorldCommand(
+              'GOODS_EXTRACTED',
+              goodsPayload.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                goodsId: 'meat',
+                quantity: goodsPayload.quantity,
+                sourceEventType: 'MEAT_HARVESTED',
+                sourceId: goodsPayload.huntId,
+                sourceTileId: goodsPayload.tileId,
+                extractedByNpcId: goodsPayload.npcId,
+                extractedAtTick: nextTick,
+                ...(motivation ? { motivation } : {}),
+                narration: `${goodsPayload.npcId}取得 ${goodsPayload.quantity} 份 meat goods。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'GOODS_STORED',
+              goodsPayload.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                goodsId: 'meat',
+                quantity: goodsPayload.quantity,
+                holderType: 'npc',
+                holderId: goodsPayload.npcId,
+                tileId: goodsPayload.tileId,
+                storedAtTick: nextTick,
+                ...(motivation ? { motivation } : {}),
+                narration: `${goodsPayload.npcId}把 ${goodsPayload.quantity} 份 meat 存入個人貨物。`
+              }
+            )
+          )
+        } else if (cmd.commandType === 'FISHERY_HARVESTED') {
+          const goodsPayload = cmd.payload as { npcId: string; delta: number; tileId: string; harvestedAtTick: number; motivation?: unknown }
+          const motivation = isEventMotivation(goodsPayload.motivation) ? goodsPayload.motivation : undefined
+          const sourceId = `fishery:${goodsPayload.tileId}:${goodsPayload.harvestedAtTick}:${goodsPayload.npcId}`
+          postAcceptedCommands.push(
+            makeLivingWorldCommand(
+              'GOODS_EXTRACTED',
+              goodsPayload.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                goodsId: 'fish',
+                quantity: goodsPayload.delta,
+                sourceEventType: 'FISHERY_HARVESTED',
+                sourceId,
+                sourceTileId: goodsPayload.tileId,
+                extractedByNpcId: goodsPayload.npcId,
+                extractedAtTick: nextTick,
+                ...(motivation ? { motivation } : {}),
+                narration: `${goodsPayload.npcId}取得 ${goodsPayload.delta} 份 fish goods。`
+              }
+            ),
+            makeLivingWorldCommand(
+              'GOODS_STORED',
+              goodsPayload.npcId,
+              'npc',
+              nextTick,
+              submittedAt,
+              {
+                goodsId: 'fish',
+                quantity: goodsPayload.delta,
+                holderType: 'npc',
+                holderId: goodsPayload.npcId,
+                tileId: goodsPayload.tileId,
+                storedAtTick: nextTick,
+                ...(motivation ? { motivation } : {}),
+                narration: `${goodsPayload.npcId}把 ${goodsPayload.delta} 份 fish 存入個人貨物。`
+              }
+            )
+          )
         }
         if (cmd.commandType === 'NPC_INTERACT') {
           const accepted = readAcceptedNpcInteraction(cmd.payload)
@@ -1896,6 +1985,7 @@ export class SimulationRuntime {
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
+        this.goodsInventoryProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2266,6 +2356,7 @@ export class SimulationRuntime {
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
+      this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
 
@@ -2355,6 +2446,13 @@ function deriveSettlementId(input: DetectedSettlementFormation): string {
 
 function makeMotivation(explanation: string, projectPurpose?: string): EventMotivation {
   return projectPurpose ? { explanation, projectPurpose } : { explanation }
+}
+
+function isEventMotivation(value: unknown): value is EventMotivation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<EventMotivation>
+  return typeof record.explanation === 'string' &&
+    (record.projectPurpose === undefined || typeof record.projectPurpose === 'string')
 }
 
 function makeFallbackProfile(npcId: string, fallbackTile: string): NpcProfile {
@@ -2488,7 +2586,15 @@ function readAcceptedNpcInteraction(payload: unknown): {
 function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEvent | null {
   const tick = typeof ev.tick === 'number' ? ev.tick : fallbackTick
 
-  if (ev.eventType === 'NPC_STATE_RECORDED' || ev.eventType === 'ANIMAL_SPAWNED') return null
+  if (
+    ev.eventType === 'NPC_STATE_RECORDED' ||
+    ev.eventType === 'ANIMAL_SPAWNED' ||
+    ev.eventType === 'GOODS_EXTRACTED' ||
+    ev.eventType === 'GOODS_STORED' ||
+    ev.eventType === 'GOODS_PROCESSED' ||
+    ev.eventType === 'GOODS_CONSUMED' ||
+    ev.eventType === 'GOODS_DESTROYED'
+  ) return null
 
   if (isLivingWorldCommandType(ev.eventType)) {
     const lw = ev.payload as LivingWorldEventPayload | undefined

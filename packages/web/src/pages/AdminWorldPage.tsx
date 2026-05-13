@@ -13,6 +13,16 @@ type FisheryDensityRow = Readonly<{
   lastSequence: number
 }>
 
+type GoodsInventoryRow = Readonly<{
+  goodsId: string
+  holderType: 'npc' | 'building' | 'settlement'
+  holderId: string
+  tileId: string
+  quantity: number
+  lastUpdatedTick: number
+  lastSequence: number
+}>
+
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 export function AdminWorldPage() {
@@ -47,9 +57,11 @@ export function AdminWorldPage() {
   }
 
   const fisheryRows = readFisheryRows(world.facts)
+  const goodsRows = readGoodsRows(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
+  const totalGoods = goodsRows.reduce((sum, row) => sum + row.quantity, 0)
   const lowestDensity = fisheryRows.reduce<number | null>(
     (lowest, row) => (lowest === null ? row.density : Math.min(lowest, row.density)),
     null
@@ -85,6 +97,7 @@ export function AdminWorldPage() {
         <StatCard label={t('admin.world.statSource')} value={source === 'server' ? t('admin.world.sourceServer') : t('admin.world.sourceFixture')} />
         <StatCard label={t('admin.world.statConnection')} value={liveConnected ? t('admin.world.live') : t('admin.world.polling')} />
         <StatCard label={t('admin.world.statFisheryRows')} value={fisheryRows.length} />
+        <StatCard label={t('admin.world.statGoodsRows')} value={goodsRows.length} />
       </section>
 
       <section className="gi-panel p-5 flex flex-col gap-4 border-cyan-700/30">
@@ -123,6 +136,53 @@ export function AdminWorldPage() {
               <tbody>
                 {fisheryRows.map((row) => (
                   <FisheryRow key={row.tileId} row={row} tileName={tileNameById.get(row.tileId) ?? row.tileId} t={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-moss-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-moss-300">
+              {t('admin.world.goodsHeading')}
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              {t('admin.world.goodsDescription')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label={t('admin.world.goodsRows')} value={goodsRows.length} />
+            <Badge label={t('admin.world.totalGoods')} value={totalGoods} />
+          </div>
+        </div>
+
+        {goodsRows.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            {t('admin.world.goodsEmpty')}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">{t('admin.world.colGoods')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colQuantity')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colHolder')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colTile')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colUpdated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {goodsRows.map((row) => (
+                  <GoodsRow
+                    key={`${row.holderType}:${row.holderId}:${row.goodsId}`}
+                    row={row}
+                    tileName={tileNameById.get(row.tileId) ?? row.tileId}
+                    t={t}
+                  />
                 ))}
               </tbody>
             </table>
@@ -168,6 +228,27 @@ function FisheryRow({ row, tileName, t }: { row: FisheryDensityRow; tileName: st
   )
 }
 
+function GoodsRow({ row, tileName, t }: { row: GoodsInventoryRow; tileName: string; t: Translator }) {
+  return (
+    <tr className="border-t border-ground-800/50">
+      <td className="py-3 pr-4 text-ground-100">
+        <div>{goodsLabel(row.goodsId, t)}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.goodsId}</div>
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-moss-300">{row.quantity}</td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div>{holderTypeLabel(row.holderType, t)}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.holderId}</div>
+      </td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div>{tileName}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.tileId}</div>
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-400">{row.lastUpdatedTick}</td>
+    </tr>
+  )
+}
+
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="gi-panel p-3 flex flex-col gap-1">
@@ -191,6 +272,17 @@ function readFisheryRows(facts: Record<string, unknown>): FisheryDensityRow[] {
   return raw.filter(isFisheryDensityRow).sort((a, b) => a.tileId.localeCompare(b.tileId))
 }
 
+function readGoodsRows(facts: Record<string, unknown>): GoodsInventoryRow[] {
+  const raw = facts.goodsInventory
+  if (!Array.isArray(raw)) return []
+  return raw.filter(isGoodsInventoryRow).sort(
+    (a, b) =>
+      a.holderType.localeCompare(b.holderType) ||
+      a.holderId.localeCompare(b.holderId) ||
+      a.goodsId.localeCompare(b.goodsId)
+  )
+}
+
 function isFisheryDensityRow(value: unknown): value is FisheryDensityRow {
   if (!value || typeof value !== 'object') return false
   const row = value as Partial<FisheryDensityRow>
@@ -202,4 +294,30 @@ function isFisheryDensityRow(value: unknown): value is FisheryDensityRow {
     typeof row.lastUpdatedTick === 'number' &&
     typeof row.lastSequence === 'number'
   )
+}
+
+function isGoodsInventoryRow(value: unknown): value is GoodsInventoryRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<GoodsInventoryRow>
+  return (
+    typeof row.goodsId === 'string' &&
+    (row.holderType === 'npc' || row.holderType === 'building' || row.holderType === 'settlement') &&
+    typeof row.holderId === 'string' &&
+    typeof row.tileId === 'string' &&
+    typeof row.quantity === 'number' &&
+    typeof row.lastUpdatedTick === 'number' &&
+    typeof row.lastSequence === 'number'
+  )
+}
+
+function goodsLabel(goodsId: string, t: Translator): string {
+  if (goodsId === 'fish') return t('admin.world.goodsFish')
+  if (goodsId === 'meat') return t('admin.world.goodsMeat')
+  return goodsId
+}
+
+function holderTypeLabel(holderType: GoodsInventoryRow['holderType'], t: Translator): string {
+  if (holderType === 'npc') return t('admin.world.holderNpc')
+  if (holderType === 'building') return t('admin.world.holderBuilding')
+  return t('admin.world.holderSettlement')
 }

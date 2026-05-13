@@ -7,6 +7,21 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase 2 §35.1 — Goods primitives sourced from ecosystem outputs**
+
+OpenSpec: `goods-primitives/`。
+
+- ✅ 新增 `GOODS_EXTRACTED` / `GOODS_STORED` / `GOODS_PROCESSED` / `GOODS_CONSUMED` / `GOODS_DESTROYED` command/event + validators。
+- ✅ 新增 `GoodsInventoryProjection`，以 `(holderType, holderId, goodsId)` 聚合 inventory，支援 replay/canonical hash，消耗不會扣到負數。
+- ✅ accepted `MEAT_HARVESTED` 會產生並存入 NPC 的 `meat` goods。
+- ✅ accepted `FISHERY_HARVESTED` 會產生並存入 NPC 的 `fish` goods。
+- ✅ `WorldSnapshot.facts.goodsInventory` 可讀；`/admin/world` 顯示貨物、數量、持有者、地點、更新 tick。
+- ✅ Focused server tests 57 passed；full `npm test` 301 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（24 passed）全綠。
+- ⚠️ Honest scope：這是 goods substrate；NPC 尚未購買、烹調、吃飯、運輸或形成價格。
+- 🚧 Commit / push / CI / Deploy Dev verification pending.
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase E0.4 follow-up — GM 世界觀測入口 + 漁場可視化**
 
 - ✅ 新增 `/admin/world` 給 GM/admin 直接看 server-authoritative world projections。

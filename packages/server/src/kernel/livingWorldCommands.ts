@@ -63,7 +63,13 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'MEAT_HARVESTED',
   // Phase E0.4 — Fishery density
   'FISHERY_HARVESTED',
-  'FISHERY_COLLAPSED'
+  'FISHERY_COLLAPSED',
+  // Phase 2 §35.1 — Goods primitives
+  'GOODS_EXTRACTED',
+  'GOODS_STORED',
+  'GOODS_PROCESSED',
+  'GOODS_CONSUMED',
+  'GOODS_DESTROYED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -437,6 +443,69 @@ export type FisheryCollapsedCmd = Readonly<{
   narration: string
 }>
 
+export const GOODS_HOLDER_TYPES = ['npc', 'building', 'settlement'] as const
+export type GoodsHolderType = (typeof GOODS_HOLDER_TYPES)[number]
+
+export type GoodsExtractedCmd = Readonly<{
+  goodsId: string
+  quantity: number
+  sourceEventType: 'MEAT_HARVESTED' | 'FISHERY_HARVESTED' | string
+  sourceId: string
+  sourceTileId: string
+  extractedByNpcId: string
+  extractedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsStoredCmd = Readonly<{
+  goodsId: string
+  quantity: number
+  holderType: GoodsHolderType
+  holderId: string
+  tileId: string
+  storedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsProcessedCmd = Readonly<{
+  inputGoodsId: string
+  inputQuantity: number
+  outputGoodsId: string
+  outputQuantity: number
+  holderType: GoodsHolderType
+  holderId: string
+  tileId: string
+  processedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsConsumedCmd = Readonly<{
+  goodsId: string
+  quantity: number
+  holderType: GoodsHolderType
+  holderId: string
+  tileId: string
+  consumerNpcId?: string
+  consumedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsDestroyedCmd = Readonly<{
+  goodsId: string
+  quantity: number
+  holderType: GoodsHolderType
+  holderId: string
+  tileId: string
+  reason: string
+  destroyedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -474,6 +543,11 @@ export type LivingWorldCommandPayload =
   | MeatHarvestedCmd
   | FisheryHarvestedCmd
   | FisheryCollapsedCmd
+  | GoodsExtractedCmd
+  | GoodsStoredCmd
+  | GoodsProcessedCmd
+  | GoodsConsumedCmd
+  | GoodsDestroyedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -908,6 +982,62 @@ const VALIDATORS: Readonly<
     if (typeof p.collapsedAtTick !== 'number' || !Number.isInteger(p.collapsedAtTick) || p.collapsedAtTick < 0) return 'collapsedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
+  },
+  GOODS_EXTRACTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isPositiveQuantity(p.quantity)) return 'quantity required'
+    if (typeof p.sourceEventType !== 'string' || p.sourceEventType.length === 0) return 'sourceEventType required'
+    if (typeof p.sourceId !== 'string' || p.sourceId.length === 0) return 'sourceId required'
+    if (typeof p.sourceTileId !== 'string' || p.sourceTileId.length === 0) return 'sourceTileId required'
+    if (typeof p.extractedByNpcId !== 'string' || p.extractedByNpcId.length === 0) return 'extractedByNpcId required'
+    if (!isNonNegativeInteger(p.extractedAtTick)) return 'extractedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_STORED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateGoodsHolderPayload(p)
+    if (err) return err
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isPositiveQuantity(p.quantity)) return 'quantity required'
+    if (!isNonNegativeInteger(p.storedAtTick)) return 'storedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_PROCESSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateGoodsHolderPayload(p)
+    if (err) return err
+    if (typeof p.inputGoodsId !== 'string' || p.inputGoodsId.length === 0) return 'inputGoodsId required'
+    if (!isPositiveQuantity(p.inputQuantity)) return 'inputQuantity required'
+    if (typeof p.outputGoodsId !== 'string' || p.outputGoodsId.length === 0) return 'outputGoodsId required'
+    if (!isPositiveQuantity(p.outputQuantity)) return 'outputQuantity required'
+    if (!isNonNegativeInteger(p.processedAtTick)) return 'processedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_CONSUMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateGoodsHolderPayload(p)
+    if (err) return err
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isPositiveQuantity(p.quantity)) return 'quantity required'
+    if (p.consumerNpcId !== undefined && (typeof p.consumerNpcId !== 'string' || p.consumerNpcId.length === 0)) return 'consumerNpcId invalid'
+    if (!isNonNegativeInteger(p.consumedAtTick)) return 'consumedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_DESTROYED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateGoodsHolderPayload(p)
+    if (err) return err
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isPositiveQuantity(p.quantity)) return 'quantity required'
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (!isNonNegativeInteger(p.destroyedAtTick)) return 'destroyedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
   }
 }
 
@@ -1113,6 +1243,25 @@ function validateHuntCommon(value: Record<string, unknown>): string | null {
   if (typeof value.targetSpeciesId !== 'string' || value.targetSpeciesId.length === 0) return 'targetSpeciesId required'
   if (typeof value.targetAnimalId !== 'string' || value.targetAnimalId.length === 0) return 'targetAnimalId required'
   return null
+}
+
+function validateGoodsHolderPayload(value: Record<string, unknown>): string | null {
+  if (!isGoodsHolderType(value.holderType)) return 'holderType invalid'
+  if (typeof value.holderId !== 'string' || value.holderId.length === 0) return 'holderId required'
+  if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
+  return null
+}
+
+function isGoodsHolderType(value: unknown): value is GoodsHolderType {
+  return value === 'npc' || value === 'building' || value === 'settlement'
+}
+
+function isPositiveQuantity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

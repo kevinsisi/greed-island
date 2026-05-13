@@ -1,0 +1,40 @@
+import Database from 'better-sqlite3'
+import { describe, expect, it } from 'vitest'
+import { loadCardCatalog } from '../cards/loader.js'
+import { SqliteEventStore } from '../kernel/eventStore.js'
+import { loadNpcProfiles } from '../npcs/loader.js'
+import { SimulationRuntime } from './runtime.js'
+
+type Internal = { runTick: () => void }
+
+describe('SimulationRuntime goods inventory', () => {
+  it('promotes accepted fishery harvests into fish goods inventory', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      for (let i = 0; i < 200; i += 1) {
+        ;(runtime as unknown as Internal).runTick()
+      }
+
+      const events = eventStore.readEvents()
+      const storedFish = events.filter((event) => {
+        const data = (event.payload as { data?: { goodsId?: string } } | undefined)?.data
+        return event.eventType === 'GOODS_STORED' && data?.goodsId === 'fish'
+      })
+      expect(storedFish.length).toBeGreaterThan(0)
+      expect(runtime.getGoodsInventory().some((row) => row.goodsId === 'fish' && row.quantity > 0)).toBe(true)
+
+      runtime.stop()
+      const restored = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+      try {
+        expect(restored.getGoodsInventory()).toEqual(runtime.getGoodsInventory())
+      } finally {
+        restored.stop()
+      }
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+})

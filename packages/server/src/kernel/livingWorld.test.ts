@@ -237,6 +237,56 @@ describe('living-world rule engine', () => {
         density: 18,
         collapsedAtTick: 8,
         narration: 'fishery collapsed'
+      }),
+      makeLivingWorldCommand('GOODS_EXTRACTED', 'temple.fisher.yu_yan_bin', 'npc', 8, 8, {
+        goodsId: 'fish',
+        quantity: 12,
+        sourceEventType: 'FISHERY_HARVESTED',
+        sourceId: 'fishery:t_temple:8:temple.fisher.yu_yan_bin',
+        sourceTileId: 't_temple',
+        extractedByNpcId: 'temple.fisher.yu_yan_bin',
+        extractedAtTick: 8,
+        narration: 'goods extracted'
+      }),
+      makeLivingWorldCommand('GOODS_STORED', 'temple.fisher.yu_yan_bin', 'npc', 8, 8, {
+        goodsId: 'fish',
+        quantity: 12,
+        holderType: 'npc',
+        holderId: 'temple.fisher.yu_yan_bin',
+        tileId: 't_temple',
+        storedAtTick: 8,
+        narration: 'goods stored'
+      }),
+      makeLivingWorldCommand('GOODS_PROCESSED', 'temple.cook', 'npc', 9, 9, {
+        inputGoodsId: 'fish',
+        inputQuantity: 2,
+        outputGoodsId: 'fish_stew',
+        outputQuantity: 1,
+        holderType: 'npc',
+        holderId: 'temple.cook',
+        tileId: 't_temple',
+        processedAtTick: 9,
+        narration: 'goods processed'
+      }),
+      makeLivingWorldCommand('GOODS_CONSUMED', 'temple.cook', 'npc', 10, 10, {
+        goodsId: 'fish_stew',
+        quantity: 1,
+        holderType: 'npc',
+        holderId: 'temple.cook',
+        tileId: 't_temple',
+        consumerNpcId: 'temple.cook',
+        consumedAtTick: 10,
+        narration: 'goods consumed'
+      }),
+      makeLivingWorldCommand('GOODS_DESTROYED', 'system', 'system', 11, 11, {
+        goodsId: 'fish',
+        quantity: 1,
+        holderType: 'npc',
+        holderId: 'temple.cook',
+        tileId: 't_temple',
+        reason: 'spoilage',
+        destroyedAtTick: 11,
+        narration: 'goods destroyed'
       })
     ]
     for (const cmd of samples) {

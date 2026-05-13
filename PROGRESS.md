@@ -3,6 +3,44 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 2 §35.1 goods primitives
+
+### Implemented
+
+- Started OpenSpec change `goods-primitives` for `docs/WORLD_CAPABILITIES.md` Phase 2 §35.1.
+- Added goods command/event primitives:
+  - `GOODS_EXTRACTED`
+  - `GOODS_STORED`
+  - `GOODS_PROCESSED`
+  - `GOODS_CONSUMED`
+  - `GOODS_DESTROYED`
+- Added `GoodsInventoryProjection` keyed by `(holderType, holderId, goodsId)` with replay/canonical-hash tests.
+- `SimulationRuntime` now promotes accepted ecosystem outputs into goods:
+  - `MEAT_HARVESTED` → `GOODS_EXTRACTED:meat` + `GOODS_STORED:meat` on the hunter NPC
+  - `FISHERY_HARVESTED` → `GOODS_EXTRACTED:fish` + `GOODS_STORED:fish` on the fisher NPC
+- Runtime fans accepted goods events into projection, rebuilds it on boot, and exposes `WorldSnapshot.facts.goodsInventory`.
+- `/admin/world` now renders goods inventory rows with goods id, quantity, holder, tile, and updated tick.
+- Routine `GOODS_*` events are hidden from public narrative surfaces; GM sees the authoritative projection instead.
+
+### Honest scope
+
+- This is Phase 2 goods substrate only. NPCs can now carry fish/meat inventory from ecosystem outputs, but there is still no NPC purchase flow, cooking recipe, meal consumption, logistics carrier, market price, spoilage policy, or player inventory bridge.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- projections/goodsInventory kernel/livingWorld sim/runtimeGoodsInventory kernel/chronicleRenderer` passed: 57 tests.
+- Focused web visibility test: `npm run test -w @greed-island/web -- state/eventVisibility` passed: 3 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **301 server** + 34 web tests.
+- `npx openspec validate goods-primitives --strict` passed.
+- `npx openspec validate --all --strict` passed: 24 passed, 0 failed.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev verification pending.
+- Next Phase 2 slice should be production/cooking or NPC exchange, so fish can move from inventory into meals and food-need reduction instead of stopping at held goods.
+
 ## 2026-05-13 — E0.4 GM visibility follow-up
 
 ### Implemented
