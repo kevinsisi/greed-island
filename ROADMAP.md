@@ -25,7 +25,7 @@ OpenSpec: `architecture-formalization/`。
 
 - ✅ `npx openspec validate architecture-formalization --strict`
 - ✅ `npx openspec validate --all --strict`（17 passed, 0 failed）
-- 🚧 commit / push / CI + Deploy Dev observation for this final handoff commit
+- ✅ Commit `d46a153` pushed; CI run `25786027078` passed; Deploy Dev run `25786027052` passed.
 
 ## v0.15.47g ✅ shipped — 2026-05-13
 

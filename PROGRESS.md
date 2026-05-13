@@ -29,7 +29,9 @@ developer. Keep latest status at the top.
 - `npx openspec list` active changes now shows 4 active changes:
   `architecture-formalization`, `civ-evo-construction`,
   `combat-phase-c-realtime-subtick`, `combat-system`.
-- Pending: commit, push, CI + Deploy Dev observation for this final handoff commit.
+- Commit `d46a153` (`docs(world): formalize runtime layers`) pushed to `main`.
+- CI run `25786027078` passed: build/typecheck/test + OpenSpec validate.
+- Deploy Dev run `25786027052` passed. Both runs only reported the known GitHub Actions Node.js 20 deprecation annotation.
 
 ## 2026-05-13 — v0.15.47g GM NPC Dashboard + Layer 2.5 ECO Doc Integration + Local Docker Refresh
 
