@@ -15,6 +15,13 @@ export type ServerActiveWorldEvent = {
   payload: Record<string, unknown>
 }
 
+export type ServerSettlement = {
+  id: string
+  tileId: string
+  formedAtTick: number
+  founderNpcIds: readonly string[]
+}
+
 export type ServerTickCommandStats = {
   lastTick: number
   peak: number
@@ -917,6 +924,10 @@ export const api = {
     }),
   adminNpcStats: (token: string) =>
     jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(token) }),
+  settlements: () =>
+    jsonFetch<{ settlements: readonly ServerSettlement[] }>('/settlements'),
+  settlementById: (id: string) =>
+    jsonFetch<ServerSettlement>(`/settlements/${encodeURIComponent(id)}`),
   // -- profile -------------------------------------------------------
   profile: (token: string) =>
     jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),

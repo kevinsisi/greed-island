@@ -25,6 +25,7 @@ import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
 import { CardActionPipeline } from './cardCommands.js'
 import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { createBuildingsRouter } from './buildingsRouter.js'
+import { createSettlementsRouter } from './settlementsRouter.js'
 import { createCombatRouter } from './combatRouter.js'
 import { createTechniqueShopRouter } from './techniqueShopRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -216,6 +217,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       authConfig: options.auth,
     })
   )
+  app.use('/api', createSettlementsRouter({ runtime: options.runtime }))
   app.use(
     '/api',
     createCombatRouter({

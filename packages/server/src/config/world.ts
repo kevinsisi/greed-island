@@ -66,6 +66,17 @@ export const COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'
 // once per 4 ticks (~20 seconds at 5s/tick).
 export const NPC_PARTITION_PERIOD = 4
 
+// Phase 1 §33.4 — Settlement formation thresholds (Layer 3 Civilization
+// Runtime). A tile with at least MIN_NPCS outdoor non-moving NPCs for
+// at least MIN_TICKS consecutive ticks emits SETTLEMENT_FORMED. Tuned
+// so casual cross-district co-presence does NOT form settlements;
+// sustained gathering (e.g. central plaza routines) does.
+//
+// 12 ticks ≈ 60 seconds of wall clock at 5s/tick — roughly one
+// in-world minute. Adjust as observation suggests.
+export const SETTLEMENT_FORMATION_MIN_NPCS = 3
+export const SETTLEMENT_FORMATION_MIN_TICKS = 12
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

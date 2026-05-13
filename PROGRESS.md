@@ -3,6 +3,43 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 1 §33.4 Settlement Domain (first Layer 3 entity)
+
+### Implemented
+
+- First Layer 3 Civilization Runtime entity: **Settlement** can now emerge from sustained NPC co-presence and become a real domain object on the world snapshot. Opens `docs/WORLD_CAPABILITIES.md` §28.1 (concrete domain object + commands + projection).
+- New OpenSpec change `settlement-domain` (validates strict). New `civilization-runtime` capability spec.
+- New `SETTLEMENT_FORMED` Command in `livingWorldCommands.ts` with payload `{ settlementId, tileId, formedAtTick, founderNpcIds, narration }`. Validator enforces sorted unique `founderNpcIds` for replay determinism.
+- New pure helper `packages/server/src/sim/settlementDetection.ts::detectSettlementFormation()` consumes `{ npcsByTile, previousHistory, existingSettlementTiles, tick }`, returns `{ detections, nextHistory }`. Detection criterion: ≥ `SETTLEMENT_FORMATION_MIN_NPCS = 3` outdoor non-moving NPCs co-located for ≥ `SETTLEMENT_FORMATION_MIN_TICKS = 12` consecutive ticks with the same cohort, and tile not already settled.
+- New `SettlementsProjection` (`packages/server/src/projections/settlements.ts`) with `rebuildFromEvents`, `project(event)`, `getAll / getById / getByTile / getTilesWithSettlement`, first-write-wins semantics for replay safety.
+- `SimulationRuntime` integration:
+  - Constructs the projection at init, rebuilds from EventLog on boot via `readEventsByTickWindow({ eventTypes: ['SETTLEMENT_FORMED'] })`.
+  - In `runTick()` after NPC engine processing, gathers `outdoorByTile` via `buildingRuntime.npcsOutsideOnTile`, runs `detectSettlementFormation`, and pushes one `SETTLEMENT_FORMED` Command per detection through the Rule Engine. Settlement id derived deterministically via `hashCanonicalJson` of `{ scheme, tileId, formedAtTick, founderNpcIds }`.
+  - New `getSettlements()` + `getSettlementById(id)` accessors.
+- New HTTP router `packages/server/src/http/settlementsRouter.ts` exposing read-only `GET /api/settlements` and `GET /api/settlements/:id`. Wired into `createHttpApp` between buildings and combat routers.
+- Web client gains `ServerSettlement` type + `api.settlements()` / `api.settlementById(id)` methods.
+
+### Honest scope
+
+- This slice is **founding only**. Population / decline / split / migration / takeover (§28.1 follow-up Commands) ship in later slices.
+- Hub map UI overlay for settlements is deferred to a `settlement-domain-ui` follow-up.
+- Settlement-aware NPC behaviour (e.g. NPCs preferring their home settlement) is Phase 3 humanity work.
+
+### Verification
+
+- `npm test`: **262 server** + 34 web tests passed (+15: 7 from `settlementDetection.test.ts`, 8 from `settlements.test.ts`).
+- `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` pass.
+- `npm run build:server` + `npm run build:web` pass.
+- `npx openspec validate settlement-domain --strict` passes.
+- `npx openspec validate --all --strict` passes (18 items, +1 from new `civilization-runtime` capability).
+
+### Outstanding
+
+- Commit + push + CI/Deploy Dev green.
+- Local docker rebuild + `curl /api/settlements` smoke.
+- Browser visual smoke of `/admin/npcs` rendering (carried over).
+- Phase 1 §33.1 slices 3b (NpcEngine filter) and 4 (regional activation) still open.
+
 ## 2026-05-13 — Phase 1 NPC partition (slice 3a — computation + snapshot exposure)
 
 ### Implemented

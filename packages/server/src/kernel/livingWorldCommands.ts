@@ -48,7 +48,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // v0.15.0 — Combat Phase B (single-shot judgement)
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
-  'COMBAT_RESOLVE'
+  'COMBAT_RESOLVE',
+  // Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime)
+  'SETTLEMENT_FORMED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -316,6 +318,19 @@ export type CombatResolveCmd = Readonly<{
   narration: string
 }>
 
+// Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime).
+// Settlements emerge from sustained NPC co-presence; this is the
+// founding event. Population / decline / takeover / goods / logistics
+// are deferred to follow-up slices per WORLD_CAPABILITIES.md §28.1.
+export type SettlementFormedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  formedAtTick: number
+  founderNpcIds: readonly string[]
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -343,6 +358,7 @@ export type LivingWorldCommandPayload =
   | CombatInitiateCmd
   | CombatPlayerActionCmd
   | CombatResolveCmd
+  | SettlementFormedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -661,6 +677,26 @@ const VALIDATORS: Readonly<
       return 'holdTicks must be positive number'
     }
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  SETTLEMENT_FORMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.formedAtTick !== 'number' || !Number.isInteger(p.formedAtTick) || p.formedAtTick < 0) {
+      return 'formedAtTick must be non-negative integer'
+    }
+    if (!Array.isArray(p.founderNpcIds) || p.founderNpcIds.length === 0) return 'founderNpcIds required (non-empty array)'
+    for (const id of p.founderNpcIds) {
+      if (typeof id !== 'string' || id.length === 0) return 'founderNpcIds entries must be non-empty strings'
+    }
+    // Determinism: founderNpcIds must be sorted lex ascending.
+    for (let i = 1; i < p.founderNpcIds.length; i += 1) {
+      if (p.founderNpcIds[i - 1] >= p.founderNpcIds[i]) {
+        return 'founderNpcIds must be sorted ascending and unique'
+      }
+    }
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   }
 }

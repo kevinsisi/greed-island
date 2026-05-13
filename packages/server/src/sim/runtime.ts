@@ -53,6 +53,12 @@ import {
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
+import {
+  detectSettlementFormation,
+  type CopresenceHistoryRow,
+  type DetectedSettlementFormation,
+} from './settlementDetection.js'
+import { SettlementsProjection, type SettlementRow } from '../projections/settlements.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
@@ -255,6 +261,14 @@ export class SimulationRuntime {
   // Computed each tick in runTick (cheap: O(N) char-code hash). Slice 3b
   // will read this to filter productive/interaction phases.
   private lastActiveNpcCount = 0
+  // Phase 1 §33.4 Settlement domain — first Layer 3 civilization entity.
+  // The projection rebuilds from SETTLEMENT_FORMED events on boot; the
+  // copresence history tracks how long each tile's cohort has been
+  // stable across consecutive ticks (in-memory cache — deterministic
+  // because it's derived from npc engine state which itself is a
+  // projection of EventLog).
+  private readonly settlementsProjection = new SettlementsProjection()
+  private settlementCopresenceHistory: ReadonlyMap<string, CopresenceHistoryRow> = new Map()
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -584,6 +598,16 @@ export class SimulationRuntime {
     return this.eventEngine.getActive()
   }
 
+  /** Phase 1 §33.4 — current settlements (Layer 3 Civilization Runtime). */
+  getSettlements(): readonly SettlementRow[] {
+    return this.settlementsProjection.getAll()
+  }
+
+  /** Phase 1 §33.4 — single settlement by id. */
+  getSettlementById(id: string): SettlementRow | null {
+    return this.settlementsProjection.getById(id)
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -773,6 +797,7 @@ export class SimulationRuntime {
       if (this.npcMemory) this.npcMemory.project(ev)
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
+      this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -1421,6 +1446,50 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Phase 1 §33.4: Settlement formation detection ----
+    // After all NPC state updates have been queued, look at where NPCs
+    // currently sit (outdoor, non-moving) and detect any tile whose
+    // cohort has sustained co-presence past the threshold. Each detection
+    // becomes a SETTLEMENT_FORMED command flowing through the Rule Engine
+    // like any other living-world command.
+    const outdoorByTile = this.buildingRuntime.npcsOutsideOnTile(
+      this.npcEngine.snapshotAll(),
+      this.completedConstructionBuildingDefs()
+    )
+    const settlementDetection = detectSettlementFormation({
+      npcsByTile: outdoorByTile,
+      previousHistory: this.settlementCopresenceHistory,
+      existingSettlementTiles: this.settlementsProjection.getTilesWithSettlement(),
+      tick: nextTick,
+    })
+    this.settlementCopresenceHistory = settlementDetection.nextHistory
+    for (const detection of settlementDetection.detections) {
+      const settlementId = deriveSettlementId(detection)
+      const founderNames = detection.founderNpcIds
+        .map((id) => this.profiles.find((p) => p.id === id)?.name.zh ?? id)
+        .slice(0, 3)
+      const tileName = TILE_NAME_BY_ID[detection.tileId] ?? detection.tileId
+      commands.push(
+        makeLivingWorldCommand(
+          'SETTLEMENT_FORMED',
+          'system',
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            settlementId,
+            tileId: detection.tileId,
+            formedAtTick: detection.formedAtTick,
+            founderNpcIds: detection.founderNpcIds,
+            motivation: makeMotivation(
+              `${founderNames.join('、')} 等 ${detection.founderNpcIds.length} 位 NPC 已連續在 ${tileName} 聚集達門檻，自然形成新聚落。`
+            ),
+            narration: `${tileName} 出現新聚落 — ${founderNames.join('、')} 為奠基成員。`,
+          }
+        )
+      )
+    }
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -1954,6 +2023,20 @@ export class SimulationRuntime {
 
     this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
     this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
+    // Phase 1 §33.4 — rebuild settlements projection from the EventLog.
+    // SETTLEMENT_FORMED events are uncommon (one per settlement ever) so
+    // full replay of just this event type is cheap. readEventsByTickWindow
+    // with from-0 / to-current returns every SETTLEMENT_FORMED event we
+    // have committed.
+    if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
+      const settlementEvents = this.store.readEventsByTickWindow({
+        eventTypes: ['SETTLEMENT_FORMED'],
+        sinceTick: -1,
+        untilTick: this.currentTick,
+        limit: 10_000,
+      }).events
+      this.settlementsProjection.rebuildFromEvents(settlementEvents)
+    }
 
     const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
@@ -1992,6 +2075,20 @@ function pickFromCycle<T>(values: readonly T[], step: number): T {
 
 function isExpansionProductiveDomain(domain: string): boolean {
   return domain === 'build' || domain === 'service' || domain === 'trade' || domain === 'learn'
+}
+
+// Phase 1 §33.4 — deterministic settlement id derivation.
+// Hash of (tileId, formedAtTick, sorted founderNpcIds) so the id is
+// reproducible across replays and unique across formation events even
+// at the same tile.
+function deriveSettlementId(input: DetectedSettlementFormation): string {
+  const seed = {
+    scheme: 'settlement.v1',
+    tileId: input.tileId,
+    formedAtTick: input.formedAtTick,
+    founderNpcIds: [...input.founderNpcIds].sort(),
+  }
+  return `settlement.${input.tileId}.${hashCanonicalJson(seed).slice(0, 16)}`
 }
 
 function makeMotivation(explanation: string, projectPurpose?: string): EventMotivation {

@@ -27,6 +27,21 @@ OpenSpec: `architecture-formalization/`。
 - ✅ `npx openspec validate --all --strict`（17 passed, 0 failed）
 - ✅ Commit `d46a153` pushed; CI run `25786027078` passed; Deploy Dev run `25786027052` passed.
 
+## v0.15.47k ✅ shipped — 2026-05-13
+
+**主題：Phase 1 §33.4 Settlement Domain — 第一個 Layer 3 Civilization Runtime 實體**
+
+- ✅ 新 OpenSpec change `settlement-domain`（validates strict）+ 新 `civilization-runtime` capability spec（18 specs all-pass）。
+- ✅ 新 Command `SETTLEMENT_FORMED`，validator 強制 `founderNpcIds` 排序+去重 → replay 確定性。
+- ✅ Pure helper `sim/settlementDetection.ts::detectSettlementFormation()` 偵測 sustained co-presence：tile 連續 12 tick 有 ≥3 個 outdoor NPC 同一 cohort 就觸發。
+- ✅ `SettlementsProjection`：`rebuildFromEvents` / `project(event)` / `getAll / getById / getByTile / getTilesWithSettlement`，first-write-wins for replay safety。
+- ✅ `SimulationRuntime` 整合：boot 時從 EventLog 重建 projection；`runTick()` 在 NPC 階段之後跑偵測、push `SETTLEMENT_FORMED` command 進 rule engine；id 用 `hashCanonicalJson({tileId, formedAtTick, founderNpcIds})` 16 字推。
+- ✅ HTTP read-only：`GET /api/settlements` + `GET /api/settlements/:id`（wired between buildings 與 combat routers）。
+- ✅ Web client：`ServerSettlement` type + `api.settlements()` / `api.settlementById(id)`。
+- ✅ Tests：`settlementDetection.test.ts` 7 個（門檻 / cohort change reset / already-formed skip / lex sort / drop-below clears）；`settlements.test.ts` 8 個（projection rebuild / canonical-hash 相等 / first-write-wins / sort）。
+- ✅ `npm test` 262 server + 34 web 全綠；`build:server` / `build:web` 通過；`openspec validate --all --strict` 18 items 過。
+- 🚧 待 commit / push / CI / Deploy Dev + 本地 docker rebuild 驗 `/api/settlements`。
+
 ## v0.15.47j ✅ shipped — 2026-05-13
 
 **主題：Phase 1 budget gate slice 3a — NPC 確定性 round-robin 分群 + snapshot exposure**
