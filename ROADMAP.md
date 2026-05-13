@@ -27,6 +27,19 @@ OpenSpec: `architecture-formalization/`。
 - ✅ `npx openspec validate --all --strict`（17 passed, 0 failed）
 - ✅ Commit `d46a153` pushed; CI run `25786027078` passed; Deploy Dev run `25786027052` passed.
 
+## v0.15.47j ✅ shipped — 2026-05-13
+
+**主題：Phase 1 budget gate slice 3a — NPC 確定性 round-robin 分群 + snapshot exposure**
+
+- ✅ `NPC_PARTITION_PERIOD = 4` 加進 `config/world.ts`（50 NPCs / 4 buckets ≈ 12-13 active/tick，每 NPC 每 4 tick 一次 active）。
+- ✅ 新 pure helper `sim/npcPartition.ts::partitionNpcsForTick(npcIds, tick, period)` 回 `{ active, period, totalCount, activeCount }`。Content-hash bucketing 用簡單 deterministic char-code mod。
+- ✅ `runTick()` 在 tick 開頭算 partition，存 `lastActiveNpcCount`，`WorldSnapshot.npcPartition = { activeCount, totalCount, period }` 暴露給 GM dashboard。
+- ✅ **NPC engine 行為不變** — 本 slice 純 classification + observability。Slice 3b 才會把 active set 接進 NpcEngine 的 Phase 2/3 filter。
+- ✅ Spec delta 加 1 條新 ADDED Requirement（partition determinism + 每 NPC 每 period 一次 active + snapshot exposure），3 個 scenarios。
+- ✅ Tests：`npcPartition.test.ts` 10 個 pure helper tests（含跨 collection order 不變、period 內 coverage、replay 一致性）；`runtimeBudget.test.ts` +2 個整合（snapshot 暴露 / 一個 period 內 activeCount 累加 = totalCount）。
+- ✅ `npm test` 247 server + 34 web 全綠；`build:server` / `build:web` 通過；`openspec validate simulation-budget-enforcement --strict` 通過。
+- 🚧 待 commit / push / CI / Deploy Dev 驗證。
+
 ## v0.15.47i ✅ shipped — 2026-05-13
 
 **主題：Phase 1 budget gate slice 2 — 確定性 hard cap enforcement**

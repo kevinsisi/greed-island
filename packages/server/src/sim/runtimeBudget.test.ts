@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadCardCatalog } from '../cards/loader.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
-import { MAX_COMMANDS_PER_TICK_SOFT_CAP, MAX_COMMANDS_PER_TICK_HARD_CAP } from '../config/world.js'
+import {
+  MAX_COMMANDS_PER_TICK_SOFT_CAP,
+  MAX_COMMANDS_PER_TICK_HARD_CAP,
+  NPC_PARTITION_PERIOD,
+} from '../config/world.js'
 import { SimulationRuntime } from './runtime.js'
 
 type Internal = { runTick: () => void }
@@ -33,6 +37,42 @@ describe('SimulationRuntime budget observability (Phase 1 slice 1)', () => {
       expect(snapshot.tickCommandStats.peak).toBeGreaterThanOrEqual(snapshot.tickCommandStats.lastTick)
       expect(snapshot.tickCommandStats.softCapHitCount).toBe(0)
       expect(snapshot.tickCommandStats.hardCapRejectedSinceBoot).toBe(0)
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('exposes npcPartition stats on the snapshot after a tick', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      ;(runtime as unknown as Internal).runTick()
+      const snapshot = runtime.getSnapshot()
+      expect(snapshot.npcPartition).toBeDefined()
+      expect(snapshot.npcPartition.period).toBe(NPC_PARTITION_PERIOD)
+      expect(snapshot.npcPartition.totalCount).toBe(50)
+      expect(snapshot.npcPartition.activeCount).toBeGreaterThan(0)
+      expect(snapshot.npcPartition.activeCount).toBeLessThan(snapshot.npcPartition.totalCount)
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('npc partition activeCount sums to total across one full period', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const run = (runtime as unknown as Internal).runTick
+      let total = 0
+      for (let i = 0; i < NPC_PARTITION_PERIOD; i += 1) {
+        run.call(runtime)
+        total += runtime.getSnapshot().npcPartition.activeCount
+      }
+      expect(total).toBe(runtime.getSnapshot().npcPartition.totalCount)
     } finally {
       runtime.stop()
       db.close()

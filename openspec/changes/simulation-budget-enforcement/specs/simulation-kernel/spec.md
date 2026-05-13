@@ -83,3 +83,29 @@ When the per-tick command count exceeds `MAX_COMMANDS_PER_TICK_HARD_CAP`, the ru
 - **WHEN** a caller invokes `runtime.getSnapshot()`
 - **THEN** `tickCommandStats.hardCap` MUST equal the active `MAX_COMMANDS_PER_TICK_HARD_CAP` value
 - **AND** `tickCommandStats.hardCapRejectedSinceBoot` MUST be a non-negative integer (cumulative count since boot)
+
+### Requirement: Runtime SHALL deterministically partition NPCs into round-robin active buckets
+
+A configurable `NPC_PARTITION_PERIOD` MUST partition NPCs into K buckets by stable content-hash of NPC id. On tick T the active bucket is `T mod K`. This partition MUST be deterministic across replays (no wall-clock, no Math.random), MUST cover every NPC exactly once per period, and MUST be exposed on the world snapshot for GM observability.
+
+Behaviour change (filtering productive + interaction phases by active set) is **out of scope** for this slice; this requirement covers only the deterministic partition computation and snapshot exposure.
+
+#### Scenario: Every NPC is active exactly once per period
+
+- **GIVEN** the partition period is K
+- **AND** the runtime is bootstrapped with N NPC profiles
+- **WHEN** the runtime advances K consecutive ticks
+- **THEN** each of the N NPCs MUST appear in the "active" set on exactly one tick across the K-tick window
+
+#### Scenario: Partition is identical across replays
+
+- **GIVEN** two independent runtimes A and B with identical NPC profiles
+- **WHEN** both advance to the same tick T
+- **THEN** `runtimeA.getSnapshot().npcPartition.activeCount` MUST equal `runtimeB.getSnapshot().npcPartition.activeCount`
+
+#### Scenario: Snapshot exposes partition stats
+
+- **WHEN** a caller invokes `runtime.getSnapshot()`
+- **THEN** the snapshot MUST include `npcPartition.activeCount`, `npcPartition.totalCount`, and `npcPartition.period`
+- **AND** `npcPartition.totalCount` MUST equal the loaded profile count
+- **AND** `npcPartition.period` MUST equal the active `NPC_PARTITION_PERIOD` value

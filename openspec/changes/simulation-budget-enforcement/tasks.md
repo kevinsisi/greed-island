@@ -15,12 +15,22 @@
 - [x] 2.2 Pure helper `packages/server/src/sim/commandBudget.ts::applyCommandHardCap(commands, hardCap)` returns `{ kept, rejected }` partition. Sorts by `commandId` ascending only when over cap (preserves natural order under cap). `runTick()` calls helper, records overflow via `eventStore.recordRejectedCommand(...)`, downstream rule-engine loop iterates `acceptedCommands` (the kept partition).
 - [x] 2.3 Replay tests: `commandBudget.test.ts` covers determinism across runtime collection order; `runtimeBudget.test.ts` confirms no false rejections under real 50-NPC load.
 
-## 3. NPC partitioning (later slice)
+## 3. NPC partitioning
 
-- [ ] 3.1 Define partition policy: active set = NPCs touched by player in last K ticks OR with pending intent; background set = the rest.
-- [ ] 3.2 Background NPCs run a cheap-policy path (schedule lookup + mood/health drift only, no interactions).
-- [ ] 3.3 Deterministic round-robin: every NPC gets a full update at least once per N ticks regardless of partition.
-- [ ] 3.4 Replay test.
+### Slice 3a — partition computation + snapshot exposure (this commit)
+
+- [x] 3.1 Define partition policy: deterministic round-robin via stable content-hash of NPC id mod `NPC_PARTITION_PERIOD = 4`. Active bucket per tick is `tick mod period`. Every NPC active exactly once per period. (Pending-intent + player-recency criteria deferred to slice 3b.)
+- [x] 3.2 Pure helper `packages/server/src/sim/npcPartition.ts::partitionNpcsForTick(npcIds, tick, period)` returns `{ active: Set<string>, period, totalCount, activeCount }`.
+- [x] 3.3 Runtime computes partition each tick (cheap O(N) char-code hash), stores `lastActiveNpcCount`, exposes `WorldSnapshot.npcPartition`.
+- [x] 3.4 Replay tests: every NPC active once per full period; partition deterministic across runtime instances; input-order-independent.
+
+### Slice 3b — wire active set into NpcEngine filtering (next slice)
+
+- [ ] 3.5 Plumb `activeNpcSet` into `NpcEngine.tick` via `NpcTickContext`.
+- [ ] 3.6 Filter Phase 2 productive-action candidates to active NPCs only.
+- [ ] 3.7 Filter Phase 3 interaction candidates to active NPCs only.
+- [ ] 3.8 Add allow-list overrides: NPCs with `activity='move'`, `dialogHold`, or `personalityOverride.targetTile` are always active regardless of bucket.
+- [ ] 3.9 Update existing tests in `cityLife.test.ts` / `npcEngine.test.ts` / `runtimeExpansion.test.ts` / `runtimePresence.test.ts` for any productive/interaction-event count changes.
 
 ## 4. Regional activation (later slice)
 
@@ -38,12 +48,20 @@
 - [x] 5.4 Commit + push + CI/Deploy Dev green (commit `f020c5e`, CI `25787482933`, Deploy `25787482860`).
 - [x] 5.5 Update `PROGRESS.md` and `ROADMAP.md`.
 
-### Slice 2 (this commit)
+### Slice 2 (shipped)
 
-- [x] 5.6 `npm test` passes (230 server + 34 web; +7 from commandBudget.test.ts, +1 from runtimeBudget.test.ts).
+- [x] 5.6 `npm test` passes (230 server + 34 web).
 - [x] 5.7 `npm run build:server` + `npm run build:web` pass.
-- [x] 5.8 `npx openspec validate simulation-budget-enforcement --strict` passes with the new hard-cap requirements.
-- [ ] 5.9 Commit + push + CI/Deploy Dev green.
-- [ ] 5.10 Update `PROGRESS.md` and `ROADMAP.md`.
+- [x] 5.8 `npx openspec validate simulation-budget-enforcement --strict` passes.
+- [x] 5.9 Commit + push + CI/Deploy Dev green (commit `f97038f`, CI `25789026698`, Deploy `25789026661`).
+- [x] 5.10 Update `PROGRESS.md` and `ROADMAP.md`.
 
-### Slices 3-4 verification still pending — re-use this section as each lands.
+### Slice 3a (this commit)
+
+- [x] 5.11 `npm test` passes (240 server + 34 web; +10 from `npcPartition.test.ts`, +2 from runtimeBudget partition tests, -2 from inline rewrite).
+- [x] 5.12 `npm run build:server` + `npm run build:web` pass.
+- [x] 5.13 `npx openspec validate simulation-budget-enforcement --strict` passes with the new partition requirements.
+- [ ] 5.14 Commit + push + CI/Deploy Dev green.
+- [ ] 5.15 Update `PROGRESS.md` and `ROADMAP.md`.
+
+### Slices 3b-4 verification still pending — re-use this section as each lands.

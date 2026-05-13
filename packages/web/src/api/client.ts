@@ -24,6 +24,12 @@ export type ServerTickCommandStats = {
   hardCapRejectedSinceBoot?: number
 }
 
+export type ServerNpcPartitionStats = {
+  activeCount: number
+  totalCount: number
+  period: number
+}
+
 export type ServerWorldSnapshot = {
   tick: number
   lastSequence: number
@@ -37,6 +43,7 @@ export type ServerWorldSnapshot = {
     timezoneOffsetMinutes?: number
   }
   tickCommandStats?: ServerTickCommandStats
+  npcPartition?: ServerNpcPartitionStats
   generatedAt: string
 }
 

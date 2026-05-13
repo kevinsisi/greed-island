@@ -48,9 +48,11 @@ import {
   WORLD_TIMEZONE_OFFSET_MINUTES,
   MAX_COMMANDS_PER_TICK_SOFT_CAP,
   MAX_COMMANDS_PER_TICK_HARD_CAP,
-  COMMAND_CAP_REJECTION_CODE
+  COMMAND_CAP_REJECTION_CODE,
+  NPC_PARTITION_PERIOD
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
+import { partitionNpcsForTick } from './npcPartition.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
@@ -185,6 +187,15 @@ export type TickCommandStats = Readonly<{
   hardCapRejectedSinceBoot: number
 }>
 
+export type NpcPartitionStats = Readonly<{
+  /** Number of NPCs in the "active" bucket for the most recent tick. */
+  activeCount: number
+  /** Total NPC count considered. */
+  totalCount: number
+  /** Bucketing period (every `period` ticks each NPC is active once). */
+  period: number
+}>
+
 export type WorldSnapshot = Readonly<{
   tick: number
   lastSequence: number
@@ -199,6 +210,8 @@ export type WorldSnapshot = Readonly<{
   }>
   /** Per-tick budget gate observability (Phase 1 simulation-budget-enforcement). */
   tickCommandStats: TickCommandStats
+  /** NPC active/background partition for the most recent tick (Phase 1 slice 3a — observability only, behaviour unchanged). */
+  npcPartition: NpcPartitionStats
   generatedAt: string
 }>
 
@@ -238,6 +251,10 @@ export class SimulationRuntime {
   private peakTickCommandCount = 0
   private softCapHitCount = 0
   private hardCapRejectedSinceBoot = 0
+  // Slice 3a: NPC active/background partition for the most recent tick.
+  // Computed each tick in runTick (cheap: O(N) char-code hash). Slice 3b
+  // will read this to filter productive/interaction phases.
+  private lastActiveNpcCount = 0
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -406,6 +423,11 @@ export class SimulationRuntime {
         softCapHitCount: this.softCapHitCount,
         hardCap: MAX_COMMANDS_PER_TICK_HARD_CAP,
         hardCapRejectedSinceBoot: this.hardCapRejectedSinceBoot,
+      },
+      npcPartition: {
+        activeCount: this.lastActiveNpcCount,
+        totalCount: this.profiles.length,
+        period: NPC_PARTITION_PERIOD,
       },
       generatedAt: new Date().toISOString()
     }
@@ -800,6 +822,19 @@ export class SimulationRuntime {
         { tick: nextTick }
       )
     )
+
+    // ---- Phase 1 slice 3a: NPC partition computation ----
+    // Deterministic round-robin partition of NPCs into "active" (full
+    // policy) vs "background" (cheap policy) buckets. This slice only
+    // computes + exposes the partition for GM observability; behaviour
+    // is unchanged. Slice 3b will read `activeNpcSet` in NpcEngine to
+    // filter productive + interaction phases.
+    const npcPartition = partitionNpcsForTick(
+      this.profiles.map((p) => p.id),
+      nextTick,
+      NPC_PARTITION_PERIOD
+    )
+    this.lastActiveNpcCount = npcPartition.activeCount
 
     // ---- NPC engine：tile-by-tile 移動、活動、互動 ----
     // v0.14.0：傳入 area resources / weather / rare-window 給 NPC personality

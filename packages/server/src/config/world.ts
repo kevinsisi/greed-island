@@ -49,6 +49,23 @@ export const MAX_COMMANDS_PER_TICK_HARD_CAP = 8000
 
 export const COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'
 
+// Phase 1 NPC partitioning (slice 3 of simulation-budget-enforcement,
+// WORLD_CAPABILITIES.md §33.1).
+//
+// Deterministic round-robin bucketing: each NPC belongs to one of K
+// buckets by stable hash of its id. On tick T, the active bucket is
+// `T % K`. Every NPC is therefore guaranteed an "active" tick exactly
+// once every K ticks regardless of player presence or recent activity.
+//
+// This slice (3a) only computes the partition and exposes it on the
+// snapshot — no behavior change yet. Slice 3b wires the active set into
+// the NPC engine's per-tick productive + interaction phases to reduce
+// per-tick work.
+//
+// K = 4 → at 50 NPCs each tick activates ~12-13 NPCs, every NPC active
+// once per 4 ticks (~20 seconds at 5s/tick).
+export const NPC_PARTITION_PERIOD = 4
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

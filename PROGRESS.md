@@ -3,6 +3,30 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 1 NPC partition (slice 3a — computation + snapshot exposure)
+
+### Implemented
+
+- Slice 3a of `simulation-budget-enforcement`: deterministic round-robin NPC partition (period `NPC_PARTITION_PERIOD = 4`). Computes the partition each tick and exposes it on the world snapshot. **No NPC engine behaviour change** — slice 3b will wire the active set into productive + interaction filtering.
+- New constant `NPC_PARTITION_PERIOD = 4` in `config/world.ts` with the rationale (50 NPCs / 4 buckets ≈ 12-13 NPCs active per tick).
+- New pure helper `packages/server/src/sim/npcPartition.ts::partitionNpcsForTick(npcIds, tick, period)` returns `{ active: Set<string>, period, totalCount, activeCount }`. Content-hash bucketing via simple deterministic char-code function. Throws on invalid period / tick.
+- `SimulationRuntime.runTick()` computes the partition at the start of each tick, stores `lastActiveNpcCount`, exposes `WorldSnapshot.npcPartition`. Web `ServerWorldSnapshot.npcPartition` typed for forward compatibility.
+- Spec delta extended with one new ADDED Requirement (deterministic partition + every-NPC-active-once-per-period + snapshot exposure) covering 3 scenarios.
+
+### Verification
+
+- `npm test`: **247 server** + 34 web tests passed (+10 from `npcPartition.test.ts`, +2 from `runtimeBudget.test.ts` partition exposure / round-robin sum tests).
+- `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` pass.
+- `npm run build:server` + `npm run build:web` pass.
+- `npx openspec validate simulation-budget-enforcement --strict` passes.
+
+### Outstanding
+
+- Slice 3b (plumb active set into `NpcEngine.tick`; filter Phase 2 productive + Phase 3 interaction to active NPCs only; add allow-list overrides for `move` / `dialogHold` / `personalityOverride.targetTile`; update affected tests in `cityLife.test.ts` / `npcEngine.test.ts` / `runtimeExpansion.test.ts` / `runtimePresence.test.ts`).
+- Slice 4 (regional activation).
+- Browser visual smoke of `/admin/npcs` rendering (carried over).
+- Dashboard UI to render `tickCommandStats` + `npcPartition` headroom.
+
 ## 2026-05-13 — Phase 1 budget hard-cap enforcement slice
 
 ### Implemented
