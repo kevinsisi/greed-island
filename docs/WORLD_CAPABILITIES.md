@@ -337,9 +337,15 @@ Friends, friend-requests, messages, conversations, presence, nearby, alliance cr
 
 # Part II — Target World Vision
 
-> Source: `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` (Reality
-> Principle / Simulation Time Principle / World Existence Principle /
-> Layers / 18 sub-principles / Final Objective).
+> Source: `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` v2 ("Runtime
+> Constitution & Civilization Program"). Eleven sections: Core Identity /
+> Non-Negotiable Runtime Laws (Event Reality / Determinism / Tick /
+> AI Read-Only) / Runtime Layer Model / Current Reality Assessment /
+> Civilization Runtime Vision (Settlement / Metabolism / Logistics /
+> Culture) / Combat Reframing / Cards Reframing / Player Philosophy /
+> Engineering Priorities (P1 Budget / P2 Typed Event Migration / P3
+> Civilization Runtime) / Recommended Development Order (Phases 0–6) /
+> Final Objective.
 
 ## 15. Vision Summary
 
@@ -407,13 +413,13 @@ formalizes this into ARCHITECTURE.md §12.
 | **4. Combat Runtime** | 🟡 partial | Phase B single-shot, deterministic formulas, replay-safe hashSeed | §11.4 full event-sourcing, Phase C real-time sub-tick, persistent consequences into Civilization (territory/economy/faction/history/relationships), cards as combat rule operators |
 | **5. Perception Runtime** | 🟡 partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | §11.9 dialog grounded in memory/relationships/household/faction/known-person graph, rumor propagation between NPCs, history projection as interpreted-not-listed, regional perception (each region "knows" different things) |
 
-**Read this honestly:** Layer 3 (Civilization Runtime) is the biggest gap. The "Civilization Evolution" that the vision and `DEVELOPMENT_CONSTITUTION.md` promise is **today only one slice deep** (NPC-initiated construction). Most of the work in Phases 1–6 is layer 3.
+**Aligned with vision §4 Current Reality Assessment:** Layer 1 is **"Strongest Layer"** (production-grade kernel). Layer 2 is **"Partially Complete"** (routine / memory / relationships / weather / world agenda / productive actions / autonomous construction present; migration / trade / rumor / mentorship / culture / long-term identity missing — today's NPCs are "有 schedule 的 simulation actor"). Layer 3 is **"Weakest Layer"** — vision calls today's state "看起來像 civilization 的 placeholder。" Most Phase 1–6 work lands on Layer 3.
 
 ## 18. Vision Principles → Required New Capabilities
 
 Concrete: what each principle demands as new Commands, projections, and runtime hooks. This is the input list for the OpenSpec changes in Part IV.
 
-### 18.1 Settlement Principle
+### 18.1 Settlement Is a Real Entity (vision §5.1)
 
 **New domain object:** `Settlement` — `{ id, tileId, sourceTilesOccupied[], population[], storage, economyState, territory, factionAlignment, stability, productionCapacity[], defense, expansionPressure, tradeRoutes[] }`.
 
@@ -431,7 +437,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Runtime hook:** Layer 3 `SettlementEngine` consults living-world NPC presence + economy + faction state every K ticks; emits Commands accordingly.
 
-### 18.2 Civilization Metabolism Principle
+### 18.2 Economy Must Become Metabolism (vision §5.2)
 
 **New domain object:** `Goods` — `{ kind: 'raw'|'intermediate'|'finished', species, quantity, location }`. Species examples: `salt_marsh_brine`, `mountain_ore`, `forest_lumber`, `refined_salt`, `iron_ingot`, `bread`.
 
@@ -446,7 +452,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Runtime hook:** Layer 3 `EconomyEngine` runs every tick (or every K ticks for inactive regions) — extraction at resource buildings, consumption at NPCs/buildings, decay.
 
-### 18.3 Logistics Principle
+### 18.3 Logistics Is Civilization (vision §5.3)
 
 **New domain object:** `TradeRoute` — `{ id, fromSettlementId, toSettlementId, carriersAssigned, goodsSpecies, capacity, hazards }`.
 **New NPC archetype:** `carrier` (already exists in lore; needs runtime behavior).
@@ -460,7 +466,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **No instant teleport** — goods location updates per carrier NPC tick.
 
-### 18.4 Construction & Map Evolution Principles
+### 18.4 Construction & Map Evolution (derives from vision §5.1 + §5.3; no standalone vision section)
 
 **Existing:** `CONSTRUCTION_INITIATE` / `_PROGRESS` / `BUILDING_CONSTRUCTED` / `MAP_TILE_UNLOCKED`.
 
@@ -475,7 +481,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Map becomes a projection of civilization Events** — frontend reads `/api/map` and gets whatever civilization has built, not a static catalog.
 
-### 18.5 Learning Principle
+### 18.5 Learning As Historical Accumulation (vision §10 Phase 3 mentorship; absorbed into §5.4 culture)
 
 **New Commands:**
 - `NPC_OBSERVED_SKILL` (NPC watched another NPC do a productive action; partial XP gain)
@@ -484,7 +490,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Skill XP semantics shift:** from "amount of work done" to "amount of work done + observed + taught". XP record may also carry `lineage` = who taught whom.
 
-### 18.6 Culture Principle
+### 18.6 Culture Must Emerge (vision §5.4)
 
 **New domain object:** `CulturalElement` — `{ id, kind: 'tradition'|'belief'|'festival'|'ritual'|'ideology'|'norm', scope: 'region'|'faction'|'household', participants[], originatingEvent }`.
 
@@ -495,7 +501,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Faction ideology** = aggregate of factional cultural elements; influences NPC behavior weights.
 
-### 18.7 Combat Principle (Persistent Consequences)
+### 18.7 Combat As Civilization Pressure Resolution (vision §6)
 
 **Existing:** `COMBAT_INITIATE` / `_PLAYER_ACTION` / `_RESOLVE` + Phase B events.
 
@@ -508,7 +514,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Combat events feed history projection** (§18.9).
 
-### 18.8 Cards as World Rule Operators
+### 18.8 Cards As World Rule Operators (vision §7)
 
 **Reframe:** cards stop being effects/items. A card is a *named Command that the player or NPC submits which modifies the rule layer for a bounded scope*.
 
@@ -521,7 +527,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 - Rule Engine evaluates active card-operator effects when validating subsequent Commands
 - Unify card events into canonical `event_log` (closes §11.2)
 
-### 18.9 History Principle (Emergent History Projection)
+### 18.9 Emergent History Projection (vision §11 final-objective success criteria)
 
 **New projection:** `history_chronicle` — derives narrative arcs from event sequences:
 - Settlement formation arc (commands from `SETTLEMENT_FORMED` → first `BUILDING_CONSTRUCTED` → first `GOODS_PROCESSED`)
@@ -531,7 +537,7 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Distinguished from Timeline:** Timeline is event list. Chronicle is interpreted arcs. Built by Layer 5 Perception (AI may help phrase, never invents).
 
-### 18.10 Player Position Principle
+### 18.10 Player As Civilization Actor (vision §8)
 
 **New Commands:**
 - `PLAYER_HIRED_NPC` / `_DISMISSED_NPC`
@@ -546,11 +552,15 @@ Concrete: what each principle demands as new Commands, projections, and runtime 
 
 **Constraint:** every player Command produces an Event NPCs can observe and remember. Player intervention shows up in history projection.
 
-### 18.11 Architectural Cross-Cutting (§11 backlog absorbed)
+### 18.11 Engineering Priorities — Architectural Cross-Cutting (vision §9)
 
-Each phase **must** close at least one §11 item, and the budget gate
-(§11.6) must close before Phase 1 grows the runtime. Detailed mapping in
-Phases below.
+Vision §9 names three Engineering Priorities that absorb the §11 backlog:
+
+- **P1 Budget Enforcement** = §11.6. Command cap, active/background partition, regional throttling, replay-safe projection rebuild. Must complete before civilization runtime expands; otherwise the temptation chain "先暫時 cache 一下啦 / 先 shortcut 一下啦 / 這邊直接 mutate 比較快" destroys architecture integrity.
+- **P2 Typed Event Migration** = §11.5. `FACT_SET` must disappear; long-term it causes replay ambiguity, projection inconsistency, hidden truth, rebuild impossibility.
+- **P3 Civilization Runtime** = §11.8 expanded. Settlement / goods / logistics / market / production chains. Vision: "civilization simulation 的難度遠高於 NPC AI。AI 對話只是 perception illusion。文明代謝才是真正的世界。"
+
+Each phase **must** close at least one §11 item. P1 + P2 land entirely in Phase 1; P3 begins in Phase 1 (Settlement) and continues through Phase 2 (metabolism). Detailed mapping in Phases below.
 
 ---
 
@@ -558,16 +568,16 @@ Phases below.
 
 ## 19. Phase Overview & Honest Sizing
 
-| Phase | Theme | Releases (est.) | Closes §11 |
-|---|---|---|---|
-| **0** | Architecture formalization (doc only) | 1 | none |
-| **1** | Civilization Runtime primitives + budget gate | 4–6 | 11.5, 11.6, 11.7 (NPC + areas), 11.8 starts |
-| **2** | Civilization metabolism | 3–5 | 11.8 expands |
-| **3** | NPC humanity completion + culture | 3–4 | 11.9 |
-| **4** | Cards as World Rule Operators | 1–2 | 11.2 |
-| **5** | Combat persistent consequences | 2–3 | 11.4 |
-| **6** | Player as civilization actor | 2–4 | 11.3, `player-intervene-and-combat` applied |
-| **Total** | | **16–25 releases** | All §11 items closed |
+| Phase | Theme (vision §10 wording) | Vision §9 priority | Releases | Closes §11 |
+|---|---|---|---|---|
+| **0** | Architecture Formalization (doc only) | — | 1 | none |
+| **1** | Budget Gate + Settlement Runtime | **P1 + P2 + P3 start** | 4–6 | 11.5, 11.6, 11.7 (NPC + areas), 11.8 starts |
+| **2** | Goods + Logistics + Market | P3 continues | 3–5 | 11.8 expands |
+| **3** | Culture + Humanity + Rumor + Mentorship | Layer 2 / 5 humanity | 3–4 | 11.9 |
+| **4** | Cards as Rule Operators | — | 1–2 | 11.2 |
+| **5** | Persistent Combat Consequences | — | 2–3 | 11.4 |
+| **6** | Player Civilization Integration | — | 2–4 | 11.3, `player-intervene-and-combat` applied |
+| **Total** | | | **16–25 releases** | All §11 items closed |
 
 **Dependency rule:** Phase 1's budget gate (§11.6) must complete before Phases 2+ add per-tick load. Phases 2/3 can partially parallel after Phase 1 lands; Phases 4/5/6 may also parallel once their dependencies are done.
 
@@ -585,8 +595,7 @@ Phases below.
   - Add "Civilization Evolution Constitution" reference to the five layers
   - Add a "Vision document" pointer to `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`
 - Update `ROADMAP.md` — v0.16.0 entry naming Phase 0.
-- Confirm `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` markdown formatting (close the unterminated code block at L37).
-- No code change.
+- No code change. (Vision doc markdown formatting fix already landed in commit `dbacdbc`.)
 
 **Definition of done:**
 - All five docs cross-reference each other consistently.
@@ -597,7 +606,7 @@ Phases below.
 
 ---
 
-## 21. Phase 1 — Civilization Runtime Primitives + Budget Gate
+## 21. Phase 1 — Budget Gate + Settlement Runtime
 
 **Goal:** Make Layer 3 (Civilization Runtime) a real layer with a first domain (Settlement) and prepay the budget/typed-event/rebuild-contract debt that everything afterwards depends on.
 
@@ -635,7 +644,7 @@ Phases below.
 
 ---
 
-## 22. Phase 2 — Civilization Metabolism
+## 22. Phase 2 — Goods + Logistics + Market
 
 **Goal:** Layer 3 starts metabolizing goods. `economy` stops being a scalar.
 
@@ -669,7 +678,7 @@ Phases below.
 
 ---
 
-## 23. Phase 3 — NPC Humanity Completion + Culture
+## 23. Phase 3 — Culture + Humanity + Rumor + Mentorship
 
 **Goal:** Layer 2 + Layer 5 close the humanity gap. NPCs become people, not predictable role-actors.
 
@@ -703,7 +712,7 @@ Phases below.
 
 ---
 
-## 24. Phase 4 — Cards as World Rule Operators
+## 24. Phase 4 — Cards as Rule Operators
 
 **Goal:** Layer 4 (and player) treats cards as rule-operators, not effects. Closes §11.2.
 
@@ -725,7 +734,7 @@ Phases below.
 
 ---
 
-## 25. Phase 5 — Combat Persistent Consequences
+## 25. Phase 5 — Persistent Combat Consequences
 
 **Goal:** Layer 4 ships Phase C; combat outcomes ripple into Layer 3 + Layer 2 + Layer 5.
 
@@ -752,7 +761,7 @@ Phases below.
 
 ---
 
-## 26. Phase 6 — Player as Civilization Actor
+## 26. Phase 6 — Player Civilization Integration
 
 **Goal:** Architecture §0.1 / vision Player Position Principle. Closes §11.3.
 
@@ -806,3 +815,20 @@ Phases below.
 - Part II (vision) updates only when the user updates `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`.
 - Part III (crosswalk) updates whenever Part I or Part II changes.
 - Part IV (plan) updates whenever a phase boundary is crossed or a dependency is invalidated.
+
+---
+
+## 28. Program Success Criteria (Vision §11)
+
+The program is **not done** when phases 0–6 ship. It is done when these four
+emergent behaviours can be observed in a live deployment. They are the
+acceptance test for "Greed Island 才真正成立。"
+
+| Criterion (vision §11) | Verifiable by |
+|---|---|
+| 「當某個 NPC 死亡。後代會記得他。」 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. (Closes the §11.9 grounding loop with Phase 5 NPC_DECEASED.) |
+| 「當某 settlement 飢荒。周邊價格會上升。」 | Disrupting a `salt_marsh_brine` supply route via `GOODS_TRANSPORT_LOST` causes neighbouring settlements' `MARKET_PRICE_DISCOVERED` events to shift upward within K ticks. End-to-end verifies Phase 1 Settlement + Phase 2 Goods/Logistics/Market. |
+| 「當 faction 戰敗。道路與物流會崩潰。」 | A losing-faction settlement's roads and trade routes show `TRADE_ROUTE_CLOSED` + `BUILDING_DAMAGED`/`_ABANDONED` after `FACTION_DOMINANCE_SHIFTED` + `TERRITORY_CLAIM_CHANGED`. End-to-end verifies Phase 5 Persistent Combat Consequences plumbing back into Phase 2 logistics. |
+| 「當玩家離開數個月。世界仍然繼續。甚至已經變成另一個文明時代。」 | After K weeks of no player activity, EventLog continues to accumulate civilization-level events (`SETTLEMENT_GROW`, `SETTLEMENT_DECLINE`, `BUILDING_CONSTRUCTED`, `CULTURAL_ELEMENT_FORMED`, `FACTION_DOMINANCE_SHIFTED`), and the world's `history_chronicle` projection shows distinct arc deltas from before-absence to after-absence. Verifies Architecture §0.10 Offline Continuity. |
+
+If any of the four criteria still cannot be demonstrated after phase 6 ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
