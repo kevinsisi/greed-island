@@ -3,6 +3,26 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — v0.16.0 release bump
+
+### Bumped
+
+- `packages/server/src/version.ts`: `0.15.47` → `0.16.0`.
+- `packages/web/src/version.ts`: `0.15.46` → `0.16.0` (web had drifted one minor behind server).
+- `packages/server/package.json` + `packages/web/package.json`: `0.15.47` → `0.16.0`.
+
+### Why 0.16.0
+
+This session shipped multiple architectural milestones that the v0.15.47 → v0.15.47k micro-labels in `ROADMAP.md` did not surface in the runtime version string. `/healthz` had been reporting `0.15.47` since session start, which made the user reasonably ask "版本是多少？我看沒改？". Cumulative changes since baseline v0.15.47:
+
+- `ARCHITECTURE.md` §12 "Six Runtime Layers" formalized.
+- Layer 2.5 Ecosystem Runtime constitution integrated into `WORLD_CAPABILITIES.md`.
+- GM NPC Dashboard (`/admin/npcs` + `/api/admin/npc-stats`).
+- Phase 1 budget gate slices 1+2+3a (per-tick command count observability, deterministic hard-cap rejection into `rejected_command_log`, NPC partition computation + snapshot).
+- **First Layer 3 Civilization Runtime entity: Settlement Domain** (`/api/settlements`, autonomous formation from sustained NPC co-presence, `SETTLEMENT_FORMED` Command + projection + rule-engine validator).
+
+These together justify a minor release bump from the v0.15 line into v0.16, signaling "Layer 3 civilization runtime is now alive".
+
 ## 2026-05-13 — Phase 1 §33.4 Settlement Domain (first Layer 3 entity)
 
 ### Implemented
