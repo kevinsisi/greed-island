@@ -69,3 +69,17 @@
 - [x] 9.5 Completed NPC buildings participate in `BuildingRuntime` owner occupancy so owner NPCs can enter/use them and are not simultaneously rendered outdoors.
 - [x] 9.6 Autonomous NPC construction has a per-tile cap to prevent infinite same-tile building spam; existing event history is preserved while runtime/API building projection only exposes the capped set.
 - [x] 9.7 Autonomous construction requires real NPC demand and personal gold; accepted paid initiates deduct gold once and healthy-economy tiles can still build under severe demand.
+
+## 10. Construction/Building Monotonic Invariant
+
+- [x] 10.1 `withConstructionProgress` in `cityLife.ts` ignores progress attempts after `completedAtTick !== null` — completed projects cannot regress.
+- [x] 10.2 `construction_projects` projection keeps the maximum observed `progress`, the maximum `targetProgress`, and the first non-null `completedAtTick` — stale or out-of-order events cannot lower values.
+- [x] 10.3 `rowFromRecord` hydrate normalization: completed records hydrate with `progress = targetProgress` so completed buildings never appear partially built.
+- [x] 10.4 Tests in `cityLife.test.ts` and `constructionProjects.test.ts` cover monotonic progress, monotonic completion tick, and hydrate normalization.
+
+## 11. Shared Visibility Cap for Completed + Open Autonomous Projects
+
+- [x] 11.1 New `visibleAutonomousConstructionProjects(...)` helper in `constructionProjects.ts` combines completed and open autonomous projects into a single deterministic per-tile `startedAtTick` window.
+- [x] 11.2 `runtime.ts` uses this helper for both `getInProgressConstructionProjects()` (in-progress API response) and `cappedCompletedConstructionProjects()` (completed building defs) — no more independent caps that could disagree.
+- [x] 11.3 The visible window is the earliest `startedAtTick` projects with `projectId` as the deterministic tie-breaker. Later projects cannot displace already-visible buildings or resurrect extra construction markers.
+- [x] 11.4 Focused tests: per-tile cap, completed + open mixing, later projects suppressed while earlier ones are visible.
