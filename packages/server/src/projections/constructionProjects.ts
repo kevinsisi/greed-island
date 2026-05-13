@@ -96,15 +96,18 @@ function buildRowsFromEvents(
       const targetProgress = readNumber(data.targetProgress)
       if (!projectId || !targetTileId || !buildingId || progressAfter === null || targetProgress === null) continue
       const existing = rows.get(projectId)
+      const normalizedTarget = Math.max(1, existing?.targetProgress ?? 0, targetProgress)
+      const progress = Math.max(existing?.progress ?? 0, Math.min(normalizedTarget, progressAfter))
+      const completedAtTick = existing?.completedAtTick ?? (progress >= normalizedTarget ? event.tick ?? null : null)
       rows.set(projectId, {
         projectId,
         kind: 'settlement',
         targetTileId,
         buildingId,
-        progress: progressAfter,
-        targetProgress,
+        progress,
+        targetProgress: normalizedTarget,
         startedAtTick: existing?.startedAtTick ?? event.tick ?? 0,
-        completedAtTick: progressAfter >= targetProgress ? event.tick ?? existing?.completedAtTick ?? null : existing?.completedAtTick ?? null,
+        completedAtTick,
         initiatedByNpcId: existing?.initiatedByNpcId ?? '',
         builderNpcIds: addUnique(existing?.builderNpcIds ?? [], npcId ? [npcId] : [])
       })
@@ -119,7 +122,7 @@ function buildRowsFromEvents(
       rows.set(projectId, {
         ...existing,
         progress: existing.targetProgress,
-        completedAtTick: event.tick ?? existing.completedAtTick
+        completedAtTick: existing.completedAtTick ?? event.tick ?? null
       })
     }
   }
@@ -127,8 +130,14 @@ function buildRowsFromEvents(
 }
 
 function rowFromRecord(project: ConstructionProjectRecord): ConstructionProjectRow {
+  const targetProgress = Math.max(1, project.targetProgress)
+  const progress = project.completedAtTick !== null
+    ? targetProgress
+    : Math.max(0, Math.min(targetProgress, project.progress))
   return {
     ...project,
+    progress,
+    targetProgress,
     builderNpcIds: project.initiatedByNpcId ? [project.initiatedByNpcId] : []
   }
 }

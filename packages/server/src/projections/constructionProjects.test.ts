@@ -105,6 +105,52 @@ describe('construction_projects projection', () => {
     expect(projection.getInProgressByTile('t_central')).toEqual([])
   })
 
+  it('keeps construction rows monotonic after completion or stale progress', () => {
+    const projectId = deriveConstructionInitiateProjectId({
+      npcId: 'central.builder',
+      tileId: 't_central',
+      buildingId: 'b_civ_evo_t_central',
+      startedAtTick: 10
+    })
+    const projection = new ConstructionProjectsProjection()
+    projection.rebuildFromEvents([
+      ev(1, 'CONSTRUCTION_INITIATE', 10, {
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 5
+      }),
+      ev(2, 'CONSTRUCTION_PROJECT_PROGRESS', 11, {
+        projectId,
+        targetTileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        npcId: 'central.builder',
+        progressAfter: 5,
+        targetProgress: 5
+      }),
+      ev(3, 'BUILDING_CONSTRUCTED', 11, {
+        projectId,
+        buildingId: 'b_civ_evo_t_central',
+        tileId: 't_central'
+      }),
+      ev(4, 'CONSTRUCTION_PROJECT_PROGRESS', 12, {
+        projectId,
+        targetTileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        npcId: 'central.helper',
+        progressAfter: 2,
+        targetProgress: 3
+      })
+    ])
+
+    expect(projection.getByProjectId(projectId)).toEqual(expect.objectContaining({
+      progress: 5,
+      targetProgress: 5,
+      completedAtTick: 11
+    }))
+    expect(projection.getInProgressByTile('t_central')).toEqual([])
+  })
+
   it('agrees with lifeExpansion construction project records', () => {
     let lifeExpansion: LifeExpansionState = {
       households: {},
@@ -135,5 +181,36 @@ describe('construction_projects projection', () => {
       initiatedByNpcId: 'central.builder',
       startedAtTick: 10
     }))
+  })
+
+  it('normalizes hydrated completed records so completed buildings never look partially built', () => {
+    const projection = new ConstructionProjectsProjection()
+    projection.hydrateFromLifeExpansion({
+      households: {},
+      children: {},
+      npcCivicRecords: {},
+      unlockedTileIds: [],
+      unlockedBuildingIds: [],
+      constructionProjects: {
+        'project.civ-evo.completed': {
+          projectId: 'project.civ-evo.completed',
+          kind: 'settlement',
+          targetTileId: 't_central',
+          buildingId: 'b_civ_evo_t_central',
+          progress: 2,
+          targetProgress: 5,
+          startedAtTick: 10,
+          completedAtTick: 11,
+          initiatedByNpcId: 'central.builder'
+        }
+      }
+    })
+
+    expect(projection.getByProjectId('project.civ-evo.completed')).toEqual(expect.objectContaining({
+      progress: 5,
+      targetProgress: 5,
+      completedAtTick: 11
+    }))
+    expect(projection.getInProgressByTile('t_central')).toEqual([])
   })
 })

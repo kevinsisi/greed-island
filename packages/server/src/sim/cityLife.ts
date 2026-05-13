@@ -263,6 +263,7 @@ export function withConstructionProgress(
     initiatedByNpcId: ''
   } : null)
   if (!before) return state
+  if (before.completedAtTick !== null) return state
   const progress = Math.min(before.targetProgress, before.progress + Math.max(1, Math.floor(input.delta)))
   return {
     ...state,
@@ -271,7 +272,7 @@ export function withConstructionProgress(
       [projectId]: {
         ...before,
         progress,
-        completedAtTick: progress >= before.targetProgress ? input.tick : before.completedAtTick
+        completedAtTick: progress >= before.targetProgress ? input.tick : null
       }
     }
   }

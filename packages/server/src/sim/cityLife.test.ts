@@ -575,5 +575,28 @@ describe('city life projection', () => {
       expect(record.progress).toBe(5)
       expect(record.completedAtTick).toBe(101)
     })
+
+    it('keeps completed construction records stable after later progress attempts', () => {
+      let expansion = createInitialLifeExpansionState()
+      expansion = withConstructionInitiated(expansion, {
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        duration: 5,
+        tick: 100
+      })
+      const projectId = deriveConstructionInitiateProjectId({
+        npcId: 'central.builder',
+        tileId: 't_central',
+        buildingId: 'b_civ_evo_t_central',
+        startedAtTick: 100
+      })
+      expansion = withConstructionProgress(expansion, { tick: 101, delta: 5, projectId })
+      const completed = expansion.constructionProjects[projectId]!
+
+      expansion = withConstructionProgress(expansion, { tick: 110, delta: 1, projectId })
+
+      expect(expansion.constructionProjects[projectId]).toEqual(completed)
+    })
   })
 })

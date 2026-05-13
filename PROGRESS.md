@@ -54,6 +54,12 @@ developer. Keep latest status at the top.
   still catching up. Construction activity markers also let authoritative
   construction project state suppress stale recent progress events, preventing
   old `CONSTRUCTION_PROJECT_PROGRESS` rows from resurrecting completed sites.
+- Building/construction monotonicity invariant: construction/building state may
+  advance, but MUST NOT regress or flicker. `withConstructionProgress` now
+  ignores progress attempts after completion, `construction_projects` keeps the
+  maximum observed progress and first completion tick, and hydrated completed
+  records normalize to `progress = targetProgress` so completed buildings never
+  look partially built again.
 
 ### Verification
 
@@ -81,6 +87,7 @@ developer. Keep latest status at the top.
 - Commit `4796868` (`fix(world): prefer event agenda over civilian dominance`) passed CI run `25749417496` and Deploy Dev run `25749417500`; both only reported the known Node.js 20 actions deprecation annotation. Live `/healthz` returned version `0.15.47` at tick `102493`. Live `/api/events?limit=12` after deploy showed newest productive motivations using `民生配給會` resource governance or `島嶼主宰的暗流` world-event pressure; remaining `平民地方支部` examples were older pre-deploy history.
 - Hub construction stability focused tests: `npm run test -w @greed-island/web -- constructionActivity hubDistricts` passed: 7 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/web`. Full `npm test` passed: 213 server tests + 34 web tests. `npm run build:web` passed with only the known Vite chunk-size warning.
 - Commit `83e6376` (`fix(hub): stabilize construction map state`) passed CI run `25772000924` and Deploy Dev run `25772000909`; both only reported the known Node.js 20 actions deprecation annotation. Live `/healthz` returned version `0.15.47` at tick `108446`, and live `/api/map` included `t_salt_marsh`, confirming the deployed authoritative map still contains the right-bottom expansion district.
+- Construction monotonicity focused tests: `npm run test -w @greed-island/server -- cityLife constructionProjects` passed: 31 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. Full `npm test` passed: 216 server tests + 34 web tests. `npm run build:server` passed. `npx openspec validate civ-evo-construction --strict` passed.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 

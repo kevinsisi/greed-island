@@ -61,6 +61,13 @@ The system SHALL extend `ConstructionProjectRecord` with `initiatedByNpcId: stri
 - **WHEN** the EventLog is replayed twice
 - **THEN** `lifeExpansion.constructionProjects[]` MUST be byte-identical between runs
 
+#### Scenario: Construction state is monotonic after completion
+- **GIVEN** a construction project has reached `completedAtTick !== null`
+- **WHEN** later reducer calls or projection replay encounter additional or stale `CONSTRUCTION_PROJECT_PROGRESS` rows for that project
+- **THEN** `progress` MUST NOT decrease
+- **AND** `completedAtTick` MUST NOT change to a later tick or return to `null`
+- **AND** the project MUST NOT reappear as in-progress in API or frontend projections
+
 ### Requirement: NPC agent state includes a deterministic build task
 
 The system SHALL extend the `NpcAgentTask` union with `{ kind: 'build', buildingId, onTile, expiresAtTick? }` so the NPC's local intent to build is observable in agent state.
@@ -88,6 +95,12 @@ The system SHALL provide a `construction_projects` projection populated by `rebu
 #### Scenario: Projection agrees with WorldState
 - **WHEN** both `construction_projects` and `lifeExpansion.constructionProjects` are rebuilt from the same EventLog
 - **THEN** every in-progress project in one MUST appear in the other with the same `progress`, `targetProgress`, `initiatedByNpcId`, `startedAtTick`
+
+#### Scenario: Projection rows never regress
+- **GIVEN** the projection has observed a higher `progress` or non-null `completedAtTick` for a project
+- **WHEN** a later event carries a lower `progressAfter` or another completion marker
+- **THEN** the projection MUST keep the maximum progress already observed
+- **AND** the first non-null `completedAtTick` MUST remain authoritative
 
 ### Requirement: /api/buildings exposes in-progress NPC-initiated projects
 
