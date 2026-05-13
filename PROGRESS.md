@@ -3,6 +3,34 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — v0.15.48 Phase 0 Architecture Formalization
+
+### Implemented
+
+- Started Phase 0 from `docs/WORLD_CAPABILITIES.md` Part IV: architecture formalization before Phase 1/E0 implementation.
+- Added OpenSpec change `architecture-formalization` with proposal/tasks/spec delta against `simulation-kernel`.
+- Added `ARCHITECTURE.md` §12 "Six Runtime Layers":
+  - Layer 1 Simulation Kernel
+  - Layer 2 Living World Runtime
+  - Layer 2.5 Ecosystem Runtime
+  - Layer 3 Civilization Runtime
+  - Layer 4 Combat Runtime
+  - Layer 5 Perception Runtime
+- Captured inter-layer dependency rules: budget gate before growth, typed events before permanence, ecosystem before metabolism, settlement before economy, combat feeds the world, cards are rule operators, player is an ordinary actor, perception never owns truth.
+- OpenSpec hygiene: archived proposal-only `player-intervene-and-combat` under `openspec/changes/archive/2026-05-13-player-intervene-and-combat-proposal-only/` so strict validation is not blocked by a change with no deltas.
+- OpenSpec hygiene: removed empty `construction-motivation-chronicle` active directory from the working tree.
+- Memory placement decision: this phase/layer/world-route decision is Greed Island project memory, recorded in project docs (`PROGRESS.md`, `ROADMAP.md`, `ARCHITECTURE.md`, OpenSpec), not `homelab-docs` global memory. Only cross-project workflow/deployment/user-preference rules belong in `homelab-docs` memory.
+- `gm-npc-dashboard` has already been archived in commit `5864e1a`; earlier handoff lines saying archive was still pending are stale. Browser visual smoke evidence is not independently reproduced in this session, but archived task 5.8 is marked complete by the company Claude Code run.
+
+### Verification
+
+- `npx openspec validate architecture-formalization --strict` passed.
+- `npx openspec validate --all --strict` passed: 17 passed, 0 failed.
+- `npx openspec list` active changes now shows 4 active changes:
+  `architecture-formalization`, `civ-evo-construction`,
+  `combat-phase-c-realtime-subtick`, `combat-system`.
+- Pending: commit, push, CI + Deploy Dev observation for this final handoff commit.
+
 ## 2026-05-13 — v0.15.47g GM NPC Dashboard + Layer 2.5 ECO Doc Integration + Local Docker Refresh
 
 ### Sequenced work (after GM dashboard slice below)
@@ -18,11 +46,11 @@ developer. Keep latest status at the top.
 - Commit `6d1e627` (ECO doc integration) → CI run `25782668554` ✅ + Deploy Dev run `25782668586` ✅.
 - 本地 healthz post-rebuild: `{"ok":true,"version":"0.15.47","tick":11890}`.
 
-### Outstanding on this session
+### Historical outstanding notes from original session
 
-- 🚧 Browser visual smoke of `/admin/npcs` rendering — needs your hands.
-- 🚧 `gm-npc-dashboard` OpenSpec archive (tasks not yet ticked; will be archived after visual smoke).
-- 🚧 Phase 0 (architecture-formalization) OpenSpec change — `ARCHITECTURE.md` §12 "Six Runtime Layers" 還沒寫。下一個 release-shape work。
+- `gm-npc-dashboard` was archived later in commit `5864e1a`.
+- Phase 0 architecture-formalization is now tracked above in the v0.15.48 entry.
+- Browser visual smoke of `/admin/npcs` was not independently reproduced in this opencode session; retain as residual manual confidence check if desired.
 
 ## 2026-05-13 — GM NPC Dashboard slice
 

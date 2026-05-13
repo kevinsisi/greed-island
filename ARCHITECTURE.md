@@ -22,8 +22,9 @@ relationships — every time.
 
 This section is the product contract for the world. It is intentionally
 stronger than the current implementation in a few areas; those gaps are
-listed in [Section 11](#11-current-non-conformance-backlog). Do not
-claim full world-law compliance until every gap is closed.
+listed in [Section 11](#11-current-non-conformance-backlog). Section 12
+defines the runtime layer vocabulary used to plan the remaining work. Do
+not claim full world-law compliance until every gap is closed.
 
 ### 0.1 World Essence
 
@@ -721,3 +722,137 @@ state, faction knowledge, or long-term social history before answering.
 Until that grounding exists, AI dialog must be guarded by deterministic
 anti-hallucination checks and must avoid inventing unknown people,
 relationships, or world facts.
+
+---
+
+## 12. Six Runtime Layers
+
+`docs/WORLD_CAPABILITIES.md` is the program-level constitution for what
+the world must become. This section mirrors its layer model at the engine
+architecture level so code review and OpenSpec proposals use the same
+vocabulary. A layer boundary does not create a second truth store: every
+state change in every layer still flows through Command -> Rule Engine ->
+Event -> Projection.
+
+### 12.1 Layer 1: Simulation Kernel
+
+**Authority:** Owns the immutable EventLog, command batching, Rule Engine
+entrypoint, deterministic ordering, tick atomicity, reducers, and replay
+contracts.
+
+**Current modules:** `kernel/*`, `eventStore`, living-world command
+catalog, reducer/replay tests, rejected-command audit log.
+
+**Forbidden shortcuts:** No feature may persist world truth outside the
+EventLog and then ask the kernel to treat it as authoritative. Orthogonal
+account, wallet, card, or admin stores may exist, but world-facing effects
+must become Commands and Events before they can affect simulation truth.
+
+### 12.2 Layer 2: Living World Runtime
+
+**Authority:** Owns autonomous NPC routines, movement, activities,
+interactions, memory, relationships, life goals, weather, seasons, rare
+windows, active world events, area pressure, and world agenda directives.
+
+**Current modules:** `sim/runtime.ts`, `npcEngine.ts`, `areaStateEngine.ts`,
+`worldAgenda.ts`, NPC memory/relationship projections, ambient world-event
+systems.
+
+**Boundary:** Living World may emit NPC/System Commands, but it may not
+invent civilization goods, ecosystem species, combat outcomes, or AI-authored
+facts. It observes only `WorldState(t-1)` during tick N.
+
+### 12.3 Layer 2.5: Ecosystem Runtime
+
+**Authority:** Owns species, animal entities, biological populations,
+fisheries, forest regrowth, migration, predation, carcasses, livestock, and
+ecological collapse/recovery.
+
+**Current status:** Not implemented. No species catalog, animal runtime,
+fishery projection, wildlife engine, migration engine, or ecosystem commands
+exist yet.
+
+**Required future projections:** `animal_population`, `ecosystem_region`,
+`migration_routes`, `carcass_registry`, and `livestock_registry`, each with
+rebuild-from-events and canonical-hash tests.
+
+**Boundary:** Civilization raw goods must originate from ecosystem Events
+once this layer exists. Goods, logistics, and market prices must not claim
+honest metabolism while fish, animals, forests, and biological scarcity are
+only labels.
+
+### 12.4 Layer 3: Civilization Runtime
+
+**Authority:** Owns settlements, construction, buildings as persistent world
+objects, roads/bridges/defenses, goods, storage, production chains,
+logistics, markets, faction territory, settlement decline, and civic history.
+
+**Current modules:** `cityLife.ts`, `constructionProjects.ts`, dynamic
+construction projection, building runtime, area resource/faction scalars.
+
+**Current status:** Partial. NPC-initiated construction can start, progress,
+complete, and project into visible buildings. Settlement entities, goods,
+transport, production, market prices, roads, capture, decay, and faction war
+are still missing.
+
+**Boundary:** Civilization may consume Ecosystem Events and Living World NPC
+Commands, but it may not bypass Layer 1 or create resources from nothing once
+the ecosystem substrate exists.
+
+### 12.5 Layer 4: Combat Runtime
+
+**Authority:** Owns combat Commands, combat rule evaluation, combat state
+projection, card-priority resolution inside combat, defeat/resolution events,
+and combat-derived world consequences.
+
+**Current modules:** `combat/*`, combat router, combat store, Phase B
+single-shot command flow.
+
+**Current status:** Partial. Phase B proves Command -> Rule Engine -> Event
+for simple combat, but §11.4 remains open because session/log side effects and
+some consequences are not fully event-sourced. Phase C must make CombatStore a
+read-only projection before combat can claim architecture compliance.
+
+**Boundary:** Combat is not a detached minigame. Persistent outcomes must feed
+Layer 3 faction/territory/economy, Layer 2 NPC memory, Layer 2.5 species
+population when wildlife exists, and Layer 5 history/perception projections.
+
+### 12.6 Layer 5: Perception Runtime
+
+**Authority:** Owns AI narration, dialog phrasing, ambient descriptions,
+chronicle rendering, summaries, GM dashboards, and user-facing interpretation
+of committed facts.
+
+**Current modules:** Gemini dialog, ambient narrator, chronicle renderer,
+anti-hallucination guardrails, `/api/admin/npc-stats` read-only dashboard.
+
+**Boundary:** AI and perception tools are read-only. They may summarize,
+phrase, filter, or visualize committed facts, but they must not submit hidden
+Commands, mutate WorldState, choose deterministic outcomes, change combat math,
+or manufacture named people/species/buildings not present in their grounded
+input.
+
+### 12.7 Inter-Layer Dependency Rules
+
+1. **Kernel first:** Layer growth is blocked if it requires unbounded per-tick
+   work before §11.6 budget controls exist.
+2. **Typed events before permanence:** New long-lived domains should use typed
+   Events and rebuildable projections, not new persistent `FACT_SET` domains.
+3. **Ecosystem before metabolism:** Goods, logistics, production chains, and
+   market prices must not claim honest civilization metabolism until Layer 2.5
+   provides the raw biological substrate for meat, fish, forest, livestock, and
+   ecological scarcity.
+4. **Settlement before economy:** A market or trade route must attach to a real
+   settlement/storage domain, not only to tile-level scalar resources.
+5. **Combat feeds the world:** Combat can be real-time internally, but
+   persistent outcomes must be committed Events consumed by civilization,
+   ecosystem, NPC memory, and history projections.
+6. **Cards are rule operators:** Card play must eventually modify deterministic
+   rule evaluation for a bounded scope; card state remains transitional until
+   §11.2 is closed.
+7. **Player is an ordinary actor:** Player civilization actions are Commands
+   under the same Rule Engine. The player may influence history, but may not
+   bypass determinism, pause the world, or receive hidden authority.
+8. **Perception never owns truth:** If a feature needs AI text to make a fact
+   exist, the fact is missing from the simulation layer and the feature is not
+   architecture-compliant.

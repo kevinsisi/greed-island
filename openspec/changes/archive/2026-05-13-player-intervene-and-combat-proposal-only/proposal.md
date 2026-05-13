@@ -52,7 +52,7 @@
 - **AI 只做旁白**：pre/mid/post combat narration，read-only，不影響戰鬥計算。
 - **階段藍圖**：Phase A 規劃 only (本 release v0.14.0) → Phase B 單擊判決 (v0.15) → Phase C real-time sub-tick (v0.16) → Phase D world feedback loop (v0.17)。
 
-詳細：見 [`openspec/changes/combat-system/proposal.md`](../combat-system/proposal.md) + [`COMBAT_ARCHITECTURE.md`](../../../COMBAT_ARCHITECTURE.md)。
+詳細：見 [`openspec/changes/combat-system/proposal.md`](../../combat-system/proposal.md) + [`COMBAT_ARCHITECTURE.md`](../../../../COMBAT_ARCHITECTURE.md)。
 
 ## Impact
 
@@ -62,3 +62,7 @@
   - web：暫時不加 UI（下個 release 再做）。可選：API 客戶端加 `npcIntervene(token, npcA, npcB, mode)`。
 - **資料遷移**：basic 版直接寫現有 `npc_relations` / `personal_events`，無新 schema。
 - **Risk**：basic 版繞過 Rule Engine，違反 ARCHITECTURE §1.1（所有狀態變更走 Command → Event）。**標記為 v0.14.x 的技術債**，必須在 v0.15 補完整 Command 路徑後才能算正式 living-world 機制。
+
+## Archive note
+
+Archived as proposal-only historical context on 2026-05-13 because it had no formal OpenSpec deltas and blocked `openspec validate --all --strict`. Future player-as-civilization work should be re-proposed under Phase 6 using `docs/WORLD_CAPABILITIES.md` §42.1 and must not reuse the v0.14 direct-mutation debt path.
