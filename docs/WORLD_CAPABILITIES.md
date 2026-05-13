@@ -1,16 +1,35 @@
-# Greed Island — Current World Capabilities
+# Greed Island — World Capabilities, Vision, and Path
 
-> What the world actually does **right now** (v0.15.47, 2026-05-13).
+> **What this document is:** a single source of truth that records (a)
+> what the world actually does today, (b) the declared target world
+> shape, and (c) the phased plan that bridges the two.
 >
-> Verified against `packages/server/src/` and `packages/web/src/`, not
-> against ROADMAP rhetoric. Capabilities marked ❌ are explicit gaps,
-> not aspirations.
+> **Structure:**
+> - **Part I — Current Baseline** (§0–§14): verified against
+>   `packages/server/src/` and `packages/web/src/` at v0.15.47.
+>   ❌ marks are real gaps, not aspirations.
+> - **Part II — Target Vision** (§15–§16): formalization of
+>   `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` into five named runtime
+>   layers.
+> - **Part III — Crosswalk** (§17–§18): per-layer status + concrete list
+>   of Commands, projections, and runtime hooks the vision requires.
+> - **Part IV — Six-Phase Plan** (§19–§26): release-sized phases with
+>   dependencies and honest sizing.
+> - **Part V — Meta** (§27).
 >
-> This is a **baseline reference** for planning the next direction. For
-> world laws read `ARCHITECTURE.md`. For release-by-release history read
-> `ROADMAP.md`. For latest handoff state read `PROGRESS.md`.
+> **Honest sizing up front:** Part IV adds up to roughly **14–22
+> releases** of work. At the v0.15.34→47 cadence (~13 slices in 1 week)
+> that is a **6–12 month program** once slices stop being micro. Do not
+> treat this as a sprint backlog.
+>
+> **What this is not:** not a roadmap (see `ROADMAP.md`), not an
+> architectural law book (see `ARCHITECTURE.md`), not a release journal
+> (see `PROGRESS.md`), not the project's vision (see
+> `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`).
 
 ---
+
+# Part I — Current Baseline (v0.15.47, 2026-05-13)
 
 ## 0. Headline Numbers
 
@@ -70,7 +89,7 @@ Every state change goes through one of these 26 Commands:
 **Combat (Phase B single-shot, v0.15.0)**
 `COMBAT_INITIATE`, `COMBAT_PLAYER_ACTION`, `COMBAT_RESOLVE`
 
-❌ Conspicuously **missing** Command types (need new design): production-chain commands, trade/market commands, settlement-formation, faction-war/territory-takeover, culture/tradition, mentorship/skill-transfer, player-hire-NPC, player-sponsor-construction, road/bridge-build.
+❌ Conspicuously **missing** Command types (need new design): production-chain, trade/market, settlement-formation, faction-war/territory-takeover, culture/tradition, mentorship/skill-transfer, player-hire-NPC, player-sponsor-construction, road/bridge-build, goods-extracted/transported/stored/consumed.
 
 ---
 
@@ -212,6 +231,7 @@ What NPCs do **without any player action** (`npcEngine.ts`, `cityLife.ts`, `worl
 
 ❌ **Phase C real-time sub-tick** (`combat-phase-c-realtime-subtick` OpenSpec exists) — not yet applied. 10Hz sub-tick + 5-phase rule engine + 紋卡 priority table not implemented.
 ❌ **§11.4** — combat session/log store and defeat side-effects partially bypass canonical EventLog.
+❌ Combat outcomes do **not** persist into faction / territory / economy / history.
 
 ---
 
@@ -224,6 +244,7 @@ What NPCs do **without any player action** (`npcEngine.ts`, `cityLife.ts`, `worl
 - ✅ **Techniques shop**: `/api/shop/techniques` + `/api/me/techniques` + buy (`techniques.ts`).
 
 ❌ **§11.2** — card events live in `card_action_log` separate from canonical `event_log`. Not unified, so card state is not fully covered by `WorldState = Reduce(EventLog)`.
+❌ Cards today are **effects/items**, not **World Rule Operators** as the vision demands.
 
 ---
 
@@ -247,7 +268,7 @@ What a logged-in player can do (HTTP endpoints, verified in `packages/server/src
 pickup / store / release / codex / codex-materialize / trade propose|accept|reject|cancel.
 
 **NPC dialog & intervention**
-`POST /api/npc/:npcId/dialog-hold` (freeze NPC during conversation), `POST /api/npc/:npcId/interact` (Gemini-rendered dialog grounded in memory/relationships), `POST /api/npc/intervene` (player-as-actor — basic version), `GET /api/npc/:npcId/greet|history`.
+`POST /api/npc/:npcId/dialog-hold`, `POST /api/npc/:npcId/interact` (Gemini-rendered dialog grounded in memory/relationships), `POST /api/npc/intervene` (basic), `GET /api/npc/:npcId/greet|history`.
 
 **Combat**
 `GET /api/combat/active`, `GET /api/combat/:id`, `POST /api/combat/initiate`, `POST /api/combat/:id/action` (Phase B).
@@ -261,18 +282,7 @@ Friends, friend-requests, messages, conversations, presence, nearby, alliance cr
 **Admin / GM**
 `/admin/users`, `/admin/users/:userId/role`, `/admin/...`, `/settings/health|keys|...`.
 
-❌ Player **cannot**:
-- Hire NPC for personal task
-- Sponsor / donate to NPC construction project
-- Join / leave / lead a faction
-- Claim or transfer land / tile ownership
-- Carry goods between tiles
-- Found a settlement
-- Place a building (only NPCs initiate construction)
-- Affect world economy beyond own wallet
-- Leave a permanent mark NPCs remember across long timespans (memory decays linearly)
-
-The OpenSpec change `player-intervene-and-combat` is drafted but **not fully applied**.
+❌ Player **cannot**: hire NPC, sponsor / donate to NPC construction, join / lead a faction, claim or transfer land, carry goods between tiles, found a settlement, place a building, affect world economy beyond own wallet, or leave a permanent mark NPCs remember across long timespans. `player-intervene-and-combat` OpenSpec is drafted but **not fully applied**.
 
 ---
 
@@ -287,12 +297,11 @@ The OpenSpec change `player-intervene-and-combat` is drafted but **not fully app
 - ✅ **Server-authored motivation payloads** (v0.15.34): events carry deterministic `payload.data.motivation`; Timeline falls back to old text only when motivation absent.
 
 ❌ **§11.9** — NPC personal dialog not fully grounded in memory: no full known-person graph, alias memory, household state, or long-term social history queries before answering. Anti-hallucination guards prevent invention but cannot replace actual grounding.
+❌ No **rumor propagation** between NPCs. Each NPC's perception of an event is whatever they directly saw; no second-hand transmission.
 
 ---
 
 ## 13. Observability Surfaces
-
-**Frontend pages** (`packages/web/src/pages/`):
 
 | Page | What it shows |
 |---|---|
@@ -322,65 +331,478 @@ The OpenSpec change `player-intervene-and-combat` is drafted but **not fully app
 - ✅ **Restart-safe expansion** (v0.15.36): `t_salt_marsh` + `b_salt_marsh_field_station` survive restart via latest-fact hydration.
 - ✅ **Orthogonal stores** (not part of simulation): accounts, password resets, friend graph, messages, alliances, player codex, card trades, player jobs, wallet, settings.
 
-❌ **§11.7** — projection rebuild contract incomplete: not every projection has a `rebuildFromEvents` method + canonical-hash replay test. `construction_projects` does; others still pending.
+❌ **§11.7** — projection rebuild contract incomplete: not every projection has a `rebuildFromEvents` method + canonical-hash replay test.
 
 ---
 
-## 15. Honest Gap Inventory (what the world **cannot** do today)
+# Part II — Target World Vision
 
-### 15.1 Architecture-level (§11 backlog)
+> Source: `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` (Reality
+> Principle / Simulation Time Principle / World Existence Principle /
+> Layers / 18 sub-principles / Final Objective).
 
-| ID | Gap | Impact |
-|---|---|---|
-| §11.2 | Card state has separate event log | Card world is durable but not unified with canonical EventLog |
-| §11.3 | Jobs/wallet mutate projection directly | Player work/wage not replayable from EventLog |
-| §11.4 | Combat store side-effects partial | Phase C OpenSpec drafted, not applied |
-| §11.5 | FACT_SET still load-bearing | NPC state migration to typed events pending |
-| §11.6 | Simulation budget not enforced | No NPC partitioning / regional activation / command cap — will hit wall at scale |
-| §11.7 | Projection rebuild contract incomplete | Not every projection has rebuild + canonical-hash test |
-| §11.8 | Civ-evo only construction slice 1 | Production chains / settlements / factions / culture all absent |
-| §11.9 | NPC dialog not fully grounded | No known-person graph / alias memory / household / faction knowledge query |
+## 15. Vision Summary
 
-### 15.2 Civilization-evolution scope (`DEVELOPMENT_CONSTITUTION.md` §"Civilization Evolution Constitution")
+Greed Island is **a deterministic living civilization simulation system**. Not a multiplayer game runtime. Not an MMORPG. Not an AI NPC showcase. Not an open-world sandbox.
 
-Required by the Prime Directive, **not yet implemented**:
+The world is:
+- **Deterministic** (same EventLog + same ruleset → same WorldState)
+- **Persistent** (committed Events survive)
+- **Autonomous** (continues without players, clients, AI, rendering)
+- **Civilization-shaped** (NPCs build civilization; map is a projection of that civilization)
+- **Event-defined Reality** (only committed Events are real)
+- **Tick-based** (no wall-clock dependency anywhere in deterministic logic)
+- **AI-assisted Perception** (AI is the perception layer only)
 
-- ❌ Production chains (raw → intermediate → finished goods)
-- ❌ Resource transport (carriers, routes, congestion)
-- ❌ Market formation, price discovery, supply chains
-- ❌ Settlement formation, growth, decline, abandonment
-- ❌ Faction war, territorial takeover, regime change
-- ❌ Skill learning from observation / mentorship / scarcity
-- ❌ Culture, household-as-economic-unit, festivals, rites
-- ❌ Emergent history written by NPC behavior at multi-year scale
+The player is **one Actor inside the civilization**. The world does not pause for the player. Player intervention is a kind of Command, like any NPC's. Player absence does not slow the world.
 
-### 15.3 Player-as-actor scope (Architecture §0.1: "the player is one actor inside the world")
+## 16. The Five Runtime Layers (Formalization)
 
-Player is structurally a **viewer plus narrow interactor** today:
+The vision splits the runtime into five named layers. Today's
+`ARCHITECTURE.md` does not name layers; sections §0–§11 describe
+guarantees and gaps but do not draw boundaries. Phase 0 (§20)
+formalizes this into ARCHITECTURE.md §12.
 
-- ❌ Cannot hire / dismiss NPCs as employer
-- ❌ Cannot sponsor or donate to construction
-- ❌ Cannot found / join / leave / lead factions
-- ❌ Cannot claim land or transfer ownership
-- ❌ Cannot affect economy beyond own wallet
-- ❌ Cannot leave persistent mark NPCs remember across seasons
-- ❌ Cannot fight at scale (Phase B is single duel)
+```text
+┌─────────────────────────────────────────────────┐
+│  Layer 5 — Perception Runtime                   │
+│  AI narration, NPC dialog, rumors, history       │
+│  interpretation, atmospheric rendering, social   │
+│  perception. AI lives ONLY here. Read-only.      │
+├─────────────────────────────────────────────────┤
+│  Layer 4 — Combat Runtime                       │
+│  Deterministic combat, rule-based interactions,  │
+│  card resolution, combat tick pipeline,          │
+│  persistent combat consequences into world.      │
+├─────────────────────────────────────────────────┤
+│  Layer 3 — Civilization Runtime                 │
+│  Settlement, economy, resource flow, logistics,  │
+│  construction, production chains, territory,     │
+│  faction expansion, population pressure.         │
+├─────────────────────────────────────────────────┤
+│  Layer 2 — Living World Runtime                 │
+│  NPC behavior, world rules, weather, seasons,    │
+│  world events, movement, autonomous commands.    │
+├─────────────────────────────────────────────────┤
+│  Layer 1 — Simulation Kernel                    │
+│  Tick runtime, Rule Engine, Event ordering,      │
+│  Reducer, deterministic resolution, replay,      │
+│  advance determinism.                           │
+└─────────────────────────────────────────────────┘
+```
 
-### 15.4 NPC-humanity depth beyond §11.9
-
-- ❌ No knowledge boundary enforcement (NPC doesn't refuse questions about people they haven't met)
-- ❌ No alias / nickname memory
-- ❌ No household shared income / decisions
-- ❌ No long-term life-stage memory weighting (linear decay only)
-- ❌ No remembered player history across long absences (memory decays linearly)
+**Inter-layer rule** (load-bearing): higher layers may *submit Commands* and *read projections*. They may **not** mutate state directly or bypass Layer 1. Layer 5 (AI/Perception) is observation-only.
 
 ---
 
-## 16. What This Document Is **Not**
+# Part III — Baseline → Target Crosswalk
 
-- Not a roadmap — see `ROADMAP.md`.
-- Not architectural law — see `ARCHITECTURE.md`.
-- Not a release journal — see `PROGRESS.md`.
-- Not a vision — that's what the conversation after this document is for.
+## 17. Layer-by-Layer Status
 
-This is a **baseline snapshot**. The next planning step is for the user to declare their world vision; this document is the floor that vision builds on.
+| Layer | Status | Already shipped | Major missing pieces |
+|---|---|---|---|
+| **1. Simulation Kernel** | ✅ solid | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity | §11.6 budget enforcement, §11.5 FACT_SET → typed events, §11.7 rebuild contracts on every projection |
+| **2. Living World Runtime** | 🟡 substantial | Weather, season, rare windows, world events, NPC routine, NPC interaction, NPC memory/relationships/life-goals/household/children, ambient errands, world agenda directives, productive actions, skill XP, autonomous construction (slice 1) | Rumor propagation, NPC migration, NPC trade, mentorship, cross-tile schedule |
+| **3. Civilization Runtime** | 🔴 **mostly empty** | Construction initiate→progress→complete pipeline; faction dominance scalar; area resource scalars (food/safety/economy); single map expansion proof | **Everything else**: settlement as entity, goods (not scalars), logistics (carriers/routes/warehouses/ports), production chains, market formation, faction territory, faction war, settlement decline, map evolution beyond catalog |
+| **4. Combat Runtime** | 🟡 partial | Phase B single-shot, deterministic formulas, replay-safe hashSeed | §11.4 full event-sourcing, Phase C real-time sub-tick, persistent consequences into Civilization (territory/economy/faction/history/relationships), cards as combat rule operators |
+| **5. Perception Runtime** | 🟡 partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | §11.9 dialog grounded in memory/relationships/household/faction/known-person graph, rumor propagation between NPCs, history projection as interpreted-not-listed, regional perception (each region "knows" different things) |
+
+**Read this honestly:** Layer 3 (Civilization Runtime) is the biggest gap. The "Civilization Evolution" that the vision and `DEVELOPMENT_CONSTITUTION.md` promise is **today only one slice deep** (NPC-initiated construction). Most of the work in Phases 1–6 is layer 3.
+
+## 18. Vision Principles → Required New Capabilities
+
+Concrete: what each principle demands as new Commands, projections, and runtime hooks. This is the input list for the OpenSpec changes in Part IV.
+
+### 18.1 Settlement Principle
+
+**New domain object:** `Settlement` — `{ id, tileId, sourceTilesOccupied[], population[], storage, economyState, territory, factionAlignment, stability, productionCapacity[], defense, expansionPressure, tradeRoutes[] }`.
+
+**New Commands:**
+- `SETTLEMENT_FORMED` — when ≥ N NPCs share a tile + recurring co-presence + shared economic activity for K ticks
+- `SETTLEMENT_POPULATION_CHANGE` — birth / death / migration in/out
+- `SETTLEMENT_GROW` — population × economy threshold crossed
+- `SETTLEMENT_DECLINE` — resource starvation / safety collapse / faction defeat
+- `SETTLEMENT_SPLIT` — population overflow + territory pressure
+- `SETTLEMENT_MIGRATE` — settlement-level move (rare)
+- `SETTLEMENT_DESTROYED` — defeat / resource exhaustion
+- `SETTLEMENT_TAKEN_OVER` — faction shift / conquest
+
+**New projection:** `settlements` table — rebuild-from-events.
+
+**Runtime hook:** Layer 3 `SettlementEngine` consults living-world NPC presence + economy + faction state every K ticks; emits Commands accordingly.
+
+### 18.2 Civilization Metabolism Principle
+
+**New domain object:** `Goods` — `{ kind: 'raw'|'intermediate'|'finished', species, quantity, location }`. Species examples: `salt_marsh_brine`, `mountain_ore`, `forest_lumber`, `refined_salt`, `iron_ingot`, `bread`.
+
+**New Commands:**
+- `GOODS_EXTRACTED` (raw goods produced by NPC at extraction site)
+- `GOODS_STORED` (deposited into warehouse / settlement storage)
+- `GOODS_PROCESSED` (intermediate → finished at production building)
+- `GOODS_CONSUMED` (consumed by NPC / settlement / faction)
+- `GOODS_DESTROYED` (decay, attack, accident)
+
+**New projection:** `goods_inventory` per (settlement, building, NPC). Rebuild-from-events.
+
+**Runtime hook:** Layer 3 `EconomyEngine` runs every tick (or every K ticks for inactive regions) — extraction at resource buildings, consumption at NPCs/buildings, decay.
+
+### 18.3 Logistics Principle
+
+**New domain object:** `TradeRoute` — `{ id, fromSettlementId, toSettlementId, carriersAssigned, goodsSpecies, capacity, hazards }`.
+**New NPC archetype:** `carrier` (already exists in lore; needs runtime behavior).
+**New building types:** `warehouse`, `port`, `road_segment`, `bridge`.
+
+**New Commands:**
+- `GOODS_TRANSPORT_STARTED` (carrier picks up cargo)
+- `GOODS_TRANSPORT_ARRIVED` (carrier deposits)
+- `GOODS_TRANSPORT_LOST` (hazard, attack, decay)
+- `TRADE_ROUTE_OPENED` / `TRADE_ROUTE_CLOSED`
+
+**No instant teleport** — goods location updates per carrier NPC tick.
+
+### 18.4 Construction & Map Evolution Principles
+
+**Existing:** `CONSTRUCTION_INITIATE` / `_PROGRESS` / `BUILDING_CONSTRUCTED` / `MAP_TILE_UNLOCKED`.
+
+**New Commands:**
+- `BUILDING_UPGRADED` (tier-up)
+- `BUILDING_DAMAGED` (combat, accident, decay)
+- `BUILDING_ABANDONED` (owner left, no operators)
+- `BUILDING_REPAIRED`
+- `BUILDING_CAPTURED` (faction takeover)
+- `ROAD_BUILT` / `BRIDGE_BUILT` / `WALL_BUILT` (new map features)
+- `MAP_FEATURE_DECAYED`
+
+**Map becomes a projection of civilization Events** — frontend reads `/api/map` and gets whatever civilization has built, not a static catalog.
+
+### 18.5 Learning Principle
+
+**New Commands:**
+- `NPC_OBSERVED_SKILL` (NPC watched another NPC do a productive action; partial XP gain)
+- `NPC_MENTORSHIP_STARTED` / `_COMPLETED` (formal teaching; large XP gain)
+- `NPC_KNOWLEDGE_INHERITED` (parent → child via household)
+
+**Skill XP semantics shift:** from "amount of work done" to "amount of work done + observed + taught". XP record may also carry `lineage` = who taught whom.
+
+### 18.6 Culture Principle
+
+**New domain object:** `CulturalElement` — `{ id, kind: 'tradition'|'belief'|'festival'|'ritual'|'ideology'|'norm', scope: 'region'|'faction'|'household', participants[], originatingEvent }`.
+
+**New Commands:**
+- `CULTURAL_ELEMENT_FORMED` (e.g. annual festival emerges from rare-window pattern)
+- `CULTURAL_ELEMENT_OBSERVED` (NPC participates → strengthen)
+- `CULTURAL_ELEMENT_FORGOTTEN` (no participants for K ticks)
+
+**Faction ideology** = aggregate of factional cultural elements; influences NPC behavior weights.
+
+### 18.7 Combat Principle (Persistent Consequences)
+
+**Existing:** `COMBAT_INITIATE` / `_PLAYER_ACTION` / `_RESOLVE` + Phase B events.
+
+**New Commands (to land on top of Phase C):**
+- `FACTION_DOMINANCE_SHIFTED` (after combat resolves in faction-relevant context)
+- `TERRITORY_CLAIM_CHANGED` (after combat over contested tile/settlement)
+- `NPC_INCAPACITATED_LONG` (severe defeat; longer than 1 tick)
+- `NPC_DECEASED` (permanent removal, rare — design carefully)
+- `COMBAT_WITNESS_RECORDED` (other NPCs present update memory/relationships)
+
+**Combat events feed history projection** (§18.9).
+
+### 18.8 Cards as World Rule Operators
+
+**Reframe:** cards stop being effects/items. A card is a *named Command that the player or NPC submits which modifies the rule layer for a bounded scope*.
+
+**Examples:**
+- `CARD_PLAYED: "潮汐倒退"` = submit a Command that lowers `food` resource cost for fishing NPCs in `t_dock` for 60 ticks
+- `CARD_PLAYED: "石脈共鳴"` = submit a Command that doubles `GOODS_EXTRACTED` rate for `mountain_ore` in `t_mountain` for 30 ticks
+
+**Implementation:**
+- Card catalog gains `ruleOperatorScope`, `ruleOperatorEffect`, `durationTicks`, `permittedInvokers` (player / specific NPC archetypes / faction)
+- Rule Engine evaluates active card-operator effects when validating subsequent Commands
+- Unify card events into canonical `event_log` (closes §11.2)
+
+### 18.9 History Principle (Emergent History Projection)
+
+**New projection:** `history_chronicle` — derives narrative arcs from event sequences:
+- Settlement formation arc (commands from `SETTLEMENT_FORMED` → first `BUILDING_CONSTRUCTED` → first `GOODS_PROCESSED`)
+- Faction war arc (territory contest events + combat events + dominance shifts)
+- Founder / hero arc (NPC's significant productive actions + inheritance + memory by others)
+- Decline arc (resource starvation + population loss + settlement decline)
+
+**Distinguished from Timeline:** Timeline is event list. Chronicle is interpreted arcs. Built by Layer 5 Perception (AI may help phrase, never invents).
+
+### 18.10 Player Position Principle
+
+**New Commands:**
+- `PLAYER_HIRED_NPC` / `_DISMISSED_NPC`
+- `PLAYER_SPONSORED_CONSTRUCTION`
+- `PLAYER_FOUNDED_SETTLEMENT`
+- `PLAYER_CLAIMED_TERRITORY`
+- `PLAYER_JOINED_FACTION` / `_LEFT_FACTION` / `_LED_FACTION`
+- `PLAYER_TRADED_GOODS`
+- `PLAYER_PLAYED_CARD` (rule-operator semantics from §18.8)
+
+**Closes:** §11.3 (player wallet/jobs event-sourced), `player-intervene-and-combat` OpenSpec applied.
+
+**Constraint:** every player Command produces an Event NPCs can observe and remember. Player intervention shows up in history projection.
+
+### 18.11 Architectural Cross-Cutting (§11 backlog absorbed)
+
+Each phase **must** close at least one §11 item, and the budget gate
+(§11.6) must close before Phase 1 grows the runtime. Detailed mapping in
+Phases below.
+
+---
+
+# Part IV — Six-Phase Plan
+
+## 19. Phase Overview & Honest Sizing
+
+| Phase | Theme | Releases (est.) | Closes §11 |
+|---|---|---|---|
+| **0** | Architecture formalization (doc only) | 1 | none |
+| **1** | Civilization Runtime primitives + budget gate | 4–6 | 11.5, 11.6, 11.7 (NPC + areas), 11.8 starts |
+| **2** | Civilization metabolism | 3–5 | 11.8 expands |
+| **3** | NPC humanity completion + culture | 3–4 | 11.9 |
+| **4** | Cards as World Rule Operators | 1–2 | 11.2 |
+| **5** | Combat persistent consequences | 2–3 | 11.4 |
+| **6** | Player as civilization actor | 2–4 | 11.3, `player-intervene-and-combat` applied |
+| **Total** | | **16–25 releases** | All §11 items closed |
+
+**Dependency rule:** Phase 1's budget gate (§11.6) must complete before Phases 2+ add per-tick load. Phases 2/3 can partially parallel after Phase 1 lands; Phases 4/5/6 may also parallel once their dependencies are done.
+
+**At v0.15.34→47 cadence** (13 slices/week in May 2026) this is ~3 months optimistic, ~6–12 months realistic once slices get heavier and live verification + OpenSpec validation per slice slow throughput.
+
+---
+
+## 20. Phase 0 — Architecture Formalization
+
+**Goal:** Lock the five-layer vocabulary into the documentation system so every subsequent OpenSpec change can reference layer + principle without re-arguing them.
+
+**Concrete deliverables:**
+- Add `ARCHITECTURE.md` §12 "Five Runtime Layers" — definitions, inter-layer rule, mapping of existing §0–§11 to layers.
+- Update `DEVELOPMENT_CONSTITUTION.md`:
+  - Add "Civilization Evolution Constitution" reference to the five layers
+  - Add a "Vision document" pointer to `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`
+- Update `ROADMAP.md` — v0.16.0 entry naming Phase 0.
+- Confirm `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md` markdown formatting (close the unterminated code block at L37).
+- No code change.
+
+**Definition of done:**
+- All five docs cross-reference each other consistently.
+- ARCHITECTURE.md §12 names which layer each existing module belongs to (`kernel/`, `sim/`, `combat/`, `npcs/aiDialog.ts`, etc.).
+- One commit, one CI pass, one Deploy Dev no-op pass.
+
+**Release:** v0.16.0.
+
+---
+
+## 21. Phase 1 — Civilization Runtime Primitives + Budget Gate
+
+**Goal:** Make Layer 3 (Civilization Runtime) a real layer with a first domain (Settlement) and prepay the budget/typed-event/rebuild-contract debt that everything afterwards depends on.
+
+**1.1 Budget gate (closes §11.6)** — 1–2 releases.
+- Implement per-tick command cap with overflow deferral
+- NPC partitioning: active set (player-relevant + recent activity) vs background set (cheaper policy)
+- Regional activation: tiles with no player presence and no flagged world rule run low-frequency drift
+- Observable metric: `/api/dashboard` exposes tick cost histogram + active/background counts
+- Tests: load test 200 NPCs at 5s tick
+
+**1.2 NPC FACT_SET → typed events (closes §11.5 for NPC state)** — 1 release.
+- Drop `npc.state.<id>` FACT_SET path; replace with typed-event projection from `NPC_MOVE` / `NPC_ACTIVITY_CHANGE` / etc.
+- Add `npc_state` projection table with `rebuildFromEvents` + canonical-hash test
+- Migration path: replay existing FACT_SET history into typed events on boot once, then never write FACT_SET for NPC state again
+
+**1.3 Projection rebuild contract sweep (closes §11.7)** — 1 release.
+- Audit all current projection-like stores
+- Add `rebuildFromEvents` + canonical-hash replay test for: area state, building occupants, world weather/season, active world events, rare windows, household/children
+
+**1.4 Settlement domain object (opens §18.1)** — 1–2 releases.
+- New OpenSpec change: `settlement-domain`
+- Commands: `SETTLEMENT_FORMED`, `SETTLEMENT_POPULATION_CHANGE`, `SETTLEMENT_GROW`, `SETTLEMENT_DECLINE`, `SETTLEMENT_DESTROYED`, `SETTLEMENT_TAKEN_OVER`, `SETTLEMENT_SPLIT`
+- Projection: `settlements` table
+- First visible behavior: when ≥ 3 NPCs spend ≥ N ticks co-located at a tile sharing productive actions, emit `SETTLEMENT_FORMED`; visible in Hub map as new district label "聚落: <name>"
+- Frontend: `/api/settlements` + Hub overlay
+- Salt-marsh becomes the first NPC-formed settlement (rather than legacy hard-coded expansion)
+
+**Definition of done for Phase 1:**
+- Tick cost stays bounded at 200 NPCs
+- All NPC state replayable from typed events
+- Salt-marsh visible as a real settlement entity, not a legacy fixed project
+- All new projections have rebuild + canonical-hash tests
+
+**Releases:** v0.16.1 → v0.16.6 (approximately).
+
+---
+
+## 22. Phase 2 — Civilization Metabolism
+
+**Goal:** Layer 3 starts metabolizing goods. `economy` stops being a scalar.
+
+**2.1 Goods primitives (§18.2)** — 1 release.
+- Catalog goods species (initial ~10: brine, lumber, ore, fish, grain, refined salt, iron ingot, bread, cloth, tools)
+- Commands: `GOODS_EXTRACTED`, `GOODS_STORED`, `GOODS_PROCESSED`, `GOODS_CONSUMED`, `GOODS_DESTROYED`
+- Projection: `goods_inventory` per (settlement, building, NPC)
+- First behavior: NPCs at extraction-eligible buildings (forest hunters, mountain miners, salt-marsh fishers) emit `GOODS_EXTRACTED` on productive `build`/`work` actions
+
+**2.2 Logistics (§18.3)** — 1–2 releases.
+- New NPC archetype: `carrier`. Some existing NPCs (port concierge, paperboy) gain carrier runtime behavior.
+- New building types: `warehouse`, `port`, `road_segment` (Phase 2 keeps roads abstract; Phase 1 settlement infra adds real geometry later).
+- Commands: `GOODS_TRANSPORT_STARTED`, `_ARRIVED`, `_LOST`, `TRADE_ROUTE_OPENED`, `_CLOSED`
+- Goods location changes only with carrier ticks; no teleport
+
+**2.3 Production chains (§18.4)** — 1 release.
+- Buildings of type `production` consume input goods → emit `GOODS_PROCESSED` with output species
+- Example chain: `salt_marsh_brine` → `refined_salt` (at salt works building) → consumed at central market
+
+**2.4 Market formation (§18.2 finishing)** — 1–2 releases.
+- Settlements track local supply/demand per goods species
+- `MARKET_PRICE_DISCOVERED` Command/Event emitted on transaction
+- NPCs prefer goods from settlements with surplus + lower price (deterministic preference function)
+
+**Definition of done for Phase 2:**
+- Salt-marsh can supply refined salt to central market via real carrier NPCs
+- Disrupting a carrier's route causes downstream goods shortage
+- Settlement market prices respond to local supply
+
+**Releases:** v0.17.0 → v0.17.4 (approximately).
+
+---
+
+## 23. Phase 3 — NPC Humanity Completion + Culture
+
+**Goal:** Layer 2 + Layer 5 close the humanity gap. NPCs become people, not predictable role-actors.
+
+**3.1 Dialog grounding (closes §11.9)** — 1–2 releases.
+- AI prompts gain query interface to: known-person graph, alias memory, household state, faction knowledge, recent participated events
+- Anti-hallucination rejects out-of-graph names with explicit "我沒聽過這個人" / "你說的是哪一位？"
+- Rumor propagation (Phase 5 of original vision): when NPCs interact, partial memory transfers with attenuation
+
+**3.2 Learning from history (§18.5)** — 1 release.
+- `NPC_OBSERVED_SKILL` emitted when NPC is co-located with another performing the same skill domain
+- Observed XP gain is partial (e.g. 25% of doing it directly)
+- `NPC_MENTORSHIP_STARTED` for explicit teaching events
+
+**3.3 Culture (§18.6)** — 1–2 releases.
+- `CulturalElement` domain
+- First emergent culture: festival around recurring rare-window event; faction-specific ritual; regional norm (e.g. salt-marsh fishing prayer)
+- Faction ideology aggregates active cultural elements; influences `factionLean` shift weights
+
+**3.4 Household shared economy** — 1 release.
+- Household members pool gold; joint decision for major purchases (Sponsor child education / large meal / shelter upgrade)
+- `HOUSEHOLD_DECISION_MADE` Command
+- Inheritance: on `NPC_DECEASED` (rare; designed in Phase 5), household assets transfer
+
+**Definition of done for Phase 3:**
+- NPCs refuse to "know" people they have never met
+- Skill XP shows lineage (taught by whom, observed where)
+- At least one regional festival visible in chronicle
+- Household decisions visible in chronicle
+
+**Releases:** v0.18.0 → v0.18.4 (approximately).
+
+---
+
+## 24. Phase 4 — Cards as World Rule Operators
+
+**Goal:** Layer 4 (and player) treats cards as rule-operators, not effects. Closes §11.2.
+
+**4.1 Unify card events into canonical EventLog** — 1 release.
+- Merge `card_action_log` into `event_log` with new event types `CARD_PICKED_UP`, `CARD_STORED`, `CARD_PLAYED`, `CARD_MATERIALIZED`, `CARD_TRADED`
+- Projection-only reads from `world_card_drops` table; truth lives in `event_log`
+
+**4.2 Cards as rule operators** — 1 release.
+- Catalog gains `ruleOperatorScope` (which Commands the card modifies), `ruleOperatorEffect` (multiplier / threshold shift / forbid / allow), `durationTicks`, `permittedInvokers`
+- Rule Engine consults active card-operator effects when validating subsequent Commands
+- Example: "潮汐倒退" reduces `GOODS_EXTRACTED` cost at `t_dock` fishing buildings for 60 ticks
+- NPCs may also play certain cards (faction-aligned cards)
+
+**Definition of done for Phase 4:**
+- Playing a card changes how subsequent NPC commands are validated, not just who has what item
+- Every card play is in `event_log` and replayable
+
+**Releases:** v0.19.0 → v0.19.1 (approximately).
+
+---
+
+## 25. Phase 5 — Combat Persistent Consequences
+
+**Goal:** Layer 4 ships Phase C; combat outcomes ripple into Layer 3 + Layer 2 + Layer 5.
+
+**5.1 Combat Phase C (existing OpenSpec `combat-phase-c-realtime-subtick`)** — 1–2 releases.
+- 10Hz sub-tick + 5-phase rule engine + 紋卡 priority table + SSE `CombatProjection` + reconcile-on-reject
+- CombatStore becomes EventLog read-only projection (closes §11.4)
+
+**5.2 Persistent consequences (§18.7)** — 1 release.
+- `FACTION_DOMINANCE_SHIFTED` emitted on combat resolution in faction-relevant context
+- `TERRITORY_CLAIM_CHANGED` on combat over contested settlement
+- `NPC_INCAPACITATED_LONG` / `NPC_DECEASED` (designed with care — permanent removal must be rare and consequential)
+- `COMBAT_WITNESS_RECORDED` updates witness NPCs' memory + relationships
+
+**5.3 History projection (§18.9)** — 1 release.
+- `history_chronicle` projection identifies narrative arcs from event sequences (Settlement formation, faction war, founder, decline)
+- Layer 5 (AI) phrases the arcs; never invents events
+
+**Definition of done for Phase 5:**
+- Losing combat over a contested settlement actually changes faction control of that tile
+- Witnesses remember combats in their `npc_memory`
+- Chronicle page shows interpreted arcs alongside raw timeline
+
+**Releases:** v0.20.0 → v0.20.3 (approximately).
+
+---
+
+## 26. Phase 6 — Player as Civilization Actor
+
+**Goal:** Architecture §0.1 / vision Player Position Principle. Closes §11.3.
+
+**6.1 Player wallet + jobs event-sourced (§11.3)** — 1 release.
+- `POST /api/buildings/:id/apply|quit|work|rest` route to Commands (`PLAYER_HIRED_AT`, `PLAYER_QUIT_JOB`, `PLAYER_WORKED`, `PLAYER_RESTED`)
+- Wallet derived from event log
+
+**6.2 Player intervention (`player-intervene-and-combat` applied)** — 1 release.
+- The existing OpenSpec change lands; player can intervene in NPC combat, NPC interaction, faction event
+
+**6.3 Player as civilization actor** — 1–2 releases.
+- `PLAYER_HIRED_NPC` (player employs an NPC for a task; NPC's productive output flows to player)
+- `PLAYER_SPONSORED_CONSTRUCTION` (donate gold/goods to NPC construction; affects priority and ownership)
+- `PLAYER_FOUNDED_SETTLEMENT` (player can initiate settlement formation directly, with full Civilization Runtime validation)
+- `PLAYER_CLAIMED_TERRITORY` (over contested tile + faction backing)
+- `PLAYER_JOINED_FACTION` / `_LEFT_FACTION` / `_LED_FACTION`
+- `PLAYER_TRADED_GOODS` (real goods, not just gold)
+
+**6.4 Player marks history** — 1 release.
+- Every player Command produces an Event visible to nearby NPCs
+- History projection includes player arcs alongside NPC arcs
+- Player long-absence does not erase player's mark; NPCs remember (subject to memory decay)
+
+**Definition of done for Phase 6:**
+- Player can hire an NPC, sponsor construction, found a settlement, lead a faction, trade goods, all via Commands → Events
+- Long-absent player's name still appears in NPC dialog and history projection
+- World runs identically whether player is online or not (verifies §0.1)
+
+**Releases:** v0.21.0 → v0.21.3 (approximately).
+
+---
+
+# Part V — Meta
+
+## 27. What This Document Is / Is Not
+
+**Is:**
+- The integrated current-state + target-vision + path picture for Greed Island.
+- The reference any new OpenSpec change consults to know which layer it belongs to, which principle it serves, and which phase it ships in.
+- The honest gap inventory: every ❌ is a real missing capability, not a future flag.
+
+**Is not:**
+- Not a substitute for `ARCHITECTURE.md` (world laws).
+- Not a substitute for `ROADMAP.md` (release history).
+- Not a substitute for `PROGRESS.md` (latest handoff state).
+- Not a substitute for the user's vision document `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`.
+- Not a sprint backlog — Part IV is **6–12 months of work** at realistic pace.
+
+**Update protocol:**
+- Part I (baseline) updates whenever a capability ships or breaks. Tag each entry with the release that introduced/removed it.
+- Part II (vision) updates only when the user updates `docs/2026-05-13_TARGET_WORLD_CAPABILITIES.md`.
+- Part III (crosswalk) updates whenever Part I or Part II changes.
+- Part IV (plan) updates whenever a phase boundary is crossed or a dependency is invalidated.
