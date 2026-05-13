@@ -89,6 +89,17 @@ type ProductionChainsSnapshot = Readonly<{
   processed: readonly ProductionProcessRow[]
 }>
 
+type MarketPriceRow = Readonly<{
+  marketId: string
+  settlementId: string
+  goodsId: string
+  supplyQuantity: number
+  demandQuantity: number
+  priceGold: number
+  lastDiscoveredTick: number
+  lastSequence: number
+}>
+
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 export function AdminWorldPage() {
@@ -126,6 +137,7 @@ export function AdminWorldPage() {
   const goodsRows = readGoodsRows(world.facts)
   const logistics = readLogistics(world.facts)
   const productionChains = readProductionChains(world.facts)
+  const marketPrices = readMarketPrices(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -162,7 +174,7 @@ export function AdminWorldPage() {
         }
       />
 
-      <section className="grid grid-cols-2 md:grid-cols-7 gap-3" aria-label={t('admin.world.summary')}>
+      <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3" aria-label={t('admin.world.summary')}>
         <StatCard label={t('admin.world.statTick')} value={world.tick} />
         <StatCard label={t('admin.world.statSource')} value={source === 'server' ? t('admin.world.sourceServer') : t('admin.world.sourceFixture')} />
         <StatCard label={t('admin.world.statConnection')} value={liveConnected ? t('admin.world.live') : t('admin.world.polling')} />
@@ -170,6 +182,7 @@ export function AdminWorldPage() {
         <StatCard label={t('admin.world.statGoodsRows')} value={goodsRows.length} />
         <StatCard label={t('admin.world.statLogisticsRows')} value={logistics.transports.length} />
         <StatCard label={t('admin.world.statProductionRows')} value={productionChains.processed.length} />
+        <StatCard label={t('admin.world.statMarketRows')} value={marketPrices.length} />
       </section>
 
       <section className="gi-panel p-5 flex flex-col gap-4 border-cyan-700/30">
@@ -375,6 +388,48 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-rust-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-rust-300">
+              {t('admin.world.marketHeading')}
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              {t('admin.world.marketDescription')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label={t('admin.world.marketRows')} value={marketPrices.length} />
+          </div>
+        </div>
+
+        {marketPrices.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            {t('admin.world.marketEmpty')}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">{t('admin.world.colGoods')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colSupply')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colDemand')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colPrice')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colMarket')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colUpdated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {marketPrices.map((row) => (
+                  <MarketPriceView key={`${row.settlementId}:${row.goodsId}`} row={row} t={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -506,6 +561,26 @@ function ProductionRecipeView({ recipe, processed, t }: { recipe: ProductionReci
   )
 }
 
+function MarketPriceView({ row, t }: { row: MarketPriceRow; t: Translator }) {
+  const scarce = row.supplyQuantity < row.demandQuantity
+  return (
+    <tr className="border-t border-ground-800/50">
+      <td className="py-3 pr-4 text-ground-100">
+        <div>{goodsLabel(row.goodsId, t)}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.goodsId}</div>
+      </td>
+      <td className={['py-3 pr-4 font-mono text-xs', scarce ? 'text-rust-300' : 'text-moss-300'].join(' ')}>{row.supplyQuantity}</td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-300">{row.demandQuantity}</td>
+      <td className="py-3 pr-4 font-mono text-xs text-rust-300">{t('admin.world.priceGold', { value: row.priceGold })}</td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div>{row.marketId}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.settlementId}</div>
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-400">{row.lastDiscoveredTick}</td>
+    </tr>
+  )
+}
+
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="gi-panel p-3 flex flex-col gap-1">
@@ -560,6 +635,12 @@ function readProductionChains(facts: Record<string, unknown>): ProductionChainsS
     recipes: Array.isArray(snapshot.recipes) ? snapshot.recipes.filter(isProductionRecipeRow).sort((a, b) => a.recipeId.localeCompare(b.recipeId)) : [],
     processed: Array.isArray(snapshot.processed) ? snapshot.processed.filter(isProductionProcessRow).sort((a, b) => a.recipeId.localeCompare(b.recipeId)) : [],
   }
+}
+
+function readMarketPrices(facts: Record<string, unknown>): MarketPriceRow[] {
+  const raw = facts.marketPrices
+  if (!Array.isArray(raw)) return []
+  return raw.filter(isMarketPriceRow).sort((a, b) => a.settlementId.localeCompare(b.settlementId) || a.goodsId.localeCompare(b.goodsId))
 }
 
 function isFisheryDensityRow(value: unknown): value is FisheryDensityRow {
@@ -655,6 +736,21 @@ function isProductionProcessRow(value: unknown): value is ProductionProcessRow {
     typeof row.holderId === 'string' &&
     typeof row.tileId === 'string' &&
     typeof row.lastProcessedTick === 'number' &&
+    typeof row.lastSequence === 'number'
+  )
+}
+
+function isMarketPriceRow(value: unknown): value is MarketPriceRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<MarketPriceRow>
+  return (
+    typeof row.marketId === 'string' &&
+    typeof row.settlementId === 'string' &&
+    typeof row.goodsId === 'string' &&
+    typeof row.supplyQuantity === 'number' &&
+    typeof row.demandQuantity === 'number' &&
+    typeof row.priceGold === 'number' &&
+    typeof row.lastDiscoveredTick === 'number' &&
     typeof row.lastSequence === 'number'
   )
 }

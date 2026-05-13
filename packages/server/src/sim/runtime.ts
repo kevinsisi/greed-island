@@ -71,6 +71,7 @@ import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { requireSpecies } from '../ecosystem/species.js'
+import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
 import {
   NpcEngine,
@@ -122,6 +123,7 @@ import { AnimalPopulationProjection, type AnimalPopulationRow } from '../project
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
+import { MarketPricesProjection, type MarketPriceRow } from '../projections/marketPrices.js'
 import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../projections/productionChains.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
@@ -302,6 +304,7 @@ export class SimulationRuntime {
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
+  private readonly marketPricesProjection = new MarketPricesProjection()
   private readonly productionChainsProjection = new ProductionChainsProjection()
 
   constructor(
@@ -449,6 +452,7 @@ export class SimulationRuntime {
         fisheryDensity: this.fisheryDensityProjection.list(),
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
+        marketPrices: this.marketPricesProjection.list(),
         productionChains: this.productionChainsProjection.snapshot()
       },
       worldConfig: {
@@ -660,6 +664,11 @@ export class SimulationRuntime {
     return this.productionChainsProjection.snapshot()
   }
 
+  /** Phase 2 §35.4 — deterministic settlement market prices (Layer 3). */
+  getMarketPrices(): readonly MarketPriceRow[] {
+    return this.marketPricesProjection.list()
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -854,6 +863,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
+      this.marketPricesProjection.project(ev)
       this.productionChainsProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
@@ -1779,6 +1789,39 @@ export class SimulationRuntime {
       )
     }
 
+    for (const price of discoverMarketPrices({ inventory: this.goodsInventoryProjection.list() })) {
+      const currentPrice = this.marketPricesProjection.get({ settlementId: price.settlementId, goodsId: price.goodsId })
+      if (
+        currentPrice &&
+        currentPrice.supplyQuantity === price.supplyQuantity &&
+        currentPrice.demandQuantity === price.demandQuantity &&
+        currentPrice.priceGold === price.priceGold
+      ) continue
+      commands.push(
+        makeLivingWorldCommand(
+          'MARKET_PRICE_DISCOVERED',
+          price.marketId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            marketId: price.marketId,
+            settlementId: price.settlementId,
+            goodsId: price.goodsId,
+            supplyQuantity: price.supplyQuantity,
+            demandQuantity: price.demandQuantity,
+            priceGold: price.priceGold,
+            discoveredAtTick: nextTick,
+            motivation: makeMotivation(
+              `${price.settlementId} 的 ${price.goodsId} 供給為 ${price.supplyQuantity}、基準需求為 ${price.demandQuantity}，市場投影據此形成 ${price.priceGold} 金價格。`,
+              'Phase 2 §35.4 market formation'
+            ),
+            narration: `${price.marketId} 形成 ${price.goodsId} 價格：${price.priceGold} 金。`
+          }
+        )
+      )
+    }
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -2069,6 +2112,7 @@ export class SimulationRuntime {
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
+        this.marketPricesProjection.project(ev)
         this.productionChainsProjection.project(ev)
         this.settlementsProjection.project(ev)
 
@@ -2598,6 +2642,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
+      this.marketPricesProjection.rebuildFromEvents(allEvents)
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
@@ -2853,7 +2898,8 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'GOODS_TRANSPORT_ARRIVED' ||
     ev.eventType === 'GOODS_TRANSPORT_LOST' ||
     ev.eventType === 'TRADE_ROUTE_OPENED' ||
-    ev.eventType === 'TRADE_ROUTE_CLOSED'
+    ev.eventType === 'TRADE_ROUTE_CLOSED' ||
+    ev.eventType === 'MARKET_PRICE_DISCOVERED'
   ) return null
 
   if (isLivingWorldCommandType(ev.eventType)) {

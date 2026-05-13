@@ -13,6 +13,7 @@ const ROUTINE_CHRONICLE_EVENT_TYPES = new Set([
   'GOODS_TRANSPORT_LOST',
   'TRADE_ROUTE_OPENED',
   'TRADE_ROUTE_CLOSED',
+  'MARKET_PRICE_DISCOVERED',
 ])
 
 export function isPublicNarrativeEvent(event: EventSummary): boolean {

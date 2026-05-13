@@ -340,6 +340,16 @@ describe('living-world rule engine', () => {
         reason: 'storm',
         lostAtTick: 15,
         narration: 'transport lost'
+      }),
+      makeLivingWorldCommand('MARKET_PRICE_DISCOVERED', 'market.t_central', 'system', 16, 16, {
+        marketId: 'market.t_central',
+        settlementId: 'settlement.t_central',
+        goodsId: 'refined_salt',
+        supplyQuantity: 0,
+        demandQuantity: 12,
+        priceGold: 28,
+        discoveredAtTick: 16,
+        narration: 'market price discovered'
       })
     ]
     for (const cmd of samples) {

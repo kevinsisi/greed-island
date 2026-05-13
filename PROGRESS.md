@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 2 §35.4 market formation
+
+### Implemented
+
+- Started OpenSpec change `market-formation` for `docs/WORLD_CAPABILITIES.md` Phase 2 §35.4.
+- Added `MARKET_PRICE_DISCOVERED` command/event with validator coverage.
+- Added deterministic market pricing policy for tracked central settlement goods:
+  - `fish`
+  - `meat`
+  - `salt_marsh_brine`
+  - `refined_salt`
+- Added `MarketPricesProjection` keyed by `(settlementId, goodsId)` with replay/canonical-hash tests.
+- `SimulationRuntime` now derives prices from `GoodsInventoryProjection` settlement supply and fixed baseline demand, then emits price discovery through the Rule Engine only when price/supply/demand changes.
+- Runtime exposes `WorldSnapshot.facts.marketPrices`.
+- `/admin/world` now renders market price rows and labels them as Phase 2 §35.4 price projection, not NPC purchases or player shop transactions.
+- Routine `MARKET_PRICE_DISCOVERED` events are hidden from public narrative/chronicle surfaces.
+
+### Honest scope
+
+- This is price projection only. It has no NPC purchase transactions, household budgets, player buy/sell UI, market orders, arbitrage, taxes, spoilage, or dynamic demand from festivals/population/cooking.
+- Prices are deterministic baseline demand + settlement inventory supply. Later slices can replace baseline demand with population, season, faction, and consumption pressure.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- goods/marketPricing projections/marketPrices sim/runtimeMarketPrices kernel/livingWorld` passed: 48 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **319 server** + 34 web tests.
+- `npx openspec validate market-formation --strict` passed.
+- `npx openspec validate --all --strict` passed: 27 passed, 0 failed.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev/live smoke pending for this market slice.
+- Next likely phase after §35.4 is Phase E1 predator/prey + migration, unless we first add NPC purchase/meal consumption as a narrow follow-up OpenSpec.
+
 ## 2026-05-13 — Phase 2 §35.3 goods production chains
 
 ### Implemented

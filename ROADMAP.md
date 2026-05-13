@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase 2 §35.4 — Market price formation**
+
+OpenSpec: `market-formation/`。
+
+- ✅ 新增 `MARKET_PRICE_DISCOVERED` command/event + validators。
+- ✅ 新增 deterministic market pricing policy：以中央聚落 settlement inventory supply + fixed baseline demand 形成價格。
+- ✅ 新增 `MarketPricesProjection`，以 `(settlementId, goodsId)` 保存最新價格，支援 replay/canonical hash。
+- ✅ `WorldSnapshot.facts.marketPrices` 可讀；`/admin/world` 顯示 supply / demand / price / market，並明確標示不是 NPC purchases 或 player shop。
+- ✅ Focused server tests 48 passed；full `npm test` 319 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（27 passed）全綠。
+- ⚠️ 待 commit / push / CI / Deploy Dev / live smoke。
+- ⚠️ Honest scope：目前只有價格投影；尚無 NPC 購買、家戶預算、玩家買賣 UI、訂單、稅或動態需求。
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase 2 §35.3 — Goods production chains**
 
 OpenSpec: `goods-production-chains/`。

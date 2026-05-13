@@ -75,7 +75,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'TRADE_ROUTE_CLOSED',
   'GOODS_TRANSPORT_STARTED',
   'GOODS_TRANSPORT_ARRIVED',
-  'GOODS_TRANSPORT_LOST'
+  'GOODS_TRANSPORT_LOST',
+  // Phase 2 §35.4 — Market formation
+  'MARKET_PRICE_DISCOVERED'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -576,6 +578,18 @@ export type GoodsTransportLostCmd = Readonly<{
   narration: string
 }>
 
+export type MarketPriceDiscoveredCmd = Readonly<{
+  marketId: string
+  settlementId: string
+  goodsId: string
+  supplyQuantity: number
+  demandQuantity: number
+  priceGold: number
+  discoveredAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -623,6 +637,7 @@ export type LivingWorldCommandPayload =
   | GoodsTransportStartedCmd
   | GoodsTransportArrivedCmd
   | GoodsTransportLostCmd
+  | MarketPriceDiscoveredCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1165,6 +1180,18 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.lostAtTick)) return 'lostAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
+  },
+  MARKET_PRICE_DISCOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.marketId !== 'string' || p.marketId.length === 0) return 'marketId required'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isNonNegativeQuantity(p.supplyQuantity)) return 'supplyQuantity required'
+    if (!isPositiveQuantity(p.demandQuantity)) return 'demandQuantity required'
+    if (!isPositiveQuantity(p.priceGold)) return 'priceGold required'
+    if (!isNonNegativeInteger(p.discoveredAtTick)) return 'discoveredAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
   }
 }
 
@@ -1398,6 +1425,10 @@ function isGoodsHolderType(value: unknown): value is GoodsHolderType {
 
 function isPositiveQuantity(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function isNonNegativeQuantity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
