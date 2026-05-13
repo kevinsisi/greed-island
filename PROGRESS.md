@@ -3,6 +3,27 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — E0.4 GM visibility follow-up
+
+### Implemented
+
+- Added `/admin/world` as a GM/admin world observer page.
+- Added visible GM world entry points:
+  - desktop navigation rail for GM/admin
+  - profile staff shortcuts for GM/admin, preserving mobile access through `/profile`
+  - admin page shortcut for admins
+- The GM world page now renders `WorldSnapshot.facts.fisheryDensity` as a fishery density table with tile name/id, density bar, harvested total, collapse/stress/stable status, and last updated tick.
+- The page also shows current tick, data source, connection mode, and fishery row count.
+
+### Verification
+
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- `npm run test -w @greed-island/web` passed: 34 tests.
+
+### Outstanding
+
+- Commit/push/CI/Deploy Dev verification pending.
+
 ## 2026-05-13 — Phase E0.4 fishery density
 
 ### Implemented

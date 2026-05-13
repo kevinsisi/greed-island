@@ -7,6 +7,16 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase E0.4 follow-up — GM 世界觀測入口 + 漁場可視化**
+
+- ✅ 新增 `/admin/world` 給 GM/admin 直接看 server-authoritative world projections。
+- ✅ GM/admin 在桌面側欄與個人資料 staff shortcuts 可進入「GM 世界」。
+- ✅ GM 世界頁顯示 `facts.fisheryDensity`：地點、密度條、採收量、狀態、更新 tick。
+- ✅ `npm run build:web` passed；`npm run test -w @greed-island/web` 34 passed。
+- 🚧 Commit / push / CI / Deploy Dev verification pending.
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase E0.4 — fishery density projection + collapse warning**
 
 OpenSpec: `ecosystem-fishery-density/`。

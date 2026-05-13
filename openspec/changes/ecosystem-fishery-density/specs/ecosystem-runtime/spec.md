@@ -40,3 +40,16 @@ recovered by a future slice.
 - **GIVEN** a fishery tile has density above the collapse threshold
 - **WHEN** a harvest lowers density to or below the threshold
 - **THEN** `FISHERY_COLLAPSED` MUST be emitted for that tile
+
+### Requirement: Fishery density SHALL be visible to GM observers
+
+The web client MUST provide a GM/admin-only world observer route that renders
+`WorldSnapshot.facts.fisheryDensity` in a human-readable form, including tile,
+density, harvested total, collapse/stress/stable status, and last updated tick.
+
+#### Scenario: GM views fishery density
+
+- **GIVEN** an authenticated GM or admin opens the world observer page
+- **WHEN** `facts.fisheryDensity` contains one or more rows
+- **THEN** the page MUST display each fishery row with density and status rather
+  than requiring the GM to inspect raw JSON

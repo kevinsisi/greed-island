@@ -141,6 +141,13 @@ export function ProfilePage() {
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
+              to="/admin/world"
+              className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
+            >
+              <span aria-hidden="true">◎</span>
+              {t('nav.gmWorld')}
+            </Link>
+            <Link
               to="/settings"
               className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
             >

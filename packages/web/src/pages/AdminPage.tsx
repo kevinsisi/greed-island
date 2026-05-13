@@ -128,12 +128,20 @@ export function AdminPage() {
         title={t('admin.title')}
         description={t('admin.description')}
         actions={
-          <a
-            href="/admin/npcs"
-            className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
-          >
-            {t('admin.npcs.link')}
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/admin/world"
+              className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+            >
+              {t('admin.world.link')}
+            </a>
+            <a
+              href="/admin/npcs"
+              className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+            >
+              {t('admin.npcs.link')}
+            </a>
+          </div>
         }
       />
 

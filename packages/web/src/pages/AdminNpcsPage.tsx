@@ -70,10 +70,10 @@ export function AdminNpcsPage() {
         description={t('admin.npcs.description')}
         actions={
           <Link
-            to="/admin"
+            to={account.role === 'admin' ? '/admin' : '/admin/world'}
             className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
           >
-            {t('admin.npcs.backToAdmin')}
+            {account.role === 'admin' ? t('admin.npcs.backToAdmin') : t('nav.gmWorld')}
           </Link>
         }
       />

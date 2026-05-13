@@ -39,6 +39,12 @@ const NAV_ITEMS: NavItem[] = [
     visibleWhen: (account) => account === null,
   },
   {
+    to: '/admin/world',
+    labelKey: 'nav.gmWorld',
+    glyph: '◎',
+    visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
+  },
+  {
     to: '/admin',
     labelKey: 'nav.admin',
     glyph: '✶',
