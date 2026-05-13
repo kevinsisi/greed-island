@@ -17,7 +17,7 @@ OpenSpec: `ecosystem-fishery-density/`。
 - ✅ density 跨過 `FISHERY_COLLAPSE_THRESHOLD = 20` 時 emit `FISHERY_COLLAPSED`。
 - ✅ `WorldSnapshot.facts.fisheryDensity` 可讀。
 - ✅ Focused tests 45 passed；full `npm test` 296 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（23 passed）全綠。
-- 🚧 Commit / push / CI / Deploy Dev verification pending.
+- ✅ Commit `d7fef26` pushed；CI run `25798295594` passed；Deploy Dev run `25798295660` passed；live `/healthz` = `0.16.0` @ tick `116291`；`/api/world.facts.fisheryDensity` exists and was empty at tick `116293` before any qualifying fisher harvest.
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 

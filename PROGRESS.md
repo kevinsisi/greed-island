@@ -29,10 +29,15 @@ developer. Keep latest status at the top.
 - `npm run build:web` passed with the known Vite chunk-size warning.
 - `npx openspec validate ecosystem-fishery-density --strict` passed.
 - `npx openspec validate --all --strict` passed: 23 passed, 0 failed.
+- Commit `d7fef26` (`feat(eco): add fishery density projection`) pushed to `main`.
+- CI run `25798295594` passed; Deploy Dev run `25798295660` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":116291}`.
+- Live `/api/world` exposes `facts.fisheryDensity`; smoke sample at tick `116293` had 0 rows because no qualifying fisher harvest had occurred since deploy.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev verification pending.
+- E0.4 live endpoint is deployed; wait for a qualifying fisher productive action to produce the first non-empty `fisheryDensity` row, or add a deterministic fixture/admin trigger in a future slice if faster live evidence is needed.
+- Next ecosystem slice remains open: fishery recovery/regrowth, species-specific fishery, or Phase 2 goods/logistics bridge.
 
 ## 2026-05-13 — Phase E0.3 simple hunting
 
