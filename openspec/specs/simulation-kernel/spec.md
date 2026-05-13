@@ -91,7 +91,7 @@ AI SHALL operate only on derived event snapshots and MUST output narrative text 
 - **THEN** EventLog and WorldState MUST remain unchanged
 
 ### Requirement: Kernel supports deterministic replay validation
-The system SHALL include replay validation proving that identical EventLog input produces identical WorldState and identical AI snapshot input.
+The system SHALL include replay validation proving that identical EventLog input produces identical WorldState and identical AI snapshot input. Deterministic world-adjacent engines that feed server-authoritative commands, including card-drop generation, MUST also have replay validation proving identical committed facts for identical tick, ruleset, world fact, and store inputs.
 
 #### Scenario: Replay validates projection identity
 - **WHEN** a replay test reduces the same EventLog fixture multiple times
@@ -101,10 +101,42 @@ The system SHALL include replay validation proving that identical EventLog input
 - **WHEN** a replay test creates AI snapshots from the same EventLog fixture multiple times
 - **THEN** each AI snapshot input MUST be identical
 
+#### Scenario: Replay validates deterministic card-drop facts
+- **WHEN** a replay test runs card-drop generation twice from identical tick, ruleset, weather, rare-window, catalog, tile, and card-store inputs
+- **THEN** each run MUST produce equivalent card-drop facts, excluding non-authoritative audit metadata such as wall-clock timestamps and store-local row ids
+
 ### Requirement: Core principle is enforced by interfaces
 The kernel SHALL enforce the principle that Command is request, Event is fact, WorldState is projection, AI is renderer, and Rule Engine is compiler.
 
 #### Scenario: Forbidden direct world mutation is blocked
 - **WHEN** a caller attempts to modify WorldState without appending Events
 - **THEN** the kernel API MUST provide no authoritative path for that mutation to become truth
+
+### Requirement: NPC productive actions persist personal civic state
+
+Accepted `NPC_PRODUCTIVE_ACTION` events SHALL update a deterministic NPC civic projection containing personal gold and skill XP.
+
+#### Scenario: Work changes personal state
+- **WHEN** an accepted `NPC_PRODUCTIVE_ACTION` with domain `trade`, `service`, `build`, or `learn` is reduced
+- **THEN** the target NPC's civic record SHALL be updated in replayable state derived from the EventLog
+
+#### Scenario: Learning accumulates skill XP
+- **WHEN** an accepted `NPC_PRODUCTIVE_ACTION` has domain `learn`
+- **THEN** the target NPC's `knowledge` XP SHALL increase even if personal gold does not
+
+#### Scenario: Projection is replayable
+- **WHEN** the same productive EventLog is reduced twice
+- **THEN** the NPC civic records SHALL be identical
+
+### Requirement: NPC skills affect future productive output
+
+NPC skill XP SHALL deterministically increase future productive action delta for the matching domain without reading external state or randomness.
+
+#### Scenario: Matching skill increases delta
+- **WHEN** an NPC has accumulated XP for the skill mapped to a productive domain
+- **THEN** future productive actions in that domain SHALL use a skill-adjusted delta
+
+#### Scenario: Non-matching skill does not increase delta
+- **WHEN** an NPC has commerce XP but performs a learn action
+- **THEN** the commerce XP SHALL NOT increase the learn action delta
 
