@@ -287,6 +287,59 @@ describe('living-world rule engine', () => {
         reason: 'spoilage',
         destroyedAtTick: 11,
         narration: 'goods destroyed'
+      }),
+      makeLivingWorldCommand('TRADE_ROUTE_OPENED', 'system', 'system', 12, 12, {
+        routeId: 'route.t_dock.t_central.fish',
+        fromTileId: 't_dock',
+        toTileId: 't_central',
+        goodsId: 'fish',
+        openedAtTick: 12,
+        narration: 'route opened'
+      }),
+      makeLivingWorldCommand('TRADE_ROUTE_CLOSED', 'system', 'system', 13, 13, {
+        routeId: 'route.t_dock.t_central.fish',
+        closedAtTick: 13,
+        reason: 'storm',
+        narration: 'route closed'
+      }),
+      makeLivingWorldCommand('GOODS_TRANSPORT_STARTED', 'dock.fishmonger.adi', 'npc', 14, 14, {
+        transportId: 'transport.abc',
+        routeId: 'route.t_dock.t_central.fish',
+        goodsId: 'fish',
+        quantity: 12,
+        carrierNpcId: 'dock.fishmonger.adi',
+        fromHolderType: 'npc',
+        fromHolderId: 'dock.fishmonger.adi',
+        fromTileId: 't_dock',
+        toHolderType: 'settlement',
+        toHolderId: 'settlement.t_central',
+        toTileId: 't_central',
+        startedAtTick: 14,
+        narration: 'transport started'
+      }),
+      makeLivingWorldCommand('GOODS_TRANSPORT_ARRIVED', 'dock.fishmonger.adi', 'npc', 14, 14, {
+        transportId: 'transport.abc',
+        routeId: 'route.t_dock.t_central.fish',
+        goodsId: 'fish',
+        quantity: 12,
+        carrierNpcId: 'dock.fishmonger.adi',
+        toHolderType: 'settlement',
+        toHolderId: 'settlement.t_central',
+        toTileId: 't_central',
+        arrivedAtTick: 14,
+        narration: 'transport arrived'
+      }),
+      makeLivingWorldCommand('GOODS_TRANSPORT_LOST', 'system', 'system', 15, 15, {
+        transportId: 'transport.def',
+        routeId: 'route.t_dock.t_central.fish',
+        goodsId: 'fish',
+        quantity: 12,
+        carrierNpcId: 'dock.fishmonger.adi',
+        fromTileId: 't_dock',
+        toTileId: 't_central',
+        reason: 'storm',
+        lostAtTick: 15,
+        narration: 'transport lost'
       })
     ]
     for (const cmd of samples) {

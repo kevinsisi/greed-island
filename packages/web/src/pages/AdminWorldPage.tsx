@@ -15,12 +15,49 @@ type FisheryDensityRow = Readonly<{
 
 type GoodsInventoryRow = Readonly<{
   goodsId: string
-  holderType: 'npc' | 'building' | 'settlement'
+  holderType: GoodsHolderType
   holderId: string
   tileId: string
   quantity: number
   lastUpdatedTick: number
   lastSequence: number
+}>
+
+type GoodsHolderType = 'npc' | 'building' | 'settlement'
+
+type TradeRouteRow = Readonly<{
+  routeId: string
+  fromTileId: string
+  toTileId: string
+  goodsId: string
+  open: boolean
+  openedAtTick: number
+  closedAtTick: number | null
+  lastSequence: number
+}>
+
+type GoodsTransportRow = Readonly<{
+  transportId: string
+  routeId: string
+  goodsId: string
+  quantity: number
+  carrierNpcId: string
+  fromHolderType: GoodsHolderType
+  fromHolderId: string
+  fromTileId: string
+  toHolderType: GoodsHolderType
+  toHolderId: string
+  toTileId: string
+  status: 'started' | 'arrived' | 'lost'
+  startedAtTick: number
+  resolvedAtTick: number | null
+  lossReason: string | null
+  lastSequence: number
+}>
+
+type LogisticsSnapshot = Readonly<{
+  routes: readonly TradeRouteRow[]
+  transports: readonly GoodsTransportRow[]
 }>
 
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
@@ -58,10 +95,13 @@ export function AdminWorldPage() {
 
   const fisheryRows = readFisheryRows(world.facts)
   const goodsRows = readGoodsRows(world.facts)
+  const logistics = readLogistics(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
   const totalGoods = goodsRows.reduce((sum, row) => sum + row.quantity, 0)
+  const openRouteCount = logistics.routes.filter((row) => row.open).length
+  const lostTransportCount = logistics.transports.filter((row) => row.status === 'lost').length
   const lowestDensity = fisheryRows.reduce<number | null>(
     (lowest, row) => (lowest === null ? row.density : Math.min(lowest, row.density)),
     null
@@ -92,12 +132,13 @@ export function AdminWorldPage() {
         }
       />
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3" aria-label={t('admin.world.summary')}>
+      <section className="grid grid-cols-2 md:grid-cols-6 gap-3" aria-label={t('admin.world.summary')}>
         <StatCard label={t('admin.world.statTick')} value={world.tick} />
         <StatCard label={t('admin.world.statSource')} value={source === 'server' ? t('admin.world.sourceServer') : t('admin.world.sourceFixture')} />
         <StatCard label={t('admin.world.statConnection')} value={liveConnected ? t('admin.world.live') : t('admin.world.polling')} />
         <StatCard label={t('admin.world.statFisheryRows')} value={fisheryRows.length} />
         <StatCard label={t('admin.world.statGoodsRows')} value={goodsRows.length} />
+        <StatCard label={t('admin.world.statLogisticsRows')} value={logistics.transports.length} />
       </section>
 
       <section className="gi-panel p-5 flex flex-col gap-4 border-cyan-700/30">
@@ -189,6 +230,73 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-5 border-amber-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-amber-300">
+              {t('admin.world.logisticsHeading')}
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              {t('admin.world.logisticsDescription')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label={t('admin.world.openRoutes')} value={openRouteCount} />
+            <Badge label={t('admin.world.transportRows')} value={logistics.transports.length} />
+            <Badge label={t('admin.world.lostTransports')} value={lostTransportCount} danger={lostTransportCount > 0} />
+          </div>
+        </div>
+
+        {logistics.routes.length === 0 && logistics.transports.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            {t('admin.world.logisticsEmpty')}
+          </div>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-2">
+            <div className="overflow-x-auto">
+              <h3 className="mb-2 font-display text-[11px] uppercase tracking-tightest text-ground-400">
+                {t('admin.world.routesHeading')}
+              </h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                    <th className="text-left py-2 pr-4">{t('admin.world.colRoute')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colGoods')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colStatus')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colUpdated')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logistics.routes.map((row) => (
+                    <TradeRouteView key={row.routeId} row={row} tileNameById={tileNameById} t={t} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-x-auto">
+              <h3 className="mb-2 font-display text-[11px] uppercase tracking-tightest text-ground-400">
+                {t('admin.world.transportsHeading')}
+              </h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                    <th className="text-left py-2 pr-4">{t('admin.world.colTransport')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colQuantity')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colStatus')}</th>
+                    <th className="text-left py-2 pr-4">{t('admin.world.colUpdated')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logistics.transports.map((row) => (
+                    <GoodsTransportView key={row.transportId} row={row} tileNameById={tileNameById} t={t} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -249,6 +357,53 @@ function GoodsRow({ row, tileName, t }: { row: GoodsInventoryRow; tileName: stri
   )
 }
 
+function TradeRouteView({ row, tileNameById, t }: { row: TradeRouteRow; tileNameById: Map<string, string>; t: Translator }) {
+  const fromName = tileNameById.get(row.fromTileId) ?? row.fromTileId
+  const toName = tileNameById.get(row.toTileId) ?? row.toTileId
+  return (
+    <tr className="border-t border-ground-800/50">
+      <td className="py-3 pr-4 text-ground-100">
+        <div>{fromName} → {toName}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.routeId}</div>
+      </td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div>{goodsLabel(row.goodsId, t)}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.goodsId}</div>
+      </td>
+      <td className="py-3 pr-4">
+        <span className={row.open ? 'text-amber-300' : 'text-ground-500'}>
+          {row.open ? t('admin.world.routeOpen') : t('admin.world.routeClosed')}
+        </span>
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-400">{row.closedAtTick ?? row.openedAtTick}</td>
+    </tr>
+  )
+}
+
+function GoodsTransportView({ row, tileNameById, t }: { row: GoodsTransportRow; tileNameById: Map<string, string>; t: Translator }) {
+  const fromName = tileNameById.get(row.fromTileId) ?? row.fromTileId
+  const toName = tileNameById.get(row.toTileId) ?? row.toTileId
+  const statusClass = row.status === 'lost' ? 'text-rust-300' : row.status === 'arrived' ? 'text-moss-300' : 'text-amber-300'
+  return (
+    <tr className="border-t border-ground-800/50">
+      <td className="py-3 pr-4 text-ground-100">
+        <div>{fromName} → {toName}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.transportId}</div>
+        <div className="font-mono text-[11px] text-ground-600">{row.carrierNpcId}</div>
+      </td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div className="font-mono text-xs text-amber-300">{row.quantity}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.goodsId}</div>
+      </td>
+      <td className="py-3 pr-4">
+        <span className={statusClass}>{transportStatusLabel(row.status, t)}</span>
+        {row.lossReason ? <div className="font-mono text-[11px] text-rust-400">{row.lossReason}</div> : null}
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-400">{row.resolvedAtTick ?? row.startedAtTick}</td>
+    </tr>
+  )
+}
+
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="gi-panel p-3 flex flex-col gap-1">
@@ -283,6 +438,18 @@ function readGoodsRows(facts: Record<string, unknown>): GoodsInventoryRow[] {
   )
 }
 
+function readLogistics(facts: Record<string, unknown>): LogisticsSnapshot {
+  const raw = facts.logistics
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { routes: [], transports: [] }
+  const snapshot = raw as { routes?: unknown; transports?: unknown }
+  return {
+    routes: Array.isArray(snapshot.routes) ? snapshot.routes.filter(isTradeRouteRow).sort((a, b) => a.routeId.localeCompare(b.routeId)) : [],
+    transports: Array.isArray(snapshot.transports)
+      ? snapshot.transports.filter(isGoodsTransportRow).sort((a, b) => b.startedAtTick - a.startedAtTick || a.transportId.localeCompare(b.transportId))
+      : [],
+  }
+}
+
 function isFisheryDensityRow(value: unknown): value is FisheryDensityRow {
   if (!value || typeof value !== 'object') return false
   const row = value as Partial<FisheryDensityRow>
@@ -310,14 +477,62 @@ function isGoodsInventoryRow(value: unknown): value is GoodsInventoryRow {
   )
 }
 
+function isTradeRouteRow(value: unknown): value is TradeRouteRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<TradeRouteRow>
+  return (
+    typeof row.routeId === 'string' &&
+    typeof row.fromTileId === 'string' &&
+    typeof row.toTileId === 'string' &&
+    typeof row.goodsId === 'string' &&
+    typeof row.open === 'boolean' &&
+    typeof row.openedAtTick === 'number' &&
+    (row.closedAtTick === null || typeof row.closedAtTick === 'number') &&
+    typeof row.lastSequence === 'number'
+  )
+}
+
+function isGoodsTransportRow(value: unknown): value is GoodsTransportRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<GoodsTransportRow>
+  return (
+    typeof row.transportId === 'string' &&
+    typeof row.routeId === 'string' &&
+    typeof row.goodsId === 'string' &&
+    typeof row.quantity === 'number' &&
+    typeof row.carrierNpcId === 'string' &&
+    isGoodsHolderType(row.fromHolderType) &&
+    typeof row.fromHolderId === 'string' &&
+    typeof row.fromTileId === 'string' &&
+    isGoodsHolderType(row.toHolderType) &&
+    typeof row.toHolderId === 'string' &&
+    typeof row.toTileId === 'string' &&
+    (row.status === 'started' || row.status === 'arrived' || row.status === 'lost') &&
+    typeof row.startedAtTick === 'number' &&
+    (row.resolvedAtTick === null || typeof row.resolvedAtTick === 'number') &&
+    (row.lossReason === null || typeof row.lossReason === 'string') &&
+    typeof row.lastSequence === 'number'
+  )
+}
+
 function goodsLabel(goodsId: string, t: Translator): string {
   if (goodsId === 'fish') return t('admin.world.goodsFish')
   if (goodsId === 'meat') return t('admin.world.goodsMeat')
   return goodsId
 }
 
-function holderTypeLabel(holderType: GoodsInventoryRow['holderType'], t: Translator): string {
+function holderTypeLabel(holderType: GoodsHolderType, t: Translator): string {
   if (holderType === 'npc') return t('admin.world.holderNpc')
   if (holderType === 'building') return t('admin.world.holderBuilding')
   return t('admin.world.holderSettlement')
+}
+
+function transportStatusLabel(status: GoodsTransportRow['status'], t: Translator): string {
+  if (status === 'arrived') return t('admin.world.transportArrived')
+  if (status === 'lost') return t('admin.world.transportLost')
+  return t('admin.world.transportStarted')
+}
+
+function isGoodsHolderType(value: unknown): value is GoodsHolderType {
+  return value === 'npc' || value === 'building' || value === 'settlement'
 }

@@ -69,7 +69,13 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'GOODS_STORED',
   'GOODS_PROCESSED',
   'GOODS_CONSUMED',
-  'GOODS_DESTROYED'
+  'GOODS_DESTROYED',
+  // Phase 2 §35.2 — Goods logistics
+  'TRADE_ROUTE_OPENED',
+  'TRADE_ROUTE_CLOSED',
+  'GOODS_TRANSPORT_STARTED',
+  'GOODS_TRANSPORT_ARRIVED',
+  'GOODS_TRANSPORT_LOST'
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -506,6 +512,69 @@ export type GoodsDestroyedCmd = Readonly<{
   narration: string
 }>
 
+export type TradeRouteOpenedCmd = Readonly<{
+  routeId: string
+  fromTileId: string
+  toTileId: string
+  goodsId: string
+  openedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type TradeRouteClosedCmd = Readonly<{
+  routeId: string
+  closedAtTick: number
+  reason: string
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsTransportStartedCmd = Readonly<{
+  transportId: string
+  routeId: string
+  goodsId: string
+  quantity: number
+  carrierNpcId: string
+  fromHolderType: GoodsHolderType
+  fromHolderId: string
+  fromTileId: string
+  toHolderType: GoodsHolderType
+  toHolderId: string
+  toTileId: string
+  startedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsTransportArrivedCmd = Readonly<{
+  transportId: string
+  routeId: string
+  goodsId: string
+  quantity: number
+  carrierNpcId: string
+  toHolderType: GoodsHolderType
+  toHolderId: string
+  toTileId: string
+  arrivedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type GoodsTransportLostCmd = Readonly<{
+  transportId: string
+  routeId: string
+  goodsId: string
+  quantity: number
+  carrierNpcId: string
+  fromTileId: string
+  toTileId: string
+  reason: string
+  lostAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -548,6 +617,11 @@ export type LivingWorldCommandPayload =
   | GoodsProcessedCmd
   | GoodsConsumedCmd
   | GoodsDestroyedCmd
+  | TradeRouteOpenedCmd
+  | TradeRouteClosedCmd
+  | GoodsTransportStartedCmd
+  | GoodsTransportArrivedCmd
+  | GoodsTransportLostCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1038,6 +1112,57 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.destroyedAtTick)) return 'destroyedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
+  },
+  TRADE_ROUTE_OPENED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.routeId !== 'string' || p.routeId.length === 0) return 'routeId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isNonNegativeInteger(p.openedAtTick)) return 'openedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  TRADE_ROUTE_CLOSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.routeId !== 'string' || p.routeId.length === 0) return 'routeId required'
+    if (!isNonNegativeInteger(p.closedAtTick)) return 'closedAtTick must be non-negative integer'
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_TRANSPORT_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateTransportPayload(p, 'started')
+    if (err) return err
+    if (!isGoodsHolderType(p.fromHolderType)) return 'fromHolderType invalid'
+    if (typeof p.fromHolderId !== 'string' || p.fromHolderId.length === 0) return 'fromHolderId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (!isNonNegativeInteger(p.startedAtTick)) return 'startedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_TRANSPORT_ARRIVED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateTransportPayload(p, 'arrived')
+    if (err) return err
+    if (!isNonNegativeInteger(p.arrivedAtTick)) return 'arrivedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  GOODS_TRANSPORT_LOST: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.transportId !== 'string' || p.transportId.length === 0) return 'transportId required'
+    if (typeof p.routeId !== 'string' || p.routeId.length === 0) return 'routeId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isPositiveQuantity(p.quantity)) return 'quantity required'
+    if (typeof p.carrierNpcId !== 'string' || p.carrierNpcId.length === 0) return 'carrierNpcId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (!isNonNegativeInteger(p.lostAtTick)) return 'lostAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
   }
 }
 
@@ -1249,6 +1374,19 @@ function validateGoodsHolderPayload(value: Record<string, unknown>): string | nu
   if (!isGoodsHolderType(value.holderType)) return 'holderType invalid'
   if (typeof value.holderId !== 'string' || value.holderId.length === 0) return 'holderId required'
   if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
+  return null
+}
+
+function validateTransportPayload(value: Record<string, unknown>, phase: 'started' | 'arrived'): string | null {
+  if (typeof value.transportId !== 'string' || value.transportId.length === 0) return 'transportId required'
+  if (typeof value.routeId !== 'string' || value.routeId.length === 0) return 'routeId required'
+  if (typeof value.goodsId !== 'string' || value.goodsId.length === 0) return 'goodsId required'
+  if (!isPositiveQuantity(value.quantity)) return 'quantity required'
+  if (typeof value.carrierNpcId !== 'string' || value.carrierNpcId.length === 0) return 'carrierNpcId required'
+  if (!isGoodsHolderType(value.toHolderType)) return 'toHolderType invalid'
+  if (typeof value.toHolderId !== 'string' || value.toHolderId.length === 0) return 'toHolderId required'
+  if (typeof value.toTileId !== 'string' || value.toTileId.length === 0) return 'toTileId required'
+  if (phase === 'arrived') return null
   return null
 }
 

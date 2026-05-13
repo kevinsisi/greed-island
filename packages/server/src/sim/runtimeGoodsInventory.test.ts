@@ -24,6 +24,8 @@ describe('SimulationRuntime goods inventory', () => {
       })
       expect(storedFish.length).toBeGreaterThan(0)
       expect(runtime.getGoodsInventory().some((row) => row.goodsId === 'fish' && row.quantity > 0)).toBe(true)
+      expect(runtime.getLogistics().routes.some((row) => row.goodsId === 'fish' && row.toTileId === 't_central')).toBe(true)
+      expect(runtime.getLogistics().transports.some((row) => row.goodsId === 'fish' && row.toTileId === 't_central')).toBe(true)
 
       runtime.stop()
       const restored = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())

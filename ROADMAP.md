@@ -7,6 +7,21 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase 2 §35.2 — Abstract goods logistics from ecosystem outputs**
+
+OpenSpec: `goods-logistics/`。
+
+- ✅ 新增 `TRADE_ROUTE_OPENED` / `TRADE_ROUTE_CLOSED` / `GOODS_TRANSPORT_STARTED` / `GOODS_TRANSPORT_ARRIVED` / `GOODS_TRANSPORT_LOST` command/event + validators。
+- ✅ 新增 `LogisticsProjection`，追蹤 route open/closed 與 transport started/arrived/lost，支援 replay/canonical hash。
+- ✅ accepted ecosystem goods outside `t_central` 會開抽象路線、消耗來源庫存、啟動運輸、送抵並存入 `settlement.t_central`。
+- ✅ active `weather.storm` 會讓 planned transport 轉成 `GOODS_TRANSPORT_LOST`，不會在本 slice 毀壞城市或建築。
+- ✅ `WorldSnapshot.facts.logistics` 可讀；`/admin/world` 顯示 routes/transports，並標示目前仍是 abstract logistics，不含道路、倉庫、價格、pathfinding 或 city damage。
+- ✅ Focused server tests 47 passed；full `npm test` 306 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（25 passed）全綠。
+- ⚠️ Local implementation verified but not yet committed/pushed/deployed/CI-verified in this handoff.
+- ⚠️ Honest scope：物流只完成第一版抽象 chain；production/cooking、household consumption、market prices 仍在後續 Phase 2 slices。
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase 2 §35.1 — Goods primitives sourced from ecosystem outputs**
 
 OpenSpec: `goods-primitives/`。

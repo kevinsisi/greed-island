@@ -3,6 +3,47 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 2 §35.2 goods logistics
+
+### Implemented
+
+- Started OpenSpec change `goods-logistics` for `docs/WORLD_CAPABILITIES.md` Phase 2 §35.2.
+- Added trade-route and goods-transport command/event primitives:
+  - `TRADE_ROUTE_OPENED`
+  - `TRADE_ROUTE_CLOSED`
+  - `GOODS_TRANSPORT_STARTED`
+  - `GOODS_TRANSPORT_ARRIVED`
+  - `GOODS_TRANSPORT_LOST`
+- Added `LogisticsProjection` with open/closed route rows, transport status rows, replay, canonical hash, and duplicate-resolution safety.
+- `SimulationRuntime` now plans an abstract logistics chain when ecosystem-sourced goods are stored outside `t_central`:
+  - open route if needed
+  - consume source inventory for loading
+  - start transport
+  - arrive and store on `settlement.t_central`
+- Active `weather.storm` world events now make planned shipment emit `GOODS_TRANSPORT_LOST` instead of arrival/storage. This does not damage buildings or cities.
+- Runtime exposes `WorldSnapshot.facts.logistics` and rebuilds/fans out accepted logistics events into the projection.
+- `/admin/world` now renders logistics route and transport rows, explicitly labeled as an abstract first logistics slice without roads, warehouses, prices, pathfinding, or city damage.
+- Routine logistics events are hidden from public narrative/chronicle surfaces; GM visibility comes from projections.
+
+### Honest scope
+
+- This is Phase 2 §35.2 abstract logistics only. It has no multi-tick travel, pathfinding risk beyond active storms, warehouses, road construction, market prices, player hauling, building damage, or city destruction.
+- Cooking, production chains, household consumption, and market formation remain future Phase 2 slices.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- projections/logistics sim/runtimeLogistics sim/runtimeGoodsInventory kernel/livingWorld` passed: 47 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **306 server** + 34 web tests.
+- `npx openspec validate goods-logistics --strict` passed.
+- `npx openspec validate --all --strict` passed: 25 passed, 0 failed.
+
+### Outstanding
+
+- Local changes are implemented and verified but not yet committed, pushed, deployed, or CI/CD-verified in this handoff.
+- Next Phase 2 slice should be §35.3 production chains/cooking or §35.4 market formation so delivered fish/meat can feed NPC needs and prices.
+
 ## 2026-05-13 — Phase 2 §35.1 goods primitives
 
 ### Implemented

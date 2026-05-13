@@ -35,6 +35,7 @@ import {
   makeLivingWorldCommand,
   type ConstructionMotivation,
   type EventMotivation,
+  type GoodsHolderType,
   type LivingWorldCommand,
   type LivingWorldEventPayload
 } from '../kernel/livingWorldCommands.js'
@@ -119,6 +120,7 @@ import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
+import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -131,6 +133,7 @@ const FACT_ACTIVE_EVENTS = 'world.activeEvents'
 const NPC_STATE_PREFIX = 'npc.state.'
 const AREA_STATE_PREFIX = 'area.state.'
 const FACT_BUILDING_OCCUPANTS = 'world.buildingOccupants'
+const CENTRAL_SETTLEMENT_HOLDER_ID = 'settlement.t_central'
 
 const WEATHERS = ['晴', '陰', '霧雨', '驟雨', '微風'] as const
 const SEASONS = ['霜之月', '雨之月', '潮之月', '熾之月'] as const
@@ -296,6 +299,7 @@ export class SimulationRuntime {
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
+  private readonly logisticsProjection = new LogisticsProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -440,7 +444,8 @@ export class SimulationRuntime {
         lifeExpansion: this.lifeExpansion,
         animalPopulation: this.animalPopulationProjection.list(),
         fisheryDensity: this.fisheryDensityProjection.list(),
-        goodsInventory: this.goodsInventoryProjection.list()
+        goodsInventory: this.goodsInventoryProjection.list(),
+        logistics: this.logisticsProjection.snapshot()
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -641,6 +646,11 @@ export class SimulationRuntime {
     return this.goodsInventoryProjection.list()
   }
 
+  /** Phase 2 §35.2 — trade routes and goods transports (Layer 3). */
+  getLogistics(): LogisticsSnapshot {
+    return this.logisticsProjection.snapshot()
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -834,6 +844,7 @@ export class SimulationRuntime {
       this.animalPopulationProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
+      this.logisticsProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -871,6 +882,7 @@ export class SimulationRuntime {
     //      relationship projection, and offline catch-up summary.
     const stateDrafts: EventDraft[] = []
     const commands: LivingWorldCommand[] = []
+    const plannedRouteIds = new Set<string>()
     const submittedAt = Date.now()
 
     stateDrafts.push(this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick))
@@ -1888,6 +1900,19 @@ export class SimulationRuntime {
               }
             )
           )
+          postAcceptedCommands.push(...this.planGoodsLogisticsCommands({
+            goodsId: 'meat',
+            quantity: goodsPayload.quantity,
+            sourceHolderType: 'npc',
+            sourceHolderId: goodsPayload.npcId,
+            sourceTileId: goodsPayload.tileId,
+            carrierNpcId: goodsPayload.npcId,
+            tick: nextTick,
+            submittedAt,
+            activeEvents: eventDelta.active,
+            motivation,
+            plannedRouteIds,
+          }))
         } else if (cmd.commandType === 'FISHERY_HARVESTED') {
           const goodsPayload = cmd.payload as { npcId: string; delta: number; tileId: string; harvestedAtTick: number; motivation?: unknown }
           const motivation = isEventMotivation(goodsPayload.motivation) ? goodsPayload.motivation : undefined
@@ -1929,6 +1954,19 @@ export class SimulationRuntime {
               }
             )
           )
+          postAcceptedCommands.push(...this.planGoodsLogisticsCommands({
+            goodsId: 'fish',
+            quantity: goodsPayload.delta,
+            sourceHolderType: 'npc',
+            sourceHolderId: goodsPayload.npcId,
+            sourceTileId: goodsPayload.tileId,
+            carrierNpcId: goodsPayload.npcId,
+            tick: nextTick,
+            submittedAt,
+            activeEvents: eventDelta.active,
+            motivation,
+            plannedRouteIds,
+          }))
         }
         if (cmd.commandType === 'NPC_INTERACT') {
           const accepted = readAcceptedNpcInteraction(cmd.payload)
@@ -1986,6 +2024,7 @@ export class SimulationRuntime {
         this.animalPopulationProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
+        this.logisticsProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2305,6 +2344,162 @@ export class SimulationRuntime {
     }
   }
 
+  private planGoodsLogisticsCommands(input: {
+    goodsId: string
+    quantity: number
+    sourceHolderType: GoodsHolderType
+    sourceHolderId: string
+    sourceTileId: string
+    carrierNpcId: string
+    tick: number
+    submittedAt: number
+    activeEvents: readonly ActiveWorldEvent[]
+    motivation?: EventMotivation | undefined
+    plannedRouteIds: Set<string>
+  }): LivingWorldCommand[] {
+    if (input.sourceTileId === 't_central') return []
+    if (input.quantity <= 0) return []
+    const routeId = tradeRouteId(input.sourceTileId, 't_central', input.goodsId)
+    const transportId = goodsTransportId(routeId, input.tick, input.sourceHolderId, input.goodsId)
+    const destinationName = TILE_NAME_BY_ID.t_central ?? 't_central'
+    const sourceName = TILE_NAME_BY_ID[input.sourceTileId] ?? input.sourceTileId
+    const stormActive = isStormActive(input.activeEvents)
+    const commands: LivingWorldCommand[] = []
+
+    if (!this.logisticsProjection.isRouteOpen(routeId) && !input.plannedRouteIds.has(routeId)) {
+      input.plannedRouteIds.add(routeId)
+      commands.push(
+        makeLivingWorldCommand(
+          'TRADE_ROUTE_OPENED',
+          SIM_ACTOR_WORLD,
+          'system',
+          input.tick,
+          input.submittedAt,
+          {
+            routeId,
+            fromTileId: input.sourceTileId,
+            toTileId: 't_central',
+            goodsId: input.goodsId,
+            openedAtTick: input.tick,
+            ...(input.motivation ? { motivation: input.motivation } : {}),
+            narration: `${sourceName}到${destinationName}的 ${input.goodsId} 貨物流通路線被登記。`
+          }
+        )
+      )
+    }
+
+    commands.push(
+      makeLivingWorldCommand(
+        'GOODS_CONSUMED',
+        input.carrierNpcId,
+        'npc',
+        input.tick,
+        input.submittedAt,
+        {
+          goodsId: input.goodsId,
+          quantity: input.quantity,
+          holderType: input.sourceHolderType,
+          holderId: input.sourceHolderId,
+          tileId: input.sourceTileId,
+          consumerNpcId: input.carrierNpcId,
+          consumedAtTick: input.tick,
+          ...(input.motivation ? { motivation: input.motivation } : {}),
+          narration: `${input.carrierNpcId}裝載 ${input.quantity} 份 ${input.goodsId}，準備送往${destinationName}。`
+        }
+      ),
+      makeLivingWorldCommand(
+        'GOODS_TRANSPORT_STARTED',
+        input.carrierNpcId,
+        'npc',
+        input.tick,
+        input.submittedAt,
+        {
+          transportId,
+          routeId,
+          goodsId: input.goodsId,
+          quantity: input.quantity,
+          carrierNpcId: input.carrierNpcId,
+          fromHolderType: input.sourceHolderType,
+          fromHolderId: input.sourceHolderId,
+          fromTileId: input.sourceTileId,
+          toHolderType: 'settlement',
+          toHolderId: CENTRAL_SETTLEMENT_HOLDER_ID,
+          toTileId: 't_central',
+          startedAtTick: input.tick,
+          ...(input.motivation ? { motivation: input.motivation } : {}),
+          narration: `${input.carrierNpcId}從${sourceName}啟運 ${input.quantity} 份 ${input.goodsId}。`
+        }
+      )
+    )
+
+    if (stormActive) {
+      commands.push(
+        makeLivingWorldCommand(
+          'GOODS_TRANSPORT_LOST',
+          SIM_ACTOR_WORLD,
+          'system',
+          input.tick,
+          input.submittedAt,
+          {
+            transportId,
+            routeId,
+            goodsId: input.goodsId,
+            quantity: input.quantity,
+            carrierNpcId: input.carrierNpcId,
+            fromTileId: input.sourceTileId,
+            toTileId: 't_central',
+            reason: 'storm',
+            lostAtTick: input.tick,
+            ...(input.motivation ? { motivation: input.motivation } : {}),
+            narration: `暴風雨打斷 ${routeId}，${input.quantity} 份 ${input.goodsId} 在運輸途中遺失。`
+          }
+        )
+      )
+      return commands
+    }
+
+    commands.push(
+      makeLivingWorldCommand(
+        'GOODS_TRANSPORT_ARRIVED',
+        input.carrierNpcId,
+        'npc',
+        input.tick,
+        input.submittedAt,
+        {
+          transportId,
+          routeId,
+          goodsId: input.goodsId,
+          quantity: input.quantity,
+          carrierNpcId: input.carrierNpcId,
+          toHolderType: 'settlement',
+          toHolderId: CENTRAL_SETTLEMENT_HOLDER_ID,
+          toTileId: 't_central',
+          arrivedAtTick: input.tick,
+          ...(input.motivation ? { motivation: input.motivation } : {}),
+          narration: `${input.carrierNpcId}把 ${input.quantity} 份 ${input.goodsId} 送抵${destinationName}。`
+        }
+      ),
+      makeLivingWorldCommand(
+        'GOODS_STORED',
+        CENTRAL_SETTLEMENT_HOLDER_ID,
+        'system',
+        input.tick,
+        input.submittedAt,
+        {
+          goodsId: input.goodsId,
+          quantity: input.quantity,
+          holderType: 'settlement',
+          holderId: CENTRAL_SETTLEMENT_HOLDER_ID,
+          tileId: 't_central',
+          storedAtTick: input.tick,
+          ...(input.motivation ? { motivation: input.motivation } : {}),
+          narration: `${destinationName}收到 ${input.quantity} 份 ${input.goodsId}。`
+        }
+      )
+    )
+    return commands
+  }
+
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
     // Boot intentionally hydrates only stateful simulation facts needed before
@@ -2357,6 +2552,7 @@ export class SimulationRuntime {
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
+      this.logisticsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
 
@@ -2442,6 +2638,19 @@ function deriveSettlementId(input: DetectedSettlementFormation): string {
     founderNpcIds: [...input.founderNpcIds].sort(),
   }
   return `settlement.${input.tileId}.${hashCanonicalJson(seed).slice(0, 16)}`
+}
+
+function tradeRouteId(fromTileId: string, toTileId: string, goodsId: string): string {
+  return `route.${fromTileId}.${toTileId}.${goodsId}`
+}
+
+function goodsTransportId(routeId: string, tick: number, holderId: string, goodsId: string): string {
+  const seed = { routeId, tick, holderId, goodsId }
+  return `transport.${hashCanonicalJson(seed).slice(0, 16)}`
+}
+
+function isStormActive(events: readonly ActiveWorldEvent[]): boolean {
+  return events.some((event) => event.templateId === 'weather.storm' || event.payload.effect === 'storm')
 }
 
 function makeMotivation(explanation: string, projectPurpose?: string): EventMotivation {
@@ -2593,7 +2802,12 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'GOODS_STORED' ||
     ev.eventType === 'GOODS_PROCESSED' ||
     ev.eventType === 'GOODS_CONSUMED' ||
-    ev.eventType === 'GOODS_DESTROYED'
+    ev.eventType === 'GOODS_DESTROYED' ||
+    ev.eventType === 'GOODS_TRANSPORT_STARTED' ||
+    ev.eventType === 'GOODS_TRANSPORT_ARRIVED' ||
+    ev.eventType === 'GOODS_TRANSPORT_LOST' ||
+    ev.eventType === 'TRADE_ROUTE_OPENED' ||
+    ev.eventType === 'TRADE_ROUTE_CLOSED'
   ) return null
 
   if (isLivingWorldCommandType(ev.eventType)) {

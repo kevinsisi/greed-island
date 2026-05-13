@@ -72,7 +72,7 @@ export class GoodsInventoryProjection {
   }
 
   list(): GoodsInventoryRow[] {
-    return [...this.rows.values()].sort(
+    return [...this.rows.values()].filter((row) => row.quantity > 0).sort(
       (a, b) =>
         a.holderType.localeCompare(b.holderType) ||
         a.holderId.localeCompare(b.holderId) ||

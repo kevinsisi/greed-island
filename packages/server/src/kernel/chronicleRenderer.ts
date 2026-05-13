@@ -286,6 +286,7 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (event.eventType === 'NPC_STATE_RECORDED') return null
   if (event.eventType === 'ANIMAL_SPAWNED') return null
   if (event.eventType.startsWith('GOODS_')) return null
+  if (event.eventType.startsWith('TRADE_ROUTE_')) return null
   const tick = typeof event.tick === 'number' ? event.tick : 0
   const payload = event.payload as LivingWorldEventPayload | undefined
   const narration = payload && typeof payload === 'object' ? payload.narration ?? null : null
