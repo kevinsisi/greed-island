@@ -36,6 +36,19 @@ export const NARRATION_RETENTION_TICKS = EVENT_RETENTION_TICKS
 // volume.
 export const MAX_COMMANDS_PER_TICK_SOFT_CAP = 5000
 
+// Hard cap (slice 2). When per-tick command count exceeds this value, the
+// runtime sorts the commands by canonical `commandId` (already a hash of
+// commandType + actorId + actorType + tick + payload, so the order is
+// deterministic across replays), keeps the first N, and records the
+// overflow in `rejected_command_log` with code `COMMAND_CAP_EXCEEDED`.
+// Rejected commands never become world Events — `WorldState` is unaffected.
+//
+// 8000 leaves a 3000-command buffer above the soft cap so transient spikes
+// trigger the warning before they hit the wall.
+export const MAX_COMMANDS_PER_TICK_HARD_CAP = 8000
+
+export const COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

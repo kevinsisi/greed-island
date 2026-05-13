@@ -46,8 +46,11 @@ import {
   TICKS_PER_MINUTE,
   WORLD_TIMEZONE,
   WORLD_TIMEZONE_OFFSET_MINUTES,
-  MAX_COMMANDS_PER_TICK_SOFT_CAP
+  MAX_COMMANDS_PER_TICK_SOFT_CAP,
+  MAX_COMMANDS_PER_TICK_HARD_CAP,
+  COMMAND_CAP_REJECTION_CODE
 } from '../config/world.js'
+import { applyCommandHardCap } from './commandBudget.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
@@ -168,14 +171,18 @@ export type SimNpcState = Readonly<{
 }>
 
 export type TickCommandStats = Readonly<{
-  /** Command count from the most recent completed tick. */
+  /** Command count from the most recent completed tick (post-rejection). */
   lastTick: number
-  /** Peak command count observed since boot. */
+  /** Peak command count observed since boot (pre-rejection count). */
   peak: number
   /** Active soft-cap threshold (warning, not enforcement). */
   softCap: number
   /** Number of ticks since boot whose command count exceeded the soft cap. */
   softCapHitCount: number
+  /** Active hard-cap threshold (deterministic overflow rejection). */
+  hardCap: number
+  /** Total commands rejected since boot due to hard-cap overflow. */
+  hardCapRejectedSinceBoot: number
 }>
 
 export type WorldSnapshot = Readonly<{
@@ -222,10 +229,15 @@ export class SimulationRuntime {
   private timer: NodeJS.Timeout | null = null
   private lastSequence = 0
   private eventCount = 0
-  // Per-tick budget gate observability (simulation-budget-enforcement slice 1).
+  // Per-tick budget gate (simulation-budget-enforcement).
+  // Slice 1: observability counters (softCap = warn-only).
+  // Slice 2: deterministic hard-cap rejection (commands sorted by canonical
+  // commandId; overflow recorded in rejected_command_log; WorldState
+  // unaffected because rejected_command_log is excluded from reduction).
   private lastTickCommandCount = 0
   private peakTickCommandCount = 0
   private softCapHitCount = 0
+  private hardCapRejectedSinceBoot = 0
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -392,6 +404,8 @@ export class SimulationRuntime {
         peak: this.peakTickCommandCount,
         softCap: MAX_COMMANDS_PER_TICK_SOFT_CAP,
         softCapHitCount: this.softCapHitCount,
+        hardCap: MAX_COMMANDS_PER_TICK_HARD_CAP,
+        hardCapRejectedSinceBoot: this.hardCapRejectedSinceBoot,
       },
       generatedAt: new Date().toISOString()
     }
@@ -1372,29 +1386,59 @@ export class SimulationRuntime {
       }
     }
 
-    // ---- Phase 1 budget gate (observability slice) ----
-    // Record command volume for the just-built batch. No enforcement yet;
-    // soft cap breach emits a one-line warning so a GM dashboard can see
-    // load growing before later slices (NPC partitioning, regional
-    // activation, hard cap) cut in. Replay determinism unaffected.
-    this.lastTickCommandCount = commands.length
-    if (commands.length > this.peakTickCommandCount) {
-      this.peakTickCommandCount = commands.length
+    // ---- Phase 1 budget gate ----
+    // Slice 1 (observability): record raw command volume, update peak,
+    // warn once per tick when over the soft cap.
+    // Slice 2 (deterministic hard-cap rejection): if the raw count
+    // exceeds the hard cap, sort commands by canonical commandId and
+    // slice the first N; the overflow is recorded in
+    // rejected_command_log with code COMMAND_CAP_EXCEEDED. Rejected
+    // commands NEVER become world Events — rejected_command_log is
+    // explicitly excluded from WorldState reduction (ARCHITECTURE.md §6,
+    // §11.6). Replay determinism: identical inputs produce identical
+    // kept/rejected partitions because commandId is a content hash.
+    const rawCommandCount = commands.length
+    if (rawCommandCount > this.peakTickCommandCount) {
+      this.peakTickCommandCount = rawCommandCount
     }
-    if (commands.length > MAX_COMMANDS_PER_TICK_SOFT_CAP) {
+    if (rawCommandCount > MAX_COMMANDS_PER_TICK_SOFT_CAP) {
       this.softCapHitCount += 1
       console.warn(
-        `[sim] tick ${nextTick} produced ${commands.length} commands ` +
+        `[sim] tick ${nextTick} produced ${rawCommandCount} commands ` +
           `(soft cap ${MAX_COMMANDS_PER_TICK_SOFT_CAP}); ` +
           `softCapHitCount=${this.softCapHitCount}`
       )
     }
+    const partition = applyCommandHardCap(commands, MAX_COMMANDS_PER_TICK_HARD_CAP)
+    if (partition.rejected.length > 0) {
+      this.hardCapRejectedSinceBoot += partition.rejected.length
+      console.warn(
+        `[sim] tick ${nextTick} hit hard cap: ${rawCommandCount} > ${MAX_COMMANDS_PER_TICK_HARD_CAP}; ` +
+          `rejecting ${partition.rejected.length} command(s); ` +
+          `hardCapRejectedSinceBoot=${this.hardCapRejectedSinceBoot}`
+      )
+      for (const overflow of partition.rejected) {
+        this.store.recordRejectedCommand(
+          overflow,
+          {
+            commandId: overflow.commandId,
+            commandType: overflow.commandType,
+            actorId: overflow.actorId,
+            code: COMMAND_CAP_REJECTION_CODE,
+            reason: `per-tick hard cap ${MAX_COMMANDS_PER_TICK_HARD_CAP} exceeded; overflow rejected by deterministic commandId sort`,
+            details: { rawCommandCount, hardCap: MAX_COMMANDS_PER_TICK_HARD_CAP, tick: nextTick },
+          }
+        )
+      }
+    }
+    const acceptedCommands = partition.kept
+    this.lastTickCommandCount = acceptedCommands.length
 
     // ---- Compile commands → typed event drafts via the Rule Engine ----
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
     let lifeExpansionChanged = false
-    for (const cmd of commands) {
+    for (const cmd of acceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
         for (const draft of result.events) typedDrafts.push(draft as EventDraft)

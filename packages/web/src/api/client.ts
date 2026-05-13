@@ -20,6 +20,8 @@ export type ServerTickCommandStats = {
   peak: number
   softCap: number
   softCapHitCount: number
+  hardCap?: number
+  hardCapRejectedSinceBoot?: number
 }
 
 export type ServerWorldSnapshot = {

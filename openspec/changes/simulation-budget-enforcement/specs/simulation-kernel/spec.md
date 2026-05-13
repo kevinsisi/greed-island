@@ -45,3 +45,41 @@ A configurable soft cap (`MAX_COMMANDS_PER_TICK_SOFT_CAP`) MUST trigger a single
 
 - **WHEN** a caller invokes `runtime.getSnapshot()`
 - **THEN** `tickCommandStats.softCap` MUST equal the active `MAX_COMMANDS_PER_TICK_SOFT_CAP` value
+
+### Requirement: Runtime SHALL enforce a deterministic per-tick hard cap on command count
+
+When the per-tick command count exceeds `MAX_COMMANDS_PER_TICK_HARD_CAP`, the runtime MUST partition the commands deterministically and reject the overflow. The partition MUST be reproducible: identical EventLog + identical pending Commands + identical hard-cap value MUST yield identical (kept, rejected) sets across replays. The deterministic ordering is by canonical `commandId` (a content hash of `commandType + actorId + actorType + tick + payload`), ascending lexicographic.
+
+#### Scenario: Under-cap tick produces no rejection
+
+- **GIVEN** the runtime has produced K commands in a tick with K ≤ `MAX_COMMANDS_PER_TICK_HARD_CAP`
+- **WHEN** the runtime advances that tick
+- **THEN** every command MUST flow through the Rule Engine
+- **AND** zero entries with `rejectionCode = 'COMMAND_CAP_EXCEEDED'` MUST appear in `rejected_command_log`
+- **AND** `tickCommandStats.hardCapRejectedSinceBoot` MUST be unchanged
+
+#### Scenario: Over-cap tick rejects deterministic overflow into the audit log
+
+- **GIVEN** the runtime has produced K commands in a tick with K > `MAX_COMMANDS_PER_TICK_HARD_CAP`
+- **WHEN** the runtime advances that tick
+- **THEN** exactly `MAX_COMMANDS_PER_TICK_HARD_CAP` commands MUST flow through the Rule Engine
+- **AND** the remaining `K - MAX_COMMANDS_PER_TICK_HARD_CAP` commands MUST be written to `rejected_command_log` with `rejectionCode = 'COMMAND_CAP_EXCEEDED'`
+- **AND** `tickCommandStats.hardCapRejectedSinceBoot` MUST increment by `K - MAX_COMMANDS_PER_TICK_HARD_CAP`
+- **AND** the kept commands MUST be the lexicographically smallest `MAX_COMMANDS_PER_TICK_HARD_CAP` of the input set when sorted by `commandId`
+
+#### Scenario: Rejected commands do NOT affect WorldState
+
+- **GIVEN** the runtime rejected some commands due to hard-cap overflow on tick N
+- **WHEN** WorldState(N) is computed by reducing the EventLog up to tick N
+- **THEN** WorldState(N) MUST contain no facts derived from any of the rejected commands
+- **AND** `rejected_command_log` MUST remain excluded from the reducer (audit-only surface)
+
+### Requirement: Hard cap value SHALL be exposed on the snapshot
+
+`tickCommandStats.hardCap` MUST be exposed on the snapshot so dashboards can render the enforcement ceiling.
+
+#### Scenario: Snapshot exposes the configured hard cap
+
+- **WHEN** a caller invokes `runtime.getSnapshot()`
+- **THEN** `tickCommandStats.hardCap` MUST equal the active `MAX_COMMANDS_PER_TICK_HARD_CAP` value
+- **AND** `tickCommandStats.hardCapRejectedSinceBoot` MUST be a non-negative integer (cumulative count since boot)

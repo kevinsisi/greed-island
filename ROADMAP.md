@@ -27,6 +27,19 @@ OpenSpec: `architecture-formalization/`。
 - ✅ `npx openspec validate --all --strict`（17 passed, 0 failed）
 - ✅ Commit `d46a153` pushed; CI run `25786027078` passed; Deploy Dev run `25786027052` passed.
 
+## v0.15.47i ✅ shipped — 2026-05-13
+
+**主題：Phase 1 budget gate slice 2 — 確定性 hard cap enforcement**
+
+- ✅ `MAX_COMMANDS_PER_TICK_HARD_CAP = 8000` 與 `COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'` 加進 `config/world.ts`。
+- ✅ 新 pure helper `sim/commandBudget.ts::applyCommandHardCap(commands, hardCap)` 回 `{ kept, rejected }`。在 cap 之下 identity-preserving（不排序），超過 cap 時按 `commandId` 升冪排序、取前 N。回傳 frozen array。
+- ✅ `SimulationRuntime.runTick()` 在 soft cap 警告後叫 helper；rejected 全部走 `eventStore.recordRejectedCommand(...)` 寫進 `rejected_command_log`（`rejectionCode = 'COMMAND_CAP_EXCEEDED'`，**不影響 WorldState** — 該 table 被 reducer 排除）；下游 rule engine loop 改 iterate `acceptedCommands`。
+- ✅ `WorldSnapshot.tickCommandStats` 多 `hardCap` + `hardCapRejectedSinceBoot` 兩欄；web `ServerTickCommandStats` 同步。
+- ✅ Spec delta 加 3 條新 ADDED Requirements（enforcement determinism、WorldState invariance under rejection、hardCap exposure）。
+- ✅ Tests：`commandBudget.test.ts` 7 個 pure-helper 測試（含跨 collection order 確定性）；`runtimeBudget.test.ts` +1 個確認真實 50-NPC 負載下 `rejected_command_log` 無 `COMMAND_CAP_EXCEEDED` 紀錄。
+- ✅ `npm test` 230 server + 34 web 全綠；`build:server` / `build:web` 通過；`openspec validate simulation-budget-enforcement --strict` 通過。
+- 🚧 待 commit / push / CI / Deploy Dev 驗證。
+
 ## v0.15.47h ✅ shipped — 2026-05-13
 
 **主題：Phase 0 archive + Phase 1 budget gate slice 1（command cap observability）**

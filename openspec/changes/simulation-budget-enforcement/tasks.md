@@ -9,11 +9,11 @@
 - [x] 1.5 Expose on `/api/dashboard` payload — `/api/dashboard` returns the snapshot in `world`, so the new field rides along; web `ServerWorldSnapshot` type updated.
 - [x] 1.6 Add focused tests: `packages/server/src/sim/runtimeBudget.test.ts` covers stat exposure, peak monotonicity, no-warning under normal load, soft-cap counter at 0 under normal load.
 
-## 2. Command cap enforcement (next slice)
+## 2. Command cap enforcement (this slice — ✅ shipped)
 
-- [ ] 2.1 Add `MAX_COMMANDS_PER_TICK_HARD_CAP` constant (default `8000`).
-- [ ] 2.2 When commands exceed hard cap, sort by deterministic key, slice first N, log overflow to `rejected_command_log` with `rejectionCode = 'COMMAND_CAP_EXCEEDED'`.
-- [ ] 2.3 Add replay test: same EventLog + same cap → same kept-vs-rejected partition.
+- [x] 2.1 Add `MAX_COMMANDS_PER_TICK_HARD_CAP = 8000` constant + `COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'` in `config/world.ts`.
+- [x] 2.2 Pure helper `packages/server/src/sim/commandBudget.ts::applyCommandHardCap(commands, hardCap)` returns `{ kept, rejected }` partition. Sorts by `commandId` ascending only when over cap (preserves natural order under cap). `runTick()` calls helper, records overflow via `eventStore.recordRejectedCommand(...)`, downstream rule-engine loop iterates `acceptedCommands` (the kept partition).
+- [x] 2.3 Replay tests: `commandBudget.test.ts` covers determinism across runtime collection order; `runtimeBudget.test.ts` confirms no false rejections under real 50-NPC load.
 
 ## 3. NPC partitioning (later slice)
 
@@ -30,12 +30,20 @@
 
 ## 5. Verification (per slice)
 
-### Slice 1 (this commit)
+### Slice 1 (shipped)
 
 - [x] 5.1 `npm test` passes (223 server + 34 web; +4 from runtimeBudget.test.ts).
 - [x] 5.2 `npm run build:server` + `npm run build:web` pass.
 - [x] 5.3 `npx openspec validate simulation-budget-enforcement --strict` passes.
-- [ ] 5.4 Commit + push + CI/Deploy Dev green.
-- [ ] 5.5 Update `PROGRESS.md` and `ROADMAP.md`.
+- [x] 5.4 Commit + push + CI/Deploy Dev green (commit `f020c5e`, CI `25787482933`, Deploy `25787482860`).
+- [x] 5.5 Update `PROGRESS.md` and `ROADMAP.md`.
 
-### Slices 2-4 verification still pending — re-use this section as each lands.
+### Slice 2 (this commit)
+
+- [x] 5.6 `npm test` passes (230 server + 34 web; +7 from commandBudget.test.ts, +1 from runtimeBudget.test.ts).
+- [x] 5.7 `npm run build:server` + `npm run build:web` pass.
+- [x] 5.8 `npx openspec validate simulation-budget-enforcement --strict` passes with the new hard-cap requirements.
+- [ ] 5.9 Commit + push + CI/Deploy Dev green.
+- [ ] 5.10 Update `PROGRESS.md` and `ROADMAP.md`.
+
+### Slices 3-4 verification still pending — re-use this section as each lands.

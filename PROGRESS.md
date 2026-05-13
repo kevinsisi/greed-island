@@ -3,6 +3,31 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 1 budget hard-cap enforcement slice
+
+### Implemented
+
+- Slice 2 of `simulation-budget-enforcement`: deterministic per-tick command hard cap with overflow rejection routed to `rejected_command_log`. `WorldState` unaffected.
+- New constants in `config/world.ts`: `MAX_COMMANDS_PER_TICK_HARD_CAP = 8000`, `COMMAND_CAP_REJECTION_CODE = 'COMMAND_CAP_EXCEEDED'`.
+- New pure helper `packages/server/src/sim/commandBudget.ts::applyCommandHardCap(commands, hardCap)` returns `{ kept, rejected }`. Identity-preserving under cap (no sort); sorts ascending by `commandId` and slices first N when over cap. Returns frozen arrays.
+- `SimulationRuntime.runTick()` calls the helper after the soft-cap warning; for each rejected command calls `eventStore.recordRejectedCommand(...)` with code `COMMAND_CAP_EXCEEDED`, then iterates `acceptedCommands` (the kept partition) in the existing rule-engine loop.
+- `WorldSnapshot.tickCommandStats` gains `hardCap` and `hardCapRejectedSinceBoot` fields. Web `ServerTickCommandStats` gets matching optional fields.
+- Spec delta extended with three new ADDED Requirements (hard-cap enforcement + determinism, WorldState invariance under rejection, hard-cap value exposure).
+
+### Verification
+
+- `npm test`: 230 server + 34 web tests passed (+7 `commandBudget.test.ts` pure-helper tests, +1 runtime hard-cap test).
+- `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` pass.
+- `npm run build:server` + `npm run build:web` pass.
+- `npx openspec validate simulation-budget-enforcement --strict` passes (now covers slices 1 + 2 requirements).
+
+### Outstanding
+
+- Slice 3 (NPC partitioning: active vs background).
+- Slice 4 (regional activation).
+- Browser visual smoke of `/admin/npcs` rendering (carried over).
+- Dashboard UI to render `tickCommandStats.lastTick / softCap / hardCap` headroom (deferred until slice 4 lands).
+
 ## 2026-05-13 — Phase 0 archive + Phase 1 budget observability slice
 
 ### Implemented

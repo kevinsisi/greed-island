@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadCardCatalog } from '../cards/loader.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
-import { MAX_COMMANDS_PER_TICK_SOFT_CAP } from '../config/world.js'
+import { MAX_COMMANDS_PER_TICK_SOFT_CAP, MAX_COMMANDS_PER_TICK_HARD_CAP } from '../config/world.js'
 import { SimulationRuntime } from './runtime.js'
 
 type Internal = { runTick: () => void }
@@ -28,9 +28,30 @@ describe('SimulationRuntime budget observability (Phase 1 slice 1)', () => {
       const snapshot = runtime.getSnapshot()
       expect(snapshot.tickCommandStats).toBeDefined()
       expect(snapshot.tickCommandStats.softCap).toBe(MAX_COMMANDS_PER_TICK_SOFT_CAP)
+      expect(snapshot.tickCommandStats.hardCap).toBe(MAX_COMMANDS_PER_TICK_HARD_CAP)
       expect(snapshot.tickCommandStats.lastTick).toBeGreaterThan(0)
       expect(snapshot.tickCommandStats.peak).toBeGreaterThanOrEqual(snapshot.tickCommandStats.lastTick)
       expect(snapshot.tickCommandStats.softCapHitCount).toBe(0)
+      expect(snapshot.tickCommandStats.hardCapRejectedSinceBoot).toBe(0)
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('under real load: no hard-cap rejections and rejected_command_log stays clean of COMMAND_CAP_EXCEEDED', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const run = (runtime as unknown as Internal).runTick
+      run.call(runtime)
+      run.call(runtime)
+      run.call(runtime)
+      const stats = runtime.getSnapshot().tickCommandStats
+      expect(stats.hardCapRejectedSinceBoot).toBe(0)
+      const audit = eventStore.readRejectedCommandAudit()
+      expect(audit.filter((row) => row.rejectionCode === 'COMMAND_CAP_EXCEEDED')).toEqual([])
     } finally {
       runtime.stop()
       db.close()
