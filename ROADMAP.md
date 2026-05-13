@@ -3,8 +3,46 @@
 > 這份 roadmap 是 release-by-release 的工作項摘要。最新狀態在最上面。
 > 詳細設計見 `openspec/changes/<change-id>/proposal.md`。
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
+> 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
+
+## v0.15.47g ✅ shipped — 2026-05-13
+
+**主題：World program consolidation + Layer 2.5 Ecosystem Runtime + GM NPC Dashboard**
+
+Runtime version stays `0.15.47`（同 prior 47e/47f 模式 — 47a–47g 是 47 series 內的 micro-slice，code 仍在 0.15.47）。下一個真正 minor bump (v0.15.48) 預留給 Phase 0 architecture-formalization slice。
+
+Doc + 程式雙線：把整個 program 在文件層收斂成單一來源，加進新的 Layer 2.5 ecosystem 軸，並 ship 第一個 GM-facing observability slice。
+
+### Doc consolidation
+
+- ✅ 合併 vision v2 進 `docs/WORLD_CAPABILITIES.md`（Part I 是用戶 constitution、Part II baseline、Part III crosswalk、Part IV 6-phase plan、Part V success criteria）。
+- ✅ 把後續的 `docs/WITH_ECO.md`（1030 行）也吃進 WORLD_CAPABILITIES.md，正式加入 Layer 2.5 Ecosystem Runtime。Layer 模型從 5 層升 6 層。
+- ✅ Phase plan 從 7 phase（0-6）擴成 **12 phase**（0, 1, E0, 2, E1, 3, E2, 4, 5, E3, 6, E4）— civ 與 ecosystem 交錯，Phase E0 必須在 Phase 2 之前以提供 metabolism substrate。
+- ✅ 完成 OpenSpec cleanup：archive 19 個 ✓ Complete / near-complete changes、刪 2 個 dead proposals（`add-living-world-runtime`、`establish-greed-island-platform`）。Active changes 從 25 降到 5。
+- ✅ `DEVELOPMENT_CONSTITUTION.md` 與 `CLAUDE.md` 都加上 `docs/WORLD_CAPABILITIES.md` 引用。
+
+### GM NPC Dashboard slice
+
+- ✅ 新 OpenSpec change `gm-npc-dashboard` (validates strict)。
+- ✅ Backend：`GET /api/admin/npc-stats`（GM 或 admin）回傳 `{ totalNpcs, byOrigin: { manual, born }, births: { totalEventCount, recent[] }, households: { totalEventCount, recent[] }, deaths: { available: false, reason, plannedAt }, generatedAtTick }`。`SqliteEventStore.countEventsByKind` 與 `SimulationRuntime.getManualNpcIds` 都是純 additive helper。
+- ✅ Frontend：`/admin/npcs` page，6 個 stat cards + births / households tables + deaths "Phase 5 pending" panel + 非 GM/admin 的 access-denied fallback。`AdminPage` 加「進入 NPC 儀表板」連結。
+- ✅ i18n zh + en（27 條新 keys）、6 個新 router 測試（auth gate + buildNpcStats）全綠。
+- ✅ Honest scope：今天 `byOrigin.born = 0`（NPC_CHILD_BORN 只記在父母身上、子代尚未成為 runtime entity）；`deaths.available = false` 直到 Phase 5.2 NPC_DECEASED 落地。
+
+### Verification
+
+- ✅ `npm test`: 219 server tests + 34 web tests。
+- ✅ `npm run build:server` / `build:web` 通過（web 只有既有 chunk-size warning）。
+- ✅ `npx openspec validate gm-npc-dashboard --strict` 通過。
+- ✅ Commit `ac9e85a` (GM dashboard) → CI run `25782314152` ✅ + Deploy Dev run `25782314113` ✅。
+- ✅ Commit `6d1e627` (ECO integration) → CI run `25782668554` ✅ + Deploy Dev run `25782668586` ✅。
+- ✅ 本地 docker 重建：`down`（保留 `deploy/data/` SQLite EventLog）→ `up -d --build`，`/healthz` 回 `version: "0.15.47"`，tick 從 11882 接續到 11890（世界歷史未斷），`/api/admin/npc-stats` 匿名回 401（auth gate 正常）。
+- 🚧 還沒做（你的手）：瀏覽器開 `http://127.0.0.1:8100/admin/npcs` 視覺確認 stat cards + tables 渲染正確。
+- 🚧 還沒做：archive `gm-npc-dashboard` change（tasks 還沒勾 + smoke 還沒完成）。
 
 ## v0.15.47 🚧 in progress — 2026-05-12
+
+**主題：civ-evo-construction Slice 4-6 — NPC-initiated 工地可見且可點**
 
 **主題：civ-evo-construction Slice 4-6 — NPC-initiated 工地可見且可點**
 

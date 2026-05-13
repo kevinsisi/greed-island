@@ -3,6 +3,27 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — v0.15.47g GM NPC Dashboard + Layer 2.5 ECO Doc Integration + Local Docker Refresh
+
+### Sequenced work (after GM dashboard slice below)
+
+- Integrated user-authored `docs/WITH_ECO.md` (1030 lines) into `docs/WORLD_CAPABILITIES.md` as the constitutional substrate for **Layer 2.5 Ecosystem Runtime**. Runtime layer model goes from 5 to 6 layers (`Kernel / Living World / Ecosystem / Civilization / Combat / Perception`). Source `docs/WITH_ECO.md` deleted (consolidated).
+- WORLD_CAPABILITIES.md 從 1397 行擴成 **1774 行**：Part I §6 新增完整 ecosystem vision、§10 加 P3 Ecosystem Foundation 優先級、§11 dev order 變成 7 civ + 5 eco 共 12 個 phase 交錯 (0, 1, E0, 2, E1, 3, E2, 4, 5, E3, 6, E4)、Part II §27 新增 ecosystem baseline = 0% implemented、Part III §30.12-30.18 七條 ecosystem crosswalk、Part IV §34/§36/§38/§41/§42.2 五個 E-phase 章節、Part V §43.2 11 條 ecosystem success criteria。
+- Honest sizing update: 程式 phase 從 7 個變成 12 個，total releases 估算從 16–25 升到 **26–43**，duration estimate 從 6–12 個月升到 **6 個月–2 年**。Ecosystem 把 program 規模約翻倍。
+- Local docker stack 重建（`down` 保留 `deploy/data/` → `up -d --build`）：`version: "0.15.47"` 接續，tick 從 11882 走到 11890 不斷，`/api/admin/npc-stats` 匿名回 401。
+
+### CI / Deploy evidence
+
+- Commit `ac9e85a` (GM dashboard ship) → CI run `25782314152` ✅ + Deploy Dev run `25782314113` ✅.
+- Commit `6d1e627` (ECO doc integration) → CI run `25782668554` ✅ + Deploy Dev run `25782668586` ✅.
+- 本地 healthz post-rebuild: `{"ok":true,"version":"0.15.47","tick":11890}`.
+
+### Outstanding on this session
+
+- 🚧 Browser visual smoke of `/admin/npcs` rendering — needs your hands.
+- 🚧 `gm-npc-dashboard` OpenSpec archive (tasks not yet ticked; will be archived after visual smoke).
+- 🚧 Phase 0 (architecture-formalization) OpenSpec change — `ARCHITECTURE.md` §12 "Six Runtime Layers" 還沒寫。下一個 release-shape work。
+
 ## 2026-05-13 — GM NPC Dashboard slice
 
 ### Implemented
