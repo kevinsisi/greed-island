@@ -34,6 +34,7 @@ This codebase is **Greed Island**, an AI-driven living-world game. The following
 - [`COMBAT_ARCHITECTURE.md`](./COMBAT_ARCHITECTURE.md) — real-time combat sub-runtime準則。**Phase B (v0.15.0) 已 ship**（單擊判決 + Command/Event 管線）；Phase C/D 仍未實作。所有戰鬥相關 PR (commands / events / 紋卡優先級) 必須遵守此文。
 - [`ROADMAP.md`](./ROADMAP.md) — release-by-release 工作項追蹤。OpenSpec change ids 都對得上 `openspec/changes/<id>/`。
 - [`PROGRESS.md`](./PROGRESS.md) — latest handoff status, local verification, CI/CD state, and active blockers. Update this before ending a coding session.
+- [`docs/WORLD_CAPABILITIES.md`](./docs/WORLD_CAPABILITIES.md) — single source of truth for the world program: Part I runtime constitution + civilization vision (user-authored, non-negotiable), Part II current verified baseline (v0.15.47), Part III principles→capabilities crosswalk, Part IV six-phase plan (≈16–25 releases, 6–12 months), Part V success criteria. Every new OpenSpec change must reference which Part I principle it serves and which Part IV phase it ships in.
 
 **所有狀態改變必須走 Command → Rule Engine → Event → 投影**。違反這條的 PR（不論是世界模擬、戰鬥、玩家動作）必須被拒絕，並在 PR 描述中註明違反 ARCHITECTURE.md 的哪一條。AI 在系統裡只能做 read-only 旁白與意圖分類；AI 不可下 Command、不可改 hp、不可影響 priority / damage 計算。
 
