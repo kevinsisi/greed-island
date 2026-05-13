@@ -88,6 +88,7 @@ developer. Keep latest status at the top.
 - Hub construction stability focused tests: `npm run test -w @greed-island/web -- constructionActivity hubDistricts` passed: 7 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/web`. Full `npm test` passed: 213 server tests + 34 web tests. `npm run build:web` passed with only the known Vite chunk-size warning.
 - Commit `83e6376` (`fix(hub): stabilize construction map state`) passed CI run `25772000924` and Deploy Dev run `25772000909`; both only reported the known Node.js 20 actions deprecation annotation. Live `/healthz` returned version `0.15.47` at tick `108446`, and live `/api/map` included `t_salt_marsh`, confirming the deployed authoritative map still contains the right-bottom expansion district.
 - Construction monotonicity focused tests: `npm run test -w @greed-island/server -- cityLife constructionProjects` passed: 31 tests. `npx tsc -p tsconfig.json --noEmit` passed in `packages/server`. Full `npm test` passed: 216 server tests + 34 web tests. `npm run build:server` passed. `npx openspec validate civ-evo-construction --strict` passed.
+- Commit `27e472d` (`fix(construction): enforce monotonic building state`) passed CI run `25773171084` and Deploy Dev run `25773171088`; both only reported the known Node.js 20 actions deprecation annotation. Live `/healthz` returned version `0.15.47` at tick `108852` after deploy.
 
 ## 2026-05-12 — v0.15.47d NPC Personal Economy + Skill XP Slice
 
