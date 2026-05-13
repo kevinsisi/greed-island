@@ -23,4 +23,4 @@
 - [x] 4.2 Web build/test passes if GM UI changes are included.
 - [x] 4.3 `npx openspec validate goods-production-chains --strict` passes.
 - [x] 4.4 `npx openspec validate --all --strict` passes.
-- [ ] 4.5 Commit, push, verify CI + Deploy Dev, and update handoff docs.
+- [x] 4.5 Commit, push, verify CI + Deploy Dev, and update handoff docs.

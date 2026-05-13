@@ -3,6 +3,40 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 2 §35.3 goods production chains
+
+### Implemented
+
+- Started OpenSpec change `goods-production-chains` for `docs/WORLD_CAPABILITIES.md` Phase 2 §35.3.
+- Added deterministic production recipe metadata for `salt_marsh_brine -> refined_salt`.
+- Added `ProductionChainsProjection` with recipe snapshot, processed totals, replay, and canonical hash.
+- `SimulationRuntime` now emits `GOODS_PROCESSED` through the Rule Engine when `settlement.t_central` has enough `salt_marsh_brine` inventory.
+- `GoodsInventoryProjection` already performs the input subtraction/output addition, so production does not fabricate missing inputs.
+- Runtime exposes `WorldSnapshot.facts.productionChains`.
+- `/admin/world` now renders production recipes and processed totals, labeled as Phase 2 §35.3 production rather than market prices or meals.
+
+### Honest scope
+
+- This is one deterministic production recipe only. There is still no market price discovery, NPC purchasing, meals, spoilage, warehouse capacity, player crafting, or multi-step manufacturing graph.
+- Storms can disrupt logistics from §35.2, but they still do not damage production buildings or cities.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- goods/productionChains projections/productionChains sim/runtimeProductionChains kernel/livingWorld projections/goodsInventory` passed: 51 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **312 server** + 34 web tests.
+- `npx openspec validate goods-production-chains --strict` passed.
+- `npx openspec validate --all --strict` passed: 26 passed, 0 failed.
+- Commit `ab54bcd` (`feat(goods): add production chain processing`) pushed to `main`.
+- CI run `25814013498` passed; Deploy Dev run `25814014812` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":119758}`.
+- Live `/api/world` smoke at tick `119758`: `productionChains.recipes = 1`, `productionChains.processed = 0`, `logistics.routes = 0`, `logistics.transports = 0`.
+
+### Outstanding
+
+- Next Phase 2 slice should be §35.4 market formation so refined salt and other goods can affect local supply/demand and prices.
+
 ## 2026-05-13 — Phase 2 §35.2 goods logistics
 
 ### Implemented
@@ -38,11 +72,13 @@ developer. Keep latest status at the top.
 - Full suite: `npm test` passed: **306 server** + 34 web tests.
 - `npx openspec validate goods-logistics --strict` passed.
 - `npx openspec validate --all --strict` passed: 25 passed, 0 failed.
+- Commit `16583fd` (`feat(goods): add abstract goods logistics`) pushed to `main`.
+- CI run `25813214469` passed; Deploy Dev run `25813214497` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":119579}`.
 
 ### Outstanding
 
-- Local changes are implemented and verified but not yet committed, pushed, deployed, or CI/CD-verified in this handoff.
-- Next Phase 2 slice should be §35.3 production chains/cooking or §35.4 market formation so delivered fish/meat can feed NPC needs and prices.
+- §35.3 production chains has now started in `goods-production-chains`.
 
 ## 2026-05-13 — Phase 2 §35.1 goods primitives
 

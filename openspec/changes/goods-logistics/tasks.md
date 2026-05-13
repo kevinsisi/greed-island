@@ -32,4 +32,4 @@
 - [x] 5.2 Web build/test passes.
 - [x] 5.3 `npx openspec validate goods-logistics --strict` passes.
 - [x] 5.4 `npx openspec validate --all --strict` passes.
-- [ ] 5.5 Commit, push, verify CI + Deploy Dev, and update handoff docs.
+- [x] 5.5 Commit, push, verify CI + Deploy Dev, and update handoff docs.

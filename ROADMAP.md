@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase 2 §35.3 — Goods production chains**
+
+OpenSpec: `goods-production-chains/`。
+
+- ✅ 新增 deterministic recipe metadata：`salt_marsh_brine -> refined_salt`。
+- ✅ 新增 `ProductionChainsProjection`，顯示配方與 processed totals，支援 replay/canonical hash。
+- ✅ `SimulationRuntime` 會在 `settlement.t_central` 有足量 `salt_marsh_brine` 時，經 Rule Engine emit `GOODS_PROCESSED`。
+- ✅ `WorldSnapshot.facts.productionChains` 可讀；`/admin/world` 顯示 production recipes / totals，並明確標示不是 market price 或 meals。
+- ✅ Focused server tests 51 passed；full `npm test` 312 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（26 passed）全綠。
+- ✅ Commit `ab54bcd` pushed；CI run `25814013498` passed；Deploy Dev run `25814014812` passed；live `/healthz` = `0.16.0` @ tick `119758`；`/api/world.facts.productionChains.recipes` = 1。
+- ⚠️ Honest scope：目前只有第一條生產配方；尚無 market prices、NPC purchases、meals、spoilage 或 warehouse capacity。
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase 2 §35.2 — Abstract goods logistics from ecosystem outputs**
 
 OpenSpec: `goods-logistics/`。
@@ -17,7 +31,7 @@ OpenSpec: `goods-logistics/`。
 - ✅ active `weather.storm` 會讓 planned transport 轉成 `GOODS_TRANSPORT_LOST`，不會在本 slice 毀壞城市或建築。
 - ✅ `WorldSnapshot.facts.logistics` 可讀；`/admin/world` 顯示 routes/transports，並標示目前仍是 abstract logistics，不含道路、倉庫、價格、pathfinding 或 city damage。
 - ✅ Focused server tests 47 passed；full `npm test` 306 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（25 passed）全綠。
-- ⚠️ Local implementation verified but not yet committed/pushed/deployed/CI-verified in this handoff.
+- ✅ Commit `16583fd` pushed；CI run `25813214469` passed；Deploy Dev run `25813214497` passed；live `/healthz` = `0.16.0` @ tick `119579`。
 - ⚠️ Honest scope：物流只完成第一版抽象 chain；production/cooking、household consumption、market prices 仍在後續 Phase 2 slices。
 
 ## v0.16.0 🚧 in progress — 2026-05-13
