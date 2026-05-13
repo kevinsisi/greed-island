@@ -19,10 +19,16 @@ developer. Keep latest status at the top.
 
 - `npm run build:web` passed with the known Vite chunk-size warning.
 - `npm run test -w @greed-island/web` passed: 34 tests.
+- `npx openspec validate ecosystem-fishery-density --strict` passed.
+- `npx openspec validate --all --strict` passed: 23 passed, 0 failed.
+- Commit `cd3eb0e` (`feat(gm): show fishery density in world view`) pushed to `main`.
+- CI run `25802979233` passed; Deploy Dev run `25802979345` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":117385}`.
+- Live `/api/world.facts.fisheryDensity` had 2 rows at tick `117385`: `t_dock` density 16/collapsed and `t_temple` density 16/collapsed.
 
 ### Outstanding
 
-- Commit/push/CI/Deploy Dev verification pending.
+- E0.4 is visible in GM UI, but it is still only an ecological pressure projection. NPCs do not yet buy fish, cook fish, store fish goods, sell fish at market, or consume prepared meals. That belongs in the next goods/logistics/cooking slice.
 
 ## 2026-05-13 — Phase E0.4 fishery density
 
@@ -41,6 +47,7 @@ developer. Keep latest status at the top.
 ### Honest scope
 
 - Tile-level fishery only. No species-specific fishery, recovery/regrowth, goods inventory, market pricing, or extinction history yet.
+- No fish purchase/cooking/meal consumption loop yet; `FISHERY_HARVESTED` is currently a world/ecosystem fact, not a commodity transaction.
 
 ### Verification
 
