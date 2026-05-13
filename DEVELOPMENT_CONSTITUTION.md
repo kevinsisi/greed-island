@@ -25,11 +25,13 @@ Every feature must preserve these laws:
 Before non-trivial changes, read in this order:
 
 1. `DEVELOPMENT_CONSTITUTION.md` — how to continue the project.
-2. `ARCHITECTURE.md` — world laws, current guarantees, and gaps.
-3. `ROADMAP.md` — release history and planned versions.
-4. `PROGRESS.md` — current handoff state and active blockers.
-5. Matching OpenSpec change under `openspec/changes/<id>/` if one exists.
-6. Code paths being modified.
+2. `docs/WORLD_CAPABILITIES.md` — single source of truth for the world program (Part I runtime constitution + civilization vision, Part II current verified baseline, Part III principles→capabilities crosswalk, Part IV six-phase plan, Part V success criteria).
+3. `ARCHITECTURE.md` — engine-level world laws, current guarantees, and §11 backlog.
+4. `COMBAT_ARCHITECTURE.md` — real-time combat sub-runtime準則 (Phase B shipped, Phase C planned).
+5. `ROADMAP.md` — release-by-release history.
+6. `PROGRESS.md` — current handoff state and active blockers.
+7. Matching OpenSpec change under `openspec/changes/<id>/` if one exists.
+8. Code paths being modified.
 
 Do not rely on chat memory alone. If a rule must survive handoff, write
 it into one of these files or an OpenSpec artifact.
