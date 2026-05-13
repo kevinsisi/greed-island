@@ -71,6 +71,7 @@ import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { requireSpecies } from '../ecosystem/species.js'
+import { planGoodsProduction } from '../goods/productionChains.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -121,6 +122,7 @@ import { AnimalPopulationProjection, type AnimalPopulationRow } from '../project
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
+import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../projections/productionChains.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -300,6 +302,7 @@ export class SimulationRuntime {
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
+  private readonly productionChainsProjection = new ProductionChainsProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -445,7 +448,8 @@ export class SimulationRuntime {
         animalPopulation: this.animalPopulationProjection.list(),
         fisheryDensity: this.fisheryDensityProjection.list(),
         goodsInventory: this.goodsInventoryProjection.list(),
-        logistics: this.logisticsProjection.snapshot()
+        logistics: this.logisticsProjection.snapshot(),
+        productionChains: this.productionChainsProjection.snapshot()
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -651,6 +655,11 @@ export class SimulationRuntime {
     return this.logisticsProjection.snapshot()
   }
 
+  /** Phase 2 §35.3 — deterministic goods production chains (Layer 3). */
+  getProductionChains(): ProductionChainsSnapshot {
+    return this.productionChainsProjection.snapshot()
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -845,6 +854,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
+      this.productionChainsProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -883,6 +893,7 @@ export class SimulationRuntime {
     const stateDrafts: EventDraft[] = []
     const commands: LivingWorldCommand[] = []
     const plannedRouteIds = new Set<string>()
+    const plannedProductionRecipeIds = new Set<string>()
     const submittedAt = Date.now()
 
     stateDrafts.push(this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick))
@@ -1735,6 +1746,39 @@ export class SimulationRuntime {
       )
     }
 
+    for (const production of planGoodsProduction({
+      inventory: this.goodsInventoryProjection.list(),
+      plannedRecipeIds: plannedProductionRecipeIds,
+    })) {
+      const recipe = production.recipe
+      plannedProductionRecipeIds.add(recipe.recipeId)
+      commands.push(
+        makeLivingWorldCommand(
+          'GOODS_PROCESSED',
+          recipe.holderId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            recipeId: recipe.recipeId,
+            inputGoodsId: recipe.inputGoodsId,
+            inputQuantity: recipe.inputQuantity,
+            outputGoodsId: recipe.outputGoodsId,
+            outputQuantity: recipe.outputQuantity,
+            holderType: recipe.holderType,
+            holderId: recipe.holderId,
+            tileId: recipe.tileId,
+            processedAtTick: nextTick,
+            motivation: makeMotivation(
+              `中央聚落已有足量 ${recipe.inputGoodsId}，生產鏈依固定配方 ${recipe.recipeId} 將原料轉成 ${recipe.outputGoodsId}。`,
+              'Phase 2 §35.3 production chain'
+            ),
+            narration: `${recipe.holderId}把 ${recipe.inputQuantity} 份 ${recipe.inputGoodsId} 加工成 ${recipe.outputQuantity} 份 ${recipe.outputGoodsId}。`
+          }
+        )
+      )
+    }
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -2025,6 +2069,7 @@ export class SimulationRuntime {
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
+        this.productionChainsProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2553,6 +2598,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
+      this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }
 

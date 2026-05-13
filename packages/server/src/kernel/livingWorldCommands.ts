@@ -476,6 +476,7 @@ export type GoodsStoredCmd = Readonly<{
 }>
 
 export type GoodsProcessedCmd = Readonly<{
+  recipeId?: string
   inputGoodsId: string
   inputQuantity: number
   outputGoodsId: string
@@ -1083,6 +1084,7 @@ const VALIDATORS: Readonly<
     if (!isRecord(p)) return 'payload must be object'
     const err = validateGoodsHolderPayload(p)
     if (err) return err
+    if (p.recipeId !== undefined && (typeof p.recipeId !== 'string' || p.recipeId.length === 0)) return 'recipeId invalid'
     if (typeof p.inputGoodsId !== 'string' || p.inputGoodsId.length === 0) return 'inputGoodsId required'
     if (!isPositiveQuantity(p.inputQuantity)) return 'inputQuantity required'
     if (typeof p.outputGoodsId !== 'string' || p.outputGoodsId.length === 0) return 'outputGoodsId required'
