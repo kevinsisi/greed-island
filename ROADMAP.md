@@ -27,6 +27,19 @@ OpenSpec: `architecture-formalization/`。
 - ✅ `npx openspec validate --all --strict`（17 passed, 0 failed）
 - ✅ Commit `d46a153` pushed; CI run `25786027078` passed; Deploy Dev run `25786027052` passed.
 
+## v0.15.47h ✅ shipped — 2026-05-13
+
+**主題：Phase 0 archive + Phase 1 budget gate slice 1（command cap observability）**
+
+- ✅ Phase 0 `architecture-formalization` archive 為 `2026-05-13-architecture-formalization`，spec delta 合進 `openspec/specs/simulation-kernel/spec.md`。
+- ✅ 新增 OpenSpec umbrella change `simulation-budget-enforcement`（WORLD_CAPABILITIES.md §33.1）涵蓋 4 個 sub-slice：observability / hard cap enforcement / NPC partitioning / regional activation。本 release 只 ship slice 1。
+- ✅ `MAX_COMMANDS_PER_TICK_SOFT_CAP = 5000` 常數加進 `config/world.ts`。
+- ✅ `SimulationRuntime` 加 `lastTickCommandCount` / `peakTickCommandCount` / `softCapHitCount`。`runTick()` 在 commands array 組完之後（rule engine dispatch 之前）更新統計，超過 soft cap 時 `console.warn` 一次。**不 reject**。
+- ✅ `WorldSnapshot.tickCommandStats = { lastTick, peak, softCap, softCapHitCount }` 自動透過 `/api/world` 與 `/api/dashboard` 對外可見。
+- ✅ `runtimeBudget.test.ts` 4 個測試覆蓋：snapshot 暴露 / peak monotonic / 真實 50-NPC 負載下不觸警告 / softCapHitCount 維持 0。
+- ✅ `npm test` 223 server + 34 web 全綠；`build:server` / `build:web` 通過；`openspec validate simulation-budget-enforcement --strict` 通過。
+- 🚧 待 commit / push / CI / Deploy Dev 驗證。
+
 ## v0.15.47g ✅ shipped — 2026-05-13
 
 **主題：World program consolidation + Layer 2.5 Ecosystem Runtime + GM NPC Dashboard**

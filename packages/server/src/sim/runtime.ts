@@ -45,7 +45,8 @@ import {
   TICKS_PER_HOUR,
   TICKS_PER_MINUTE,
   WORLD_TIMEZONE,
-  WORLD_TIMEZONE_OFFSET_MINUTES
+  WORLD_TIMEZONE_OFFSET_MINUTES,
+  MAX_COMMANDS_PER_TICK_SOFT_CAP
 } from '../config/world.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
@@ -166,6 +167,17 @@ export type SimNpcState = Readonly<{
   civic: NpcCivicRecord | null
 }>
 
+export type TickCommandStats = Readonly<{
+  /** Command count from the most recent completed tick. */
+  lastTick: number
+  /** Peak command count observed since boot. */
+  peak: number
+  /** Active soft-cap threshold (warning, not enforcement). */
+  softCap: number
+  /** Number of ticks since boot whose command count exceeded the soft cap. */
+  softCapHitCount: number
+}>
+
 export type WorldSnapshot = Readonly<{
   tick: number
   lastSequence: number
@@ -178,6 +190,8 @@ export type WorldSnapshot = Readonly<{
     timezone: string
     timezoneOffsetMinutes: number
   }>
+  /** Per-tick budget gate observability (Phase 1 simulation-budget-enforcement). */
+  tickCommandStats: TickCommandStats
   generatedAt: string
 }>
 
@@ -208,6 +222,10 @@ export class SimulationRuntime {
   private timer: NodeJS.Timeout | null = null
   private lastSequence = 0
   private eventCount = 0
+  // Per-tick budget gate observability (simulation-budget-enforcement slice 1).
+  private lastTickCommandCount = 0
+  private peakTickCommandCount = 0
+  private softCapHitCount = 0
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -368,6 +386,12 @@ export class SimulationRuntime {
         ticksPerDay: TICKS_PER_DAY,
         timezone: WORLD_TIMEZONE,
         timezoneOffsetMinutes: WORLD_TIMEZONE_OFFSET_MINUTES,
+      },
+      tickCommandStats: {
+        lastTick: this.lastTickCommandCount,
+        peak: this.peakTickCommandCount,
+        softCap: MAX_COMMANDS_PER_TICK_SOFT_CAP,
+        softCapHitCount: this.softCapHitCount,
       },
       generatedAt: new Date().toISOString()
     }
@@ -1346,6 +1370,24 @@ export class SimulationRuntime {
           )
         )
       }
+    }
+
+    // ---- Phase 1 budget gate (observability slice) ----
+    // Record command volume for the just-built batch. No enforcement yet;
+    // soft cap breach emits a one-line warning so a GM dashboard can see
+    // load growing before later slices (NPC partitioning, regional
+    // activation, hard cap) cut in. Replay determinism unaffected.
+    this.lastTickCommandCount = commands.length
+    if (commands.length > this.peakTickCommandCount) {
+      this.peakTickCommandCount = commands.length
+    }
+    if (commands.length > MAX_COMMANDS_PER_TICK_SOFT_CAP) {
+      this.softCapHitCount += 1
+      console.warn(
+        `[sim] tick ${nextTick} produced ${commands.length} commands ` +
+          `(soft cap ${MAX_COMMANDS_PER_TICK_SOFT_CAP}); ` +
+          `softCapHitCount=${this.softCapHitCount}`
+      )
     }
 
     // ---- Compile commands → typed event drafts via the Rule Engine ----

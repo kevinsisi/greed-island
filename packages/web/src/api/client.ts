@@ -15,6 +15,13 @@ export type ServerActiveWorldEvent = {
   payload: Record<string, unknown>
 }
 
+export type ServerTickCommandStats = {
+  lastTick: number
+  peak: number
+  softCap: number
+  softCapHitCount: number
+}
+
 export type ServerWorldSnapshot = {
   tick: number
   lastSequence: number
@@ -27,6 +34,7 @@ export type ServerWorldSnapshot = {
     timezone?: string
     timezoneOffsetMinutes?: number
   }
+  tickCommandStats?: ServerTickCommandStats
   generatedAt: string
 }
 

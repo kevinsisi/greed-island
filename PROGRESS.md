@@ -3,6 +3,31 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 0 archive + Phase 1 budget observability slice
+
+### Implemented
+
+- Archived Phase 0 OpenSpec change `architecture-formalization` as `2026-05-13-architecture-formalization`. ARCHITECTURE.md §12 (Six Runtime Layers) merged into canonical `openspec/specs/simulation-kernel/spec.md` via layer-vocabulary requirement.
+- Opened new umbrella OpenSpec change `simulation-budget-enforcement` covering the 4 sub-deliverables of WORLD_CAPABILITIES.md §33.1 (command cap observability → enforcement → NPC partitioning → regional activation). Slice 1 (observability) ships in this commit; slices 2–4 stay unchecked.
+- Added `MAX_COMMANDS_PER_TICK_SOFT_CAP = 5000` constant in `packages/server/src/config/world.ts`.
+- `SimulationRuntime` tracks `lastTickCommandCount`, `peakTickCommandCount`, `softCapHitCount`. `runTick()` updates these right after the `commands` array is fully built and emits a single `console.warn` per tick over the soft cap. No rejection (observability slice).
+- New `TickCommandStats` type on `WorldSnapshot.tickCommandStats`. Rides through `/api/world` and `/api/dashboard` (no router changes needed — the field is on the existing snapshot).
+- Web `ServerWorldSnapshot` type gains optional `tickCommandStats` so future dashboard UI can render headroom (e.g. `1234 / 5000`).
+
+### Verification
+
+- `npm test`: 223 server tests + 34 web tests passed (added 4 `runtimeBudget.test.ts` tests covering snapshot exposure, peak monotonicity, no-warning under normal load, and soft-cap counter staying at 0 under real 50-NPC tick).
+- `npx tsc -p packages/server/tsconfig.json --noEmit` and `packages/web/tsconfig.json --noEmit` pass.
+- `npm run build:server` and `npm run build:web` pass.
+- `npx openspec validate simulation-budget-enforcement --strict` passes.
+
+### Outstanding
+
+- Slice 2 (hard cap + deterministic overflow → `rejected_command_log`).
+- Slice 3 (NPC partitioning: active vs background).
+- Slice 4 (regional activation).
+- Browser visual smoke of `/admin/npcs` rendering (carried over).
+
 ## 2026-05-13 — v0.15.48 Phase 0 Architecture Formalization
 
 ### Implemented

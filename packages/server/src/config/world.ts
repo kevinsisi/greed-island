@@ -23,6 +23,19 @@ export const EVENT_RETENTION_TICKS = EVENT_RETENTION_DAYS * TICKS_PER_DAY
 export const NARRATION_RETENTION_DAYS = EVENT_RETENTION_DAYS
 export const NARRATION_RETENTION_TICKS = EVENT_RETENTION_TICKS
 
+// Phase 1 budget gate (ARCHITECTURE.md §11.6, WORLD_CAPABILITIES.md §33.1).
+//
+// Observability-only soft cap. When per-tick command count exceeds this
+// threshold, the runtime emits a one-line warning and increments a
+// `softCapHitCount` stat — Commands are still processed normally. Later
+// slices add a hard cap with deterministic overflow handling.
+//
+// 5000 is sized for ~10x the current ~50 NPC + autonomous-construction
+// load so we get warning headroom before population/ecosystem expansions
+// in Phase 1.4 (settlement) and Phase E0 (ecosystem) increase command
+// volume.
+export const MAX_COMMANDS_PER_TICK_SOFT_CAP = 5000
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number
