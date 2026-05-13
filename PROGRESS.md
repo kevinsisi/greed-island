@@ -37,10 +37,12 @@ developer. Keep latest status at the top.
 - `npm run build:server` + `npm run build:web` passed (web only reported the known Vite chunk-size warning).
 - `npx openspec validate simulation-budget-enforcement --strict` passed.
 - `npx openspec validate --all --strict` passed: 18 passed, 0 failed.
+- Commit `23cfca6` (`feat(sim): gate NPC actions by active partition`) pushed to `main`.
+- CI run `25791664215` passed; Deploy Dev run `25791664183` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":114629}`.
 
 ### Outstanding
 
-- Commit + push + CI/Deploy Dev green.
 - Slice 4 regional activation.
 - Browser visual smoke of `/admin/npcs` rendering (carried over).
 

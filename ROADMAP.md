@@ -17,7 +17,7 @@ OpenSpec: `simulation-budget-enforcement/`。
 - ✅ 補 spec delta：productive gating、interaction gating、allow-list bypass 三個 scenarios。
 - ✅ 補測試：`npcEngine.test.ts` 新增 4 個 slice 3b cases；`runtimePresence.test.ts` 更新以適應分群後的 event cadence。
 - ✅ `npm test` 266 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（18 passed）全綠。
-- 🚧 待 commit / push / CI / Deploy Dev。
+- ✅ Commit `23cfca6` pushed；CI run `25791664215` passed；Deploy Dev run `25791664183` passed；live `/healthz` = `0.16.0` @ tick `114629`.
 
 ## v0.15.48 🚧 in progress — 2026-05-13
 

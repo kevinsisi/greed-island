@@ -70,7 +70,7 @@
 - [x] 5.17 `npm test` passes (266 server + 34 web).
 - [x] 5.18 `npm run build:server` + `npm run build:web` pass; `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` pass.
 - [x] 5.19 `npx openspec validate simulation-budget-enforcement --strict` and `npx openspec validate --all --strict` pass.
-- [ ] 5.20 Commit + push + CI/Deploy Dev green.
-- [ ] 5.21 Update `PROGRESS.md` and `ROADMAP.md`.
+- [x] 5.20 Commit + push + CI/Deploy Dev green (commit `23cfca6`, CI `25791664215`, Deploy `25791664183`).
+- [x] 5.21 Update `PROGRESS.md` and `ROADMAP.md`.
 
 ### Slice 4 verification still pending — re-use this section when regional activation lands.
