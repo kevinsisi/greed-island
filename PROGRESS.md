@@ -38,10 +38,12 @@ developer. Keep latest status at the top.
 - `npx openspec validate ecosystem-foundation --strict` passed.
 - `npx openspec validate settlement-domain --strict` passed.
 - `npx openspec validate --all --strict` passed: 19 passed, 0 failed.
+- Commit `cf53455` (`feat(eco): add initial species substrate`) pushed to `main`.
+- CI run `25793089359` passed; Deploy Dev run `25793089369` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":114886}`.
 
 ### Outstanding
 
-- Commit + push + CI/Deploy Dev green for E0.1.
 - Next E0 slice: `ANIMAL_SPAWNED` + `animal_population` projection + deterministic per-biome spawn policy.
 - 33.2 NPC FACT_SET -> typed-event migration still not started.
 

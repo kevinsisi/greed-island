@@ -20,4 +20,4 @@
 - [x] 4.2 `npm test` passes.
 - [x] 4.3 `npm run build:server` and `npx tsc -p packages/server/tsconfig.json --noEmit` pass.
 - [x] 4.4 `npx openspec validate ecosystem-foundation --strict` and `npx openspec validate --all --strict` pass.
-- [ ] 4.5 Update `PROGRESS.md` / `ROADMAP.md`, commit, push, and verify CI + Deploy Dev.
+- [x] 4.5 Update `PROGRESS.md` / `ROADMAP.md`, commit, push, and verify CI + Deploy Dev (commit `cf53455`, CI `25793089359`, Deploy `25793089369`).

@@ -17,7 +17,7 @@ OpenSpec: `ecosystem-foundation/`。
 - ✅ 提供 deterministic read-only helpers：`listSpecies` / `getSpecies` / `requireSpecies` / `listSpeciesByRegion` / `listSpeciesByCategory`。
 - ✅ 這一刀不碰 runtime tick、不碰 `ANIMAL_SPAWNED`、不碰 projection；它是 E0 的 substrate slice，不假裝 wildlife engine 已存在。
 - ✅ Focused tests 15 passed；full `npm test` 273 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（19 passed）全綠。
-- 🚧 待 commit / push / CI / Deploy Dev。
+- ✅ Commit `cf53455` pushed；CI run `25793089359` passed；Deploy Dev run `25793089369` passed；live `/healthz` = `0.16.0` @ tick `114886`.
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
