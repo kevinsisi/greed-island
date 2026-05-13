@@ -95,7 +95,7 @@ import {
   type NpcCivicRecord,
   type NpcLifeView
 } from './cityLife.js'
-import { ConstructionProjectsProjection, type ConstructionProjectRow } from '../projections/constructionProjects.js'
+import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -405,8 +405,9 @@ export class SimulationRuntime {
   }
 
   getInProgressConstructionProjects(tileId?: string): readonly ConstructionProjectRow[] {
-    if (tileId) return this.constructionProjects.getInProgressByTile(tileId)
-    return this.constructionProjects.list().filter((project) => project.completedAtTick === null)
+    return this.visibleAutonomousConstructionProjects()
+      .filter((project) => project.completedAtTick === null)
+      .filter((project) => tileId === undefined || project.targetTileId === tileId)
   }
 
   getAllBuildings(): readonly BuildingRuntimeView[] {
@@ -467,16 +468,15 @@ export class SimulationRuntime {
   }
 
   private cappedCompletedConstructionProjects(): readonly ConstructionProjectRow[] {
-    const countsByTile = new Map<string, number>()
-    return this.constructionProjects
-      .list()
-      .filter((project) => project.completedAtTick !== null && project.initiatedByNpcId)
-      .filter((project) => {
-        const count = countsByTile.get(project.targetTileId) ?? 0
-        if (count >= CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE) return false
-        countsByTile.set(project.targetTileId, count + 1)
-        return true
-      })
+    return this.visibleAutonomousConstructionProjects()
+      .filter((project) => project.completedAtTick !== null)
+  }
+
+  private visibleAutonomousConstructionProjects(): readonly ConstructionProjectRow[] {
+    return visibleAutonomousConstructionProjects(
+      this.constructionProjects.list(),
+      CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE
+    )
   }
 
   private findRuntimeBuildingById(id: string): BuildingDef | null {

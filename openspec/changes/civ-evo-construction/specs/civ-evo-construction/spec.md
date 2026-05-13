@@ -102,6 +102,13 @@ The system SHALL provide a `construction_projects` projection populated by `rebu
 - **THEN** the projection MUST keep the maximum progress already observed
 - **AND** the first non-null `completedAtTick` MUST remain authoritative
 
+#### Scenario: Visible autonomous projects use one stable per-tile window
+- **GIVEN** a tile has more autonomous construction projects than `CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE`
+- **WHEN** the runtime derives completed building defs or in-progress construction sites
+- **THEN** completed and open autonomous projects MUST share the same deterministic visible window
+- **AND** that window MUST be the earliest `startedAtTick` projects with `projectId` as the tie-breaker
+- **AND** later projects MUST NOT displace already-visible completed or in-progress projects
+
 ### Requirement: /api/buildings exposes in-progress NPC-initiated projects
 
 The system SHALL extend `GET /api/buildings?tileId=X` so the response includes `inProgress: [{ projectId, buildingId, progress, targetProgress, initiatedByNpcId, startedAtTick }]` sourced from the `construction_projects` projection.
@@ -115,6 +122,12 @@ The system SHALL extend `GET /api/buildings?tileId=X` so the response includes `
 - **WHEN** a `BUILDING_CONSTRUCTED` event has been committed for a project
 - **THEN** subsequent `GET /api/buildings?tileId=X` responses MUST NOT list the project in `inProgress`
 - **AND** the constructed building MUST appear in the existing completed-buildings portion of the response
+
+#### Scenario: In-progress sites obey the same visibility cap as completed buildings
+- **GIVEN** a tile already has `CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE` visible autonomous projects
+- **WHEN** the client calls `GET /api/buildings?tileId=X`
+- **THEN** later open projects beyond that stable window MUST NOT appear as construction sites
+- **AND** the API MUST NOT expose more than the configured cap of combined completed and open autonomous projects for that tile
 
 ### Requirement: Frontend renders NPC-initiated construction without a new scene
 

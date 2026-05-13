@@ -46,6 +46,24 @@ export function rebuildConstructionProjectsFromEvents(events: readonly Event[]):
   return [...buildRowsFromEvents(events).values()].sort((a, b) => a.startedAtTick - b.startedAtTick || a.projectId.localeCompare(b.projectId))
 }
 
+export function visibleAutonomousConstructionProjects(
+  projects: readonly ConstructionProjectRow[],
+  maxPerTile: number
+): ConstructionProjectRow[] {
+  const safeMax = Math.max(0, Math.floor(maxPerTile))
+  if (safeMax <= 0) return []
+  const countsByTile = new Map<string, number>()
+  return [...projects]
+    .filter((project) => project.initiatedByNpcId)
+    .sort((a, b) => a.startedAtTick - b.startedAtTick || a.projectId.localeCompare(b.projectId))
+    .filter((project) => {
+      const count = countsByTile.get(project.targetTileId) ?? 0
+      if (count >= safeMax) return false
+      countsByTile.set(project.targetTileId, count + 1)
+      return true
+    })
+}
+
 function buildRowsFromEvents(
   events: readonly Event[],
   initialRows: ReadonlyMap<string, ConstructionProjectRow> = new Map()

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
 import { deriveConstructionInitiateProjectId, withConstructionInitiated, withConstructionProgress, type LifeExpansionState } from '../sim/cityLife.js'
-import { ConstructionProjectsProjection, rebuildConstructionProjectsFromEvents } from './constructionProjects.js'
+import { ConstructionProjectsProjection, rebuildConstructionProjectsFromEvents, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from './constructionProjects.js'
 
 function ev(sequence: number, eventType: string, tick: number, payload: Record<string, unknown>): Event {
   return {
@@ -213,4 +213,34 @@ describe('construction_projects projection', () => {
     }))
     expect(projection.getInProgressByTile('t_central')).toEqual([])
   })
+
+  it('selects a stable combined visible window for completed and open autonomous projects', () => {
+    const projects = [
+      row('project.civ-evo.004', 40, null),
+      row('project.civ-evo.002', 20, 45),
+      row('project.civ-evo.003', 30, null),
+      row('project.civ-evo.001', 10, 25)
+    ]
+
+    expect(visibleAutonomousConstructionProjects(projects, 3).map((project) => project.projectId)).toEqual([
+      'project.civ-evo.001',
+      'project.civ-evo.002',
+      'project.civ-evo.003'
+    ])
+  })
 })
+
+function row(projectId: string, startedAtTick: number, completedAtTick: number | null): ConstructionProjectRow {
+  return {
+    projectId,
+    kind: 'settlement',
+    targetTileId: 't_central',
+    buildingId: 'b_civ_evo_t_central',
+    progress: completedAtTick === null ? 2 : 5,
+    targetProgress: 5,
+    startedAtTick,
+    completedAtTick,
+    initiatedByNpcId: 'central.builder',
+    builderNpcIds: ['central.builder']
+  }
+}
