@@ -13,6 +13,7 @@ import { PlayerStateStore } from './playerState.js'
 import { SettingsStore } from './settings.js'
 import { createSettingsRouter } from './settingsRouter.js'
 import { createAdminRouter } from './adminRouter.js'
+import { createAdminNpcsRouter } from './adminNpcsRouter.js'
 import { createProfileRouter } from './profileRouter.js'
 import { PasswordResetStore } from './passwordResets.js'
 import { SocialStore } from './socialStore.js'
@@ -29,6 +30,7 @@ import { createTechniqueShopRouter } from './techniqueShopRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
+import { SqliteEventStore } from '../kernel/eventStore.js'
 import { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import { createLivingWorldRouter } from './livingWorldRouter.js'
@@ -161,6 +163,19 @@ export function createHttpApp(options: HttpAppOptions): Express {
     createAdminRouter({
       accounts: accountStore,
       resets: passwordResetStore,
+      authConfig: options.auth,
+    })
+  )
+  // GM/admin observability over NPC origin (manual vs autonomously-born),
+  // births, households, and explicit deaths-not-implemented placeholder.
+  // Read-only projection over runtime + EventLog; submits no commands.
+  const eventStore = new SqliteEventStore(options.db)
+  app.use(
+    '/api',
+    createAdminNpcsRouter({
+      runtime: options.runtime,
+      eventStore,
+      accounts: accountStore,
       authConfig: options.auth,
     })
   )

@@ -3,6 +3,32 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — GM NPC Dashboard slice
+
+### Implemented
+
+- New OpenSpec change `gm-npc-dashboard` (proposal + tasks + spec; validates strict).
+- `SqliteEventStore.countEventsByKind(kind)` — additive helper backed by existing `idx_event_log_type` index.
+- `SimulationRuntime.getManualNpcIds()` — returns the loaded profile IDs.
+- `GET /api/admin/npc-stats` (`packages/server/src/http/adminNpcsRouter.ts`) gated to `gm` or `admin` via `requireRole`. Response: `{ totalNpcs, byOrigin: { manual, born }, births: { totalEventCount, recent[] }, households: { totalEventCount, recent[] }, deaths: { available: false, reason, plannedAt }, generatedAtTick }`.
+- New frontend `AdminNpcsPage` at `/admin/npcs` with stat cards (Total / Manual / Born / Births / Households / Deaths placeholder), recent-births table, recent-households table, deaths "Phase 5 pending" panel; access-denied fallback for non-GM/admin.
+- `AdminPage` gains a `「進入 NPC 儀表板」` action link.
+- i18n keys (zh + en) for the new page.
+
+### Honest scope
+
+- `byOrigin.born` is `0` today because `NPC_CHILD_BORN` records children as parent-side linkage, not as standalone runtime NPCs. Promoting children to full NPC entities is a Phase 1 follow-up in `docs/WORLD_CAPABILITIES.md`.
+- `deaths.available` is `false` until Phase 5.2 lands `NPC_DECEASED`. The page surfaces this honestly rather than rendering an empty column.
+
+### Verification
+
+- `npm test`: 219 server tests + 34 web tests passed (added 6 adminNpcsRouter tests).
+- `npm run build:server` passed.
+- `npm run build:web` passed (only the known Vite chunk-size warning).
+- `npx tsc -p packages/server/tsconfig.json --noEmit` + `packages/web/tsconfig.json --noEmit` passed.
+- `npx openspec validate gm-npc-dashboard --strict` passed.
+- TODO post-push: live `curl https://hunter.sisihome.org/api/admin/npc-stats` smoke (deploy auto-triggers on push).
+
 ## 2026-05-12 — v0.15.47f OpenSpec Alignment + Worktree/Branch Convergence
 
 ### Cleanup

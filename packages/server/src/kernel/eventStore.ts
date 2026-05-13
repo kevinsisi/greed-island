@@ -231,6 +231,14 @@ export class SqliteEventStore {
     return row.count
   }
 
+  countEventsByKind(kind: string): number {
+    if (!kind) return 0
+    const row = this.db
+      .prepare('SELECT COUNT(*) as count FROM event_log WHERE event_type = ?')
+      .get(kind) as { count: number }
+    return row.count
+  }
+
   recordRejectedCommand(command: Command, rejection: RuleRejection, rejectedAt = command.submittedAt): void {
     this.db
       .prepare(

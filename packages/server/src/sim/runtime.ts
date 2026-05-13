@@ -524,6 +524,10 @@ export class SimulationRuntime {
     return this.eventEngine.getActive()
   }
 
+  getManualNpcIds(): readonly string[] {
+    return Object.freeze(this.profiles.map((profile) => profile.id))
+  }
+
   getNpcs(): SimNpcState[] {
     return this.profiles.map((profile) => {
       const s =

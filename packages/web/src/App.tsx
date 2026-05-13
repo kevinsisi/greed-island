@@ -15,6 +15,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SocialPage } from './pages/SocialPage'
 import { AdminPage } from './pages/AdminPage'
+import { AdminNpcsPage } from './pages/AdminNpcsPage'
 
 export function App() {
   return (
@@ -34,6 +35,7 @@ export function App() {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/npcs" element={<AdminNpcsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

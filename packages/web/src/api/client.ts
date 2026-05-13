@@ -168,6 +168,32 @@ export type ServerAccount = {
   displayName: string
 }
 
+export type ServerNpcStatsBirth = {
+  tick: number
+  childId: string
+  householdId: string
+  nameZh: string
+  nameEn: string
+  motivation: string | null
+}
+
+export type ServerNpcStatsHousehold = {
+  tick: number
+  householdId: string
+  partnerNpcIds: readonly string[]
+  homeTileId: string
+  motivation: string | null
+}
+
+export type ServerNpcStats = {
+  totalNpcs: number
+  byOrigin: { manual: number; born: number }
+  births: { totalEventCount: number; recent: readonly ServerNpcStatsBirth[] }
+  households: { totalEventCount: number; recent: readonly ServerNpcStatsHousehold[] }
+  deaths: { available: false; reason: string; plannedAt: string }
+  generatedAtTick: number
+}
+
 export type ServerAdminUser = {
   id: number
   email: string
@@ -872,6 +898,8 @@ export const api = {
       method: 'POST',
       headers: authHeaders(token)
     }),
+  adminNpcStats: (token: string) =>
+    jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(token) }),
   // -- profile -------------------------------------------------------
   profile: (token: string) =>
     jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),

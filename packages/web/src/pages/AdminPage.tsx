@@ -123,7 +123,19 @@ export function AdminPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader eyebrow={t('admin.eyebrow')} title={t('admin.title')} description={t('admin.description')} />
+      <PageHeader
+        eyebrow={t('admin.eyebrow')}
+        title={t('admin.title')}
+        description={t('admin.description')}
+        actions={
+          <a
+            href="/admin/npcs"
+            className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+          >
+            {t('admin.npcs.link')}
+          </a>
+        }
+      />
 
       {error && (
         <div className="gi-panel p-3 text-[12px] font-display uppercase tracking-tightest text-rust-400 border-rust-700">
