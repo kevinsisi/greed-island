@@ -24,6 +24,7 @@ export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
 export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MOVE',
   'NPC_ACTIVITY_CHANGE',
+  'NPC_STATE_RECORDED',
   'NPC_LIFE_GOAL_SET',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
@@ -75,6 +76,12 @@ export type NpcActivityChangeCmd = Readonly<{
   from: string
   to: string
   motivation?: EventMotivation
+  narration: string | null
+}>
+
+export type NpcStateRecordedCmd = Readonly<{
+  npcId: string
+  state: Readonly<Record<string, unknown>>
   narration: string | null
 }>
 
@@ -334,6 +341,7 @@ export type SettlementFormedCmd = Readonly<{
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
+  | NpcStateRecordedCmd
   | NpcLifeGoalSetCmd
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
@@ -397,6 +405,15 @@ const VALIDATORS: Readonly<
     if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
     if (typeof p.from !== 'string') return 'from required'
     if (typeof p.to !== 'string') return 'to required'
+    return null
+  },
+  NPC_STATE_RECORDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (!isRecord(p.state)) return 'state required'
+    const err = validateNpcStateSnapshot(p.state)
+    if (err) return err
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },
   NPC_LIFE_GOAL_SET: (p) => {
@@ -829,6 +846,38 @@ function validateEventMotivation(value: unknown): string | null {
   if (!isRecord(value)) return 'motivation must be object'
   if (typeof value.explanation !== 'string' || value.explanation.length === 0) return 'motivation explanation required'
   if (value.projectPurpose !== undefined && typeof value.projectPurpose !== 'string') return 'motivation projectPurpose must be string'
+  return null
+}
+
+function validateNpcStateSnapshot(value: Record<string, unknown>): string | null {
+  if (typeof value.tile !== 'string' || value.tile.length === 0) return 'state.tile required'
+  if (typeof value.mood !== 'number' || !Number.isFinite(value.mood)) return 'state.mood required'
+  if (typeof value.health !== 'number' || !Number.isFinite(value.health)) return 'state.health required'
+  if (typeof value.activity !== 'string' || value.activity.length === 0) return 'state.activity required'
+  if (typeof value.faction !== 'string' || value.faction.length === 0) return 'state.faction required'
+  if (typeof value.targetTile !== 'string' || value.targetTile.length === 0) return 'state.targetTile required'
+  if (typeof value.lastActedTick !== 'number' || !Number.isFinite(value.lastActedTick)) return 'state.lastActedTick required'
+  if (typeof value.subCol !== 'number' || !Number.isFinite(value.subCol)) return 'state.subCol required'
+  if (typeof value.subRow !== 'number' || !Number.isFinite(value.subRow)) return 'state.subRow required'
+  if (typeof value.subZ !== 'number' || !Number.isFinite(value.subZ)) return 'state.subZ required'
+  if (value.personalityOverride !== undefined && value.personalityOverride !== null) {
+    if (!isRecord(value.personalityOverride)) return 'state.personalityOverride must be object or null'
+    if (typeof value.personalityOverride.targetTile !== 'string' || value.personalityOverride.targetTile.length === 0) {
+      return 'state.personalityOverride.targetTile required'
+    }
+    if (typeof value.personalityOverride.expiresAtTick !== 'number' || !Number.isFinite(value.personalityOverride.expiresAtTick)) {
+      return 'state.personalityOverride.expiresAtTick required'
+    }
+    if (typeof value.personalityOverride.reason !== 'string') return 'state.personalityOverride.reason required'
+  }
+  if (value.travelRoute !== undefined && value.travelRoute !== null) {
+    if (!isRecord(value.travelRoute)) return 'state.travelRoute must be object or null'
+    if (typeof value.travelRoute.fromTile !== 'string' || value.travelRoute.fromTile.length === 0) return 'state.travelRoute.fromTile required'
+    if (typeof value.travelRoute.toTile !== 'string' || value.travelRoute.toTile.length === 0) return 'state.travelRoute.toTile required'
+    if (typeof value.travelRoute.targetTile !== 'string' || value.travelRoute.targetTile.length === 0) return 'state.travelRoute.targetTile required'
+    if (typeof value.travelRoute.startedAtTick !== 'number' || !Number.isFinite(value.travelRoute.startedAtTick)) return 'state.travelRoute.startedAtTick required'
+  }
+  if (value.agent !== undefined && !isRecord(value.agent)) return 'state.agent must be object when present'
   return null
 }
 

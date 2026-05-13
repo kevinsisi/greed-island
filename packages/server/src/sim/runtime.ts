@@ -7,9 +7,10 @@
 //      tide_festival rare window
 //   4. Spawns / expires WorldEventEngine entries
 //
-// All state is persisted as FACT_SET events so it can be reconstructed
-// on restart via the kernel reducer. The runtime also keeps an in-
-// memory projection so HTTP reads don't have to re-reduce the entire
+// Transitional domains still persist some FACT_SET snapshots for restart
+// hydration, but NPC state now also has a typed projection path
+// (`NPC_STATE_RECORDED` -> `NpcStateProjection`). The runtime also keeps
+// in-memory projections so HTTP reads don't have to re-reduce the entire
 // event log on every request.
 
 import {
@@ -69,6 +70,7 @@ import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
   type NpcActivity,
+  type NpcStateChange,
   type NpcRuntimeState
 } from './npcEngine.js'
 import { deriveNpcIntentLine, type NpcIntentLine } from './npcIntent.js'
@@ -108,6 +110,7 @@ import {
   type NpcLifeView
 } from './cityLife.js'
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
+import { NpcStateProjection } from '../projections/npcState.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -281,6 +284,7 @@ export class SimulationRuntime {
   private ambientNarrator: AmbientNarrator | null = null
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
   private readonly constructionProjects = new ConstructionProjectsProjection()
+  private readonly npcStateProjection = new NpcStateProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1171,15 +1175,12 @@ export class SimulationRuntime {
     for (const command of this.planLifeGoalCommands(nextTick, submittedAt)) {
       commands.push(command)
     }
-    // 把 NPC state 變更寫回 FACT_SET，讓重啟可 hydrate
+    // Phase 1 §33.2 — NPC state now persists through typed
+    // NPC_STATE_RECORDED events + NpcStateProjection. Legacy npc.state.*
+    // FACT_SET facts remain boot fallback for pre-migration event logs.
     for (const change of npcResult.changedStates) {
-      stateDrafts.push(
-        this.factSetDraft(
-          `${NPC_STATE_PREFIX}${change.npcId}`,
-          { ...change.state },
-          change.npcId,
-          nextTick
-        )
+      commands.push(
+        this.makeNpcStateRecordedCommand(change, nextTick, submittedAt)
       )
     }
 
@@ -1542,6 +1543,7 @@ export class SimulationRuntime {
     // ---- Compile commands → typed event drafts via the Rule Engine ----
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
+    const postAcceptedCommands: LivingWorldCommand[] = []
     let lifeExpansionChanged = false
     for (const cmd of acceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
@@ -1617,13 +1619,8 @@ export class SimulationRuntime {
               accepted.mode,
               nextTick
             )) {
-              postAcceptedStateDrafts.push(
-                this.factSetDraft(
-                  `${NPC_STATE_PREFIX}${change.npcId}`,
-                  { ...change.state },
-                  change.npcId,
-                  nextTick
-                )
+              postAcceptedCommands.push(
+                this.makeNpcStateRecordedCommand(change, nextTick, submittedAt)
               )
             }
           }
@@ -1641,6 +1638,18 @@ export class SimulationRuntime {
       )
     }
 
+    for (const cmd of postAcceptedCommands) {
+      const result = this.livingWorldRuleEngine.evaluate(cmd)
+      if (result.accepted) {
+        for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+      } else {
+        console.warn(
+          `[sim] rule engine rejected ${result.rejection.commandType} ` +
+            `from ${result.rejection.actorId}: ${result.rejection.reason}`
+        )
+      }
+    }
+
     // Append in one transaction. Normal state snapshots stay before typed events;
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
@@ -1653,6 +1662,7 @@ export class SimulationRuntime {
         if (this.npcMemory) this.npcMemory.project(ev)
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
+        this.npcStateProjection.project(ev)
         this.settlementsProjection.project(ev)
 
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -1691,6 +1701,25 @@ export class SimulationRuntime {
    * Wall-clock `submittedAt` is audit-only and does not participate
    * in the deterministic key.
    */
+  private makeNpcStateRecordedCommand(
+    change: NpcStateChange,
+    tick: number,
+    submittedAt: number
+  ): LivingWorldCommand {
+    return makeLivingWorldCommand(
+      'NPC_STATE_RECORDED',
+      change.npcId,
+      'npc',
+      tick,
+      submittedAt,
+      {
+        npcId: change.npcId,
+        state: { ...change.state },
+        narration: 'internal npc state projection'
+      }
+    )
+  }
+
   private factSetDraft(
     key: string,
     value: unknown,
@@ -1999,10 +2028,21 @@ export class SimulationRuntime {
       this.rareWindowOpen = !!r.open
       this.rareWindowClosesAtTick = r.closesAt ?? 0
     }
-    // Hydrate NPC state from the new npc.state.<id> facts. Backward-
-    // compatible：若這些 keys 不存在但舊版本的 npc.<id>.location 存在，
-    // 就把舊的位置補上去。
+    if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
+      const allEvents = this.store.readEvents()
+      this.npcStateProjection.rebuildFromEvents(allEvents)
+      this.settlementsProjection.rebuildFromEvents(allEvents)
+    }
+
+    // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
+    // projection. Legacy npc.state.<id> FACT_SET values remain fallback for
+    // older logs that predate NPC_STATE_RECORDED.
     for (const profile of this.profiles) {
+      const projected = this.npcStateProjection.getByNpcId(profile.id)
+      if (projected) {
+        this.npcEngine.hydrate(profile.id, projected.state)
+        continue
+      }
       const newKey = `${NPC_STATE_PREFIX}${profile.id}`
       const newRaw = facts[newKey]
       if (newRaw) {
@@ -2025,21 +2065,6 @@ export class SimulationRuntime {
 
     this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
     this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
-    // Phase 1 §33.4 — rebuild settlements projection from the EventLog.
-    // SETTLEMENT_FORMED events are uncommon (one per settlement ever) so
-    // full replay of just this event type is cheap. readEventsByTickWindow
-    // with from-0 / to-current returns every SETTLEMENT_FORMED event we
-    // have committed.
-    if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
-      const settlementEvents = this.store.readEventsByTickWindow({
-        eventTypes: ['SETTLEMENT_FORMED'],
-        sinceTick: -1,
-        untilTick: this.currentTick,
-        limit: 10_000,
-      }).events
-      this.settlementsProjection.rebuildFromEvents(settlementEvents)
-    }
-
     const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
     if (Array.isArray(activeEventsFact)) {
       const restored: ActiveWorldEvent[] = []
@@ -2227,6 +2252,8 @@ function readAcceptedNpcInteraction(payload: unknown): {
  */
 function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEvent | null {
   const tick = typeof ev.tick === 'number' ? ev.tick : fallbackTick
+
+  if (ev.eventType === 'NPC_STATE_RECORDED') return null
 
   if (isLivingWorldCommandType(ev.eventType)) {
     const lw = ev.payload as LivingWorldEventPayload | undefined

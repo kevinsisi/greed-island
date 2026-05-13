@@ -3,6 +3,48 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-13 — Phase 1 §33.2 NPC state typed projection
+
+### Implemented
+
+- Started `docs/WORLD_CAPABILITIES.md` Phase 1 §33.2 with new OpenSpec change `npc-state-typed-projection`.
+- Added `NPC_STATE_RECORDED` to the living-world command catalog.
+- Added validator coverage for `NpcStateRecordedCmd { npcId, state, narration }`.
+- Added `packages/server/src/projections/npcState.ts` with:
+  - `rebuildFromEvents(events)`
+  - `project(event)`
+  - `getByNpcId(npcId)`
+  - `getAll()`
+  - `canonicalHash()`
+- `SimulationRuntime` now emits typed `NPC_STATE_RECORDED` events for:
+  - normal `NpcEngine.tick()` changed states
+  - post-accepted social-task updates after `NPC_INTERACT`
+- New NPC state changes no longer write `npc.state.<id>` FACT_SET snapshots.
+- Boot hydration now prefers `NpcStateProjection` rebuilt from EventLog; legacy `npc.state.<id>` facts remain fallback only for pre-migration logs.
+- `NPC_STATE_RECORDED` is suppressed from recent narrative / chronicle surfaces so the typed state event does not spam public feeds.
+- Updated comments in `runtime.ts` / `npcEngine.ts` so the codebase no longer claims NPC state is primarily FACT_SET-backed.
+
+### Honest scope
+
+- This slice migrates NPC state persistence, but does **not** touch area/building/weather/season/rare-window FACT_SET domains yet.
+- The new projection is in-memory like `SettlementsProjection`, not a SQLite projection table.
+- This is the first 33.2 slice, not the whole 33.3 projection sweep.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- livingWorld npcState runtimeNpcStateProjection` passed: 45 tests.
+- Full suite: `npm test` passed: **279 server** + 34 web tests.
+- `npx tsc -p packages/server/tsconfig.json --noEmit` passed.
+- `npm run build:server` + `npm run build:web` passed (web only reported the known Vite chunk-size warning).
+- `npx openspec validate npc-state-typed-projection --strict` passed.
+- `npx openspec validate --all --strict` passed: 20 passed, 0 failed.
+
+### Outstanding
+
+- Commit + push + CI/Deploy Dev green.
+- Follow-up 33.2 decision: whether to archive this slice after CI or keep it open until a future SQLite-backed `npc_state` table exists.
+- 33.3 projection rebuild contract sweep for the other FACT_SET-backed domains remains open.
+
 ## 2026-05-13 — Phase E0.1 ecosystem foundation (species catalog + Animal substrate)
 
 ### Implemented

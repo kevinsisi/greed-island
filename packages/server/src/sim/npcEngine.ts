@@ -8,13 +8,14 @@
 //   6. mood / health 隨活動緩慢漂移
 //   7. 同 tile、室外、三維座標靠近的 NPC 才以 deterministic 機率觸發互動
 //
-// 所有狀態變化都以 FactSet draft 形式回傳給 SimulationRuntime；engine
+// 所有狀態變化都以 changedStates 形式回傳給 SimulationRuntime；engine
 // 本身不直接寫 EventLog，符合 deterministic kernel 的 command-vs-event
-// 分離原則。狀態 key：
-//   npc.state.<id> = { tile, mood, health, activity, faction,
-//                      targetTile, travelRoute, lastActedTick, subCol, subRow, subZ }
+// 分離原則。Phase 1 §33.2 之後，runtime 會把這些狀態轉成 typed
+// `NPC_STATE_RECORDED` events（舊的 `npc.state.<id>` FACT_SET 只剩 boot
+// fallback for legacy logs）。
 //
-// hydrate：runtime 啟動時把 reducer 算出的 facts 透過 hydrate() 餵回。
+// hydrate：runtime 啟動時把 typed npc-state projection（或 legacy facts）
+// 透過 hydrate() 餵回。
 
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE } from '../config/world.js'
@@ -267,7 +268,7 @@ export class NpcEngine {
     }
   }
 
-  /** 由 SimulationRuntime 在 hydrate 階段呼叫，把先前 FACT_SET 還原回 state map。 */
+  /** 由 SimulationRuntime 在 hydrate 階段呼叫，把 typed npc-state projection（或 legacy FACT_SET fallback）還原回 state map。 */
   hydrate(npcId: string, raw: unknown): void {
     if (!raw || typeof raw !== 'object') return
     const r = raw as Partial<NpcRuntimeState>

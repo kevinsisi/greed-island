@@ -54,6 +54,25 @@ describe('living-world rule engine', () => {
         reachedDest: false,
         narration: '...'
       }),
+      makeLivingWorldCommand('NPC_STATE_RECORDED', 'npc-a', 'npc', 2, 2, {
+        npcId: 'npc-a',
+        state: {
+          tile: 't_market',
+          mood: 60,
+          health: 80,
+          activity: 'idle',
+          faction: 'civilian',
+          targetTile: 't_market',
+          lastActedTick: 2,
+          subCol: 7,
+          subRow: 5,
+          subZ: 0,
+          personalityOverride: null,
+          travelRoute: null,
+          agent: { activeTask: { kind: 'bootstrap' } }
+        },
+        narration: null
+      }),
       makeLivingWorldCommand('NPC_INTERACT', 'npc-a', 'npc', 3, 3, {
         tile: 't_market',
         participants: ['npc-a', 'npc-b'],
@@ -646,6 +665,46 @@ describe('grounded chronicle renderer', () => {
     expect(context.memories.length).toBeGreaterThan(0)
     expect(context.allowedNames).toContain('npc-a')
     expect(context.allowedNames).toContain('npc-b')
+  })
+
+  describe('NPC_STATE_RECORDED validator', () => {
+    const base = {
+      npcId: 'npc-a',
+      state: {
+        tile: 't_central',
+        mood: 60,
+        health: 80,
+        activity: 'idle',
+        faction: 'civilian',
+        targetTile: 't_central',
+        lastActedTick: 1,
+        subCol: 7,
+        subRow: 5,
+        subZ: 0,
+        personalityOverride: null,
+        travelRoute: null,
+        agent: { activeTask: { kind: 'bootstrap' } }
+      },
+      narration: null
+    } as const
+
+    it('accepts a well-formed payload', () => {
+      const { ruleEngine } = makeHarness()
+      const cmd = makeLivingWorldCommand('NPC_STATE_RECORDED', 'npc-a', 'npc', 3, 3, base)
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted).toBe(true)
+    })
+
+    it('rejects malformed state payload', () => {
+      const { ruleEngine } = makeHarness()
+      const cmd = makeLivingWorldCommand('NPC_STATE_RECORDED', 'npc-a', 'npc', 3, 3, {
+        ...base,
+        state: { tile: 't_central' }
+      })
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted).toBe(false)
+      if (!result.accepted) expect(result.rejection.reason).toBe('state.mood required')
+    })
   })
 
   it('keeps routine productive actions out of chronicle context', () => {

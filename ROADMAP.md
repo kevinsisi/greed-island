@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-13
 
+**主題：Phase 1 §33.2 — NPC state 從 FACT_SET 轉向 typed projection**
+
+OpenSpec: `npc-state-typed-projection/`。
+
+- ✅ 新增 `NPC_STATE_RECORDED` command/event。
+- ✅ 新增 `NpcStateProjection`，提供 `rebuildFromEvents / project / getByNpcId / getAll / canonicalHash`。
+- ✅ `SimulationRuntime` 改為對 NPC state change emit typed event，不再為新 state change 寫 `npc.state.<id>` FACT_SET。
+- ✅ boot hydrate 現在優先讀 typed `NpcStateProjection`；舊 `npc.state.<id>` facts 只留 backward-compatible fallback。
+- ✅ `NPC_STATE_RECORDED` 不進 public recent-event / chronicle narrative surface。
+- ✅ Focused tests 45 passed；full `npm test` 279 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（20 passed）全綠。
+- 🚧 待 commit / push / CI / Deploy Dev。
+
+## v0.16.0 🚧 in progress — 2026-05-13
+
 **主題：Phase E0.1 — 第一個 Layer 2.5 substrate 進 codebase（species catalog + Animal domain）**
 
 OpenSpec: `ecosystem-foundation/`。
