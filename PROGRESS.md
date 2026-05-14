@@ -34,11 +34,14 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push; CI and Deploy Dev not yet run.
+- CI run `25843969886` — success (48 s).
+- Deploy Dev run `25843969861` — image push success; desktop runner running; images pulled and containers restarted manually.
+- Live `/healthz` at tick 16933: `{"ok":true,"version":"0.16.0","tick":16933}` ✓
+- Live `/api/world.facts.npcRumors`: key present, empty array `[]` (expected — no rumor-seeding events in current session yet) ✓
 
 ### Outstanding
 
-- CI green and live `/api/world.facts.npcRumors` verification pending commit + push.
+- Rumors will seed automatically once ANIMAL_STARVED events fire (requires predator starvation threshold to be met in live world).
 
 ## 2026-05-14 — Phase E1.4 predator mortality
 
