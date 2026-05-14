@@ -35,7 +35,8 @@ developer. Keep latest status at the top.
 
 - CI run `25845143736` — success (50 s).
 - Deploy Dev image push success; containers restarted manually.
-- Live `/healthz` at tick 17250: `{"ok":true,"version":"0.16.0","tick":17250}` ✓
+- Live `/healthz` at tick 17703: `{"ok":true,"version":"0.17.0","tick":17703}` ✓
+- CI `25845598136` — success (43 s). Deploy Dev `25845598156` — success. Image pulled and containers restarted.
 
 ### Outstanding
 
