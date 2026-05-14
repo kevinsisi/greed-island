@@ -38,4 +38,4 @@
 - [x] 6.5 Run `npx openspec validate --all --strict`
 - [x] 6.6 Update `PROGRESS.md` with implementation summary, honest scope, verification evidence
 - [x] 6.7 Update `ROADMAP.md` with E1.4 slice entry
-- [ ] 6.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz` and `/api/world.facts.predatorHunger`
+- [x] 6.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz` and `/api/world.facts.predatorHunger`

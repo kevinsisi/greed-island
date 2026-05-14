@@ -33,7 +33,10 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending: commit and push, confirm CI and Deploy Dev.
+- CI run `25840338300` — success (52 s).
+- Deploy Dev run `25840338292` — image push success; desktop runner hung on `docker version` (same Docker Desktop timeout as E1.3); images pulled and containers restarted manually.
+- Live `/healthz` at tick 15565: `{"ok":true,"version":"0.16.0","tick":15565}` ✓
+- Live `/api/world.facts.predatorHunger`: key present, empty array `[]` (expected — boot skipped hydration of 404 k events, no predator kills yet in new session) ✓
 
 ### Outstanding
 
