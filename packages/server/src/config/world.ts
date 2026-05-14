@@ -91,6 +91,10 @@ export const ECOSYSTEM_ANIMAL_SUBGRID_COLUMNS = 16
 export const ECOSYSTEM_ANIMAL_SUBGRID_ROWS = 16
 export const ECOSYSTEM_TILE_CARRYING_CAPACITY_DIVISOR = 12
 
+// Phase E1.2 — local reproduction. Reproduction runs on its own cadence so
+// population recovery is bounded separately from biome spawning.
+export const ECOSYSTEM_REPRODUCTION_CADENCE_TICKS = TICKS_PER_MINUTE
+
 // Phase E0.3 — simple hunting. Hunter-role NPCs only hunt when their food
 // pressure is genuinely elevated, so hunting is not a generic patrol flavor.
 export const ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60

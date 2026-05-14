@@ -15,6 +15,7 @@ export type AnimalPopulationRow = Readonly<{
 
 const ANIMAL_SPAWNED = 'ANIMAL_SPAWNED'
 const ANIMAL_KILLED = 'ANIMAL_KILLED'
+const ANIMAL_REPRODUCED = 'ANIMAL_REPRODUCED'
 
 export class AnimalPopulationProjection {
   private rows = new Map<string, AnimalPopulationRow>()
@@ -30,21 +31,14 @@ export class AnimalPopulationProjection {
     if (event.eventType === ANIMAL_SPAWNED) {
       const payload = readSpawnPayload(event)
       if (!payload) return
-      const key = populationKey(payload.animal.speciesId, payload.animal.tileId)
-      const existing = this.rows.get(key)
-      if (existing?.animalIds.includes(payload.animal.id)) return
+      this.addAnimal(payload.animal, payload.spawnedAtTick, event.sequence, true)
+      return
+    }
 
-      const animalIds = [...(existing?.animalIds ?? []), payload.animal.id].sort()
-      this.rows.set(key, {
-        speciesId: payload.animal.speciesId,
-        tileId: payload.animal.tileId,
-        biomeRegion: payload.animal.biomeRegion,
-        count: animalIds.length,
-        animalIds,
-        lastSpawnedAtTick: payload.spawnedAtTick,
-        lastKilledAtTick: existing?.lastKilledAtTick ?? null,
-        lastSequence: event.sequence,
-      })
+    if (event.eventType === ANIMAL_REPRODUCED) {
+      const payload = readReproducedPayload(event)
+      if (!payload) return
+      this.addAnimal(payload.animal, payload.reproducedAtTick, event.sequence, false)
       return
     }
 
@@ -82,6 +76,24 @@ export class AnimalPopulationProjection {
   canonicalHash(): string {
     return hashCanonicalJson(this.list())
   }
+
+  private addAnimal(animal: Animal, eventTick: number, sequence: number, updateLastSpawnedAtTick: boolean): void {
+    const key = populationKey(animal.speciesId, animal.tileId)
+    const existing = this.rows.get(key)
+    if (existing?.animalIds.includes(animal.id)) return
+
+    const animalIds = [...(existing?.animalIds ?? []), animal.id].sort()
+    this.rows.set(key, {
+      speciesId: animal.speciesId,
+      tileId: animal.tileId,
+      biomeRegion: animal.biomeRegion,
+      count: animalIds.length,
+      animalIds,
+      lastSpawnedAtTick: updateLastSpawnedAtTick ? eventTick : existing?.lastSpawnedAtTick ?? eventTick,
+      lastKilledAtTick: existing?.lastKilledAtTick ?? null,
+      lastSequence: sequence,
+    })
+  }
 }
 
 function readSpawnPayload(event: Event): { animal: Animal; spawnedAtTick: number } | null {
@@ -96,6 +108,20 @@ function readSpawnPayload(event: Event): { animal: Animal; spawnedAtTick: number
   if (!isEcosystemRegionId(animal.biomeRegion)) return null
   if (typeof p.spawnedAtTick !== 'number' || !Number.isInteger(p.spawnedAtTick) || p.spawnedAtTick < 0) return null
   return { animal: animal as Animal, spawnedAtTick: p.spawnedAtTick }
+}
+
+function readReproducedPayload(event: Event): { animal: Animal; reproducedAtTick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (!p.animal || typeof p.animal !== 'object') return null
+  const animal = p.animal as Partial<Animal>
+  if (typeof animal.id !== 'string' || animal.id.length === 0) return null
+  if (typeof animal.speciesId !== 'string' || animal.speciesId.length === 0) return null
+  if (typeof animal.tileId !== 'string' || animal.tileId.length === 0) return null
+  if (!isEcosystemRegionId(animal.biomeRegion)) return null
+  if (typeof p.reproducedAtTick !== 'number' || !Number.isInteger(p.reproducedAtTick) || p.reproducedAtTick < 0) return null
+  return { animal: animal as Animal, reproducedAtTick: p.reproducedAtTick }
 }
 
 function readKilledPayload(event: Event): { animalId: string; speciesId: string; tileId: string; killedAtTick: number } | null {

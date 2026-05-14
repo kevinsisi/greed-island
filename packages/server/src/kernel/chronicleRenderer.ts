@@ -289,6 +289,7 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (event.eventType === 'ANIMAL_HUNT_RESOLVED') return null
   if (event.eventType === 'ANIMAL_KILLED') return null
   if (event.eventType === 'ANIMAL_STARVED') return null
+  if (event.eventType === 'ANIMAL_REPRODUCED') return null
   if (event.eventType.startsWith('GOODS_')) return null
   if (event.eventType.startsWith('TRADE_ROUTE_')) return null
   if (event.eventType === 'MARKET_PRICE_DISCOVERED') return null

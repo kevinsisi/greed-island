@@ -71,6 +71,7 @@ import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { planPredation } from '../ecosystem/predation.js'
+import { planAnimalReproduction } from '../ecosystem/reproduction.js'
 import { requireSpecies } from '../ecosystem/species.js'
 import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
@@ -1597,6 +1598,32 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Phase E1.2: deterministic reproduction + carrying capacity ----
+    const reproduction = planAnimalReproduction({
+      tick: nextTick,
+      animalPopulation: this.animalPopulationProjection.list(),
+      reservedAnimalIds: plannedHuntedAnimalIds,
+    })
+    if (reproduction) {
+      const tileName = TILE_NAME_BY_ID[reproduction.animal.tileId] ?? reproduction.animal.tileId
+      commands.push(
+        makeLivingWorldCommand(
+          'ANIMAL_REPRODUCED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            animal: reproduction.animal,
+            parentAnimalIds: reproduction.parentAnimalIds,
+            reproducedAtTick: reproduction.reproducedAtTick,
+            motivation: makeMotivation(`${reproduction.animal.speciesId} 在${tileName}依 reproductionRate 與 carrying capacity 完成本地繁殖，population 只能透過 typed EventLog 增長。`),
+            narration: null,
+          }
+        )
+      )
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -2983,6 +3010,7 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'ANIMAL_HUNT_RESOLVED' ||
     ev.eventType === 'ANIMAL_KILLED' ||
     ev.eventType === 'ANIMAL_STARVED' ||
+    ev.eventType === 'ANIMAL_REPRODUCED' ||
     ev.eventType === 'GOODS_EXTRACTED' ||
     ev.eventType === 'GOODS_STORED' ||
     ev.eventType === 'GOODS_PROCESSED' ||

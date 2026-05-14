@@ -61,6 +61,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_KILLED',
   // Phase E1.1 — Ecosystem predation
   'ANIMAL_STARVED',
+  // Phase E1.2 — Ecosystem reproduction + capacity
+  'ANIMAL_REPRODUCED',
   'CARCASS_CREATED',
   'MEAT_HARVESTED',
   // Phase E0.4 — Fishery density
@@ -418,6 +420,14 @@ export type AnimalStarvedCmd = Readonly<{
   narration: string
 }>
 
+export type AnimalReproducedCmd = Readonly<{
+  animal: Animal
+  parentAnimalIds: readonly [string, string]
+  reproducedAtTick: number
+  motivation?: EventMotivation
+  narration: string | null
+}>
+
 export type CarcassCreatedCmd = Readonly<{
   huntId: string
   carcassId: string
@@ -637,6 +647,7 @@ export type LivingWorldCommandPayload =
   | AnimalHuntResolvedCmd
   | AnimalKilledCmd
   | AnimalStarvedCmd
+  | AnimalReproducedCmd
   | CarcassCreatedCmd
   | MeatHarvestedCmd
   | FisheryHarvestedCmd
@@ -1049,6 +1060,22 @@ const VALIDATORS: Readonly<
     if (p.starvationStage !== 'hungry' && p.starvationStage !== 'scarce_prey') return 'starvationStage invalid'
     if (typeof p.starvedAtTick !== 'number' || !Number.isInteger(p.starvedAtTick) || p.starvedAtTick < 0) return 'starvedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ANIMAL_REPRODUCED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (!isRecord(p.animal)) return 'animal required'
+    const err = validateAnimal(p.animal)
+    if (err) return err
+    if (!Array.isArray(p.parentAnimalIds) || p.parentAnimalIds.length !== 2) return 'parentAnimalIds tuple required'
+    const [a, b] = p.parentAnimalIds as readonly unknown[]
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length === 0 || b.length === 0) return 'parent animal ids required'
+    if (a === b) return 'parent animal ids must differ'
+    if (a > b) return 'parentAnimalIds must be sorted ascending'
+    if (typeof p.reproducedAtTick !== 'number' || !Number.isInteger(p.reproducedAtTick) || p.reproducedAtTick < 0) {
+      return 'reproducedAtTick must be non-negative integer'
+    }
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },
   CARCASS_CREATED: (p) => {

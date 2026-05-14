@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase E1.2 ecosystem reproduction + carrying capacity
+
+### Implemented
+
+- Started OpenSpec change `ecosystem-reproduction-capacity` for `docs/WORLD_CAPABILITIES.md` Phase E1.2.
+- Added `ANIMAL_REPRODUCED` command/event with validator coverage.
+- Added deterministic reproduction planner using `animal_population`, species `reproductionRate`, and the existing per-tile carrying-capacity policy.
+- Reproduction requires at least two same-species animal ids on the tile and no full-capacity population.
+- Runtime now plans at most one reproduction per cadence tick and emits `ANIMAL_REPRODUCED` only through the Rule Engine.
+- `AnimalPopulationProjection` now adds reproduced newborn animal ids during replay/incremental projection, with duplicate newborn safety.
+- Routine reproduction facts are hidden from public recent-event and chronicle surfaces.
+
+### Honest scope
+
+- This is local population recovery only. It has no migration, seasonality, sex/pair genealogy, genetics, gestation, lifecycle aging, overpopulation mortality, or extinction warning policy.
+- Carrying capacity is the same simple per-tile cap already used by biome spawning.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- ecosystem/reproduction kernel/livingWorld projections/animalPopulation sim/runtimeReproduction` passed: 53 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **333 server** + 34 web tests.
+- `npx openspec validate ecosystem-reproduction-capacity --strict` passed.
+- `npx openspec validate --all --strict` passed: 29 passed, 0 failed.
+
+### Outstanding
+
+- Commit, push, CI/CD verification, and live smoke are pending for this slice.
+- Next E1 slice should be migration (`ANIMAL_MIGRATED`, `MIGRATION_WAVE_STARTED`, migration route projection) before starvation can safely become predator death or range expansion.
+
 ## 2026-05-14 — Phase E1.1 ecosystem predation
 
 ### Implemented

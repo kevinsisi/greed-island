@@ -172,6 +172,30 @@ describe('living-world rule engine', () => {
         spawnedAtTick: 6,
         narration: null,
       }),
+      makeLivingWorldCommand('ANIMAL_REPRODUCED', 'system', 'system', 6, 6, {
+        animal: {
+          id: 'animal.t_forest.forest_deer.repro.abc',
+          speciesId: 'forest_deer',
+          tileId: 't_forest',
+          biomeRegion: 'forest',
+          position: { subCol: 3, subRow: 4, subZ: 0 },
+          state: 'idle',
+          hunger: 0,
+          health: 100,
+          fear: 75,
+          aggression: 5,
+          packId: 'pack.t_forest.forest_deer.abc',
+          migrationTarget: null,
+          currentTarget: null,
+          reproductionCooldown: 0,
+          lifecycleStage: 'juvenile',
+          ownerSettlementId: null,
+          domesticatedBy: null,
+        },
+        parentAnimalIds: ['animal.t_forest.forest_deer.abc', 'animal.t_forest.forest_deer.def'],
+        reproducedAtTick: 6,
+        narration: null,
+      }),
       makeLivingWorldCommand('ANIMAL_HUNT_STARTED', 'forest.hunter.lyra', 'npc', 7, 7, {
         huntId: 'hunt.t_forest.abc',
         npcId: 'forest.hunter.lyra',
@@ -413,6 +437,37 @@ describe('living-world rule engine', () => {
     const result = ruleEngine.evaluate(cmd)
     expect(result.accepted).toBe(false)
     if (!result.accepted) expect(result.rejection.reason).toBe('starvationStage invalid')
+  })
+
+  it('rejects malformed animal reproduction parent ids', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('ANIMAL_REPRODUCED', 'system', 'system', 7, 7, {
+      animal: {
+        id: 'animal.t_forest.forest_deer.repro.abc',
+        speciesId: 'forest_deer',
+        tileId: 't_forest',
+        biomeRegion: 'forest',
+        position: { subCol: 3, subRow: 4, subZ: 0 },
+        state: 'idle',
+        hunger: 0,
+        health: 100,
+        fear: 75,
+        aggression: 5,
+        packId: null,
+        migrationTarget: null,
+        currentTarget: null,
+        reproductionCooldown: 0,
+        lifecycleStage: 'juvenile',
+        ownerSettlementId: null,
+        domesticatedBy: null,
+      },
+      parentAnimalIds: ['parent-b', 'parent-a'],
+      reproducedAtTick: 7,
+      narration: null,
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('parentAnimalIds must be sorted ascending')
   })
 
   describe('CONSTRUCTION_INITIATE validator', () => {

@@ -42,6 +42,21 @@ describe('AnimalPopulationProjection', () => {
     expect(row?.lastKilledAtTick).toBe(20)
   })
 
+  it('adds reproduced animal ids without double-counting duplicate reproduction', () => {
+    const projection = new AnimalPopulationProjection()
+    const newborn = animal('animal-c', 'forest_deer', 't_forest', 'forest')
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
+      spawnedEvent(2, animal('animal-b', 'forest_deer', 't_forest', 'forest'), 12),
+      reproducedEvent(3, newborn, ['animal-a', 'animal-b'], 24),
+      reproducedEvent(4, newborn, ['animal-a', 'animal-b'], 24),
+    ])
+
+    const row = projection.getBySpeciesAndTile('forest_deer', 't_forest')
+    expect(row?.count).toBe(3)
+    expect(row?.animalIds).toEqual(['animal-a', 'animal-b', 'animal-c'])
+  })
+
   it('rebuilds to an identical canonical hash', () => {
     const events = [
       spawnedEvent(1, animal('animal-a', 'forest_deer', 't_forest', 'forest'), 12),
@@ -96,6 +111,24 @@ function killedEvent(sequence: number, animalId: string, speciesId: string, tile
     deterministicKey: `key-kill-${sequence}`,
     version: 1,
     tick: killedAtTick,
+  }
+}
+
+function reproducedEvent(sequence: number, animalValue: Animal, parentAnimalIds: readonly [string, string], reproducedAtTick: number): Event {
+  return {
+    sequence,
+    eventId: `event-reproduction-${sequence}`,
+    eventType: 'ANIMAL_REPRODUCED',
+    occurredAt: 0,
+    actorId: 'system',
+    payload: {
+      actorType: 'system',
+      data: { animal: animalValue, parentAnimalIds, reproducedAtTick, narration: null },
+      narration: null,
+    },
+    deterministicKey: `key-reproduction-${sequence}`,
+    version: 1,
+    tick: reproducedAtTick,
   }
 }
 

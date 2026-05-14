@@ -7,6 +7,21 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-14
 
+**主題：Phase E1.2 — Ecosystem reproduction + carrying capacity**
+
+OpenSpec: `ecosystem-reproduction-capacity/`。
+
+- ✅ 新增 `ANIMAL_REPRODUCED` command/event + validators。
+- ✅ 新增 `packages/server/src/ecosystem/reproduction.ts`：從 `animal_population` + `Species.reproductionRate` deterministic 規劃本地繁殖。
+- ✅ Reproduction 需要同 tile 至少 2 個同 species animal ids，且 count 必須低於既有 per-tile carrying capacity。
+- ✅ `AnimalPopulationProjection` 支援 `ANIMAL_REPRODUCED` 增加 newborn animal id，duplicate newborn 不會重複計數。
+- ✅ Runtime 每 cadence tick 最多 emit 一次 `ANIMAL_REPRODUCED`，且只經 Rule Engine 進 EventLog；routine reproduction 不進 public recent-event / chronicle surfaces。
+- ✅ Focused server tests 53 passed；full `npm test` 333 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（29 passed）全綠。
+- 🚧 待 commit / push / CI / Deploy Dev + live smoke。
+- ⚠️ Honest scope：local reproduction only；尚無 migration、seasonality、genealogy、gestation、lifecycle aging、overpopulation mortality 或 extinction warnings。
+
+## v0.16.0 🚧 in progress — 2026-05-14
+
 **主題：Phase E1.1 — Ecosystem predator/prey pressure**
 
 OpenSpec: `ecosystem-predation/`。
