@@ -158,6 +158,10 @@ export function createNpcRouter(input: {
       resolvedIntent = 'ask'
     } else if (hasKeys) {
       try {
+        const rawRumors = input.runtime.getActiveNpcRumors(npcId)
+        const rumorCtx = rawRumors.length > 0
+          ? rawRumors.map((r) => ({ topic: r.topic as string, subjectId: r.subjectId, tileId: r.tileId, accuracy: r.accuracy }))
+          : undefined
         const ai = await generateAiReply(input.settings, {
           profile,
           player,
@@ -167,6 +171,7 @@ export function createNpcRouter(input: {
           playerMessage,
           worldTick: tick,
           worldValidNpcNames: input.runtime.getNpcs().map((npc) => npc.name.zh),
+          ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
         })
         const knownNpcNames = input.runtime.getNpcs().map((npc) => npc.name.zh)
         const sanitized = sanitizeNpcReplyForUnknownEntities({

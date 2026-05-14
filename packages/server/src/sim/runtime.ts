@@ -126,6 +126,8 @@ import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
 import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
+import { RumorProjection, type RumorRow } from '../projections/rumor.js'
+import { seedRumorsFromEvent } from './rumorSeeder.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
@@ -309,6 +311,7 @@ export class SimulationRuntime {
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
   private readonly animalMigrationProjection = new AnimalMigrationProjection()
   private readonly predatorHungerProjection = new PredatorHungerProjection()
+  private readonly rumorProjection = new RumorProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
@@ -464,6 +467,7 @@ export class SimulationRuntime {
         productionChains: this.productionChainsProjection.snapshot(),
         migrationRoutes: this.animalMigrationProjection.list(),
         predatorHunger: this.predatorHungerProjection.list(),
+        npcRumors: this.rumorProjection.list(),
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -657,6 +661,11 @@ export class SimulationRuntime {
   /** Phase E0.4 — current fishery density projection (Layer 2.5). */
   getFisheryDensity(): readonly FisheryDensityRow[] {
     return this.fisheryDensityProjection.list()
+  }
+
+  /** Phase 3 Slice 1 — active rumors for a given NPC (accuracy >= threshold). */
+  getActiveNpcRumors(npcId: string): readonly RumorRow[] {
+    return this.rumorProjection.getActiveRumors(npcId)
   }
 
   /** Phase 2 §35.1 — current goods inventory projection (Layer 3). */
@@ -872,6 +881,7 @@ export class SimulationRuntime {
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
       this.predatorHungerProjection.project(ev)
+      this.rumorProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
@@ -2244,6 +2254,26 @@ export class SimulationRuntime {
                 this.makeNpcStateRecordedCommand(change, nextTick, submittedAt)
               )
             }
+            // Phase 3 Slice 1 — rumor spread: if one participant has rumors
+            // the other doesn't, emit NPC_RUMOR_SPREAD for the top rumor.
+            const [pA, pB] = accepted.participants
+            const rumorSpread = planRumorSpread(this.rumorProjection, pA, pB, nextTick, submittedAt)
+            if (rumorSpread) postAcceptedCommands.push(rumorSpread)
+          }
+        }
+        if (cmd.commandType === 'ANIMAL_STARVED' || cmd.commandType === 'BUILDING_CONSTRUCTED') {
+          // Phase 3 Slice 1 — seed rumors onto NPCs present on the event tile.
+          const tileId = readEventTileId(cmd.payload)
+          if (tileId) {
+            const npcIdsOnTile = this.getNpcs()
+              .filter((n) => n.location === tileId)
+              .map((n) => n.id)
+            const seeds = seedRumorsFromEvent(
+              { eventType: cmd.commandType, payload: cmd.payload, tick: nextTick },
+              npcIdsOnTile,
+              nextTick,
+            )
+            for (const s of seeds) postAcceptedCommands.push(s)
           }
         }
       } else {
@@ -2287,13 +2317,13 @@ export class SimulationRuntime {
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
         this.predatorHungerProjection.project(ev)
+        this.rumorProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
         this.marketPricesProjection.project(ev)
         this.productionChainsProjection.project(ev)
         this.settlementsProjection.project(ev)
-
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -2819,6 +2849,7 @@ export class SimulationRuntime {
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.animalMigrationProjection.rebuildFromEvents(allEvents)
       this.predatorHungerProjection.rebuildFromEvents(allEvents)
+      this.rumorProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
@@ -3073,6 +3104,8 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'ANIMAL_HUNT_RESOLVED' ||
     ev.eventType === 'ANIMAL_KILLED' ||
     ev.eventType === 'ANIMAL_STARVED' ||
+    ev.eventType === 'NPC_RUMOR_HEARD' ||
+    ev.eventType === 'NPC_RUMOR_SPREAD' ||
     ev.eventType === 'ANIMAL_REPRODUCED' ||
     ev.eventType === 'MIGRATION_WAVE_STARTED' ||
     ev.eventType === 'ANIMAL_MIGRATED' ||
@@ -3232,3 +3265,59 @@ function buildNpcFactionLean(profiles: readonly NpcProfile[]): Map<string, Facti
   }
   return map
 }
+
+// Phase 3 Slice 1 — rumor helper functions
+
+function planRumorSpread(
+  projection: RumorProjection,
+  pA: string,
+  pB: string,
+  tick: number,
+  submittedAt: number,
+): LivingWorldCommand | null {
+  const aRumors = projection.getActiveRumors(pA)
+  const bRumors = projection.getActiveRumors(pB)
+  const bIds = new Set(bRumors.map((r) => r.rumorId))
+  const aIds = new Set(aRumors.map((r) => r.rumorId))
+
+  // Try A → B first
+  const aCandidates = aRumors.filter((r) => !bIds.has(r.rumorId))
+  if (aCandidates.length > 0) {
+    const top = aCandidates[0]! // already sorted by descending accuracy
+    const degraded = Math.round(top.accuracy * 85 / 100)
+    return makeLivingWorldCommand(
+      'NPC_RUMOR_SPREAD',
+      pA,
+      'npc',
+      tick,
+      submittedAt,
+      { fromNpcId: pA, toNpcId: pB, rumorId: top.rumorId, topic: top.topic, subjectId: top.subjectId, tileId: top.tileId, originTick: top.originTick, accuracy: degraded }
+    )
+  }
+  // Fallback: B → A
+  const bCandidates = bRumors.filter((r) => !aIds.has(r.rumorId))
+  if (bCandidates.length > 0) {
+    const top = bCandidates[0]!
+    const degraded = Math.round(top.accuracy * 85 / 100)
+    return makeLivingWorldCommand(
+      'NPC_RUMOR_SPREAD',
+      pB,
+      'npc',
+      tick,
+      submittedAt,
+      { fromNpcId: pB, toNpcId: pA, rumorId: top.rumorId, topic: top.topic, subjectId: top.subjectId, tileId: top.tileId, originTick: top.originTick, accuracy: degraded }
+    )
+  }
+  return null
+}
+
+function readEventTileId(payload: unknown): string | null {
+  const data = (payload as { tileId?: unknown } | null)
+  if (!data || typeof data !== 'object') return null
+  if (typeof (data as Record<string, unknown>).tileId === 'string') {
+    return (data as Record<string, unknown>).tileId as string
+  }
+  return null
+}
+
+

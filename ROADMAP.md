@@ -7,6 +7,23 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-14
 
+**主題：Phase 3 Slice 1 — NPC Rumor Propagation**
+
+OpenSpec: `npc-rumor-propagation/`。
+
+- ✅ 新增常數 `RUMOR_ACCURACY_DECAY = 85`、`RUMOR_ACCURACY_THRESHOLD = 10`、`RUMOR_MAX_PER_NPC = 5`。
+- ✅ 新增 `NPC_RUMOR_HEARD` / `NPC_RUMOR_SPREAD` command/event + validators（含 accuracy 0–100 整數 + fromNpcId ≠ toNpcId guard）。
+- ✅ 新增 `RumorProjection`：`(npcId, rumorId)` upsert；超過 cap 時 evict 最舊 `heardAtTick`；`rebuildFromEvents` / `canonicalHash` 合規。
+- ✅ 新增 `rumorSeeder.ts`：`ANIMAL_STARVED` → `topic='predator_death'`；`BUILDING_CONSTRUCTED` → `topic='construction_complete'`；只對 tile 上的 NPC 產生 `NPC_RUMOR_HEARD`。
+- ✅ Runtime integration：boot hydration；兩條 fan-out loop 加入 `rumorProjection.project(ev)`；command loop 在 `ANIMAL_STARVED`/`BUILDING_CONSTRUCTED` 後呼叫 seeder；`NPC_INTERACT` accepted 後呼叫 `planRumorSpread()` push `NPC_RUMOR_SPREAD`。
+- ✅ `NPC_RUMOR_SPREAD` 後透過 `deriveMemoryRows()` 自動寫入 `fromNpcId` 與 `toNpcId` 的 `event`-type NPC memory。
+- ✅ 兩個 rumor event types 加入 narrative suppression list；不進 `getRecentEvents()` / SSE 表面。
+- ✅ `WorldSnapshot.facts.npcRumors` 可讀；NPC dialog system prompt 注入 top-3 active rumors block（`buildRumorsBlock()`）。
+- ✅ Focused server tests 14 passed；full `npm test` 383 server + 34 web（417 total）；`build:server` / `build:web`；`openspec validate --all --strict`（32 passed）全綠。
+- ⚠️ Honest scope：只 seed from `ANIMAL_STARVED` 和 `BUILDING_CONSTRUCTED`；其他 notable events（NPC combat、trade）尚未 seed；無 UI 顯示 rumor list 給玩家；每次 NPC_INTERACT 最多 spread 一條 rumor。
+
+## v0.16.0 🚧 in progress — 2026-05-14
+
 **主題：Phase E1.4 — Predator mortality (starvation threshold)**
 
 OpenSpec: `predator-mortality/`。

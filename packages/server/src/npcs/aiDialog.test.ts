@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseReply } from './aiDialog.js'
+import { buildRumorsBlock, parseReply } from './aiDialog.js'
 
 describe('parseReply', () => {
   it('parses a clean JSON reply', () => {
@@ -88,5 +88,43 @@ describe('parseReply', () => {
     expect(out).not.toBeNull()
     expect(out!.intent).toBe('ask')
     expect(out!.trustDelta).toBe(1)
+  })
+})
+
+describe('buildRumorsBlock', () => {
+  it('returns empty array when rumors is undefined', () => {
+    expect(buildRumorsBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array when rumors is empty', () => {
+    expect(buildRumorsBlock([])).toEqual([])
+  })
+
+  it('includes rumor content when rumors are present', () => {
+    const rumors = [
+      { topic: 'predator_death', subjectId: 'fog_wolf', tileId: 't_forest', accuracy: 90 },
+    ]
+    const lines = buildRumorsBlock(rumors)
+    expect(lines.length).toBeGreaterThan(0)
+    const joined = lines.join('\n')
+    expect(joined).toContain('fog_wolf')
+    expect(joined).toContain('90%')
+  })
+
+  it('caps at 3 rumors even when more are provided', () => {
+    const rumors = [
+      { topic: 'predator_death', subjectId: 's1', tileId: 't1', accuracy: 100 },
+      { topic: 'predator_death', subjectId: 's2', tileId: 't2', accuracy: 90 },
+      { topic: 'predator_death', subjectId: 's3', tileId: 't3', accuracy: 80 },
+      { topic: 'construction_complete', subjectId: 'b1', tileId: 't4', accuracy: 70 },
+      { topic: 'construction_complete', subjectId: 'b2', tileId: 't5', accuracy: 60 },
+    ]
+    const lines = buildRumorsBlock(rumors)
+    const joined = lines.join('\n')
+    expect(joined).toContain('s1')
+    expect(joined).toContain('s2')
+    expect(joined).toContain('s3')
+    expect(joined).not.toContain('b1')
+    expect(joined).not.toContain('b2')
   })
 })

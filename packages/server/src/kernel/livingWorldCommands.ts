@@ -84,7 +84,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'GOODS_TRANSPORT_ARRIVED',
   'GOODS_TRANSPORT_LOST',
   // Phase 2 §35.4 — Market formation
-  'MARKET_PRICE_DISCOVERED'
+  'MARKET_PRICE_DISCOVERED',
+  // Phase 3 Slice 1 — NPC rumor propagation
+  'NPC_RUMOR_HEARD',
+  'NPC_RUMOR_SPREAD',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -635,6 +638,29 @@ export type MarketPriceDiscoveredCmd = Readonly<{
   narration: string
 }>
 
+export type RumorTopic = 'predator_death' | 'construction_complete'
+
+export type NpcRumorHeardCmd = Readonly<{
+  npcId: string
+  rumorId: string
+  topic: RumorTopic
+  subjectId: string
+  tileId: string
+  originTick: number
+  accuracy: number
+}>
+
+export type NpcRumorSpreadCmd = Readonly<{
+  fromNpcId: string
+  toNpcId: string
+  rumorId: string
+  topic: RumorTopic
+  subjectId: string
+  tileId: string
+  originTick: number
+  accuracy: number
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -687,6 +713,8 @@ export type LivingWorldCommandPayload =
   | GoodsTransportArrivedCmd
   | GoodsTransportLostCmd
   | MarketPriceDiscoveredCmd
+  | NpcRumorHeardCmd
+  | NpcRumorSpreadCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1294,6 +1322,30 @@ const VALIDATORS: Readonly<
     if (!isPositiveQuantity(p.priceGold)) return 'priceGold required'
     if (!isNonNegativeInteger(p.discoveredAtTick)) return 'discoveredAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_RUMOR_HEARD: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.rumorId !== 'string' || p.rumorId.length === 0) return 'rumorId required'
+    if (p.topic !== 'predator_death' && p.topic !== 'construction_complete') return 'topic invalid'
+    if (typeof p.subjectId !== 'string' || p.subjectId.length === 0) return 'subjectId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.originTick)) return 'originTick must be non-negative integer'
+    if (typeof p.accuracy !== 'number' || !Number.isInteger(p.accuracy) || p.accuracy < 0 || p.accuracy > 100) return 'accuracy must be integer 0-100'
+    return null
+  },
+  NPC_RUMOR_SPREAD: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.fromNpcId !== 'string' || p.fromNpcId.length === 0) return 'fromNpcId required'
+    if (typeof p.toNpcId !== 'string' || p.toNpcId.length === 0) return 'toNpcId required'
+    if (p.fromNpcId === p.toNpcId) return 'fromNpcId and toNpcId must differ'
+    if (typeof p.rumorId !== 'string' || p.rumorId.length === 0) return 'rumorId required'
+    if (p.topic !== 'predator_death' && p.topic !== 'construction_complete') return 'topic invalid'
+    if (typeof p.subjectId !== 'string' || p.subjectId.length === 0) return 'subjectId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.originTick)) return 'originTick must be non-negative integer'
+    if (typeof p.accuracy !== 'number' || !Number.isInteger(p.accuracy) || p.accuracy < 0 || p.accuracy > 100) return 'accuracy must be integer 0-100'
     return null
   }
 }

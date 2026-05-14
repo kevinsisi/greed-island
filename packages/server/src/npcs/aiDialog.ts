@@ -29,6 +29,13 @@ export type AiDialogReply = Readonly<{
   trustDelta: number
 }>
 
+export type ActiveRumorContext = Readonly<{
+  topic: string
+  subjectId: string
+  tileId: string
+  accuracy: number
+}>
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -42,6 +49,7 @@ export type AiDialogContext = Readonly<{
   playerMessage: string
   worldTick: number
   worldValidNpcNames?: readonly string[]
+  activeRumors?: readonly ActiveRumorContext[]
 }>
 
 export class AiDialogError extends Error {
@@ -147,6 +155,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     `### 最近的對話紀錄（你之前回覆過的內容，僅供參考，不要重複）`,
     historyBlock,
     '',
+    ...buildRumorsBlock(ctx.activeRumors),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -352,3 +361,19 @@ function clampDelta(value: number): number {
 }
 
 export const SUPPORTED_INTENTS = INTERACT_INTENTS
+
+export function buildRumorsBlock(rumors: readonly ActiveRumorContext[] | undefined): string[] {
+  if (!rumors || rumors.length === 0) return []
+  const top = rumors.slice(0, 3)
+  const lines = top.map((r) => {
+    const topicLabel = r.topic === 'predator_death'
+      ? `一隻 ${r.subjectId} 死亡於 ${r.tileId}`
+      : `${r.tileId} 有建築 ${r.subjectId} 竣工`
+    return `  · ${topicLabel}（可信度 ${r.accuracy}%）`
+  })
+  return [
+    `### 你最近聽說的事（可選擇性地在回應中自然帶出，不強迫）`,
+    ...lines,
+    '',
+  ]
+}

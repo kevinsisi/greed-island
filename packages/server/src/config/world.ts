@@ -103,6 +103,15 @@ export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 // consecutive cadence ticks without a successful kill on its tile starves.
 export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 
+// Phase 3 Slice 1 — NPC rumor propagation.
+// Accuracy is an integer 0–100. Each NPC-to-NPC spread step multiplies
+// by this factor (integer math: Math.round(acc * DECAY / 100)).
+export const RUMOR_ACCURACY_DECAY = 85
+// Rumors at or below this accuracy are considered expired / ineligible.
+export const RUMOR_ACCURACY_THRESHOLD = 10
+// Maximum active rumors per NPC; oldest by heardAtTick is evicted on overflow.
+export const RUMOR_MAX_PER_NPC = 5
+
 // Phase E0.3 — simple hunting. Hunter-role NPCs only hunt when their food
 // pressure is genuinely elevated, so hunting is not a generic patrol flavor.
 export const ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60

@@ -20,6 +20,7 @@ import type {
   NpcInteractCmd,
   NpcMoveCmd,
   NpcProductiveActionCmd,
+  NpcRumorSpreadCmd,
   PlayerIntervenecmd,
   SeasonChangeCmd,
   WeatherChangeCmd
@@ -401,6 +402,14 @@ function deriveMemoryRows(
           content: { kind: 'season', from: d.from, to: d.to, tick },
           importance: 4
         }
+      ]
+    }
+    case 'NPC_RUMOR_SPREAD': {
+      const d = data as NpcRumorSpreadCmd
+      const content = { kind: 'rumor.spread', topic: d.topic, subjectId: d.subjectId, tileId: d.tileId, accuracy: d.accuracy, tick } as const
+      return [
+        { npcId: d.fromNpcId, memoryType: 'event', content, importance: 3 },
+        { npcId: d.toNpcId, memoryType: 'event', content, importance: 3 },
       ]
     }
     default:

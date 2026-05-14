@@ -3,6 +3,43 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase 3 Slice 1: NPC Rumor Propagation
+
+### Implemented
+
+- OpenSpec change `npc-rumor-propagation` for `docs/WORLD_CAPABILITIES.md` Phase 3 Slice 1 (§11 NPC Social Network).
+- Constants added: `RUMOR_ACCURACY_DECAY = 85`, `RUMOR_ACCURACY_THRESHOLD = 10`, `RUMOR_MAX_PER_NPC = 5`.
+- New command/event types: `NPC_RUMOR_HEARD` (NPC witnesses notable event), `NPC_RUMOR_SPREAD` (NPC-to-NPC relay during interaction). Both registered in `LivingWorldRuleEngine` with validators.
+- `RumorProjection`: in-memory projection keyed by `(npcId, rumorId)`; evicts oldest entry when cap exceeded; `rebuildFromEvents`/`canonicalHash` compliant.
+- `rumorSeeder.ts`: converts `ANIMAL_STARVED` and `BUILDING_CONSTRUCTED` events into `NPC_RUMOR_HEARD` commands for all NPCs on the triggering tile.
+- Runtime integration: projection hydrated on boot; both fan-out loops project into `rumorProjection`; seeder fires in command processing loop; `planRumorSpread()` enqueues `NPC_RUMOR_SPREAD` after accepted `NPC_INTERACT`; both rumor event types suppressed from narrative surfaces.
+- `NpcMemory` integration: `NPC_RUMOR_SPREAD` adds `event`-type memory rows for both participants via `deriveMemoryRows()`.
+- `WorldSnapshot.facts.npcRumors` exposes all active rumor rows.
+- AI dialog: `buildRumorsBlock()` injects top-3 active rumors context into system prompt; omitted when NPC has no active rumors.
+
+### Honest scope
+
+- Rumors seed only from `ANIMAL_STARVED` and `BUILDING_CONSTRUCTED`; other notable events (NPC combat, trade) are not yet seeded.
+- No UI display of rumor state beyond `facts.npcRumors` and the dialog prompt injection.
+- Spread is at most one rumor per NPC_INTERACT; no multi-hop chain within a single tick.
+
+### Verification
+
+- Focused tests (14 tests): `npm run test -w @greed-island/server -- projections/rumor sim/runtimeRumor` — **14 passed**.
+- `npm run build:server` — clean TypeScript.
+- `npm run build:web` — passed (known Vite chunk-size warning only).
+- Full suite: `npm test` — **383 server + 34 web tests passed** (417 total).
+- `npx openspec validate npc-rumor-propagation --strict` — passed.
+- `npx openspec validate --all --strict` — **32 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending push; CI and Deploy Dev not yet run.
+
+### Outstanding
+
+- CI green and live `/api/world.facts.npcRumors` verification pending commit + push.
+
 ## 2026-05-14 — Phase E1.4 predator mortality
 
 ### Implemented
