@@ -1,6 +1,8 @@
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
 import type { Animal, EcosystemRegionId } from '../ecosystem/species.js'
+import { TILE_BY_ID } from '../sim/mapGraph.js'
+import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
 
 export type AnimalPopulationRow = Readonly<{
   speciesId: string
@@ -16,6 +18,7 @@ export type AnimalPopulationRow = Readonly<{
 const ANIMAL_SPAWNED = 'ANIMAL_SPAWNED'
 const ANIMAL_KILLED = 'ANIMAL_KILLED'
 const ANIMAL_REPRODUCED = 'ANIMAL_REPRODUCED'
+const ANIMAL_MIGRATED = 'ANIMAL_MIGRATED'
 
 export class AnimalPopulationProjection {
   private rows = new Map<string, AnimalPopulationRow>()
@@ -54,6 +57,36 @@ export class AnimalPopulationProjection {
         count: animalIds.length,
         animalIds,
         lastKilledAtTick: payload.killedAtTick,
+        lastSequence: event.sequence,
+      })
+      return
+    }
+
+    if (event.eventType === ANIMAL_MIGRATED) {
+      const payload = readMigratedPayload(event)
+      if (!payload) return
+      // Remove from source tile — only proceed if animal actually was there
+      const fromKey = populationKey(payload.speciesId, payload.fromTileId)
+      const fromRow = this.rows.get(fromKey)
+      if (!fromRow?.animalIds.includes(payload.animalId)) return
+      const fromAnimalIds = fromRow.animalIds.filter((id) => id !== payload.animalId).sort()
+      this.rows.set(fromKey, { ...fromRow, count: fromAnimalIds.length, animalIds: fromAnimalIds, lastSequence: event.sequence })
+      // Add to destination tile
+      const toKey = populationKey(payload.speciesId, payload.toTileId)
+      const toRow = this.rows.get(toKey)
+      if (toRow?.animalIds.includes(payload.animalId)) return
+      const destTile = TILE_BY_ID[payload.toTileId]
+      const destRegion = destTile ? ecosystemRegionForTile(destTile) : null
+      if (!destRegion) return
+      const toAnimalIds = [...(toRow?.animalIds ?? []), payload.animalId].sort()
+      this.rows.set(toKey, {
+        speciesId: payload.speciesId,
+        tileId: payload.toTileId,
+        biomeRegion: destRegion,
+        count: toAnimalIds.length,
+        animalIds: toAnimalIds,
+        lastSpawnedAtTick: toRow?.lastSpawnedAtTick ?? payload.migratedAtTick,
+        lastKilledAtTick: toRow?.lastKilledAtTick ?? null,
         lastSequence: event.sequence,
       })
     }
@@ -133,6 +166,18 @@ function readKilledPayload(event: Event): { animalId: string; speciesId: string;
   if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
   if (typeof p.killedAtTick !== 'number' || !Number.isInteger(p.killedAtTick) || p.killedAtTick < 0) return null
   return { animalId: p.animalId, speciesId: p.speciesId, tileId: p.tileId, killedAtTick: p.killedAtTick }
+}
+
+function readMigratedPayload(event: Event): { animalId: string; speciesId: string; fromTileId: string; toTileId: string; migratedAtTick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.animalId !== 'string' || p.animalId.length === 0) return null
+  if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return null
+  if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return null
+  if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return null
+  if (typeof p.migratedAtTick !== 'number' || !Number.isInteger(p.migratedAtTick) || p.migratedAtTick < 0) return null
+  return { animalId: p.animalId, speciesId: p.speciesId, fromTileId: p.fromTileId, toTileId: p.toTileId, migratedAtTick: p.migratedAtTick }
 }
 
 function populationKey(speciesId: string, tileId: string): string {

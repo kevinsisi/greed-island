@@ -7,6 +7,22 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-14
 
+**主題：Phase E1.3 — Ecosystem migration engine**
+
+OpenSpec: `ecosystem-migration/`。
+
+- ✅ 新增 `MIGRATION_WAVE_STARTED` / `ANIMAL_MIGRATED` command/event + validators。
+- ✅ 新增 `packages/server/src/ecosystem/migration.ts`：`pressure` species（占用率 ≥ 80% carrying cap）與 `seasonal` species（每 cadence tick）的 deterministic migration planner。
+- ✅ Destination 優先選 biome-affinity 匹配的相鄰 ecosystem tile，hash tiebreak；`none` / `event_driven` pattern 不處理。
+- ✅ `AnimalPopulationProjection` 支援 `ANIMAL_MIGRATED`：從 source tile 移除 animalId，在 dest tile upsert（帶正確 biomeRegion）。
+- ✅ 新增 `AnimalMigrationProjection`（`migration_routes` read model）：`MIGRATION_WAVE_STARTED` 建 wave row（count=0）；`ANIMAL_MIGRATED` 遞增 count；first-write-wins replay 安全。
+- ✅ Runtime boot hydrate；runTick() 每 cadence 至多 push 一對 commands 進 Rule Engine；routine events 不進 public surfaces。
+- ✅ `WorldSnapshot.facts.migrationRoutes` 可讀；`/admin/world` 顯示 migration wave rows（Phase E1.3 abstract migration 標示）。
+- ✅ Focused server tests 67 passed；full `npm test` 352 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（30 passed）全綠。
+- ⚠️ Honest scope：pressure + seasonal only；尚無 `event_driven` migration、multi-tick in-transit state、extinction warnings 或 predator mortality。
+
+## v0.16.0 🚧 in progress — 2026-05-14
+
 **主題：Phase E1.2 — Ecosystem reproduction + carrying capacity**
 
 OpenSpec: `ecosystem-reproduction-capacity/`。

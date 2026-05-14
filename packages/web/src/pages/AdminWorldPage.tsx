@@ -100,6 +100,16 @@ type MarketPriceRow = Readonly<{
   lastSequence: number
 }>
 
+type AnimalMigrationWaveRow = Readonly<{
+  waveId: string
+  speciesId: string
+  fromTileId: string
+  toTileId: string
+  migrationType: 'pressure' | 'seasonal'
+  startedAtTick: number
+  count: number
+}>
+
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 export function AdminWorldPage() {
@@ -138,6 +148,7 @@ export function AdminWorldPage() {
   const logistics = readLogistics(world.facts)
   const productionChains = readProductionChains(world.facts)
   const marketPrices = readMarketPrices(world.facts)
+  const migrationWaves = readMigrationWaves(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -424,6 +435,59 @@ export function AdminWorldPage() {
               <tbody>
                 {marketPrices.map((row) => (
                   <MarketPriceView key={`${row.settlementId}:${row.goodsId}`} row={row} t={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-emerald-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-emerald-300">
+              Migration Routes
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              Phase E1.3 — abstract animal migration waves between adjacent ecosystem tiles. pressure = over carrying capacity; seasonal = periodic cadence.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label="waves" value={migrationWaves.length} />
+          </div>
+        </div>
+
+        {migrationWaves.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            No migration waves recorded yet. Migrations emit at cadence ticks when pressure or seasonal conditions are met.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">Species</th>
+                  <th className="text-left py-2 pr-4">From</th>
+                  <th className="text-left py-2 pr-4">To</th>
+                  <th className="text-left py-2 pr-4">Type</th>
+                  <th className="text-right py-2 pr-4">Count</th>
+                  <th className="text-right py-2 pr-4">Started @tick</th>
+                </tr>
+              </thead>
+              <tbody>
+                {migrationWaves.map((wave) => (
+                  <tr key={wave.waveId} className="border-t border-ground-800/50">
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-200">{wave.speciesId}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-400">{wave.fromTileId}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-400">{wave.toTileId}</td>
+                    <td className="py-2 pr-4">
+                      <span className={`text-[11px] font-display uppercase tracking-tightest ${wave.migrationType === 'pressure' ? 'text-amber-400' : 'text-cyan-400'}`}>
+                        {wave.migrationType}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-200">{wave.count}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-500">{wave.startedAtTick}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -782,4 +846,24 @@ function transportStatusLabel(status: GoodsTransportRow['status'], t: Translator
 
 function isGoodsHolderType(value: unknown): value is GoodsHolderType {
   return value === 'npc' || value === 'building' || value === 'settlement'
+}
+
+function readMigrationWaves(facts: Record<string, unknown>): AnimalMigrationWaveRow[] {
+  const raw = facts.migrationRoutes
+  if (!Array.isArray(raw)) return []
+  return raw.filter(isAnimalMigrationWaveRow).sort((a, b) => b.startedAtTick - a.startedAtTick || a.speciesId.localeCompare(b.speciesId))
+}
+
+function isAnimalMigrationWaveRow(value: unknown): value is AnimalMigrationWaveRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<AnimalMigrationWaveRow>
+  return (
+    typeof row.waveId === 'string' &&
+    typeof row.speciesId === 'string' &&
+    typeof row.fromTileId === 'string' &&
+    typeof row.toTileId === 'string' &&
+    (row.migrationType === 'pressure' || row.migrationType === 'seasonal') &&
+    typeof row.startedAtTick === 'number' &&
+    typeof row.count === 'number'
+  )
 }

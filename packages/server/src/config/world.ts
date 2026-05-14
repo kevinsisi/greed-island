@@ -95,6 +95,10 @@ export const ECOSYSTEM_TILE_CARRYING_CAPACITY_DIVISOR = 12
 // population recovery is bounded separately from biome spawning.
 export const ECOSYSTEM_REPRODUCTION_CADENCE_TICKS = TICKS_PER_MINUTE
 
+// Phase E1.3 — animal migration. Pressure migration triggers when a tile's
+// population for a species exceeds this fraction of carrying capacity.
+export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
+
 // Phase E0.3 — simple hunting. Hunter-role NPCs only hunt when their food
 // pressure is genuinely elevated, so hunting is not a generic patrol flavor.
 export const ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60

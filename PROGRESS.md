@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase E1.3 ecosystem migration engine
+
+### Implemented
+
+- Started OpenSpec change `ecosystem-migration` for `docs/WORLD_CAPABILITIES.md` Phase E1.3.
+- Added `MIGRATION_WAVE_STARTED` and `ANIMAL_MIGRATED` command/event types with validator coverage.
+- Added deterministic migration planner (`ecosystem/migration.ts`) using `SpeciesMigrationPattern`, `MAP_ADJACENCY`, and per-tile carrying capacity.
+  - `pressure` species migrate when tile occupancy ≥ `ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD` (80%) of carrying capacity.
+  - `seasonal` species migrate on every cadence tick when a destination with capacity exists.
+  - `none` and `event_driven` species are skipped.
+  - Destination selection prefers biome-matching adjacent ecosystem tiles; falls back to any adjacent ecosystem tile with capacity; deterministic hash tiebreak.
+- `AnimalPopulationProjection` now handles `ANIMAL_MIGRATED`: removes animal id from source tile row, upserts on destination tile row with correct `biomeRegion`.
+- New `AnimalMigrationProjection` tracks active migration waves from `MIGRATION_WAVE_STARTED` (`migration_routes` projection); increments wave `count` on each `ANIMAL_MIGRATED`; first-write-wins for replay safety.
+- Runtime hydrates `AnimalMigrationProjection` on boot; emits `MIGRATION_WAVE_STARTED` then `ANIMAL_MIGRATED` through Rule Engine at most once per cadence tick.
+- Both migration event types suppressed from public recent-event and chronicle surfaces.
+- `WorldSnapshot.facts.migrationRoutes` exposes wave rows from projection.
+- `/admin/world` renders migration wave table (speciesId, fromTile, toTile, type, count, startedAtTick), labeled as Phase E1.3 abstract migration.
+
+### Honest scope
+
+- This is pressure + seasonal migration only. No `event_driven` migration, no multi-tick in-transit state, no extinction warnings, no predator mortality. Animals move tile-to-tile atomically in one event.
+- Season tracking uses reproduction cadence period, not a true game-calendar season.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- ecosystem/migration projections/animalMigration projections/animalPopulation sim/runtimeMigration kernel/livingWorld` passed: 67 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **352 server** + 34 web tests.
+- `npx openspec validate ecosystem-migration --strict` passed.
+- `npx openspec validate --all --strict` passed: 30 passed, 0 failed.
+
+### Outstanding
+
+- Next E1 slice: predator mortality (ANIMAL_DIED_STARVATION) — now unblocked by migration. Or extend migration with `event_driven` triggers.
+
 ## 2026-05-14 — Phase E1.2 ecosystem reproduction + carrying capacity
 
 ### Implemented

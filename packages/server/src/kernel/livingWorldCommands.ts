@@ -63,6 +63,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_STARVED',
   // Phase E1.2 — Ecosystem reproduction + capacity
   'ANIMAL_REPRODUCED',
+  // Phase E1.3 — Ecosystem migration
+  'MIGRATION_WAVE_STARTED',
+  'ANIMAL_MIGRATED',
   'CARCASS_CREATED',
   'MEAT_HARVESTED',
   // Phase E0.4 — Fishery density
@@ -428,6 +431,25 @@ export type AnimalReproducedCmd = Readonly<{
   narration: string | null
 }>
 
+export type MigrationWaveStartedCmd = Readonly<{
+  waveId: string
+  speciesId: string
+  fromTileId: string
+  toTileId: string
+  startedAtTick: number
+  migrationType: 'pressure' | 'seasonal'
+}>
+
+export type AnimalMigratedCmd = Readonly<{
+  animalId: string
+  speciesId: string
+  fromTileId: string
+  toTileId: string
+  migratedAtTick: number
+  migrationType: 'pressure' | 'seasonal'
+  waveId: string
+}>
+
 export type CarcassCreatedCmd = Readonly<{
   huntId: string
   carcassId: string
@@ -648,6 +670,8 @@ export type LivingWorldCommandPayload =
   | AnimalKilledCmd
   | AnimalStarvedCmd
   | AnimalReproducedCmd
+  | MigrationWaveStartedCmd
+  | AnimalMigratedCmd
   | CarcassCreatedCmd
   | MeatHarvestedCmd
   | FisheryHarvestedCmd
@@ -1076,6 +1100,33 @@ const VALIDATORS: Readonly<
       return 'reproducedAtTick must be non-negative integer'
     }
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  MIGRATION_WAVE_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.waveId !== 'string' || p.waveId.length === 0) return 'waveId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (p.fromTileId === p.toTileId) return 'fromTileId and toTileId must differ'
+    if (typeof p.startedAtTick !== 'number' || !Number.isInteger(p.startedAtTick) || p.startedAtTick < 0) {
+      return 'startedAtTick must be non-negative integer'
+    }
+    if (p.migrationType !== 'pressure' && p.migrationType !== 'seasonal') return 'migrationType must be pressure or seasonal'
+    return null
+  },
+  ANIMAL_MIGRATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (p.fromTileId === p.toTileId) return 'fromTileId and toTileId must differ'
+    if (typeof p.migratedAtTick !== 'number' || !Number.isInteger(p.migratedAtTick) || p.migratedAtTick < 0) {
+      return 'migratedAtTick must be non-negative integer'
+    }
+    if (p.migrationType !== 'pressure' && p.migrationType !== 'seasonal') return 'migrationType must be pressure or seasonal'
+    if (typeof p.waveId !== 'string' || p.waveId.length === 0) return 'waveId required'
     return null
   },
   CARCASS_CREATED: (p) => {

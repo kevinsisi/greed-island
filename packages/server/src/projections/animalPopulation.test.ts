@@ -68,6 +68,47 @@ describe('AnimalPopulationProjection', () => {
     b.rebuildFromEvents(events)
     expect(a.canonicalHash()).toBe(b.canonicalHash())
   })
+
+  it('moves animal id from source to destination on ANIMAL_MIGRATED', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('deer-a', 'forest_deer', 't_forest', 'forest'), 10),
+      spawnedEvent(2, animal('deer-b', 'forest_deer', 't_forest', 'forest'), 10),
+      migratedEvent(3, 'deer-a', 'forest_deer', 't_forest', 't_mountain', 'wave-x', 20),
+    ])
+
+    const source = projection.getBySpeciesAndTile('forest_deer', 't_forest')
+    const dest = projection.getBySpeciesAndTile('forest_deer', 't_mountain')
+
+    expect(source?.animalIds).toEqual(['deer-b'])
+    expect(source?.count).toBe(1)
+    expect(dest?.animalIds).toContain('deer-a')
+    expect(dest?.count).toBe(1)
+    expect(dest?.biomeRegion).toBe('mountain')
+  })
+
+  it('ignores ANIMAL_MIGRATED for animal not on source tile', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('deer-b', 'forest_deer', 't_forest', 'forest'), 10),
+      migratedEvent(2, 'deer-a', 'forest_deer', 't_forest', 't_mountain', 'wave-x', 20),
+    ])
+
+    expect(projection.getBySpeciesAndTile('forest_deer', 't_forest')?.count).toBe(1)
+    expect(projection.getBySpeciesAndTile('forest_deer', 't_mountain')).toBeNull()
+  })
+
+  it('canonical hash after ANIMAL_MIGRATED is replay-consistent', () => {
+    const events = [
+      spawnedEvent(1, animal('deer-a', 'forest_deer', 't_forest', 'forest'), 10),
+      migratedEvent(2, 'deer-a', 'forest_deer', 't_forest', 't_mountain', 'wave-x', 20),
+    ]
+    const a = new AnimalPopulationProjection()
+    const b = new AnimalPopulationProjection()
+    a.rebuildFromEvents(events)
+    b.rebuildFromEvents(events)
+    expect(a.canonicalHash()).toBe(b.canonicalHash())
+  })
 })
 
 function spawnedEvent(sequence: number, animalValue: Animal, spawnedAtTick: number): Event {
@@ -85,6 +126,24 @@ function spawnedEvent(sequence: number, animalValue: Animal, spawnedAtTick: numb
     deterministicKey: `key-${sequence}`,
     version: 1,
     tick: spawnedAtTick,
+  }
+}
+
+function migratedEvent(sequence: number, animalId: string, speciesId: string, fromTileId: string, toTileId: string, waveId: string, migratedAtTick: number): Event {
+  return {
+    sequence,
+    eventId: `event-migrated-${sequence}`,
+    eventType: 'ANIMAL_MIGRATED',
+    occurredAt: 0,
+    actorId: 'system',
+    payload: {
+      actorType: 'system',
+      data: { animalId, speciesId, fromTileId, toTileId, waveId, migratedAtTick, migrationType: 'pressure' },
+      narration: null,
+    },
+    deterministicKey: `key-migrated-${sequence}`,
+    version: 1,
+    tick: migratedAtTick,
   }
 }
 

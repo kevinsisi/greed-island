@@ -70,6 +70,7 @@ import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, listMapTiles } from './mapGraph
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
+import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
 import { planAnimalReproduction } from '../ecosystem/reproduction.js'
 import { requireSpecies } from '../ecosystem/species.js'
@@ -122,6 +123,7 @@ import {
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
+import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
@@ -303,6 +305,7 @@ export class SimulationRuntime {
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
+  private readonly animalMigrationProjection = new AnimalMigrationProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
@@ -455,7 +458,8 @@ export class SimulationRuntime {
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
         marketPrices: this.marketPricesProjection.list(),
-        productionChains: this.productionChainsProjection.snapshot()
+        productionChains: this.productionChainsProjection.snapshot(),
+        migrationRoutes: this.animalMigrationProjection.list(),
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -862,6 +866,7 @@ export class SimulationRuntime {
       this.constructionProjects.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
+      this.animalMigrationProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
@@ -1624,6 +1629,51 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Phase E1.3: deterministic animal migration ----
+    const migration = planAnimalMigration({
+      tick: nextTick,
+      animalPopulation: this.animalPopulationProjection.list(),
+      unlockedTileIds: this.lifeExpansion.unlockedTileIds,
+      reservedAnimalIds: plannedHuntedAnimalIds,
+    })
+    if (migration) {
+      commands.push(
+        makeLivingWorldCommand(
+          'MIGRATION_WAVE_STARTED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            waveId: migration.waveId,
+            speciesId: migration.speciesId,
+            fromTileId: migration.fromTileId,
+            toTileId: migration.toTileId,
+            startedAtTick: migration.migratedAtTick,
+            migrationType: migration.migrationType,
+          }
+        )
+      )
+      commands.push(
+        makeLivingWorldCommand(
+          'ANIMAL_MIGRATED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            animalId: migration.animalId,
+            speciesId: migration.speciesId,
+            fromTileId: migration.fromTileId,
+            toTileId: migration.toTileId,
+            migratedAtTick: migration.migratedAtTick,
+            migrationType: migration.migrationType,
+            waveId: migration.waveId,
+          }
+        )
+      )
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -2226,6 +2276,7 @@ export class SimulationRuntime {
         this.constructionProjects.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
+        this.animalMigrationProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
@@ -2756,6 +2807,7 @@ export class SimulationRuntime {
       const allEvents = this.store.readEvents()
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
+      this.animalMigrationProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
@@ -3011,6 +3063,8 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'ANIMAL_KILLED' ||
     ev.eventType === 'ANIMAL_STARVED' ||
     ev.eventType === 'ANIMAL_REPRODUCED' ||
+    ev.eventType === 'MIGRATION_WAVE_STARTED' ||
+    ev.eventType === 'ANIMAL_MIGRATED' ||
     ev.eventType === 'GOODS_EXTRACTED' ||
     ev.eventType === 'GOODS_STORED' ||
     ev.eventType === 'GOODS_PROCESSED' ||
