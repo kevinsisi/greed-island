@@ -17,7 +17,7 @@ OpenSpec: `ecosystem-reproduction-capacity/`。
 - ✅ `AnimalPopulationProjection` 支援 `ANIMAL_REPRODUCED` 增加 newborn animal id，duplicate newborn 不會重複計數。
 - ✅ Runtime 每 cadence tick 最多 emit 一次 `ANIMAL_REPRODUCED`，且只經 Rule Engine 進 EventLog；routine reproduction 不進 public recent-event / chronicle surfaces。
 - ✅ Focused server tests 53 passed；full `npm test` 333 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（29 passed）全綠。
-- 🚧 待 commit / push / CI / Deploy Dev + live smoke。
+- ✅ Commit `ab9a793` pushed；CI run `25836110686` passed；Deploy Dev run `25836110663` passed；live `/healthz` = `0.16.0` @ tick `125931`；`/api/world.facts.animalPopulation` has 15 rows, market/prod projections still present。
 - ⚠️ Honest scope：local reproduction only；尚無 migration、seasonality、genealogy、gestation、lifecycle aging、overpopulation mortality 或 extinction warnings。
 
 ## v0.16.0 🚧 in progress — 2026-05-14

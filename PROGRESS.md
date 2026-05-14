@@ -28,10 +28,13 @@ developer. Keep latest status at the top.
 - Full suite: `npm test` passed: **333 server** + 34 web tests.
 - `npx openspec validate ecosystem-reproduction-capacity --strict` passed.
 - `npx openspec validate --all --strict` passed: 29 passed, 0 failed.
+- Commit `ab9a793` (`feat(eco): add animal reproduction capacity`) pushed to `main`.
+- CI run `25836110686` passed; Deploy Dev run `25836110663` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":125931}`.
+- Live `/api/world` smoke at tick `125931`: `animalPopulationRows = 15`, `marketPrices = 4`, `productionChains.recipes = 1`.
 
 ### Outstanding
 
-- Commit, push, CI/CD verification, and live smoke are pending for this slice.
 - Next E1 slice should be migration (`ANIMAL_MIGRATED`, `MIGRATION_WAVE_STARTED`, migration route projection) before starvation can safely become predator death or range expansion.
 
 ## 2026-05-14 — Phase E1.1 ecosystem predation
