@@ -110,6 +110,12 @@ type AnimalMigrationWaveRow = Readonly<{
   count: number
 }>
 
+type PredatorHungerRow = Readonly<{
+  predatorSpeciesId: string
+  tileId: string
+  lastKillAtTick: number
+}>
+
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 export function AdminWorldPage() {
@@ -149,6 +155,7 @@ export function AdminWorldPage() {
   const productionChains = readProductionChains(world.facts)
   const marketPrices = readMarketPrices(world.facts)
   const migrationWaves = readMigrationWaves(world.facts)
+  const predatorHungerRows = readPredatorHunger(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -487,6 +494,49 @@ export function AdminWorldPage() {
                     </td>
                     <td className="py-2 pr-4 text-right font-mono text-xs text-ground-200">{wave.count}</td>
                     <td className="py-2 pr-4 text-right font-mono text-xs text-ground-500">{wave.startedAtTick}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-red-900/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-red-400">
+              Predator Hunger
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              Phase E1.4 — last successful kill tick per predator species per tile. Predators starve after 5 cadence ticks (≈5 min) with no prey.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label="trackers" value={predatorHungerRows.length} />
+          </div>
+        </div>
+
+        {predatorHungerRows.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            No predator kill records yet. Records appear once a predator successfully kills prey on a tile.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">Predator</th>
+                  <th className="text-left py-2 pr-4">Tile</th>
+                  <th className="text-right py-2 pr-4">Last Kill @tick</th>
+                </tr>
+              </thead>
+              <tbody>
+                {predatorHungerRows.map((row) => (
+                  <tr key={`${row.predatorSpeciesId}@${row.tileId}`} className="border-t border-ground-800/50">
+                    <td className="py-2 pr-4 font-mono text-xs text-red-300">{row.predatorSpeciesId}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-400">{row.tileId}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-500">{row.lastKillAtTick}</td>
                   </tr>
                 ))}
               </tbody>
@@ -865,5 +915,21 @@ function isAnimalMigrationWaveRow(value: unknown): value is AnimalMigrationWaveR
     (row.migrationType === 'pressure' || row.migrationType === 'seasonal') &&
     typeof row.startedAtTick === 'number' &&
     typeof row.count === 'number'
+  )
+}
+
+function readPredatorHunger(facts: Record<string, unknown>): PredatorHungerRow[] {
+  const raw = facts.predatorHunger
+  if (!Array.isArray(raw)) return []
+  return raw.filter(isPredatorHungerRow).sort((a, b) => a.tileId.localeCompare(b.tileId) || a.predatorSpeciesId.localeCompare(b.predatorSpeciesId))
+}
+
+function isPredatorHungerRow(value: unknown): value is PredatorHungerRow {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<PredatorHungerRow>
+  return (
+    typeof row.predatorSpeciesId === 'string' &&
+    typeof row.tileId === 'string' &&
+    typeof row.lastKillAtTick === 'number'
   )
 }

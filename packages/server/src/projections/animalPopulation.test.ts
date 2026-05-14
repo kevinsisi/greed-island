@@ -109,6 +109,44 @@ describe('AnimalPopulationProjection', () => {
     b.rebuildFromEvents(events)
     expect(a.canonicalHash()).toBe(b.canonicalHash())
   })
+
+  it('removes predator animal id on ANIMAL_STARVED', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('wolf-a', 'fog_wolf', 't_forest', 'forest'), 10),
+      spawnedEvent(2, animal('wolf-b', 'fog_wolf', 't_forest', 'forest'), 10),
+      starvedEvent(3, 'wolf-a', 'fog_wolf', 't_forest', 50),
+    ])
+
+    const row = projection.getBySpeciesAndTile('fog_wolf', 't_forest')
+    expect(row?.count).toBe(1)
+    expect(row?.animalIds).toEqual(['wolf-b'])
+    expect(row?.lastKilledAtTick).toBe(50)
+  })
+
+  it('ignores ANIMAL_STARVED for predator not on tile (no-op)', () => {
+    const projection = new AnimalPopulationProjection()
+    projection.rebuildFromEvents([
+      spawnedEvent(1, animal('wolf-b', 'fog_wolf', 't_forest', 'forest'), 10),
+      starvedEvent(2, 'wolf-a', 'fog_wolf', 't_forest', 50),
+    ])
+
+    const row = projection.getBySpeciesAndTile('fog_wolf', 't_forest')
+    expect(row?.count).toBe(1)
+    expect(row?.animalIds).toEqual(['wolf-b'])
+  })
+
+  it('canonical hash after ANIMAL_STARVED is replay-consistent', () => {
+    const events = [
+      spawnedEvent(1, animal('wolf-a', 'fog_wolf', 't_forest', 'forest'), 10),
+      starvedEvent(2, 'wolf-a', 'fog_wolf', 't_forest', 50),
+    ]
+    const a = new AnimalPopulationProjection()
+    const b = new AnimalPopulationProjection()
+    a.rebuildFromEvents(events)
+    b.rebuildFromEvents(events)
+    expect(a.canonicalHash()).toBe(b.canonicalHash())
+  })
 })
 
 function spawnedEvent(sequence: number, animalValue: Animal, spawnedAtTick: number): Event {
@@ -188,6 +226,32 @@ function reproducedEvent(sequence: number, animalValue: Animal, parentAnimalIds:
     deterministicKey: `key-reproduction-${sequence}`,
     version: 1,
     tick: reproducedAtTick,
+  }
+}
+
+function starvedEvent(sequence: number, predatorAnimalId: string, predatorSpeciesId: string, tileId: string, starvedAtTick: number): Event {
+  return {
+    sequence,
+    eventId: `event-starved-${sequence}`,
+    eventType: 'ANIMAL_STARVED',
+    occurredAt: 0,
+    actorId: `ecosystem.predator.${predatorSpeciesId}`,
+    payload: {
+      actorType: 'system',
+      data: {
+        starvationId: `starvation-${sequence}`,
+        predatorAnimalId,
+        predatorSpeciesId,
+        tileId,
+        starvationStage: 'scarce_prey',
+        starvedAtTick,
+        narration: null,
+      },
+      narration: null,
+    },
+    deterministicKey: `key-starved-${sequence}`,
+    version: 1,
+    tick: starvedAtTick,
   }
 }
 

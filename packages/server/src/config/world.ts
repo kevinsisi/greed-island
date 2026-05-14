@@ -99,6 +99,10 @@ export const ECOSYSTEM_REPRODUCTION_CADENCE_TICKS = TICKS_PER_MINUTE
 // population for a species exceeds this fraction of carrying capacity.
 export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 
+// Phase E1.4 — predator mortality. A predator that has gone this many
+// consecutive cadence ticks without a successful kill on its tile starves.
+export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+
 // Phase E0.3 — simple hunting. Hunter-role NPCs only hunt when their food
 // pressure is genuinely elevated, so hunting is not a generic patrol flavor.
 export const ECOSYSTEM_HUNT_FOOD_NEED_THRESHOLD = 60

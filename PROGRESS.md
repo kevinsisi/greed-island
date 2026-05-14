@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase E1.4 predator mortality
+
+### Implemented
+
+- OpenSpec change `predator-mortality` for `docs/WORLD_CAPABILITIES.md` Phase E1.4.
+- Added `PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS` (60 ticks) constant.
+- New `PredatorHungerProjection`: tracks `lastKillAtTick` per `(predatorSpeciesId, tileId)` from `ANIMAL_KILLED` events emitted by `ecosystem.predator.*` actors; ignores NPC-hunter kills; `canonicalHash`/`rebuildFromEvents` compliant.
+- `AnimalPopulationProjection` extended to handle `ANIMAL_STARVED`: removes `predatorAnimalId` from `(predatorSpeciesId, tileId)` row; no-op for unknown id; `lastKilledAtTick` updated.
+- Runtime: starvation gate — `ANIMAL_STARVED` only fires when `hungerDuration >= PREDATOR_STARVATION_THRESHOLD_TICKS`; previously emitted unconditionally on every cadence tick with no prey.
+- Both fan-out loops in runtime now project into `predatorHungerProjection`.
+- `WorldSnapshot.facts.predatorHunger` exposes all rows from projection.
+- `/admin/world` renders predator hunger table (speciesId, tileId, lastKillAtTick), labeled as Phase E1.4.
+
+### Honest scope
+
+- One starvation per cadence tick; the deterministic planner selects ONE wolf. Spawning may add new wolves on the same tick as starvation, so total count can stay ≥ 1.
+- No pack-level starvation, no gradual hunger states beyond the kill timestamp, no visual UI beyond admin table.
+- `ANIMAL_KILLED` and `ANIMAL_STARVED` already existed in command catalog; no new command types introduced.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- ecosystem/predation projections/predatorHunger projections/animalPopulation sim/runtimePredation kernel/livingWorld` — **70 tests passed**.
+- `npm run build:server` passed (clean TypeScript).
+- `npm run build:web` passed (known Vite chunk-size warning only).
+- Full suite: `npm test` — **365 server + 34 web tests passed**.
+- `npx openspec validate predator-mortality --strict` passed.
+- `npx openspec validate --all --strict` passed: 31 passed, 0 failed.
+
+### CI / Deploy
+
+- Pending: commit and push, confirm CI and Deploy Dev.
+
+### Outstanding
+
+- Next E1 slice: pack-level reproduction gating, multi-predator competition, or ecosystem health metrics. Or begin Layer 3 Phase 2 civilization growth.
+
 ## 2026-05-14 — Phase E1.3 ecosystem migration engine
 
 ### Implemented

@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-14
 
+**主題：Phase E1.4 — Predator mortality (starvation threshold)**
+
+OpenSpec: `predator-mortality/`。
+
+- ✅ 新增 `PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS`（60 ticks）常數。
+- ✅ 新增 `PredatorHungerProjection`：依 `ANIMAL_KILLED`（`ecosystem.predator.*` actor）追蹤每 `(predatorSpeciesId, tileId)` 的 `lastKillAtTick`；NPC hunter kills 不計入；`canonicalHash` / `rebuildFromEvents` 合規。
+- ✅ `AnimalPopulationProjection` 擴充 `ANIMAL_STARVED` 處理：移除 `predatorAnimalId`，no-op if not present。
+- ✅ Runtime 以 `hungerDuration >= PREDATOR_STARVATION_THRESHOLD_TICKS` 為 gate，才 emit `ANIMAL_STARVED`；兩條 fan-out loop 均加入 `predatorHungerProjection.project(ev)`；boot hydration 加入。
+- ✅ `WorldSnapshot.facts.predatorHunger` 可讀；`/admin/world` 顯示 predator hunger table（Phase E1.4 predator mortality 標示）。
+- ✅ Focused server tests 70 passed；full `npm test` 365 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（31 passed）全綠。
+- ⚠️ Honest scope：每 cadence tick 最多 kill 一隻 wolf（deterministic hash selection）；同 tick 可能 spawn 新 wolf 故 total count 不一定降為 0；尚無 pack-level starvation、gradual hunger state。
+
+## v0.16.0 🚧 in progress — 2026-05-14
+
 **主題：Phase E1.3 — Ecosystem migration engine**
 
 OpenSpec: `ecosystem-migration/`。

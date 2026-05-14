@@ -19,6 +19,7 @@ const ANIMAL_SPAWNED = 'ANIMAL_SPAWNED'
 const ANIMAL_KILLED = 'ANIMAL_KILLED'
 const ANIMAL_REPRODUCED = 'ANIMAL_REPRODUCED'
 const ANIMAL_MIGRATED = 'ANIMAL_MIGRATED'
+const ANIMAL_STARVED = 'ANIMAL_STARVED'
 
 export class AnimalPopulationProjection {
   private rows = new Map<string, AnimalPopulationRow>()
@@ -57,6 +58,23 @@ export class AnimalPopulationProjection {
         count: animalIds.length,
         animalIds,
         lastKilledAtTick: payload.killedAtTick,
+        lastSequence: event.sequence,
+      })
+      return
+    }
+
+    if (event.eventType === ANIMAL_STARVED) {
+      const payload = readStarvedPayload(event)
+      if (!payload) return
+      const key = populationKey(payload.predatorSpeciesId, payload.tileId)
+      const existing = this.rows.get(key)
+      if (!existing || !existing.animalIds.includes(payload.predatorAnimalId)) return
+      const animalIds = existing.animalIds.filter((id) => id !== payload.predatorAnimalId).sort()
+      this.rows.set(key, {
+        ...existing,
+        count: animalIds.length,
+        animalIds,
+        lastKilledAtTick: payload.starvedAtTick,
         lastSequence: event.sequence,
       })
       return
@@ -166,6 +184,17 @@ function readKilledPayload(event: Event): { animalId: string; speciesId: string;
   if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
   if (typeof p.killedAtTick !== 'number' || !Number.isInteger(p.killedAtTick) || p.killedAtTick < 0) return null
   return { animalId: p.animalId, speciesId: p.speciesId, tileId: p.tileId, killedAtTick: p.killedAtTick }
+}
+
+function readStarvedPayload(event: Event): { predatorAnimalId: string; predatorSpeciesId: string; tileId: string; starvedAtTick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.predatorAnimalId !== 'string' || p.predatorAnimalId.length === 0) return null
+  if (typeof p.predatorSpeciesId !== 'string' || p.predatorSpeciesId.length === 0) return null
+  if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
+  if (typeof p.starvedAtTick !== 'number' || !Number.isInteger(p.starvedAtTick) || p.starvedAtTick < 0) return null
+  return { predatorAnimalId: p.predatorAnimalId, predatorSpeciesId: p.predatorSpeciesId, tileId: p.tileId, starvedAtTick: p.starvedAtTick }
 }
 
 function readMigratedPayload(event: Event): { animalId: string; speciesId: string; fromTileId: string; toTileId: string; migratedAtTick: number } | null {

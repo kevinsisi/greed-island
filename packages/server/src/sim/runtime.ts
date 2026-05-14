@@ -51,7 +51,8 @@ import {
   MAX_COMMANDS_PER_TICK_SOFT_CAP,
   MAX_COMMANDS_PER_TICK_HARD_CAP,
   COMMAND_CAP_REJECTION_CODE,
-  NPC_PARTITION_PERIOD
+  NPC_PARTITION_PERIOD,
+  PREDATOR_STARVATION_THRESHOLD_TICKS
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -124,6 +125,7 @@ import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, 
 import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
+import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
@@ -306,6 +308,7 @@ export class SimulationRuntime {
   private readonly npcStateProjection = new NpcStateProjection()
   private readonly animalPopulationProjection = new AnimalPopulationProjection()
   private readonly animalMigrationProjection = new AnimalMigrationProjection()
+  private readonly predatorHungerProjection = new PredatorHungerProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
@@ -460,6 +463,7 @@ export class SimulationRuntime {
         marketPrices: this.marketPricesProjection.list(),
         productionChains: this.productionChainsProjection.snapshot(),
         migrationRoutes: this.animalMigrationProjection.list(),
+        predatorHunger: this.predatorHungerProjection.list(),
       },
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
@@ -867,6 +871,7 @@ export class SimulationRuntime {
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
+      this.predatorHungerProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
@@ -1581,26 +1586,30 @@ export class SimulationRuntime {
         )
       )
     } else if (predation?.kind === 'starvation') {
-      const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
-      commands.push(
-        makeLivingWorldCommand(
-          'ANIMAL_STARVED',
-          predation.predatorActorId,
-          'system',
-          nextTick,
-          submittedAt,
-          {
-            starvationId: predation.starvationId,
-            predatorAnimalId: predation.predatorAnimalId,
-            predatorSpeciesId: predation.predatorSpeciesId,
-            tileId: predation.tileId,
-            starvationStage: predation.starvationStage,
-            starvedAtTick: nextTick,
-            motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}找不到 same-tile prey；本 slice 只記錄 starvation pressure，不直接殺死 predator。`),
-            narration: `${predation.predatorSpeciesId}在${tileName}找不到足夠獵物。`
-          }
+      const lastKill = this.predatorHungerProjection.getLastKillAtTick(predation.predatorSpeciesId, predation.tileId)
+      const hungerDuration = lastKill === null ? nextTick : nextTick - lastKill
+      if (hungerDuration >= PREDATOR_STARVATION_THRESHOLD_TICKS) {
+        const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
+        commands.push(
+          makeLivingWorldCommand(
+            'ANIMAL_STARVED',
+            predation.predatorActorId,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              starvationId: predation.starvationId,
+              predatorAnimalId: predation.predatorAnimalId,
+              predatorSpeciesId: predation.predatorSpeciesId,
+              tileId: predation.tileId,
+              starvationStage: predation.starvationStage,
+              starvedAtTick: nextTick,
+              motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}超過 ${PREDATOR_STARVATION_THRESHOLD_TICKS} ticks 無獵物，predator 死亡。`),
+              narration: `${predation.predatorSpeciesId}在${tileName}因長期缺乏獵物而死亡。`,
+            }
+          )
         )
-      )
+      }
     }
 
     // ---- Phase E1.2: deterministic reproduction + carrying capacity ----
@@ -2277,6 +2286,7 @@ export class SimulationRuntime {
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
+        this.predatorHungerProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
@@ -2808,6 +2818,7 @@ export class SimulationRuntime {
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.animalMigrationProjection.rebuildFromEvents(allEvents)
+      this.predatorHungerProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
