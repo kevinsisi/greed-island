@@ -56,6 +56,7 @@ export type BuildingDef = Readonly<{
   hiring: readonly BuildingHiringSlot[]
   enterable: boolean
   restorative: boolean
+  tags?: readonly string[]
 }>
 
 export type BuildingOccupant = Readonly<{

@@ -7,6 +7,18 @@
 
 ## v0.18.0 🚧 in progress — 2026-05-14
 
+**主題：Phase 3 §37.3 — NPC Culture & Emergent Festivals**
+
+OpenSpec: `npc-culture-festivals/`。
+
+- ✅ 常數：`CULTURAL_FESTIVAL_THRESHOLD = 3`、`CULTURAL_NORM_NPC_THRESHOLD = 3`、`RITUAL_FACTION_LEANS = ['monastic', 'temple']` 加入 `config/world.ts`。
+- ✅ 三個新 command/event 類型：`CULTURAL_FESTIVAL_FORMED`、`CULTURAL_RITUAL_PERFORMED`、`CULTURAL_NORM_ESTABLISHED` + payload types + validators 在 `livingWorldCommands.ts`。
+- ✅ `CulturalElementProjection`：`(tileId, elementId) → CulturalElementRow`；內部 `festivalCounters` map（`RARE_WINDOW_OPEN` 計數）；三種 cultural event 全部 idempotent；`getByTile`、`getFestivalCounter`、`hasFestival`、`hasNorm`、`rebuildFromEvents`、`canonicalHash` accessors。
+- ✅ `BuildingDef.tags?: readonly string[]`；catalog 中 `b_temple_shrine`、`b_dimai_archway`、`b_mountain_lodge` 標記 `['ritual_site']`。
+- ✅ `culturalSeeders.ts`：`planFestivalSeed`（threshold gate + 唯一 festival guard）、`planRitualSeed`（ritual_site tag + factionLean + rareWindowOpen gate）、`planNormSeed`（tile skill level density check）。
+- ✅ `SimulationRuntime`：`culturalElementProjection` 掛載；兩個 fan-out + `rebuildProjections` 串接；公開 `getCulturalElements(tileId)`；`RARE_WINDOW_OPEN`/`BUILDING_ENTER`/`NPC_OBSERVED_SKILL` accepted 後各自觸發對應 seeder。
+- ✅ 445 server + 34 web = 479 tests passed；build:server clean；openspec validate --all --strict 35 passed。
+
 **主題：Phase 3 §37.2 — NPC Skill Learning & Mentorship**
 
 OpenSpec: `npc-skill-mentorship/`。

@@ -131,6 +131,8 @@ import { seedRumorsFromEvent } from './rumorSeeder.js'
 import { planSkillObservations } from './skillObservationSeeder.js'
 import { planMentorshipTick } from './mentorshipEngine.js'
 import { SkillXpProjection } from '../projections/skillXp.js'
+import { CulturalElementProjection } from '../projections/culturalElement.js'
+import { planFestivalSeed, planRitualSeed, planNormSeed } from './culturalSeeders.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
@@ -316,6 +318,7 @@ export class SimulationRuntime {
   private readonly predatorHungerProjection = new PredatorHungerProjection()
   private readonly rumorProjection = new RumorProjection()
   private readonly skillXpProjection = new SkillXpProjection()
+  private readonly culturalElementProjection = new CulturalElementProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
@@ -679,6 +682,11 @@ export class SimulationRuntime {
       xp: r.xp,
       level: r.level,
     }))
+  }
+
+  /** Phase 3 §37.3 — cultural element rows for a given tile. */
+  getCulturalElements(tileId: string) {
+    return this.culturalElementProjection.getByTile(tileId)
   }
 
   /** Phase 3 §37.1 — animal population rows for a specific tile (for dialog grounding). */
@@ -2094,6 +2102,8 @@ export class SimulationRuntime {
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
     const postAcceptedCommands: LivingWorldCommand[] = []
+    // Phase 3 §37.3 — collect (tileId, skillId) pairs when NPC_OBSERVED_SKILL is accepted to run norm seeder.
+    const normCheckPairs = new Set<string>()
     // Phase 3 §37.2 — mentorship XP increments run every tick before the main command loop.
     for (const cmd of planMentorshipTick(this.skillXpProjection, nextTick)) {
       postAcceptedCommands.push(cmd)
@@ -2335,6 +2345,34 @@ export class SimulationRuntime {
             for (const obs of observations) postAcceptedCommands.push(obs)
           }
         }
+        if (cmd.commandType === 'RARE_WINDOW_OPEN') {
+          // Phase 3 §37.3 — festival seeder: emit CULTURAL_FESTIVAL_FORMED when threshold met.
+          const rwoPayload = cmd.payload as { windowId: string }
+          const festivalCmd = planFestivalSeed(
+            this.culturalElementProjection,
+            { windowId: rwoPayload.windowId },
+            nextTick,
+          )
+          if (festivalCmd) postAcceptedCommands.push(festivalCmd)
+        }
+        if (cmd.commandType === 'BUILDING_ENTER') {
+          // Phase 3 §37.3 — ritual seeder: emit CULTURAL_RITUAL_PERFORMED for faction NPCs at ritual sites.
+          const bePayload = cmd.payload as { npcId: string; buildingId: string; tileId: string }
+          const ritualCmd = planRitualSeed(
+            bePayload,
+            this.findProfile(bePayload.npcId),
+            this.findRuntimeBuildingById(bePayload.buildingId),
+            this.rareWindowOpen,
+            nextTick,
+          )
+          if (ritualCmd) postAcceptedCommands.push(ritualCmd)
+        }
+        if (cmd.commandType === 'NPC_OBSERVED_SKILL') {
+          // Phase 3 §37.3 — norm seeder: track (tileId, skillId) pairs for post-loop norm check.
+          const nsoPayload = cmd.payload as { npcId: string; skillId: string }
+          const npcLoc = this.getNpcs().find((n) => n.id === nsoPayload.npcId)?.location
+          if (npcLoc) normCheckPairs.add(`${npcLoc}::${nsoPayload.skillId}`)
+        }
       } else {
         console.warn(
           `[sim] rule engine rejected ${result.rejection.commandType} ` +
@@ -2352,11 +2390,41 @@ export class SimulationRuntime {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
         for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        if (cmd.commandType === 'NPC_OBSERVED_SKILL') {
+          // Phase 3 §37.3 — also track from seeder-produced skill observations.
+          const nsoPayload = cmd.payload as { npcId: string; skillId: string }
+          const npcLoc = this.getNpcs().find((n) => n.id === nsoPayload.npcId)?.location
+          if (npcLoc) normCheckPairs.add(`${npcLoc}::${nsoPayload.skillId}`)
+        }
       } else {
         console.warn(
           `[sim] rule engine rejected ${result.rejection.commandType} ` +
             `from ${result.rejection.actorId}: ${result.rejection.reason}`
         )
+      }
+    }
+    // Phase 3 §37.3 — norm seeder: for each unique (tileId, skillId) pair observed this tick,
+    // check if enough skilled NPCs exist to establish a cultural norm.
+    if (normCheckPairs.size > 0) {
+      const allNpcLocations = this.getNpcs().map((n) => ({ npcId: n.id, tileId: n.location }))
+      for (const pair of normCheckPairs) {
+        const sepIdx = pair.indexOf('::')
+        const pairTileId = pair.slice(0, sepIdx)
+        const pairSkillId = pair.slice(sepIdx + 2)
+        const normCmd = planNormSeed(
+          this.culturalElementProjection,
+          this.skillXpProjection,
+          pairTileId,
+          pairSkillId,
+          allNpcLocations,
+          nextTick,
+        )
+        if (normCmd) {
+          const result = this.livingWorldRuleEngine.evaluate(normCmd)
+          if (result.accepted) {
+            for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+          }
+        }
       }
     }
 
@@ -2378,6 +2446,7 @@ export class SimulationRuntime {
         this.predatorHungerProjection.project(ev)
         this.rumorProjection.project(ev)
         this.skillXpProjection.project(ev)
+        this.culturalElementProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
@@ -2911,6 +2980,7 @@ export class SimulationRuntime {
       this.predatorHungerProjection.rebuildFromEvents(allEvents)
       this.rumorProjection.rebuildFromEvents(allEvents)
       this.skillXpProjection.rebuildFromEvents(allEvents)
+      this.culturalElementProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)

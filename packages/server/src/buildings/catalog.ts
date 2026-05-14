@@ -192,7 +192,8 @@ const ALL_BUILDINGS: BuildingDef[] = [
       { shift: 'morning', capacity: 2, wage: 12, taskZh: '清掃道場、打掃禪院' }
     ],
     enterable: true,
-    restorative: true
+    restorative: true,
+    tags: ['ritual_site'],
   },
   // ── t_temple 霓港區
   {
@@ -207,7 +208,8 @@ const ALL_BUILDINGS: BuildingDef[] = [
     ownerNpcId: null,
     hiring: [],
     enterable: true,
-    restorative: false
+    restorative: false,
+    tags: ['ritual_site'],
   },
   {
     id: 'b_temple_apartment',
@@ -253,7 +255,8 @@ const ALL_BUILDINGS: BuildingDef[] = [
     ownerNpcId: null,
     hiring: [],
     enterable: true,
-    restorative: false
+    restorative: false,
+    tags: ['ritual_site'],
   },
   {
     id: 'b_dimai_archive',

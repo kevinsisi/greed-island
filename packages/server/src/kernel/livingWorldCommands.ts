@@ -93,6 +93,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_OBSERVED_SKILL',
   'NPC_MENTORSHIP_STARTED',
   'NPC_MENTORSHIP_COMPLETED',
+  // Phase 3 §37.3 — NPC culture & emergent festivals
+  'CULTURAL_FESTIVAL_FORMED',
+  'CULTURAL_RITUAL_PERFORMED',
+  'CULTURAL_NORM_ESTABLISHED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -690,6 +694,32 @@ export type NpcMentorshipCompletedCmd = Readonly<{
   tick: number
 }>
 
+// Phase 3 §37.3 — NPC culture & emergent festivals
+export type CulturalFestivalFormedCmd = Readonly<{
+  windowId: string
+  tileId: string
+  occurrenceCount: number
+  formedAtTick: number
+  narration: string
+}>
+
+export type CulturalRitualPerformedCmd = Readonly<{
+  npcId: string
+  buildingId: string
+  tileId: string
+  factionLean: string
+  performedAtTick: number
+  narration: string
+}>
+
+export type CulturalNormEstablishedCmd = Readonly<{
+  tileId: string
+  skillId: string
+  npcCount: number
+  formedAtTick: number
+  narration: string
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -747,6 +777,9 @@ export type LivingWorldCommandPayload =
   | NpcObservedSkillCmd
   | NpcMentorshipStartedCmd
   | NpcMentorshipCompletedCmd
+  | CulturalFestivalFormedCmd
+  | CulturalRitualPerformedCmd
+  | CulturalNormEstablishedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1405,6 +1438,34 @@ const VALIDATORS: Readonly<
     if (!(SKILL_IDS as readonly string[]).includes(p.skillId as string)) return 'skillId must be one of: ' + SKILL_IDS.join(', ')
     if (typeof p.finalLevel !== 'number' || !Number.isInteger(p.finalLevel) || p.finalLevel < 1) return 'finalLevel must be positive integer'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  CULTURAL_FESTIVAL_FORMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.windowId !== 'string' || p.windowId.length === 0) return 'windowId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.occurrenceCount !== 'number' || !Number.isInteger(p.occurrenceCount) || p.occurrenceCount < 1) return 'occurrenceCount must be positive integer'
+    if (!isNonNegativeInteger(p.formedAtTick)) return 'formedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  CULTURAL_RITUAL_PERFORMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.buildingId !== 'string' || p.buildingId.length === 0) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.factionLean !== 'string' || p.factionLean.length === 0) return 'factionLean required'
+    if (!isNonNegativeInteger(p.performedAtTick)) return 'performedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  CULTURAL_NORM_ESTABLISHED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!(SKILL_IDS as readonly string[]).includes(p.skillId as string)) return 'skillId must be one of: ' + SKILL_IDS.join(', ')
+    if (typeof p.npcCount !== 'number' || !Number.isInteger(p.npcCount) || p.npcCount < 1) return 'npcCount must be positive integer'
+    if (!isNonNegativeInteger(p.formedAtTick)) return 'formedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   }
 }

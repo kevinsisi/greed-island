@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase 3 §37.3: NPC Culture & Emergent Festivals
+
+### Implemented
+
+- `CULTURAL_FESTIVAL_THRESHOLD = 3`, `CULTURAL_NORM_NPC_THRESHOLD = 3`, `RITUAL_FACTION_LEANS` added to `config/world.ts`.
+- Three new command/event types: `CULTURAL_FESTIVAL_FORMED`, `CULTURAL_RITUAL_PERFORMED`, `CULTURAL_NORM_ESTABLISHED` with payload types and validators in `livingWorldCommands.ts`.
+- `CulturalElementProjection` (`projections/culturalElement.ts`): maps `(tileId, elementId) → CulturalElementRow`; internal `festivalCounters` map incremented on `RARE_WINDOW_OPEN`; `getByTile`, `getFestivalCounter`, `hasFestival`, `hasNorm`, `rebuildFromEvents`, `canonicalHash` accessors; all three cultural event types handled idempotently.
+- `BuildingDef.tags?: readonly string[]` added to `buildings/types.ts`; `b_temple_shrine`, `b_dimai_archway`, `b_mountain_lodge` all tagged `['ritual_site']` in `catalog.ts`.
+- `culturalSeeders.ts`: `planFestivalSeed` (RARE_WINDOW_OPEN counter threshold check, tide_festival→t_temple map), `planRitualSeed` (ritual_site tag + RITUAL_FACTION_LEANS + rareWindowOpen gate), `planNormSeed` (tile skill level density check).
+- `SimulationRuntime` integration: `culturalElementProjection` instantiated, `rebuildFromEvents` wired, two fan-out points; `getCulturalElements(tileId)` public accessor; festival seeder after `RARE_WINDOW_OPEN` accepted; ritual seeder after `BUILDING_ENTER` accepted; norm pair collection + seeder after both command loops.
+
+### Honest scope
+
+- Festival fires once per `windowId`; no annual recurrence in this slice.
+- Ritual seeder fires per NPC per window opening (repeatable living act); no chronicle deduplication.
+- Norm check uses pre-commit skillXp state; norms crystallize one tick after the threshold is crossed.
+- Only `tide_festival` window maps to a festival tile (`t_temple`); other windowIds ignored.
+
+### Verification
+
+- `npm run build:server` — clean TypeScript.
+- `npm test` — **445 server + 34 web = 479 tests passed**.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- None. Festivals, rituals, and norms will emerge once `RARE_WINDOW_OPEN` recurs 3 times, faction NPCs enter ritual sites during windows, or skill-level density thresholds are met on any tile.
+
 ## 2026-05-14 — Phase 3 §37.2: NPC Skill Learning & Mentorship
 
 ### Implemented

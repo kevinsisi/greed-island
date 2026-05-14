@@ -103,6 +103,12 @@ export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 // consecutive cadence ticks without a successful kill on its tile starves.
 export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 
+// Phase 3 §37.3 — NPC culture & emergent festivals.
+export const CULTURAL_FESTIVAL_THRESHOLD = 3
+export const CULTURAL_NORM_NPC_THRESHOLD = 3
+export const RITUAL_FACTION_LEANS = ['monastic', 'temple'] as const
+export type RitualFactionLean = (typeof RITUAL_FACTION_LEANS)[number]
+
 // Phase 3 §37.2 — NPC skill learning & mentorship.
 export const SKILL_IDS = ['hunting', 'fishing', 'construction'] as const
 export type SkillId = (typeof SKILL_IDS)[number]
