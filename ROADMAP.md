@@ -7,6 +7,20 @@
 
 ## v0.16.0 🚧 in progress — 2026-05-14
 
+**主題：Phase 3 §37.1 — NPC Dialog Grounding**
+
+OpenSpec: `npc-dialog-grounding/`。
+
+- ✅ `SimulationRuntime` 新增 `getAnimalPopulationOnTile(tileId)` 與 `getFisheryDensityOnTile(tileId)` tile-scoped accessors（委派既有 projection，不新增 state）。
+- ✅ `AiDialogContext` 新增四個 optional fields：`knownPersonNames`、`ecologyContext`、`fisheryContext`、`recentLocalEvents`。
+- ✅ 四個新 builder functions：`buildKnownPersonBlock`、`buildAntiHallucinationBlock`、`buildEcologyBlock`、`buildRecentEventsBlock`；全部 export 並串進 `buildSystemPrompt()`。
+- ✅ `npc.ts` handler 在 AI call 前組裝 grounding context：NPC interaction memory → known-person list（cap 10）；tile ecology；tile-filter recent events（cap 5）。
+- ✅ 反幻覺 constraint block 使用明確中文指令，禁止 model 提及 list 外人名/物種。
+- ✅ Focused tests 29 passed；full `npm test` 399 server + 34 web（433 total）；build:server / build:web；openspec validate --all --strict（33 passed）全綠。
+- ⚠️ Honest scope：known-person graph 只用 interaction memory，無跨 NPC 推論；生態只看當前 tile；constraint 為 prompt-level，無 post-processing validation。
+
+## v0.16.0 🚧 in progress — 2026-05-14
+
 **主題：Phase 3 Slice 1 — NPC Rumor Propagation**
 
 OpenSpec: `npc-rumor-propagation/`。

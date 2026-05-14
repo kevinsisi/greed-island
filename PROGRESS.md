@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase 3 §37.1: NPC Dialog Grounding
+
+### Implemented
+
+- OpenSpec change `npc-dialog-grounding` for `docs/WORLD_CAPABILITIES.md` §37.1.
+- `SimulationRuntime` gained `getAnimalPopulationOnTile(tileId)` and `getFisheryDensityOnTile(tileId)` — tile-scoped accessors delegating to existing projections.
+- `AiDialogContext` extended with 4 optional fields: `knownPersonNames`, `ecologyContext`, `fisheryContext`, `recentLocalEvents`.
+- Four new exported builder functions in `aiDialog.ts`: `buildKnownPersonBlock`, `buildAntiHallucinationBlock`, `buildEcologyBlock`, `buildRecentEventsBlock`.
+- `buildSystemPrompt()` wires all four blocks: known-person + anti-hallucination before history; ecology + recent-events after rumors.
+- `npc.ts` handler assembles grounded context: interaction memories → known-person names (cap 10); tile ecology; tile-filtered recent events (cap 5).
+- Anti-hallucination constraint block uses hard directive language in Chinese: forbids naming people/species not in supplied lists.
+
+### Honest scope
+
+- Known-person graph uses `interaction`-type NPC memory rows; no cross-NPC relationship inference.
+- Ecological awareness is current-tile only; no adjacent-tile or region-wide data.
+- Recent events filtered by `payload.data.tileId`; events without tileId are silently skipped.
+- No post-processing validation — constraint is prompt-level only.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- npcs/aiDialog` — **29 passed**.
+- `npm run build:server` — clean TypeScript.
+- `npm run build:web` — passed (known Vite chunk-size warning only).
+- Full suite: `npm test` — **399 server + 34 web tests passed** (433 total).
+- `npx openspec validate npc-dialog-grounding --strict` — passed.
+- `npx openspec validate --all --strict` — **33 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending push.
+
+### Outstanding
+
+- CI green and live verification pending commit + push.
+
 ## 2026-05-14 — Phase 3 Slice 1: NPC Rumor Propagation
 
 ### Implemented

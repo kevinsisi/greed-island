@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, type AiDialogContext } from '../npcs/aiDialog.js'
 import { generateWithKeyPool, GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import {
@@ -162,7 +162,47 @@ export function createNpcRouter(input: {
         const rumorCtx = rawRumors.length > 0
           ? rawRumors.map((r) => ({ topic: r.topic as string, subjectId: r.subjectId, tileId: r.tileId, accuracy: r.accuracy }))
           : undefined
-        const ai = await generateAiReply(input.settings, {
+
+        // Phase 3 §37.1 — grounded world context
+        const npcState = input.runtime.getNpcs().find((n) => n.id === npcId)
+        const npcTile = npcState?.location ?? profile.defaultLocation
+        const allProfiles = input.runtime.getNpcs()
+
+        // known-person graph from interaction memories (cap 10 unique)
+        const memoryStore = input.runtime.getNpcMemory()
+        const knownNpcIds = new Set<string>()
+        if (memoryStore) {
+          for (const mem of memoryStore.getRecent(npcId, 50)) {
+            if (mem.memoryType === 'interaction') {
+              const withNpc = (mem.content as Record<string, unknown>).withNpc
+              if (typeof withNpc === 'string' && withNpc !== npcId) knownNpcIds.add(withNpc)
+              if (knownNpcIds.size >= 10) break
+            }
+          }
+        }
+        const knownPersonNames = knownNpcIds.size > 0
+          ? [...knownNpcIds]
+              .map((id) => allProfiles.find((n) => n.id === id)?.name.zh)
+              .filter((n): n is string => typeof n === 'string')
+          : undefined
+
+        // ecology context
+        const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
+        const fisheryRow = input.runtime.getFisheryDensityOnTile(npcTile)
+
+        // recent local events (last 20 events, filter by tile, take 5)
+        const localEventLines = input.runtime
+          .getRecentEvents(20)
+          .filter((ev) => {
+            const d = (ev.payload as Record<string, unknown>)
+            const data = d.data as Record<string, unknown> | undefined
+            return data?.tileId === npcTile
+          })
+          .slice(0, 5)
+          .map((ev) => `[tick ${ev.tick}] ${ev.eventType}`)
+        const recentLocalEvents = localEventLines.length > 0 ? localEventLines : undefined
+
+        const dialogCtx: AiDialogContext = {
           profile,
           player,
           trust: previousTrust,
@@ -170,15 +210,19 @@ export function createNpcRouter(input: {
           history,
           playerMessage,
           worldTick: tick,
-          worldValidNpcNames: input.runtime.getNpcs().map((npc) => npc.name.zh),
+          worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
-        })
-        const knownNpcNames = input.runtime.getNpcs().map((npc) => npc.name.zh)
+          ...(knownPersonNames ? { knownPersonNames } : {}),
+          ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
+          ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
+          ...(recentLocalEvents ? { recentLocalEvents } : {}),
+        }
+        const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({
           playerMessage,
           replyZh: ai.zh,
           replyEn: ai.en,
-          knownNpcNames,
+          knownNpcNames: allProfiles.map((npc) => npc.name.zh),
         })
         replyZh = sanitized.zh
         replyEn = sanitized.en

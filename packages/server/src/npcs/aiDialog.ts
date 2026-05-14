@@ -50,6 +50,10 @@ export type AiDialogContext = Readonly<{
   worldTick: number
   worldValidNpcNames?: readonly string[]
   activeRumors?: readonly ActiveRumorContext[]
+  knownPersonNames?: readonly string[]
+  ecologyContext?: readonly { speciesId: string; count: number }[]
+  fisheryContext?: { density: string; collapsed: boolean } | null
+  recentLocalEvents?: readonly string[]
 }>
 
 export class AiDialogError extends Error {
@@ -152,10 +156,17 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     `- 如果玩家問「你是誰」，你必須直接回答你是「${profile.name.zh}」，角色是「${profile.role.zh}」。`,
     `- 世界資料中可驗證存在的 NPC 名稱只有：${worldValidNpcNames.length > 0 ? worldValidNpcNames : '（未提供）'}。這份清單只用來避免你虛構名字，不代表你本人認識清單上的每個人。玩家提到不在清單內的人名、外號或稱呼時，你只能說不確定並請玩家說明；不可宣稱世界裡有這個人、很多個同名者、或你知道此人的背景。`,
     '',
+    ...buildKnownPersonBlock(ctx.knownPersonNames),
+    ...buildAntiHallucinationBlock(
+      ctx.knownPersonNames ?? [],
+      (ctx.ecologyContext ?? []).map((r) => r.speciesId),
+    ),
     `### 最近的對話紀錄（你之前回覆過的內容，僅供參考，不要重複）`,
     historyBlock,
     '',
     ...buildRumorsBlock(ctx.activeRumors),
+    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext),
+    ...buildRecentEventsBlock(ctx.recentLocalEvents),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -374,6 +385,62 @@ export function buildRumorsBlock(rumors: readonly ActiveRumorContext[] | undefin
   return [
     `### 你最近聽說的事（可選擇性地在回應中自然帶出，不強迫）`,
     ...lines,
+    '',
+  ]
+}
+
+export function buildKnownPersonBlock(names: readonly string[] | undefined): string[] {
+  if (!names || names.length === 0) return []
+  return [
+    `### 你在世界中真正認識的人（只有以下人物是你親身打過交道的）`,
+    names.map((n) => `  · ${n}`).join('\n'),
+    '',
+  ]
+}
+
+export function buildAntiHallucinationBlock(knownNames: readonly string[], knownSpecies: readonly string[]): string[] {
+  const nameList = knownNames.length > 0 ? knownNames.join('、') : '（目前無）'
+  const speciesLines = knownSpecies.length > 0
+    ? [`  · 允許提及的生物種：${knownSpecies.join('、')}`]
+    : [`  · 你目前沒有可信的生物資訊，**禁止提及任何具體生物種名**`]
+  return [
+    `### ⚠️ 反幻覺鐵則（Phase 3 §37.1）`,
+    `你只能提及以下人物名稱，**禁止虛構任何不在此列表中的人名**：${nameList}`,
+    ...speciesLines,
+    `如果玩家提到不在列表中的人名或生物名，你只能說不確定或請玩家說明。`,
+    '',
+  ]
+}
+
+export function buildEcologyBlock(
+  ecology: readonly { speciesId: string; count: number }[] | undefined,
+  fishery: { density: string; collapsed: boolean } | null | undefined,
+): string[] {
+  const hasEcology = ecology && ecology.length > 0
+  const hasFishery = fishery != null
+  if (!hasEcology && !hasFishery) return []
+  const lines: string[] = []
+  if (hasEcology) {
+    for (const row of ecology) {
+      lines.push(`  · ${row.speciesId}：${row.count} 隻`)
+    }
+  }
+  if (hasFishery) {
+    const label = fishery.collapsed ? `魚場已崩潰` : `漁場豐度：${fishery.density}`
+    lines.push(`  · ${label}`)
+  }
+  return [
+    `### 你所在地區的生態現況（依據世界資料，可自然融入對話）`,
+    ...lines,
+    '',
+  ]
+}
+
+export function buildRecentEventsBlock(events: readonly string[] | undefined): string[] {
+  if (!events || events.length === 0) return []
+  return [
+    `### 你所在地區最近發生的事（世界事件紀錄，可作為對話背景）`,
+    events.map((e) => `  · ${e}`).join('\n'),
     '',
   ]
 }

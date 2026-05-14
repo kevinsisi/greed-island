@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildRumorsBlock, parseReply } from './aiDialog.js'
+import {
+  buildRumorsBlock,
+  buildKnownPersonBlock,
+  buildAntiHallucinationBlock,
+  buildEcologyBlock,
+  buildRecentEventsBlock,
+  parseReply,
+} from './aiDialog.js'
 
 describe('parseReply', () => {
   it('parses a clean JSON reply', () => {
@@ -126,5 +133,113 @@ describe('buildRumorsBlock', () => {
     expect(joined).toContain('s3')
     expect(joined).not.toContain('b1')
     expect(joined).not.toContain('b2')
+  })
+})
+
+describe('buildKnownPersonBlock', () => {
+  it('returns empty array when names is undefined', () => {
+    expect(buildKnownPersonBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array when names is empty', () => {
+    expect(buildKnownPersonBlock([])).toEqual([])
+  })
+
+  it('includes name content when names are present', () => {
+    const lines = buildKnownPersonBlock(['沈若雲', '老王'])
+    expect(lines.length).toBeGreaterThan(0)
+    const joined = lines.join('\n')
+    expect(joined).toContain('沈若雲')
+    expect(joined).toContain('老王')
+  })
+})
+
+describe('buildAntiHallucinationBlock', () => {
+  it('includes known person names in output', () => {
+    const lines = buildAntiHallucinationBlock(['沈若雲'], ['fog_wolf'])
+    const joined = lines.join('\n')
+    expect(joined).toContain('沈若雲')
+  })
+
+  it('includes species names when provided', () => {
+    const lines = buildAntiHallucinationBlock([], ['fog_wolf', 'forest_deer'])
+    const joined = lines.join('\n')
+    expect(joined).toContain('fog_wolf')
+    expect(joined).toContain('forest_deer')
+  })
+
+  it('omits species names when species list is empty', () => {
+    const lines = buildAntiHallucinationBlock(['沈若雲'], [])
+    const joined = lines.join('\n')
+    expect(joined).not.toContain('fog_wolf')
+    expect(joined).toContain('禁止提及任何具體生物種名')
+  })
+})
+
+describe('buildEcologyBlock', () => {
+  it('returns empty array when both ecology and fishery are undefined', () => {
+    expect(buildEcologyBlock(undefined, undefined)).toEqual([])
+  })
+
+  it('returns empty array when ecology is empty and fishery is null', () => {
+    expect(buildEcologyBlock([], null)).toEqual([])
+  })
+
+  it('includes animal count lines when ecology data is present', () => {
+    const lines = buildEcologyBlock([{ speciesId: 'fog_wolf', count: 3 }], null)
+    const joined = lines.join('\n')
+    expect(joined).toContain('fog_wolf')
+    expect(joined).toContain('3')
+  })
+
+  it('includes fishery density in output', () => {
+    const lines = buildEcologyBlock([], { density: 'scarce', collapsed: false })
+    const joined = lines.join('\n')
+    expect(joined).toContain('scarce')
+  })
+
+  it('shows collapsed label when fishery is collapsed', () => {
+    const lines = buildEcologyBlock([], { density: 'depleted', collapsed: true })
+    const joined = lines.join('\n')
+    expect(joined).toContain('崩潰')
+  })
+})
+
+describe('buildRecentEventsBlock', () => {
+  it('returns empty array when events is undefined', () => {
+    expect(buildRecentEventsBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array when events is empty', () => {
+    expect(buildRecentEventsBlock([])).toEqual([])
+  })
+
+  it('includes event lines when events are provided', () => {
+    const lines = buildRecentEventsBlock(['[tick 100] ANIMAL_STARVED', '[tick 101] NPC_INTERACT'])
+    const joined = lines.join('\n')
+    expect(joined).toContain('ANIMAL_STARVED')
+    expect(joined).toContain('NPC_INTERACT')
+  })
+})
+
+describe('grounded context — combined blocks', () => {
+  it('anti-hallucination block contains both names and species constraint', () => {
+    const block = buildAntiHallucinationBlock(['沈若雲', '老王'], ['fog_wolf']).join('\n')
+    expect(block).toContain('反幻覺')
+    expect(block).toContain('沈若雲')
+    expect(block).toContain('老王')
+    expect(block).toContain('fog_wolf')
+  })
+
+  it('ecology block correctly combines animal rows and fishery', () => {
+    const block = buildEcologyBlock(
+      [{ speciesId: 'fog_wolf', count: 3 }, { speciesId: 'forest_deer', count: 7 }],
+      { density: 'moderate', collapsed: false },
+    ).join('\n')
+    expect(block).toContain('fog_wolf')
+    expect(block).toContain('3')
+    expect(block).toContain('forest_deer')
+    expect(block).toContain('7')
+    expect(block).toContain('moderate')
   })
 })

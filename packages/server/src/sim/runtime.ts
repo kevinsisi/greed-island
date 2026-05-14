@@ -668,6 +668,26 @@ export class SimulationRuntime {
     return this.rumorProjection.getActiveRumors(npcId)
   }
 
+  /** Phase 3 §37.1 — animal population rows for a specific tile (for dialog grounding). */
+  getAnimalPopulationOnTile(tileId: string): Array<{ speciesId: string; count: number }> {
+    return this.animalPopulationProjection
+      .list()
+      .filter((r) => r.tileId === tileId && r.count > 0)
+      .map((r) => ({ speciesId: r.speciesId, count: r.count }))
+  }
+
+  /** Phase 3 §37.1 — fishery density for a specific tile, as a human-readable label. */
+  getFisheryDensityOnTile(tileId: string): { density: string; collapsed: boolean } | null {
+    const row = this.fisheryDensityProjection.getByTile(tileId)
+    if (!row) return null
+    let label: string
+    if (row.collapsed || row.density < 20) label = 'depleted'
+    else if (row.density < 40) label = 'scarce'
+    else if (row.density < 66) label = 'moderate'
+    else label = 'abundant'
+    return { density: label, collapsed: row.collapsed }
+  }
+
   /** Phase 2 §35.1 — current goods inventory projection (Layer 3). */
   getGoodsInventory(): readonly GoodsInventoryRow[] {
     return this.goodsInventoryProjection.list()
