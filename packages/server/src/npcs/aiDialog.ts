@@ -54,6 +54,7 @@ export type AiDialogContext = Readonly<{
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
   recentLocalEvents?: readonly string[]
+  skillLevels?: readonly { skillId: string; level: number }[]
 }>
 
 export class AiDialogError extends Error {
@@ -167,6 +168,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildRumorsBlock(ctx.activeRumors),
     ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
+    ...buildSkillBlock(ctx.skillLevels),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -441,6 +443,16 @@ export function buildRecentEventsBlock(events: readonly string[] | undefined): s
   return [
     `### 你所在地區最近發生的事（世界事件紀錄，可作為對話背景）`,
     events.map((e) => `  · ${e}`).join('\n'),
+    '',
+  ]
+}
+
+export function buildSkillBlock(skills: readonly { skillId: string; level: number }[] | undefined): string[] {
+  if (!skills || skills.length === 0) return []
+  const skillNames: Record<string, string> = { hunting: '狩獵', fishing: '捕魚', construction: '建造' }
+  return [
+    `### 你自身的技能等級（這是你真正掌握的能力，可自然融入對話中提及）`,
+    skills.map((s) => `  · ${skillNames[s.skillId] ?? s.skillId}：等級 ${s.level}`).join('\n'),
     '',
   ]
 }

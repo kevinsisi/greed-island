@@ -128,6 +128,9 @@ import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../proje
 import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
 import { RumorProjection, type RumorRow } from '../projections/rumor.js'
 import { seedRumorsFromEvent } from './rumorSeeder.js'
+import { planSkillObservations } from './skillObservationSeeder.js'
+import { planMentorshipTick } from './mentorshipEngine.js'
+import { SkillXpProjection } from '../projections/skillXp.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
@@ -312,6 +315,7 @@ export class SimulationRuntime {
   private readonly animalMigrationProjection = new AnimalMigrationProjection()
   private readonly predatorHungerProjection = new PredatorHungerProjection()
   private readonly rumorProjection = new RumorProjection()
+  private readonly skillXpProjection = new SkillXpProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
@@ -668,6 +672,15 @@ export class SimulationRuntime {
     return this.rumorProjection.getActiveRumors(npcId)
   }
 
+  /** Phase 3 §37.2 — skill XP rows for a given NPC (only rows with xp > 0). */
+  getNpcSkills(npcId: string): Array<{ skillId: string; xp: number; level: number }> {
+    return this.skillXpProjection.getByNpc(npcId).map((r) => ({
+      skillId: r.skillId,
+      xp: r.xp,
+      level: r.level,
+    }))
+  }
+
   /** Phase 3 §37.1 — animal population rows for a specific tile (for dialog grounding). */
   getAnimalPopulationOnTile(tileId: string): Array<{ speciesId: string; count: number }> {
     return this.animalPopulationProjection
@@ -902,6 +915,7 @@ export class SimulationRuntime {
       this.animalMigrationProjection.project(ev)
       this.predatorHungerProjection.project(ev)
       this.rumorProjection.project(ev)
+      this.skillXpProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
@@ -2080,6 +2094,10 @@ export class SimulationRuntime {
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
     const postAcceptedCommands: LivingWorldCommand[] = []
+    // Phase 3 §37.2 — mentorship XP increments run every tick before the main command loop.
+    for (const cmd of planMentorshipTick(this.skillXpProjection, nextTick)) {
+      postAcceptedCommands.push(cmd)
+    }
     let lifeExpansionChanged = false
     for (const cmd of acceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
@@ -2296,6 +2314,27 @@ export class SimulationRuntime {
             for (const s of seeds) postAcceptedCommands.push(s)
           }
         }
+        if (
+          cmd.commandType === 'ANIMAL_HUNT_RESOLVED' ||
+          cmd.commandType === 'FISHERY_HARVESTED' ||
+          cmd.commandType === 'BUILDING_CONSTRUCTED'
+        ) {
+          // Phase 3 §37.2 — skill observation: co-present NPCs gain XP from witnessing productive events.
+          const tileId = readEventTileId(cmd.payload)
+          const actorNpcId = readActorNpcId(cmd.payload)
+          if (tileId) {
+            const npcIdsOnTile = this.getNpcs()
+              .filter((n) => n.location === tileId)
+              .map((n) => n.id)
+            const observations = planSkillObservations(
+              { eventType: cmd.commandType, payload: cmd.payload, tick: nextTick },
+              actorNpcId,
+              npcIdsOnTile,
+              nextTick,
+            )
+            for (const obs of observations) postAcceptedCommands.push(obs)
+          }
+        }
       } else {
         console.warn(
           `[sim] rule engine rejected ${result.rejection.commandType} ` +
@@ -2338,6 +2377,7 @@ export class SimulationRuntime {
         this.animalMigrationProjection.project(ev)
         this.predatorHungerProjection.project(ev)
         this.rumorProjection.project(ev)
+        this.skillXpProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
@@ -2870,6 +2910,7 @@ export class SimulationRuntime {
       this.animalMigrationProjection.rebuildFromEvents(allEvents)
       this.predatorHungerProjection.rebuildFromEvents(allEvents)
       this.rumorProjection.rebuildFromEvents(allEvents)
+      this.skillXpProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
@@ -3338,6 +3379,12 @@ function readEventTileId(payload: unknown): string | null {
     return (data as Record<string, unknown>).tileId as string
   }
   return null
+}
+
+function readActorNpcId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  return typeof p.npcId === 'string' ? p.npcId : null
 }
 
 

@@ -5,7 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.16.0 🚧 in progress — 2026-05-14
+## v0.18.0 🚧 in progress — 2026-05-14
+
+**主題：Phase 3 §37.2 — NPC Skill Learning & Mentorship**
+
+OpenSpec: `npc-skill-mentorship/`。
+
+- ✅ 常數：`SKILL_IDS`、`SKILL_XP_PER_OBSERVE = 5`、`SKILL_XP_PER_MENTOR_TICK = 8`、`SKILL_XP_LEVEL_THRESHOLD = 100` 加入 `config/world.ts`。
+- ✅ 三個新 command/event 類型：`NPC_OBSERVED_SKILL`、`NPC_MENTORSHIP_STARTED`、`NPC_MENTORSHIP_COMPLETED` + validators 全部在 `livingWorldCommands.ts` 登記。
+- ✅ `SkillXpProjection`：`(npcId, skillId) → { xp, level, mentorId }` rows；`rebuildFromEvents` / `canonicalHash` 合規；`getByNpc`、`getAll`、`getAllActive` accessors。
+- ✅ `SimulationRuntime` 掛載 `skillXpProjection`：兩個 fan-out 點 + `rebuildProjections` 全部串接；公開 `getNpcSkills(npcId)` accessor（filter xp > 0）。
+- ✅ `skillObservationSeeder.ts`：`ANIMAL_HUNT_RESOLVED → hunting`、`FISHERY_HARVESTED → fishing`、`BUILDING_CONSTRUCTED → construction`；cap 3 observers；排除 actor NPC；runtime 在 productive event accepted 後 enqueue。
+- ✅ `mentorshipEngine.ts`：每 tick 對 active mentorship 計算 XP increment；threshold 時改 emit `NPC_MENTORSHIP_COMPLETED`；runtime 在 tick 開始前 enqueue。
+- ✅ `AiDialogContext` 新增 `skillLevels?` field；`buildSkillBlock()` export；`buildSystemPrompt()` 末段注入；`npc.ts` handler 組裝。
+- ✅ 423 server + 34 web = 457 tests passed；build:server clean；openspec validate --all --strict 34 passed。
+
+## v0.17.0 ✅ shipped — 2026-05-14
 
 **主題：Phase 3 §37.1 — NPC Dialog Grounding**
 
@@ -19,7 +34,7 @@ OpenSpec: `npc-dialog-grounding/`。
 - ✅ Focused tests 29 passed；full `npm test` 399 server + 34 web（433 total）；build:server / build:web；openspec validate --all --strict（33 passed）全綠。
 - ⚠️ Honest scope：known-person graph 只用 interaction memory，無跨 NPC 推論；生態只看當前 tile；constraint 為 prompt-level，無 post-processing validation。
 
-## v0.16.0 🚧 in progress — 2026-05-14
+## v0.17.0 ✅ shipped — 2026-05-14
 
 **主題：Phase 3 Slice 1 — NPC Rumor Propagation**
 

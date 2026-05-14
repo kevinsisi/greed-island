@@ -5,6 +5,7 @@ import {
   buildAntiHallucinationBlock,
   buildEcologyBlock,
   buildRecentEventsBlock,
+  buildSkillBlock,
   parseReply,
 } from './aiDialog.js'
 
@@ -241,5 +242,32 @@ describe('grounded context — combined blocks', () => {
     expect(block).toContain('forest_deer')
     expect(block).toContain('7')
     expect(block).toContain('moderate')
+  })
+})
+
+describe('buildSkillBlock', () => {
+  it('returns empty array for undefined', () => {
+    expect(buildSkillBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array for empty array', () => {
+    expect(buildSkillBlock([])).toEqual([])
+  })
+
+  it('returns non-empty lines for valid skill list with level', () => {
+    const lines = buildSkillBlock([{ skillId: 'fishing', level: 2 }]).join('\n')
+    expect(lines).toContain('捕魚')
+    expect(lines).toContain('2')
+  })
+
+  it('includes all provided skills', () => {
+    const lines = buildSkillBlock([
+      { skillId: 'hunting', level: 1 },
+      { skillId: 'construction', level: 3 },
+    ]).join('\n')
+    expect(lines).toContain('狩獵')
+    expect(lines).toContain('1')
+    expect(lines).toContain('建造')
+    expect(lines).toContain('3')
   })
 })

@@ -202,6 +202,11 @@ export function createNpcRouter(input: {
           .map((ev) => `[tick ${ev.tick}] ${ev.eventType}`)
         const recentLocalEvents = localEventLines.length > 0 ? localEventLines : undefined
 
+        const rawSkills = input.runtime.getNpcSkills(npcId)
+        const skillLevels = rawSkills.length > 0
+          ? rawSkills.map((s) => ({ skillId: s.skillId, level: s.level }))
+          : undefined
+
         const dialogCtx: AiDialogContext = {
           profile,
           player,
@@ -216,6 +221,7 @@ export function createNpcRouter(input: {
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(recentLocalEvents ? { recentLocalEvents } : {}),
+          ...(skillLevels ? { skillLevels } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({

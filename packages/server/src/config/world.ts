@@ -103,6 +103,13 @@ export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 // consecutive cadence ticks without a successful kill on its tile starves.
 export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 
+// Phase 3 §37.2 — NPC skill learning & mentorship.
+export const SKILL_IDS = ['hunting', 'fishing', 'construction'] as const
+export type SkillId = (typeof SKILL_IDS)[number]
+export const SKILL_XP_PER_OBSERVE = 5
+export const SKILL_XP_PER_MENTOR_TICK = 8
+export const SKILL_XP_LEVEL_THRESHOLD = 100
+
 // Phase 3 Slice 1 — NPC rumor propagation.
 // Accuracy is an integer 0–100. Each NPC-to-NPC spread step multiplies
 // by this factor (integer math: Math.round(acc * DECAY / 100)).

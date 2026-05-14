@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase 3 §37.2: NPC Skill Learning & Mentorship
+
+### Implemented
+
+- `SKILL_IDS`, `SKILL_XP_PER_OBSERVE`, `SKILL_XP_PER_MENTOR_TICK`, `SKILL_XP_LEVEL_THRESHOLD` added to `config/world.ts`.
+- Three new command/event types registered in `LivingWorldRuleEngine`: `NPC_OBSERVED_SKILL`, `NPC_MENTORSHIP_STARTED`, `NPC_MENTORSHIP_COMPLETED`.
+- `SkillXpProjection` (`projections/skillXp.ts`): `(npcId, skillId) → { xp, level, mentorId }` projection; `rebuildFromEvents` / `canonicalHash` compliant; `getByNpc`, `getAll`, `getAllActive` accessors.
+- `SimulationRuntime`: two fan-out points + `rebuildProjections` wired; `getNpcSkills(npcId)` public accessor (filters xp > 0).
+- `skillObservationSeeder.ts`: maps productive events to skill IDs, caps observers at 3, excludes actor NPC.
+- `mentorshipEngine.ts`: tick-driven XP increment; emits `NPC_MENTORSHIP_COMPLETED` when threshold crossed; wired at start of `runTick` fan-out.
+- `AiDialogContext` extended with `skillLevels?`; `buildSkillBlock()` exported from `aiDialog.ts`; `npc.ts` assembles and passes skills.
+
+### Honest scope
+
+- Mentorship must be started externally via `NPC_MENTORSHIP_STARTED` command; no auto-pairing logic in this slice.
+- No skill-based gating of productive actions.
+- Observation seeder runs only after productive events pass the rule engine; no retrospective observation.
+
+### Verification
+
+- `npm run build:server` — clean TypeScript.
+- `npm test` — **423 server + 34 web = 457 tests passed**.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- None. Skill XP will accumulate once productive events and mentorship commands begin flowing through the simulation.
+
 ## 2026-05-14 — Phase 3 §37.1: NPC Dialog Grounding
 
 ### Implemented

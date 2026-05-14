@@ -18,6 +18,7 @@ import {
   type RuleResult
 } from './types.js'
 import type { Animal } from '../ecosystem/species.js'
+import { SKILL_IDS } from '../config/world.js'
 
 export const LIVING_WORLD_ACTOR_TYPES = ['player', 'npc', 'system'] as const
 export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
@@ -88,6 +89,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Phase 3 Slice 1 — NPC rumor propagation
   'NPC_RUMOR_HEARD',
   'NPC_RUMOR_SPREAD',
+  // Phase 3 §37.2 — NPC skill learning & mentorship
+  'NPC_OBSERVED_SKILL',
+  'NPC_MENTORSHIP_STARTED',
+  'NPC_MENTORSHIP_COMPLETED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -661,6 +666,30 @@ export type NpcRumorSpreadCmd = Readonly<{
   accuracy: number
 }>
 
+// Phase 3 §37.2 — NPC skill learning & mentorship
+export type NpcObservedSkillCmd = Readonly<{
+  npcId: string
+  skillId: string
+  sourceEventType: string
+  tick: number
+  xpDelta?: number
+}>
+
+export type NpcMentorshipStartedCmd = Readonly<{
+  mentorNpcId: string
+  menteeNpcId: string
+  skillId: string
+  tick: number
+}>
+
+export type NpcMentorshipCompletedCmd = Readonly<{
+  mentorNpcId: string
+  menteeNpcId: string
+  skillId: string
+  finalLevel: number
+  tick: number
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -715,6 +744,9 @@ export type LivingWorldCommandPayload =
   | MarketPriceDiscoveredCmd
   | NpcRumorHeardCmd
   | NpcRumorSpreadCmd
+  | NpcObservedSkillCmd
+  | NpcMentorshipStartedCmd
+  | NpcMentorshipCompletedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1346,6 +1378,33 @@ const VALIDATORS: Readonly<
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.originTick)) return 'originTick must be non-negative integer'
     if (typeof p.accuracy !== 'number' || !Number.isInteger(p.accuracy) || p.accuracy < 0 || p.accuracy > 100) return 'accuracy must be integer 0-100'
+    return null
+  },
+  NPC_OBSERVED_SKILL: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (!(SKILL_IDS as readonly string[]).includes(p.skillId as string)) return 'skillId must be one of: ' + SKILL_IDS.join(', ')
+    if (typeof p.sourceEventType !== 'string' || p.sourceEventType.length === 0) return 'sourceEventType required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    if (p.xpDelta !== undefined && (typeof p.xpDelta !== 'number' || !Number.isInteger(p.xpDelta) || p.xpDelta <= 0)) return 'xpDelta must be positive integer if provided'
+    return null
+  },
+  NPC_MENTORSHIP_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.mentorNpcId !== 'string' || p.mentorNpcId.length === 0) return 'mentorNpcId required'
+    if (typeof p.menteeNpcId !== 'string' || p.menteeNpcId.length === 0) return 'menteeNpcId required'
+    if (p.mentorNpcId === p.menteeNpcId) return 'mentorNpcId and menteeNpcId must differ'
+    if (!(SKILL_IDS as readonly string[]).includes(p.skillId as string)) return 'skillId must be one of: ' + SKILL_IDS.join(', ')
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  NPC_MENTORSHIP_COMPLETED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.mentorNpcId !== 'string' || p.mentorNpcId.length === 0) return 'mentorNpcId required'
+    if (typeof p.menteeNpcId !== 'string' || p.menteeNpcId.length === 0) return 'menteeNpcId required'
+    if (!(SKILL_IDS as readonly string[]).includes(p.skillId as string)) return 'skillId must be one of: ' + SKILL_IDS.join(', ')
+    if (typeof p.finalLevel !== 'number' || !Number.isInteger(p.finalLevel) || p.finalLevel < 1) return 'finalLevel must be positive integer'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   }
 }
