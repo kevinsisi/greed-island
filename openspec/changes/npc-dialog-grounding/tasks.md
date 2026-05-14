@@ -37,4 +37,4 @@
 - [x] 5.5 Run `npx openspec validate --all --strict`
 - [x] 5.6 Update `PROGRESS.md` with implementation summary and verification evidence
 - [x] 5.7 Update `ROADMAP.md` with Phase 3 Slice 37.1 entry
-- [ ] 5.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz`
+- [x] 5.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz`

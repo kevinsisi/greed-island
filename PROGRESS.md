@@ -33,11 +33,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push.
+- CI run `25845143736` — success (50 s).
+- Deploy Dev image push success; containers restarted manually.
+- Live `/healthz` at tick 17250: `{"ok":true,"version":"0.16.0","tick":17250}` ✓
 
 ### Outstanding
 
-- CI green and live verification pending commit + push.
+- None. Dialog grounding will activate automatically on next player NPC interaction that goes through the AI path.
 
 ## 2026-05-14 — Phase 3 Slice 1: NPC Rumor Propagation
 
