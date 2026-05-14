@@ -29,10 +29,13 @@ developer. Keep latest status at the top.
 - Full suite: `npm test` passed: **326 server** + 34 web tests.
 - `npx openspec validate ecosystem-predation --strict` passed.
 - `npx openspec validate --all --strict` passed: 28 passed, 0 failed.
+- Commit `031eac6` (`feat(eco): add predator prey pressure`) pushed to `main`.
+- CI run `25834085886` passed; Deploy Dev run `25834085882` passed. Both only reported the known GitHub Actions Node.js 20 deprecation annotation.
+- Live `/healthz` after deploy returned `{"ok":true,"version":"0.16.0","tick":125000}`.
+- Live `/api/world` smoke at tick `125000`: `animalPopulationRows = 0`, `marketPrices = 4`, `productionChains.recipes = 1`.
 
 ### Outstanding
 
-- Commit, push, CI/CD verification, and live smoke are pending for this slice.
 - Next E1 slices should cover reproduction/carrying capacity and migration before predator starvation can safely become predator mortality.
 
 ## 2026-05-13 — Phase 2 §35.4 market formation

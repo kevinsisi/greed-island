@@ -26,4 +26,4 @@
 - [x] 4.2 Run focused server tests for predation, living-world commands, runtime, and animal population.
 - [x] 4.3 Run full server/web tests and builds required by the repo.
 - [x] 4.4 Update `PROGRESS.md`, `ROADMAP.md`, and task checkboxes with verification evidence.
-- [ ] 4.5 Commit, push, verify CI/CD, and smoke live `/healthz` plus relevant `/api/world` facts.
+- [x] 4.5 Commit, push, verify CI/CD, and smoke live `/healthz` plus relevant `/api/world` facts.

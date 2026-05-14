@@ -17,7 +17,7 @@ OpenSpec: `ecosystem-predation/`。
 - ✅ Predator kill 走既有 `ANIMAL_KILLED`，所以 `AnimalPopulationProjection` 用同一路徑扣除 prey animal id。
 - ✅ Routine predation/starvation events 不進 public recent-event / chronicle surfaces。
 - ✅ Focused server tests 52 passed；full `npm test` 326 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（28 passed）全綠。
-- 🚧 待 commit / push / CI / Deploy Dev + live smoke。
+- ✅ Commit `031eac6` pushed；CI run `25834085886` passed；Deploy Dev run `25834085882` passed；live `/healthz` = `0.16.0` @ tick `125000`；`/api/world.facts.animalPopulation` currently has 0 rows, market/prod projections still present。
 - ⚠️ Honest scope：同 tile predation pressure only；尚無 migration、reproduction、carrying capacity、predator death、carcass/goods from animal-on-animal kills。
 
 ## v0.16.0 🚧 in progress — 2026-05-13
