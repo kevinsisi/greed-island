@@ -59,6 +59,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_HUNT_STARTED',
   'ANIMAL_HUNT_RESOLVED',
   'ANIMAL_KILLED',
+  // Phase E1.1 — Ecosystem predation
+  'ANIMAL_STARVED',
   'CARCASS_CREATED',
   'MEAT_HARVESTED',
   // Phase E0.4 — Fishery density
@@ -405,6 +407,17 @@ export type AnimalKilledCmd = Readonly<{
   narration: string
 }>
 
+export type AnimalStarvedCmd = Readonly<{
+  starvationId: string
+  predatorAnimalId: string
+  predatorSpeciesId: string
+  tileId: string
+  starvationStage: 'hungry' | 'scarce_prey'
+  starvedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type CarcassCreatedCmd = Readonly<{
   huntId: string
   carcassId: string
@@ -623,6 +636,7 @@ export type LivingWorldCommandPayload =
   | AnimalHuntStartedCmd
   | AnimalHuntResolvedCmd
   | AnimalKilledCmd
+  | AnimalStarvedCmd
   | CarcassCreatedCmd
   | MeatHarvestedCmd
   | FisheryHarvestedCmd
@@ -1023,6 +1037,17 @@ const VALIDATORS: Readonly<
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (typeof p.killedByNpcId !== 'string' || p.killedByNpcId.length === 0) return 'killedByNpcId required'
     if (typeof p.killedAtTick !== 'number' || !Number.isInteger(p.killedAtTick) || p.killedAtTick < 0) return 'killedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ANIMAL_STARVED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.starvationId !== 'string' || p.starvationId.length === 0) return 'starvationId required'
+    if (typeof p.predatorAnimalId !== 'string' || p.predatorAnimalId.length === 0) return 'predatorAnimalId required'
+    if (typeof p.predatorSpeciesId !== 'string' || p.predatorSpeciesId.length === 0) return 'predatorSpeciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (p.starvationStage !== 'hungry' && p.starvationStage !== 'scarce_prey') return 'starvationStage invalid'
+    if (typeof p.starvedAtTick !== 'number' || !Number.isInteger(p.starvedAtTick) || p.starvedAtTick < 0) return 'starvedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-14 — Phase E1.1 ecosystem predation
+
+### Implemented
+
+- Started OpenSpec change `ecosystem-predation` for `docs/WORLD_CAPABILITIES.md` Phase E1.1.
+- Added `ANIMAL_STARVED` command/event with validator coverage.
+- Added deterministic predation planner using `animal_population` rows and species `preyTargets`.
+- Runtime now plans at most one same-tile predator/prey interaction per tick:
+  - valid prey exists: emits `ANIMAL_HUNT_STARTED`, `ANIMAL_HUNT_RESOLVED`, and `ANIMAL_KILLED` through the Rule Engine.
+  - no same-tile target prey exists: emits `ANIMAL_STARVED` starvation pressure through the Rule Engine.
+- Predator kills reuse `ANIMAL_KILLED`, so `AnimalPopulationProjection` removes prey through the existing authoritative population-removal path.
+- Routine predation/starvation facts are hidden from public recent-event and chronicle surfaces.
+
+### Honest scope
+
+- This is same-tile E1.1 predation pressure only. It has no off-tile hunting, migration, reproduction, carrying-capacity balancing, predator death, carcass/goods generation from animal-on-animal kills, or extinction policy.
+- `ANIMAL_STARVED` is a pressure signal only; it does not directly remove predator population in this slice.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- ecosystem/predation kernel/livingWorld sim/runtimePredation projections/animalPopulation` passed: 52 tests.
+- `npm run build:server` passed.
+- `npm run build:web` passed with the known Vite chunk-size warning.
+- Full suite: `npm test` passed: **326 server** + 34 web tests.
+- `npx openspec validate ecosystem-predation --strict` passed.
+- `npx openspec validate --all --strict` passed: 28 passed, 0 failed.
+
+### Outstanding
+
+- Commit, push, CI/CD verification, and live smoke are pending for this slice.
+- Next E1 slices should cover reproduction/carrying capacity and migration before predator starvation can safely become predator mortality.
+
 ## 2026-05-13 — Phase 2 §35.4 market formation
 
 ### Implemented

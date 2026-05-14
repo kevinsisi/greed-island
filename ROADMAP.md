@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.16.0 🚧 in progress — 2026-05-14
+
+**主題：Phase E1.1 — Ecosystem predator/prey pressure**
+
+OpenSpec: `ecosystem-predation/`。
+
+- ✅ 新增 `ANIMAL_STARVED` command/event + validators。
+- ✅ 新增 `packages/server/src/ecosystem/predation.ts`：從 `animal_population` + species `preyTargets` deterministic 規劃 same-tile predation。
+- ✅ Runtime 每 tick 最多規劃一次 ecosystem predation：有 prey 時 emit `ANIMAL_HUNT_STARTED` / `ANIMAL_HUNT_RESOLVED` / `ANIMAL_KILLED`；無 same-tile target prey 時 emit `ANIMAL_STARVED` pressure。
+- ✅ Predator kill 走既有 `ANIMAL_KILLED`，所以 `AnimalPopulationProjection` 用同一路徑扣除 prey animal id。
+- ✅ Routine predation/starvation events 不進 public recent-event / chronicle surfaces。
+- ✅ Focused server tests 52 passed；full `npm test` 326 server + 34 web；`build:server` / `build:web`；`openspec validate --all --strict`（28 passed）全綠。
+- 🚧 待 commit / push / CI / Deploy Dev + live smoke。
+- ⚠️ Honest scope：同 tile predation pressure only；尚無 migration、reproduction、carrying capacity、predator death、carcass/goods from animal-on-animal kills。
+
 ## v0.16.0 🚧 in progress — 2026-05-13
 
 **主題：Phase 2 §35.4 — Market price formation**

@@ -200,6 +200,15 @@ describe('living-world rule engine', () => {
         killedAtTick: 7,
         narration: 'animal killed'
       }),
+      makeLivingWorldCommand('ANIMAL_STARVED', 'ecosystem.predator.fog_wolf', 'system', 7, 7, {
+        starvationId: 'starvation.t_forest.abc',
+        predatorAnimalId: 'animal.t_forest.fog_wolf.abc',
+        predatorSpeciesId: 'fog_wolf',
+        tileId: 't_forest',
+        starvationStage: 'scarce_prey',
+        starvedAtTick: 7,
+        narration: 'predator found no prey'
+      }),
       makeLivingWorldCommand('CARCASS_CREATED', 'system', 'system', 7, 7, {
         huntId: 'hunt.t_forest.abc',
         carcassId: 'carcass.t_forest.abc',
@@ -388,6 +397,22 @@ describe('living-world rule engine', () => {
     const result = ruleEngine.evaluate(cmd)
     expect(result.accepted).toBe(false)
     if (!result.accepted) expect(result.rejection.code).toBe('INVALID_PAYLOAD')
+  })
+
+  it('rejects malformed animal starvation payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('ANIMAL_STARVED', 'ecosystem.predator.fog_wolf', 'system', 7, 7, {
+      starvationId: 'starvation.t_forest.abc',
+      predatorAnimalId: 'animal.t_forest.fog_wolf.abc',
+      predatorSpeciesId: 'fog_wolf',
+      tileId: 't_forest',
+      starvationStage: 'lost' as 'scarce_prey',
+      starvedAtTick: 7,
+      narration: 'predator found no prey'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('starvationStage invalid')
   })
 
   describe('CONSTRUCTION_INITIATE validator', () => {

@@ -70,6 +70,7 @@ import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, listMapTiles } from './mapGraph
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
+import { planPredation } from '../ecosystem/predation.js'
 import { requireSpecies } from '../ecosystem/species.js'
 import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
@@ -1507,6 +1508,95 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Phase E1.1: deterministic predator/prey pressure ----
+    // Predation uses only already-projected population rows. Current-tick
+    // spawns become eligible next tick after their EventLog facts commit.
+    const predation = planPredation({
+      tick: nextTick,
+      animalPopulation: this.animalPopulationProjection.list(),
+      reservedAnimalIds: plannedHuntedAnimalIds,
+    })
+    if (predation?.kind === 'kill') {
+      plannedHuntedAnimalIds.add(predation.preyAnimalId)
+      const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
+      const motivation = makeMotivation(`${predation.predatorSpeciesId} 在${tileName}依 deterministic predator/prey policy 捕食 ${predation.preySpeciesId}，讓 ecosystem population 透過 typed EventLog 變動。`)
+      commands.push(
+        makeLivingWorldCommand(
+          'ANIMAL_HUNT_STARTED',
+          predation.predatorActorId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            huntId: predation.huntId,
+            npcId: predation.predatorActorId,
+            tileId: predation.tileId,
+            targetSpeciesId: predation.preySpeciesId,
+            targetAnimalId: predation.preyAnimalId,
+            startedAtTick: nextTick,
+            motivation,
+            narration: `${predation.predatorSpeciesId}在${tileName}開始追蹤${predation.preySpeciesId}。`
+          }
+        ),
+        makeLivingWorldCommand(
+          'ANIMAL_HUNT_RESOLVED',
+          predation.predatorActorId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            huntId: predation.huntId,
+            npcId: predation.predatorActorId,
+            tileId: predation.tileId,
+            targetSpeciesId: predation.preySpeciesId,
+            targetAnimalId: predation.preyAnimalId,
+            outcome: 'success',
+            resolvedAtTick: nextTick,
+            motivation,
+            narration: `${predation.predatorSpeciesId}在${tileName}完成一次捕食。`
+          }
+        ),
+        makeLivingWorldCommand(
+          'ANIMAL_KILLED',
+          predation.predatorActorId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            huntId: predation.huntId,
+            animalId: predation.preyAnimalId,
+            speciesId: predation.preySpeciesId,
+            tileId: predation.tileId,
+            killedByNpcId: predation.predatorActorId,
+            killedAtTick: nextTick,
+            motivation,
+            narration: `${predation.predatorSpeciesId}捕食了一隻${predation.preySpeciesId}。`
+          }
+        )
+      )
+    } else if (predation?.kind === 'starvation') {
+      const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
+      commands.push(
+        makeLivingWorldCommand(
+          'ANIMAL_STARVED',
+          predation.predatorActorId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            starvationId: predation.starvationId,
+            predatorAnimalId: predation.predatorAnimalId,
+            predatorSpeciesId: predation.predatorSpeciesId,
+            tileId: predation.tileId,
+            starvationStage: predation.starvationStage,
+            starvedAtTick: nextTick,
+            motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}找不到 same-tile prey；本 slice 只記錄 starvation pressure，不直接殺死 predator。`),
+            narration: `${predation.predatorSpeciesId}在${tileName}找不到足夠獵物。`
+          }
+        )
+      )
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -2889,6 +2979,10 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
   if (
     ev.eventType === 'NPC_STATE_RECORDED' ||
     ev.eventType === 'ANIMAL_SPAWNED' ||
+    ev.eventType === 'ANIMAL_HUNT_STARTED' ||
+    ev.eventType === 'ANIMAL_HUNT_RESOLVED' ||
+    ev.eventType === 'ANIMAL_KILLED' ||
+    ev.eventType === 'ANIMAL_STARVED' ||
     ev.eventType === 'GOODS_EXTRACTED' ||
     ev.eventType === 'GOODS_STORED' ||
     ev.eventType === 'GOODS_PROCESSED' ||
