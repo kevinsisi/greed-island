@@ -51,4 +51,4 @@
 - [x] 7.5 Run `npx openspec validate --all --strict`
 - [x] 7.6 Update `PROGRESS.md` with implementation summary, honest scope, verification evidence
 - [x] 7.7 Update `ROADMAP.md` with E1.3 slice entry
-- [ ] 7.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz` and `/api/world.facts.migrationRoutes`
+- [x] 7.8 Commit and push; confirm CI and Deploy Dev pass; verify live `/healthz` and `/api/world.facts.migrationRoutes`

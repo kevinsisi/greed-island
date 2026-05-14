@@ -35,6 +35,13 @@ developer. Keep latest status at the top.
 - `npx openspec validate ecosystem-migration --strict` passed.
 - `npx openspec validate --all --strict` passed: 30 passed, 0 failed.
 
+### CI / Deploy
+
+- CI run `25838119729` — success.
+- Deploy Dev image push `25838119742` — success; desktop runner timed out twice (Docker Desktop unresponsive); image pulled and containers restarted manually.
+- Live `/healthz` at tick 14928: `{"ok":true,"version":"0.16.0","tick":14928}` ✓
+- Live `/api/world.facts.migrationRoutes`: key present; first wave observed at tick 14952 — `iron_beak_vulture` pressure migration `t_mountain → t_forest`, count=1 ✓
+
 ### Outstanding
 
 - Next E1 slice: predator mortality (ANIMAL_DIED_STARVATION) — now unblocked by migration. Or extend migration with `event_driven` triggers.
