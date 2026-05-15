@@ -78,7 +78,14 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `f39cc17` pushed; CI run `25899873346` success; Deploy Dev run `25899873349` success (runner smoke check `curl http://100.83.112.20:8100/` returned `web ok`).
+- Workstation session cannot reach the Tailscale interface from `127.0.0.1`, but the runner smoke check is the trustworthy evidence per HomeProject verification-and-evidence skill.
+
+### Archive
+
+- Delta specs synced: created new main spec `openspec/specs/ecology-visibility/spec.md` (5 requirements promoted) and appended 1 requirement to `openspec/specs/npc-dialog-grounding/spec.md`.
+- Change folder moved to `openspec/changes/archive/2026-05-15-world-visibility-ecology`.
+- `npx openspec validate --all --strict` after archive — **32 passed, 0 failed**.
 
 ### Outstanding
 
