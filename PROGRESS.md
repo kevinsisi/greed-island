@@ -67,7 +67,13 @@ both pure deterministic and replay-safe.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `2320dab` pushed; CI run `25902575801` success; Deploy Dev run `25902575797` success.
+
+### Archive
+
+- Delta specs synced: created new main spec `openspec/specs/ecosystem-aggression/spec.md` (4 requirements) and appended 1 requirement to `openspec/specs/living-deterministic-world/spec.md`.
+- Change folder moved to `openspec/changes/archive/2026-05-15-animal-aggression`.
+- `npx openspec validate --all --strict` after archive — **33 passed, 0 failed**.
 
 ### Outstanding
 
