@@ -59,7 +59,13 @@ reproduction / migration work on empty regions.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `825a931` pushed; CI run `25903986530` success; Deploy Dev run `25903986518` success.
+
+### Archive
+
+- Delta spec for the umbrella `simulation-budget-enforcement` change synced into `openspec/specs/simulation-kernel/spec.md` (7 requirements from prior slices 1-3b plus 3 new Slice 4 requirements appended in this commit).
+- Change folder moved to `openspec/changes/archive/2026-05-15-simulation-budget-enforcement`.
+- `npx openspec validate --all --strict` after archive — **33 passed, 0 failed**.
 
 ### Outstanding
 
