@@ -55,7 +55,9 @@ import {
   PREDATOR_STARVATION_THRESHOLD_TICKS,
   HOUSEHOLD_GOLD_CONTRIBUTION_RATE,
   DEFENSE_REACTION_WINDOW_TICKS,
-  DEFENSE_PARTY_MIN_MEMBERS
+  DEFENSE_PARTY_MIN_MEMBERS,
+  TILE_ACTIVITY_RECENCY_TICKS,
+  TILE_INACTIVE_DRIFT_PERIOD
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -78,6 +80,7 @@ import {
   type DefensePartyAttackRow,
   type DefensePartyAlivePredator,
 } from '../ecosystem/defenseParty.js'
+import { computeActiveTiles, tileShouldRunEcology } from './tileActivation.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -1667,6 +1670,34 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Slice 4: regional tile activation gate ----
+    // A tile counts as "active" this tick when an NPC has acted on it
+    // within TILE_ACTIVITY_RECENCY_TICKS or an active world event covers
+    // it. Inactive tiles still run ecology drift, but only every
+    // TILE_INACTIVE_DRIFT_PERIOD ticks. The gate is replay-safe — it
+    // is a pure function of NPC state + active events + tick.
+    //
+    // We read NPC tile + lastActedTick from the live NpcEngine state
+    // (not the projection), because the projection lags one tick
+    // behind: NPC_STATE_RECORDED events committed THIS tick won't be
+    // in the projection until next tick. The engine state is the
+    // server-authoritative current view and is equivalent for the
+    // purpose of activation gating.
+    const npcStatesForActivation: { npcId: string; tile: string; lastActedTick: number }[] = []
+    for (const [npcId, runtimeState] of this.npcEngine.snapshotAll()) {
+      npcStatesForActivation.push({
+        npcId,
+        tile: runtimeState.tile,
+        lastActedTick: runtimeState.lastActedTick,
+      })
+    }
+    const activeTilesThisTick = computeActiveTiles({
+      tick: nextTick,
+      npcStates: npcStatesForActivation,
+      activeEvents: this.eventEngine.getActive(),
+      recencyTicks: TILE_ACTIVITY_RECENCY_TICKS,
+    })
+
     // ---- Phase E1.1: deterministic predator/prey pressure ----
     // Predation uses only already-projected population rows. Current-tick
     // spawns become eligible next tick after their EventLog facts commit.
@@ -1675,7 +1706,15 @@ export class SimulationRuntime {
       animalPopulation: this.animalPopulationProjection.list(),
       reservedAnimalIds: plannedHuntedAnimalIds,
     })
-    if (predation?.kind === 'kill') {
+    const predationTileEligible =
+      !predation ||
+      tileShouldRunEcology({
+        tileId: predation.tileId,
+        tick: nextTick,
+        activeTiles: activeTilesThisTick,
+        inactiveDriftPeriod: TILE_INACTIVE_DRIFT_PERIOD,
+      })
+    if (predationTileEligible && predation?.kind === 'kill') {
       plannedHuntedAnimalIds.add(predation.preyAnimalId)
       const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
       const motivation = makeMotivation(`${predation.predatorSpeciesId} 在${tileName}依 deterministic predator/prey policy 捕食 ${predation.preySpeciesId}，讓 ecosystem population 透過 typed EventLog 變動。`)
@@ -1733,7 +1772,7 @@ export class SimulationRuntime {
           }
         )
       )
-    } else if (predation?.kind === 'starvation') {
+    } else if (predationTileEligible && predation?.kind === 'starvation') {
       // Sprint 2B — Animal aggression. Before letting the predator
       // starve, see if there's an NPC on the same tile and the species
       // has any aggression. If so, swap the starvation chain for an
@@ -2051,7 +2090,15 @@ export class SimulationRuntime {
       animalPopulation: this.animalPopulationProjection.list(),
       reservedAnimalIds: plannedHuntedAnimalIds,
     })
-    if (reproduction) {
+    if (
+      reproduction &&
+      tileShouldRunEcology({
+        tileId: reproduction.animal.tileId,
+        tick: nextTick,
+        activeTiles: activeTilesThisTick,
+        inactiveDriftPeriod: TILE_INACTIVE_DRIFT_PERIOD,
+      })
+    ) {
       const tileName = TILE_NAME_BY_ID[reproduction.animal.tileId] ?? reproduction.animal.tileId
       commands.push(
         makeLivingWorldCommand(
@@ -2078,7 +2125,15 @@ export class SimulationRuntime {
       unlockedTileIds: this.lifeExpansion.unlockedTileIds,
       reservedAnimalIds: plannedHuntedAnimalIds,
     })
-    if (migration) {
+    if (
+      migration &&
+      tileShouldRunEcology({
+        tileId: migration.fromTileId,
+        tick: nextTick,
+        activeTiles: activeTilesThisTick,
+        inactiveDriftPeriod: TILE_INACTIVE_DRIFT_PERIOD,
+      })
+    ) {
       commands.push(
         makeLivingWorldCommand(
           'MIGRATION_WAVE_STARTED',

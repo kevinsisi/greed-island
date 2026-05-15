@@ -32,11 +32,14 @@
 - [x] 3.8 Add allow-list overrides: NPCs with `activity='move'`, `dialogHold`, or `personalityOverride.targetTile` are always active regardless of bucket.
 - [x] 3.9 Update existing tests in `cityLife.test.ts` / `npcEngine.test.ts` / `runtimeExpansion.test.ts` / `runtimePresence.test.ts` for any productive/interaction-event count changes.
 
-## 4. Regional activation (later slice)
+## 4. Regional activation (Slice 4 — shipped)
 
-- [ ] 4.1 Define active region: any tile with player presence within K ticks OR flagged by a world rule.
-- [ ] 4.2 Inactive areas: run low-frequency drift only (every 10th tick).
-- [ ] 4.3 Replay test.
+- [x] 4.1 Define active region: any tile with player presence within K ticks OR flagged by a world rule.
+  - Implemented as: any tile where a current NPC has `lastActedTick >= tick - TILE_ACTIVITY_RECENCY_TICKS` OR any active world event whose scope includes the tile. Pure helper `packages/server/src/sim/tileActivation.ts::computeActiveTiles`. Constants `TILE_ACTIVITY_RECENCY_TICKS = 60` and `TILE_INACTIVE_DRIFT_PERIOD = 10` in `config/world.ts`.
+- [x] 4.2 Inactive areas: run low-frequency drift only (every 10th tick).
+  - Gate applied in `runtime.ts` to the three ecology planners that run unconditionally per tick: predation (kill + starvation branches, including Sprint 2B aggression chain), reproduction, migration. Helper `tileShouldRunEcology({ tileId, tick, activeTiles, inactiveDriftPeriod })` returns `true` when the tile is active OR when `tick % inactiveDriftPeriod === 0`. NPC-triggered ecology (NPC hunt, fishery harvest) stays unchanged — these are naturally gated by NPC presence.
+- [x] 4.3 Replay test.
+  - 9 unit tests on `tileActivation`: empty/populated/world-event/boundary recency cases + drift-period semantics. Full suite (487 server + 39 web) passes.
 
 ## 5. Verification (per slice)
 
@@ -73,4 +76,11 @@
 - [x] 5.20 Commit + push + CI/Deploy Dev green (commit `23cfca6`, CI `25791664215`, Deploy `25791664183`).
 - [x] 5.21 Update `PROGRESS.md` and `ROADMAP.md`.
 
-### Slice 4 verification still pending — re-use this section when regional activation lands.
+### Slice 4 (shipped)
+
+- [x] 5.22 `npm run test -w @greed-island/server -- sim/tileActivation` passes (9 tests).
+- [x] 5.23 `npm test` passes (487 server + 39 web).
+- [x] 5.24 `npm run build:server` + `npm run build:web` pass.
+- [x] 5.25 `npx openspec validate simulation-budget-enforcement --strict` and `npx openspec validate --all --strict` pass.
+- [x] 5.26 Commit + push + CI/Deploy Dev green.
+- [x] 5.27 Update `PROGRESS.md` and `ROADMAP.md`.

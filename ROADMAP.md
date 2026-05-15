@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.22.0 🚧 in progress — 2026-05-15
+
+**主題：Sprint 3 — Simulation Budget Enforcement Slice 4 (Regional Tile Activation)**
+
+OpenSpec: `simulation-budget-enforcement/` Slice 4。Closes the final outstanding piece of the umbrella budget-enforcement change (Slices 1-3 already shipped). Tiles with no recent NPC activity and no active world event now run ecology drift only every 10th tick instead of every tick, bounding per-tick predator / reproduction / migration work on empty regions.
+
+- ✅ 新增 `config/world.ts` 常數：`TILE_ACTIVITY_RECENCY_TICKS = 60`、`TILE_INACTIVE_DRIFT_PERIOD = 10`。
+- ✅ 新增 `packages/server/src/sim/tileActivation.ts`：純函式 `computeActiveTiles()` + `tileShouldRunEcology()`，replay-safe（NPC live state from `npcEngine.snapshotAll()` + active world events + tick；不引入 wall-clock）。
+- ✅ Runtime 整合：predation (含 Sprint 2B aggression chain)、reproduction、migration 三個 planners 加 tile activation gate；NPC-triggered ecology (hunt, fishery) 維持原樣（隱式由 NPC presence 決定）。
+- ✅ 9 個 tileActivation 單元測試 + full suite 487 server + 39 web 全綠；`openspec validate --all --strict` 34 passed；`simulation-budget-enforcement` change 進入 ✓ Complete。
+- ⚠️ Honest scope：drift cadence 是固定 tick-mod-10；player presence 來自 `socialPresence` 端但 Slice 4 改採 NPC live state (更可靠且不需要新基礎建設)。Tile 0 不 drift，避免冷啟動。
+
 ## v0.21.0 🚧 in progress — 2026-05-15
 
 **主題：Sprint 2C — NPC Defense Coordination**

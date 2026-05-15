@@ -109,6 +109,15 @@ export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CA
 export const DEFENSE_REACTION_WINDOW_TICKS = 2
 export const DEFENSE_PARTY_MIN_MEMBERS = 2
 
+// Slice 4 — Regional tile activation. A tile is considered "active"
+// when (a) any NPC has acted on it within `TILE_ACTIVITY_RECENCY_TICKS`
+// ticks, or (b) any active world event has the tile in its scope.
+// Inactive tiles run ecology drift only every
+// `TILE_INACTIVE_DRIFT_PERIOD` ticks instead of every tick — bounding
+// per-tick predator / reproduction / fishery work on empty regions.
+export const TILE_ACTIVITY_RECENCY_TICKS = 60
+export const TILE_INACTIVE_DRIFT_PERIOD = 10
+
 // Phase 3 §37.3 — NPC culture & emergent festivals.
 export const CULTURAL_FESTIVAL_THRESHOLD = 3
 export const CULTURAL_NORM_NPC_THRESHOLD = 3

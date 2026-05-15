@@ -3,6 +3,69 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 3: simulation-budget-enforcement Slice 4 (v0.22.0)
+
+### Implemented
+
+Closes the final outstanding piece of the umbrella
+`simulation-budget-enforcement` change (Slices 1-3 already shipped).
+Tiles with no recent NPC activity and no active world event now run
+ecology drift only every 10th tick, bounding per-tick predator /
+reproduction / migration work on empty regions.
+
+#### Server
+- `config/world.ts`: `TILE_ACTIVITY_RECENCY_TICKS = 60` and
+  `TILE_INACTIVE_DRIFT_PERIOD = 10`.
+- `packages/server/src/sim/tileActivation.ts`:
+  - `computeActiveTiles({ tick, npcStates, activeEvents, recencyTicks })`
+    returns a `Set<tileId>` of tiles where any NPC has acted within the
+    recency window OR where an active world event's region scope
+    includes the tile.
+  - `tileShouldRunEcology({ tileId, tick, activeTiles, inactiveDriftPeriod })`
+    returns `true` when the tile is in the active set OR when
+    `tick % inactiveDriftPeriod === 0` (and tick > 0 to avoid cold-
+    start mass drift on boot).
+- `packages/server/src/sim/runtime.ts`:
+  - Top of `runTick()` computes `activeTilesThisTick` from the live
+    `npcEngine.snapshotAll()` state (not the projection — which lags
+    one tick) plus `eventEngine.getActive()`.
+  - Predation planner (kill / starvation / Sprint 2B aggression chain)
+    is gated by `tileShouldRunEcology(predation.tileId, ...)`.
+  - Reproduction and migration planners get the same gate keyed on
+    their source tile.
+  - NPC-triggered ecology (hunt path, fishery harvest) is unchanged —
+    it is implicitly gated by NPC presence.
+
+### Honest scope
+
+- Drift cadence is a fixed `tick % 10`; no jitter, no per-tile schedule.
+- Player presence is derived from NPC activity rather than the social
+  presence API (simpler, no new infrastructure).
+- Tile 0 does not drift, to avoid waking every inactive tile on
+  runtime boot.
+- The original spec mentioned "player presence within K ticks"; in
+  practice the player avatar's tile shares with whichever NPCs are on
+  that tile, so NPC-activity-based gating is an honest reformulation.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- sim/tileActivation` — **9 tests passing**.
+- Full `npm test` — **487 server + 39 web = 526 tests passing**.
+- `npm run build` (server + web) — clean.
+- `npx openspec validate simulation-budget-enforcement --strict` — passes.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npx openspec list` now shows `simulation-budget-enforcement` as `✓ Complete`.
+- Versions bumped to `0.22.0` across `package.json` + `version.ts`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 4: `district-subtile-terrain` (sub-cell terrain mask on water-biome districts).
+- Sprint 5–6: combat-system + combat-phase-c-realtime-subtick.
+
 ## 2026-05-15 — Sprint 2C: npc-defense-coordination (v0.21.0)
 
 ### Implemented
