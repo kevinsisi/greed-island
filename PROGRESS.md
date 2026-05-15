@@ -5,6 +5,22 @@ developer. Keep latest status at the top.
 
 ## 2026-05-15 — Area Ecology Visibility Bugfix
 
+### Follow-up: Read-only Area Element Inspection
+
+- Added tap/click inspection for area ecology elements: animal dots, animal clusters, and fishery bars now show a short in-scene label instead of behaving like inert decoration.
+- Added tap/click inspection for environment/resource decoration glyphs (trees, rocks, wood piles, reeds, ruins, boats, signs, etc.). These are read-only hints only; they do not harvest resources, start combat, or mutate world state.
+- Added zh labels for known animal species so ecology inspection shows player-readable names such as `擬態黴菌 ×7` instead of raw species ids.
+
+#### Verification
+
+- `npm test -w @greed-island/web` — **50 tests passed**.
+- `npm run build:web` — clean TypeScript + Vite build; known chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+
+#### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke verification for this follow-up.
+
 ### Implemented
 
 - Fixed `AreaPhaserGame` / `AreaScene` ecology update flow: async `/api/area/:tileId/ecology` responses now update the active Phaser scene and redraw animal overlays instead of only being used during initial scene creation.

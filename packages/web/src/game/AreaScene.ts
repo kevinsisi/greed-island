@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
-import { visualForSpecies } from './speciesPalette'
+import { labelForSpecies, visualForSpecies } from './speciesPalette'
 import {
   COLOR_FOR_TERRAIN,
   isWalkableTerrain,
@@ -460,8 +460,46 @@ export class AreaScene extends Phaser.Scene {
       })
       text.setOrigin(0.5, 0.5)
       text.setDepth(40)
+      text.setInteractive({ useHandCursor: true })
+      text.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        this.flashInspectHint(this.labelForDecoration(deco.glyph), cx, cy)
+      })
       this.attachEnvAnimation(text, deco.glyph, cx, cy, deco.col, deco.row)
     }
+  }
+
+  private labelForDecoration(glyph: string): string {
+    const labels: Readonly<Record<string, string>> = {
+      '🌲': '針葉林',
+      '🌳': '林木',
+      '🌵': '沙地植物',
+      '🌿': '濕地植被',
+      '🌾': '野生穀草',
+      '🪵': '木材堆',
+      '🪨': '岩石',
+      '⛰': '山岩',
+      '🏔': '雪峰',
+      '🏚': '遺跡殘屋',
+      '🏠': '民居外觀',
+      '🏪': '商鋪外觀',
+      '🛖': '棚屋',
+      '🪔': '燈火',
+      '⛩': '神社外觀',
+      '🏯': '塔樓外觀',
+      '🪧': '告示牌',
+      '⚓': '船錨',
+      '⛵': '小船',
+      '🛟': '救生圈',
+      '🪝': '釣具',
+      '🐟': '魚群跡象',
+      '🐚': '貝殼',
+      '✦': '異常光點',
+      '✧': '微光殘響',
+      '◈': '結晶標記',
+    }
+    return labels[glyph] ?? `環境物件 ${glyph}`
   }
 
   /**
@@ -604,6 +642,12 @@ export class AreaScene extends Phaser.Scene {
           const { x, y } = areaSubcellFromHash(animalId, eco.tileId, 'ecology-placement')
           const dot = this.add.circle(x, y, 7, visual.color, 0.9)
           dot.setStrokeStyle(1, 0x0a0a0a, 0.7)
+          dot.setInteractive(new Phaser.Geom.Circle(0, 0, 15), Phaser.Geom.Circle.Contains)
+          dot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            pointer.event?.stopPropagation?.()
+            this.suppressNextPointerTarget = true
+            this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×1`, x, y)
+          })
           layer.add(dot)
           const glyph = this.add.text(x, y - 1, visual.emoji, {
             fontFamily:
@@ -619,6 +663,12 @@ export class AreaScene extends Phaser.Scene {
         const { x, y } = areaSubcellFromHash(row.speciesId, eco.tileId, 'ecology-cluster')
         const bg = this.add.circle(x, y, 14, 0x141820, 0.85)
         bg.setStrokeStyle(2, visual.color, 0.95)
+        bg.setInteractive(new Phaser.Geom.Circle(0, 0, 24), Phaser.Geom.Circle.Contains)
+        bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          pointer.event?.stopPropagation?.()
+          this.suppressNextPointerTarget = true
+          this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×${row.count}`, x, y)
+        })
         layer.add(bg)
         const glyph = this.add.text(x, y, visual.emoji, {
           fontFamily:
@@ -649,6 +699,15 @@ export class AreaScene extends Phaser.Scene {
       layer.add(bg)
       const fill = this.add.rectangle(40, barY, widthPx, 6, eco.fishery.collapsed ? 0xe04a3a : 0x4a9cd6, 0.9)
       fill.setOrigin(0, 0.5)
+      fill.setInteractive(
+        new Phaser.Geom.Rectangle(0, -12, Math.max(widthPx, 40), 24),
+        Phaser.Geom.Rectangle.Contains
+      )
+      fill.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        this.flashInspectHint(this.fisheryLabel(eco.fishery!.density, eco.fishery!.collapsed), 40 + widthPx / 2, barY)
+      })
       layer.add(fill)
       const label = this.add.text(40, barY - 12, this.fisheryLabel(eco.fishery.density, eco.fishery.collapsed), {
         fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
@@ -1019,6 +1078,32 @@ export class AreaScene extends Phaser.Scene {
     if (this.tooFarHintTimer) this.tooFarHintTimer.remove(false)
     this.tooFarHintTimer = this.time.delayedCall(1000, () => {
       this.interactPrompt.setData('lockedUntil', 0)
+      this.tooFarHintTimer = null
+    })
+  }
+
+  private flashInspectHint(message: string, x: number, y: number): void {
+    const promptText = this.interactPrompt.getData('text') as Phaser.GameObjects.Text
+    const promptBg = this.interactPrompt.getData('bg') as Phaser.GameObjects.Rectangle
+    promptText.setText(message)
+    promptText.setColor('#d9fff0')
+    const w = Math.max(140, promptText.width + 24)
+    promptBg.setSize(w, 26)
+    promptBg.setStrokeStyle(1, 0x9ee0c7, 0.95)
+    const promptX = Math.max(w / 2 + 4, Math.min(AREA_CANVAS_WIDTH - w / 2 - 4, x))
+    const promptY = Math.max(18, y - AREA_TILE_SIZE * 0.7)
+    this.interactPrompt.setPosition(promptX, promptY)
+    this.interactPrompt.setVisible(true)
+    this.interactPrompt.setData('lockedUntil', this.time.now + 1400)
+    this.interactPrompt.setData('lockedX', promptX)
+    this.interactPrompt.setData('lockedY', promptY)
+    if (this.tooFarHintTimer) this.tooFarHintTimer.remove(false)
+    this.tooFarHintTimer = this.time.delayedCall(1400, () => {
+      promptText.setColor('#fff5b8')
+      promptBg.setStrokeStyle(1, 0xfff5b8, 0.9)
+      this.interactPrompt.setData('lockedUntil', 0)
+      this.interactPrompt.setData('lockedX', undefined)
+      this.interactPrompt.setData('lockedY', undefined)
       this.tooFarHintTimer = null
     })
   }
@@ -2008,9 +2093,11 @@ export class AreaScene extends Phaser.Scene {
     const lockedUntil = (this.interactPrompt.getData('lockedUntil') as number | undefined) ?? 0
     if (lockedUntil > this.time.now) {
       // 仍在閃示警告中：keep prompt visible at player head position
+      const lockedX = this.interactPrompt.getData('lockedX') as number | undefined
+      const lockedY = this.interactPrompt.getData('lockedY') as number | undefined
       this.interactPrompt.setPosition(
-        this.player.x,
-        this.player.y - PLAYER_SPRITE_SIZE * 1.4
+        lockedX ?? this.player.x,
+        lockedY ?? this.player.y - PLAYER_SPRITE_SIZE * 1.4
       )
       this.interactPrompt.setVisible(true)
       return

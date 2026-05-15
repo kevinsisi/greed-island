@@ -50,6 +50,40 @@ export function visualForSpecies(speciesId: string): SpeciesVisual {
   }
 }
 
+const SPECIES_LABEL_ZH: Readonly<Record<string, string>> = {
+  forest_deer: '森林鹿',
+  fog_wolf: '霧狼',
+  moss_boar: '苔野豬',
+  ember_owl: '燼鴞',
+  bark_mantis: '樹皮螳螂',
+  mountain_lynx: '山猞猁',
+  cliff_goat: '崖山羊',
+  iron_beak_vulture: '鐵喙禿鷲',
+  stone_lizard: '石蜥',
+  mountain_bear: '山熊',
+  marsh_heron: '沼鷺',
+  marsh_fish: '沼魚',
+  salt_crab: '鹽蟹',
+  reed_eel: '蘆葦鰻',
+  white_marsh_leviathan: '白沼巨獸',
+  reef_carp: '礁鯉',
+  deep_eel: '深鰻',
+  desert_jerboa: '沙漠跳鼠',
+  dune_lizard: '沙丘蜥',
+  ash_serpent: '灰蛇',
+  sand_runner: '沙兔',
+  mirage_hawk: '蜃景鷹',
+  ruin_raven: '遺跡鴉',
+  ruin_rat: '遺跡鼠',
+  mimic_mold: '擬態黴菌',
+  iron_hound: '鐵犬',
+  lantern_moth: '燈蛾',
+}
+
+export function labelForSpecies(speciesId: string): string {
+  return SPECIES_LABEL_ZH[speciesId] ?? speciesId.replaceAll('_', ' ')
+}
+
 function firstGlyph(speciesId: string): string {
   if (!speciesId) return FALLBACK.letter
   const ch = speciesId.charAt(0).toUpperCase()
