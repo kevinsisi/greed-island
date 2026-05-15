@@ -3,6 +3,41 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Phase 3 §37.4: Household Shared Economy
+
+### Implemented
+
+- OpenSpec change `household-shared-economy` added for `docs/WORLD_CAPABILITIES.md` Phase 3 §37.4.
+- `HOUSEHOLD_GOLD_CONTRIBUTION_RATE = 0.25` added to `config/world.ts`; positive household-member income rounds up to at least 1 pooled gold.
+- Three new command/event types: `HOUSEHOLD_GOLD_CONTRIBUTED`, `HOUSEHOLD_GOLD_SPENT`, `HOUSEHOLD_INHERITANCE_ASSIGNED`, plus payload types and validators in `livingWorldCommands.ts`.
+- `HouseholdEconomyProjection` (`projections/householdEconomy.ts`): replayable rows keyed by `householdId`; idempotent contribution/spend/inheritance handling; spending clamp prevents negative pooled balance; canonical hash support.
+- `SimulationRuntime` integration: projection boot rebuild, two fan-out points, `getHouseholdEconomy()`, and `WorldSnapshot.facts.householdEconomy` for GM/admin observability.
+- Accepted `NPC_PRODUCTIVE_ACTION` and `MEAT_HARVESTED` income by household members emits deterministic household contribution events.
+- Autonomous construction decisions observe personal gold plus household pooled balance; when household balance is needed, runtime emits `HOUSEHOLD_GOLD_SPENT` after the construction command is accepted.
+- Routine household economy events are suppressed from chronicle/public narrative surfaces.
+
+### Honest scope
+
+- Household contributions are an accounting layer on top of existing individual civic gold in this slice; income is not subtracted from personal civic balances.
+- Inheritance command/projection substrate exists, but `NPC_DECEASED` generation is still not implemented.
+- Household construction spend is only wired into the existing autonomous construction path; no general-purpose household purchase system yet.
+
+### Verification
+
+- `npx openspec validate household-shared-economy --strict` — valid.
+- `npx openspec validate --all --strict` — **36 passed, 0 failed**.
+- Focused: `npx vitest run src/kernel/livingWorld.test.ts src/sim/runtimeExpansion.test.ts src/projections/householdEconomy.test.ts` — **48 tests passed**.
+- `npm run build` — server TypeScript clean; web production build clean except known Vite chunk-size warning.
+- `npm test` — **449 server + 34 web = 483 tests passed**.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke verification.
+
+### Outstanding
+
+- Complete commit/push/CI/deploy follow-through and smoke `/healthz` plus `/api/world` `facts.householdEconomy`.
+
 ## 2026-05-14 — Phase 3 §37.3: NPC Culture & Emergent Festivals
 
 ### Implemented

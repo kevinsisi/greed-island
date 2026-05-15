@@ -109,6 +109,10 @@ export const CULTURAL_NORM_NPC_THRESHOLD = 3
 export const RITUAL_FACTION_LEANS = ['monastic', 'temple'] as const
 export type RitualFactionLean = (typeof RITUAL_FACTION_LEANS)[number]
 
+// Phase 3 §37.4 — household shared economy. This is an accounting
+// contribution layered on top of individual civic gold in the first slice.
+export const HOUSEHOLD_GOLD_CONTRIBUTION_RATE = 0.25
+
 // Phase 3 §37.2 — NPC skill learning & mentorship.
 export const SKILL_IDS = ['hunting', 'fishing', 'construction'] as const
 export type SkillId = (typeof SKILL_IDS)[number]

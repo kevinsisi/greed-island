@@ -52,7 +52,8 @@ import {
   MAX_COMMANDS_PER_TICK_HARD_CAP,
   COMMAND_CAP_REJECTION_CODE,
   NPC_PARTITION_PERIOD,
-  PREDATOR_STARVATION_THRESHOLD_TICKS
+  PREDATOR_STARVATION_THRESHOLD_TICKS,
+  HOUSEHOLD_GOLD_CONTRIBUTION_RATE
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -109,6 +110,7 @@ import {
   decideCivEvoConstructionInitiate,
   hydrateLifeExpansionState,
   householdIdForNpc,
+  NPC_PRODUCTIVE_GOLD_BY_DOMAIN,
   productiveDeltaWithNpcSkill,
   withMeatHarvestedRecorded,
   withChildBorn,
@@ -138,6 +140,7 @@ import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
 import { MarketPricesProjection, type MarketPriceRow } from '../projections/marketPrices.js'
 import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../projections/productionChains.js'
+import { HouseholdEconomyProjection, type HouseholdEconomyRow } from '../projections/householdEconomy.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 
 const SIM_ACTOR_WORLD = 'system'
@@ -323,6 +326,7 @@ export class SimulationRuntime {
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
   private readonly marketPricesProjection = new MarketPricesProjection()
+  private readonly householdEconomyProjection = new HouseholdEconomyProjection()
   private readonly productionChainsProjection = new ProductionChainsProjection()
 
   constructor(
@@ -471,6 +475,7 @@ export class SimulationRuntime {
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
         marketPrices: this.marketPricesProjection.list(),
+        householdEconomy: this.householdEconomyProjection.list(),
         productionChains: this.productionChainsProjection.snapshot(),
         migrationRoutes: this.animalMigrationProjection.list(),
         predatorHunger: this.predatorHungerProjection.list(),
@@ -497,6 +502,10 @@ export class SimulationRuntime {
       },
       generatedAt: new Date().toISOString()
     }
+  }
+
+  getHouseholdEconomy(): readonly HouseholdEconomyRow[] {
+    return this.householdEconomyProjection.list()
   }
 
   getAreaStates(): readonly AreaState[] {
@@ -928,6 +937,7 @@ export class SimulationRuntime {
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
       this.marketPricesProjection.project(ev)
+      this.householdEconomyProjection.project(ev)
       this.productionChainsProjection.project(ev)
       this.settlementsProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
@@ -1355,15 +1365,19 @@ export class SimulationRuntime {
         // the reducer side (`withConstructionInitiated`) makes repeated
         // ticks safe.
         if (event.domain === 'build') {
+          const personalGold = this.lifeExpansion.npcCivicRecords[event.npcId]?.gold ?? 0
+          const householdBalance = this.householdBalanceForNpc(event.npcId)
           const decision = decideCivEvoConstructionInitiate({
             npcId: event.npcId,
             tile: event.tile,
             areaState: this.getAreaState(event.tile),
             lifeExpansion: this.lifeExpansion,
             constructionDemand: this.constructionDemandForNpc(event.npcId, profile ?? null, event.tile, nextTick),
-            availableGold: this.lifeExpansion.npcCivicRecords[event.npcId]?.gold ?? 0
+            availableGold: personalGold + householdBalance
           })
           if (decision) {
+            const personalGoldCost = Math.min(personalGold, decision.goldCost)
+            const householdGoldCost = decision.goldCost - personalGoldCost
             const motivation = this.buildAutonomousConstructionMotivation(
               event.npcId,
               profile ?? null,
@@ -1384,7 +1398,8 @@ export class SimulationRuntime {
                   tileId: decision.tileId,
                   buildingId: decision.buildingId,
                   duration: decision.duration,
-                  goldCost: decision.goldCost,
+                  goldCost: personalGoldCost,
+                  ...(householdGoldCost > 0 ? { householdGoldCost } : {}),
                   motivation,
                   narration: `${profile?.name.zh ?? event.npcId}承接${motivation.projectPurpose}，在${event.tile}支付 ${decision.goldCost} 金開一處新建案 ${decision.buildingId}，預計 ${decision.duration} tick 完工。`
                 }
@@ -2120,7 +2135,10 @@ export class SimulationRuntime {
             buildingId: string
             duration: number
             goldCost?: number
+            householdGoldCost?: number
+            motivation?: unknown
           }
+          const beforeConstruction = this.lifeExpansion
           this.lifeExpansion = withConstructionInitiated(this.lifeExpansion, {
             npcId: payload.npcId,
             tileId: payload.tileId,
@@ -2130,11 +2148,25 @@ export class SimulationRuntime {
             tick: nextTick
           })
           lifeExpansionChanged = true
+          if (this.lifeExpansion !== beforeConstruction && payload.householdGoldCost && payload.householdGoldCost > 0) {
+            const householdSpend = this.planHouseholdGoldSpend({
+              npcId: payload.npcId,
+              tileId: payload.tileId,
+              amount: payload.householdGoldCost,
+              purpose: 'construction',
+              sourceId: cmd.commandId,
+              tick: nextTick,
+              ...(isEventMotivation(payload.motivation) ? { motivation: payload.motivation } : {}),
+            })
+            if (householdSpend) postAcceptedCommands.push(householdSpend)
+          }
         } else if (cmd.commandType === 'NPC_PRODUCTIVE_ACTION') {
           const payload = cmd.payload as {
             npcId: string
+            tile: string
             domain: 'build' | 'learn' | 'trade' | 'service'
             delta: number
+            motivation?: unknown
           }
           this.lifeExpansion = withNpcProductiveActionRecorded(this.lifeExpansion, {
             npcId: payload.npcId,
@@ -2143,6 +2175,17 @@ export class SimulationRuntime {
             tick: nextTick
           })
           lifeExpansionChanged = true
+          const goldGain = NPC_PRODUCTIVE_GOLD_BY_DOMAIN[payload.domain] * Math.max(1, Math.floor(payload.delta))
+          const householdContribution = this.planHouseholdGoldContribution({
+            npcId: payload.npcId,
+            tileId: payload.tile,
+            amount: Math.ceil(goldGain * HOUSEHOLD_GOLD_CONTRIBUTION_RATE),
+            sourceEventType: 'NPC_PRODUCTIVE_ACTION',
+            sourceId: cmd.commandId,
+            tick: nextTick,
+            ...(isEventMotivation(payload.motivation) ? { motivation: payload.motivation } : {}),
+          })
+          if (householdContribution) postAcceptedCommands.push(householdContribution)
         } else if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
           const payload = cmd.payload as { delta: number; projectId?: string }
           this.lifeExpansion = withConstructionProgress(this.lifeExpansion, {
@@ -2184,6 +2227,16 @@ export class SimulationRuntime {
           lifeExpansionChanged = true
           const goodsPayload = cmd.payload as { huntId: string; npcId: string; quantity: number; tileId: string; motivation?: unknown }
           const motivation = isEventMotivation(goodsPayload.motivation) ? goodsPayload.motivation : undefined
+          const householdContribution = this.planHouseholdGoldContribution({
+            npcId: payload.npcId,
+            tileId: goodsPayload.tileId,
+            amount: Math.ceil(Math.max(0, Math.floor(payload.goldValue)) * HOUSEHOLD_GOLD_CONTRIBUTION_RATE),
+            sourceEventType: 'MEAT_HARVESTED',
+            sourceId: goodsPayload.huntId,
+            tick: nextTick,
+            ...(motivation ? { motivation } : {}),
+          })
+          if (householdContribution) postAcceptedCommands.push(householdContribution)
           postAcceptedCommands.push(
             makeLivingWorldCommand(
               'GOODS_EXTRACTED',
@@ -2451,6 +2504,7 @@ export class SimulationRuntime {
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
         this.marketPricesProjection.project(ev)
+        this.householdEconomyProjection.project(ev)
         this.productionChainsProjection.project(ev)
         this.settlementsProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
@@ -2926,6 +2980,78 @@ export class SimulationRuntime {
     return commands
   }
 
+  private planHouseholdGoldContribution(input: {
+    npcId: string
+    tileId: string
+    amount: number
+    sourceEventType: string
+    sourceId: string
+    tick: number
+    motivation?: EventMotivation
+  }): LivingWorldCommand | null {
+    const amount = Math.max(0, Math.floor(input.amount))
+    if (amount <= 0) return null
+    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    if (!householdId) return null
+    return makeLivingWorldCommand(
+      'HOUSEHOLD_GOLD_CONTRIBUTED',
+      input.npcId,
+      'npc',
+      input.tick,
+      input.tick,
+      {
+        householdId,
+        npcId: input.npcId,
+        amount,
+        sourceEventType: input.sourceEventType,
+        sourceId: input.sourceId,
+        tileId: input.tileId,
+        contributedAtTick: input.tick,
+        ...(input.motivation ? { motivation: input.motivation } : {}),
+        narration: `${input.npcId} contributed ${amount} gold to household ${householdId}.`
+      }
+    )
+  }
+
+  private planHouseholdGoldSpend(input: {
+    npcId: string
+    tileId: string
+    amount: number
+    purpose: string
+    sourceId: string
+    tick: number
+    motivation?: EventMotivation
+  }): LivingWorldCommand | null {
+    const amount = Math.max(0, Math.floor(input.amount))
+    if (amount <= 0) return null
+    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    if (!householdId) return null
+    return makeLivingWorldCommand(
+      'HOUSEHOLD_GOLD_SPENT',
+      input.npcId,
+      'npc',
+      input.tick,
+      input.tick,
+      {
+        householdId,
+        npcId: input.npcId,
+        amount,
+        purpose: input.purpose,
+        sourceId: input.sourceId,
+        tileId: input.tileId,
+        spentAtTick: input.tick,
+        ...(input.motivation ? { motivation: input.motivation } : {}),
+        narration: `${input.npcId} spent ${amount} household gold for ${input.purpose}.`
+      }
+    )
+  }
+
+  private householdBalanceForNpc(npcId: string): number {
+    const householdId = householdIdForNpc(this.lifeExpansion, npcId)
+    if (!householdId) return 0
+    return this.householdEconomyProjection.getByHouseholdId(householdId)?.balance ?? 0
+  }
+
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
     // Boot intentionally hydrates only stateful simulation facts needed before
@@ -2985,6 +3111,7 @@ export class SimulationRuntime {
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
       this.marketPricesProjection.rebuildFromEvents(allEvents)
+      this.householdEconomyProjection.rebuildFromEvents(allEvents)
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
     }

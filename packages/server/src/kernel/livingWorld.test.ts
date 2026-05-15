@@ -383,6 +383,34 @@ describe('living-world rule engine', () => {
         priceGold: 28,
         discoveredAtTick: 16,
         narration: 'market price discovered'
+      }),
+      makeLivingWorldCommand('HOUSEHOLD_GOLD_CONTRIBUTED', 'npc-a', 'npc', 17, 17, {
+        householdId: 'household-a',
+        npcId: 'npc-a',
+        amount: 2,
+        sourceEventType: 'NPC_PRODUCTIVE_ACTION',
+        sourceId: 'cmd-income',
+        tileId: 't_market',
+        contributedAtTick: 17,
+        narration: 'household gold contributed'
+      }),
+      makeLivingWorldCommand('HOUSEHOLD_GOLD_SPENT', 'npc-a', 'npc', 18, 18, {
+        householdId: 'household-a',
+        npcId: 'npc-a',
+        amount: 1,
+        purpose: 'construction',
+        sourceId: 'cmd-spend',
+        tileId: 't_market',
+        spentAtTick: 18,
+        narration: 'household gold spent'
+      }),
+      makeLivingWorldCommand('HOUSEHOLD_INHERITANCE_ASSIGNED', 'household-a', 'system', 19, 19, {
+        householdId: 'household-a',
+        deceasedNpcId: 'npc-a',
+        heirId: 'npc-b',
+        amount: 3,
+        assignedAtTick: 19,
+        narration: 'household inheritance assigned'
       })
     ]
     for (const cmd of samples) {
@@ -437,6 +465,23 @@ describe('living-world rule engine', () => {
     const result = ruleEngine.evaluate(cmd)
     expect(result.accepted).toBe(false)
     if (!result.accepted) expect(result.rejection.reason).toBe('starvationStage invalid')
+  })
+
+  it('rejects malformed household economy payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('HOUSEHOLD_GOLD_CONTRIBUTED', 'npc-a', 'npc', 17, 17, {
+      householdId: 'household-a',
+      npcId: 'npc-a',
+      amount: 0,
+      sourceEventType: 'NPC_PRODUCTIVE_ACTION',
+      sourceId: 'cmd-income',
+      tileId: 't_market',
+      contributedAtTick: 17,
+      narration: 'household gold contributed'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('amount required')
   })
 
   it('rejects malformed animal reproduction parent ids', () => {

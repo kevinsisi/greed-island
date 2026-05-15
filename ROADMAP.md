@@ -7,6 +7,19 @@
 
 ## v0.18.0 🚧 in progress — 2026-05-14
 
+**主題：Phase 3 §37.4 — Household Shared Economy**
+
+OpenSpec: `household-shared-economy/`。
+
+- ✅ 常數：`HOUSEHOLD_GOLD_CONTRIBUTION_RATE = 0.25` 加入 `config/world.ts`；非零收入採向上取整產生 pooled household contribution。
+- ✅ 三個新 command/event 類型：`HOUSEHOLD_GOLD_CONTRIBUTED`、`HOUSEHOLD_GOLD_SPENT`、`HOUSEHOLD_INHERITANCE_ASSIGNED` + payload types + validators 在 `livingWorldCommands.ts`。
+- ✅ `HouseholdEconomyProjection`：`householdId → HouseholdEconomyRow`；contribution/spend/inheritance 依 deterministic source idempotent；spend clamp 保證 balance 不為負；`getByHouseholdId`、`list`、`rebuildFromEvents`、`canonicalHash` accessors。
+- ✅ `SimulationRuntime`：household economy projection 掛載、boot rebuild、兩個 fan-out 點、公開 `getHouseholdEconomy()`，並在 `WorldSnapshot.facts.householdEconomy` 暴露給 GM/admin。
+- ✅ accepted `NPC_PRODUCTIVE_ACTION` / `MEAT_HARVESTED` 會為有 household 的 NPC 產生 `HOUSEHOLD_GOLD_CONTRIBUTED`；autonomous construction 會觀察 personal + household pooled gold，不足 personal 的部分以 `HOUSEHOLD_GOLD_SPENT` 記帳。
+- ✅ household economy routine events 不進 chronicle/public narrative surface。
+- ✅ Focused household tests 48 passed；full `npm test` 449 server + 34 web = 483 passed；`npm run build` clean（保留既有 Vite chunk warning）；`openspec validate --all --strict` 36 passed。
+- ⚠️ Honest scope：本 slice 不扣個人 civic income、不產生 `NPC_DECEASED`；inheritance 只提供 command/projection substrate。
+
 **主題：Phase 3 §37.3 — NPC Culture & Emergent Festivals**
 
 OpenSpec: `npc-culture-festivals/`。

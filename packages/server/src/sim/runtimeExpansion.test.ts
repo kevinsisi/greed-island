@@ -26,6 +26,7 @@ describe('SimulationRuntime life goals and expansion', () => {
       const events = eventStore.readEvents()
       const eventTypes = new Set(events.map((event) => event.eventType))
       const householdEvents = events.filter((event) => event.eventType === 'NPC_HOUSEHOLD_FORMED')
+      const householdGoldEvents = events.filter((event) => event.eventType === 'HOUSEHOLD_GOLD_CONTRIBUTED')
       const constructionEvent = events
         .filter((event) => event.eventType === 'CONSTRUCTION_PROJECT_PROGRESS')
         .find((event) => ((event.payload as { data?: { progressAfter?: number } }).data?.progressAfter ?? 0) >= 12)
@@ -46,6 +47,7 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(eventTypes.has('NPC_LIFE_GOAL_SET')).toBe(true)
       expect(eventTypes.has('NPC_HOUSEHOLD_FORMED')).toBe(true)
       expect(eventTypes.has('NPC_CHILD_BORN')).toBe(true)
+      expect(eventTypes.has('HOUSEHOLD_GOLD_CONTRIBUTED')).toBe(true)
       expect(eventTypes.has('CONSTRUCTION_PROJECT_PROGRESS')).toBe(true)
       expect(eventTypes.has('MAP_TILE_UNLOCKED')).toBe(true)
       expect(eventTypes.has('BUILDING_CONSTRUCTED')).toBe(true)
@@ -73,6 +75,8 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(npcs.some((npc) => npc.civic && Object.values(npc.civic.skillXp).some((xp) => xp > 0))).toBe(true)
       expect((world.facts.lifeExpansion as { unlockedTileIds?: string[] }).unlockedTileIds).toContain(SALT_MARSH_TILE_ID)
       expect(Object.keys((world.facts.lifeExpansion as { npcCivicRecords?: Record<string, unknown> }).npcCivicRecords ?? {})).not.toHaveLength(0)
+      expect(householdGoldEvents.length).toBeGreaterThan(0)
+      expect((world.facts.householdEconomy as { balance?: number }[]).some((row) => (row.balance ?? 0) > 0)).toBe(true)
 
       runtime.stop()
       const restored = new SimulationRuntime(eventStore, profiles, loadCardCatalog())
@@ -80,6 +84,7 @@ describe('SimulationRuntime life goals and expansion', () => {
         expect(restored.getMap().tiles.map((tile) => tile.id)).toContain(SALT_MARSH_TILE_ID)
         expect(restored.getBuildingsOnTile(SALT_MARSH_TILE_ID).map((view) => view.def.id)).toContain(SALT_MARSH_BUILDING_ID)
         expect(restored.getNpcs().some((npc) => npc.civic && npc.civic.gold > 0)).toBe(true)
+        expect(restored.getHouseholdEconomy().some((row) => row.balance > 0)).toBe(true)
       } finally {
         restored.stop()
       }

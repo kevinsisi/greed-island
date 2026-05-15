@@ -97,6 +97,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'CULTURAL_FESTIVAL_FORMED',
   'CULTURAL_RITUAL_PERFORMED',
   'CULTURAL_NORM_ESTABLISHED',
+  // Phase 3 §37.4 — Household shared economy
+  'HOUSEHOLD_GOLD_CONTRIBUTED',
+  'HOUSEHOLD_GOLD_SPENT',
+  'HOUSEHOLD_INHERITANCE_ASSIGNED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -167,6 +171,40 @@ export type NpcProductiveActionCmd = Readonly<{
   narration: string
 }>
 
+export type HouseholdGoldContributedCmd = Readonly<{
+  householdId: string
+  npcId: string
+  amount: number
+  sourceEventType: string
+  sourceId: string
+  tileId: string
+  contributedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type HouseholdGoldSpentCmd = Readonly<{
+  householdId: string
+  npcId: string
+  amount: number
+  purpose: string
+  sourceId: string
+  tileId: string
+  spentAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type HouseholdInheritanceAssignedCmd = Readonly<{
+  householdId: string
+  deceasedNpcId: string
+  heirId: string
+  amount: number
+  assignedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type EventMotivation = Readonly<{
   explanation: string
   projectPurpose?: string
@@ -188,6 +226,7 @@ export type ConstructionInitiateCmd = Readonly<{
   buildingId: string
   duration: number
   goldCost?: number
+  householdGoldCost?: number
   motivation?: ConstructionMotivation
   narration: string
 }>
@@ -780,6 +819,9 @@ export type LivingWorldCommandPayload =
   | CulturalFestivalFormedCmd
   | CulturalRitualPerformedCmd
   | CulturalNormEstablishedCmd
+  | HouseholdGoldContributedCmd
+  | HouseholdGoldSpentCmd
+  | HouseholdInheritanceAssignedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -897,6 +939,9 @@ const VALIDATORS: Readonly<
     }
     if (p.goldCost !== undefined && (typeof p.goldCost !== 'number' || !Number.isFinite(p.goldCost) || p.goldCost < 0)) {
       return 'goldCost must be a non-negative number'
+    }
+    if (p.householdGoldCost !== undefined && (typeof p.householdGoldCost !== 'number' || !Number.isFinite(p.householdGoldCost) || p.householdGoldCost < 0)) {
+      return 'householdGoldCost must be a non-negative number'
     }
     if (p.motivation !== undefined) {
       const err = validateConstructionMotivation(p.motivation)
@@ -1467,6 +1512,34 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.formedAtTick)) return 'formedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
+  },
+  HOUSEHOLD_GOLD_CONTRIBUTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateHouseholdMoneyCommon(p)
+    if (err) return err
+    if (typeof p.sourceEventType !== 'string' || p.sourceEventType.length === 0) return 'sourceEventType required'
+    if (typeof p.contributedAtTick !== 'number' || !Number.isInteger(p.contributedAtTick) || p.contributedAtTick < 0) return 'contributedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  HOUSEHOLD_GOLD_SPENT: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateHouseholdMoneyCommon(p)
+    if (err) return err
+    if (typeof p.purpose !== 'string' || p.purpose.length === 0) return 'purpose required'
+    if (typeof p.spentAtTick !== 'number' || !Number.isInteger(p.spentAtTick) || p.spentAtTick < 0) return 'spentAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  HOUSEHOLD_INHERITANCE_ASSIGNED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (typeof p.deceasedNpcId !== 'string' || p.deceasedNpcId.length === 0) return 'deceasedNpcId required'
+    if (typeof p.heirId !== 'string' || p.heirId.length === 0) return 'heirId required'
+    if (!isPositiveQuantity(p.amount)) return 'amount required'
+    if (typeof p.assignedAtTick !== 'number' || !Number.isInteger(p.assignedAtTick) || p.assignedAtTick < 0) return 'assignedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
   }
 }
 
@@ -1677,6 +1750,15 @@ function validateHuntCommon(value: Record<string, unknown>): string | null {
 function validateGoodsHolderPayload(value: Record<string, unknown>): string | null {
   if (!isGoodsHolderType(value.holderType)) return 'holderType invalid'
   if (typeof value.holderId !== 'string' || value.holderId.length === 0) return 'holderId required'
+  if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
+  return null
+}
+
+function validateHouseholdMoneyCommon(value: Record<string, unknown>): string | null {
+  if (typeof value.householdId !== 'string' || value.householdId.length === 0) return 'householdId required'
+  if (typeof value.npcId !== 'string' || value.npcId.length === 0) return 'npcId required'
+  if (!isPositiveQuantity(value.amount)) return 'amount required'
+  if (typeof value.sourceId !== 'string' || value.sourceId.length === 0) return 'sourceId required'
   if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
   return null
 }
