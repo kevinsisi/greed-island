@@ -460,14 +460,28 @@ export class AreaScene extends Phaser.Scene {
       })
       text.setOrigin(0.5, 0.5)
       text.setDepth(40)
-      text.setInteractive({ useHandCursor: true })
-      text.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation?.()
-        this.suppressNextPointerTarget = true
-        this.flashInspectHint(this.labelForDecoration(deco.glyph), cx, cy)
-      })
+      this.createInspectZone(cx, cy, AREA_TILE_SIZE, AREA_TILE_SIZE, this.labelForDecoration(deco.glyph), 41)
       this.attachEnvAnimation(text, deco.glyph, cx, cy, deco.col, deco.row)
     }
+  }
+
+  private createInspectZone(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    message: string,
+    depth?: number
+  ): Phaser.GameObjects.Zone {
+    const zone = this.add.zone(x, y, width, height)
+    if (depth !== undefined) zone.setDepth(depth)
+    zone.setInteractive({ useHandCursor: true })
+    zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.stopPropagation?.()
+      this.suppressNextPointerTarget = true
+      this.flashInspectHint(message, x, y)
+    })
+    return zone
   }
 
   private labelForDecoration(glyph: string): string {
@@ -632,7 +646,7 @@ export class AreaScene extends Phaser.Scene {
     if (!eco) return
 
     const layer = this.add.container(0, 0)
-    layer.setDepth(45)
+    layer.setDepth(44)
     this.ecologyLayer = layer
 
     for (const row of eco.animals) {
@@ -657,6 +671,7 @@ export class AreaScene extends Phaser.Scene {
           })
           glyph.setOrigin(0.5, 0.5)
           layer.add(glyph)
+          layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE, AREA_TILE_SIZE, `${labelForSpecies(row.speciesId)} ×1`))
         }
       } else {
         // Cluster at a deterministic spot derived from speciesId + tileId.
@@ -687,6 +702,7 @@ export class AreaScene extends Phaser.Scene {
         })
         count.setOrigin(0, 0.5)
         layer.add(count)
+        layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE * 1.4, AREA_TILE_SIZE * 1.2, `${labelForSpecies(row.speciesId)} ×${row.count}`))
       }
     }
 
@@ -699,16 +715,16 @@ export class AreaScene extends Phaser.Scene {
       layer.add(bg)
       const fill = this.add.rectangle(40, barY, widthPx, 6, eco.fishery.collapsed ? 0xe04a3a : 0x4a9cd6, 0.9)
       fill.setOrigin(0, 0.5)
-      fill.setInteractive(
-        new Phaser.Geom.Rectangle(0, -12, Math.max(widthPx, 40), 24),
-        Phaser.Geom.Rectangle.Contains
-      )
-      fill.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        pointer.event?.stopPropagation?.()
-        this.suppressNextPointerTarget = true
-        this.flashInspectHint(this.fisheryLabel(eco.fishery!.density, eco.fishery!.collapsed), 40 + widthPx / 2, barY)
-      })
       layer.add(fill)
+      layer.add(
+        this.createInspectZone(
+          40 + maxWidth / 2,
+          barY,
+          maxWidth,
+          36,
+          this.fisheryLabel(eco.fishery.density, eco.fishery.collapsed)
+        )
+      )
       const label = this.add.text(40, barY - 12, this.fisheryLabel(eco.fishery.density, eco.fishery.collapsed), {
         fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
         fontSize: '10px',

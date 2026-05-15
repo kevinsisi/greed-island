@@ -10,12 +10,14 @@ developer. Keep latest status at the top.
 - Added tap/click inspection for area ecology elements: animal dots, animal clusters, and fishery bars now show a short in-scene label instead of behaving like inert decoration.
 - Added tap/click inspection for environment/resource decoration glyphs (trees, rocks, wood piles, reeds, ruins, boats, signs, etc.). These are read-only hints only; they do not harvest resources, start combat, or mutate world state.
 - Added zh labels for known animal species so ecology inspection shows player-readable names such as `擬態黴菌 ×7` instead of raw species ids.
+- Follow-up fix after mobile feedback: inspection now uses transparent tile-sized hit zones rather than tiny emoji/circle bodies, and ecology zones render below building interaction depth so visible elements are easier to tap without stealing building entry.
 
 #### Verification
 
 - `npm test -w @greed-island/web` — **50 tests passed**.
 - `npm run build:web` — clean TypeScript + Vite build; known chunk-size warning remains.
 - `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Hit-zone follow-up verification: `npm test -w @greed-island/web` — **50 tests passed**; `npm run build:web` — clean TypeScript + Vite build with known chunk-size warning; `npx openspec validate --all --strict` — **34 passed, 0 failed**.
 
 #### CI / Deploy
 
