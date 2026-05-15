@@ -27,6 +27,7 @@ import {
   type ServerNearbyPlayer
 } from '../api/client'
 import { areaOutdoorNpcs } from './npcProjection'
+import { eventBelongsToArea } from './areaEvents'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle: 'npc.activity.idle',
@@ -176,13 +177,7 @@ export function AreaPage() {
     if (!tile) return []
     const occupantIds = new Set(occupants.map((n) => n.id))
     return events
-      .filter((event) => {
-        if (occupantIds.has(event.actorId)) return true
-        const payload = event.payload ?? {}
-        const from = String((payload as { from?: unknown }).from ?? '')
-        const to = String((payload as { to?: unknown }).to ?? '')
-        return from === tileId || to === tileId
-      })
+      .filter((event) => eventBelongsToArea(event, tileId, occupantIds))
       .slice(0, 12)
   }, [events, occupants, tile, tileId])
 

@@ -218,7 +218,8 @@ export function AreaPhaserGame({
       locale,
       hudStrings,
       controlsEnabled,
-      ...(weather ? { weather } : {})
+      ...(weather ? { weather } : {}),
+      ...(ecology !== undefined ? { ecology } : {})
     }
     if (players) update.players = players
     if (playerName !== undefined) update.playerName = playerName
@@ -240,7 +241,7 @@ export function AreaPhaserGame({
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [npcs, players, playerName, drops, buildings, locale, hudStrings, weather, controlsEnabled])
+  }, [npcs, players, playerName, drops, buildings, locale, hudStrings, weather, ecology, controlsEnabled])
 
   return (
     <div

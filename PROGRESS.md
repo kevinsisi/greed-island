@@ -3,6 +3,24 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Area Ecology Visibility Bugfix
+
+### Implemented
+
+- Fixed `AreaPhaserGame` / `AreaScene` ecology update flow: async `/api/area/:tileId/ecology` responses now update the active Phaser scene and redraw animal overlays instead of only being used during initial scene creation.
+- Fixed area-local event filtering so payload tile fields (`tileId`, `fromTileId`, `toTileId`, `sourceTileId`, `targetTileId`, etc.) count as local. `ANIMAL_ATTACKED_NPC` events now appear under the matching area's recent events.
+- Expanded known species visuals so current ecosystem species (for example `mirage_hawk`, `dune_lizard`, `mimic_mold`, `iron_hound`) render with distinct animal glyphs instead of generic fallback paws.
+
+### Verification
+
+- `npx vitest run src/pages/areaEvents.test.ts src/pages/hubEcology.test.ts` — **8 tests passed**.
+- `npm test -w @greed-island/web` — **50 tests passed**.
+- `npm run build:web` — clean TypeScript + Vite build; known chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke verification.
+
 ## 2026-05-15 — User-reported visual bugfixes (v0.24.2)
 
 ### Implemented

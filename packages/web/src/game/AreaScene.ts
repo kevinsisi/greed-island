@@ -329,6 +329,7 @@ export class AreaScene extends Phaser.Scene {
     hudStrings?: AreaSceneInit['hudStrings']
     buildings?: AreaMapBuilding[]
     weather?: AreaWeather
+    ecology?: AreaEcologyView | null
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -363,6 +364,10 @@ export class AreaScene extends Phaser.Scene {
     if (payload.weather && payload.weather !== this.weather) {
       this.weather = payload.weather
       this.applyWeather(payload.weather)
+    }
+    if (payload.ecology !== undefined) {
+      this.ecology = payload.ecology
+      this.drawEcologyOverlay()
     }
   }
 
