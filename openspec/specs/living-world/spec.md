@@ -174,3 +174,68 @@ MobileTabBar 之上（bottom 偏移約 60px）。main 內容區 padding 必須�
 - **WHEN** 世界發生天氣變化事件
 - **THEN** 事件條必須顯示在 mobile nav 上方且可見，不需要拉動就能看到
 
+### Requirement: BuildingDef supports optional tags field
+
+`BuildingDef` SHALL include an optional field `tags?: readonly string[]`. Existing buildings without this field compile unchanged. Temple and monastery buildings in the catalog SHALL be tagged with `['ritual_site']`.
+
+#### Scenario: ritual_site tag present on temple buildings
+
+- **WHEN** the building catalog is loaded
+- **THEN** buildings `b_temple_shrine` and `b_mountain_monastery` (or equivalent temple-type buildings) have `tags` containing `'ritual_site'`
+
+#### Scenario: buildings without tags compile cleanly
+
+- **WHEN** `BuildingDef` objects are created without a `tags` field
+- **THEN** TypeScript compiles without error (field is optional)
+
+### Requirement: CULTURAL_FESTIVAL_FORMED and CULTURAL_NORM_ESTABLISHED surface in the chronicle
+
+Cultural event commands SHALL include a non-empty `narration` string field. `readNarrativeFromAnyEvent` SHALL treat these events as chronicle-eligible (narration non-null), so they appear in `TimelinePage`.
+
+#### Scenario: festival narration reaches the chronicle
+
+- **WHEN** `CULTURAL_FESTIVAL_FORMED` is accepted and its event is committed
+- **THEN** the event's `narration` field is non-null and non-empty
+- **AND** the event appears in the `TimelinePage` event stream
+
+### Requirement: Constants CULTURAL_FESTIVAL_THRESHOLD and CULTURAL_NORM_NPC_THRESHOLD are in world config
+
+Both SHALL be exported from `config/world.ts` as named constants. No magic numbers in seeder or projection logic.
+
+#### Scenario: constants used in festival seeder
+
+- **WHEN** the festival seeder compares the counter to the threshold
+- **THEN** it uses `CULTURAL_FESTIVAL_THRESHOLD` (not a hardcoded literal)
+
+### Requirement: NPC state SHALL be persisted as typed living-world events
+
+The runtime SHALL persist authoritative NPC state snapshots as typed
+`NPC_STATE_RECORDED` events rather than only as generic `FACT_SET` rows.
+
+#### Scenario: Changed NPC state emits typed state event
+- **WHEN** `NpcEngine.tick` produces a changed state for `npcId = X`
+- **THEN** the runtime MUST commit an `NPC_STATE_RECORDED` event carrying `X` and
+  the authoritative state snapshot for that tick
+
+#### Scenario: Internal NPC state events do not appear as public narrative
+- **WHEN** a `NPC_STATE_RECORDED` event is committed
+- **THEN** it MUST remain available for typed projection rebuild
+- **AND** it MUST NOT surface as a public recent-event / chronicle narrative item
+
+### Requirement: NPC state projection SHALL rebuild engine state from typed events
+
+The server SHALL provide a replayable `NpcStateProjection` rebuilt from
+`NPC_STATE_RECORDED` events. Boot hydration SHALL prefer that projection over the
+legacy `npc.state.<id>` FACT_SET path.
+
+#### Scenario: Boot hydrate prefers typed projection
+- **GIVEN** an EventLog containing `NPC_STATE_RECORDED` events for an NPC
+- **WHEN** the runtime boots
+- **THEN** `NpcEngine.hydrate(...)` MUST receive the latest typed state snapshot
+- **AND** legacy `npc.state.<id>` FACT_SET values MUST be ignored for that NPC
+
+#### Scenario: Legacy FACT_SET remains backward-compatible fallback
+- **GIVEN** an older EventLog with no `NPC_STATE_RECORDED` events for an NPC
+- **WHEN** the runtime boots
+- **THEN** boot hydration MAY fall back to `npc.state.<id>` FACT_SET for that NPC
+

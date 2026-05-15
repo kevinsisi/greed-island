@@ -3,6 +3,23 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — OpenSpec Hygiene: Completed Changes Archived
+
+### Implemented
+
+- Archived completed Phase 3 changes: `npc-dialog-grounding`, `npc-rumor-propagation`, `npc-skill-mentorship`, `npc-culture-festivals`, `household-shared-economy`.
+- Archived completed ecosystem/economy foundation changes: `npc-state-typed-projection`, `ecosystem-foundation`, `ecosystem-animal-spawning`, `ecosystem-simple-hunting`, `ecosystem-predation`, `ecosystem-reproduction-capacity`, `ecosystem-migration`, `predator-mortality`, `goods-primitives`, `goods-logistics`, `goods-production-chains`, `market-formation`.
+- Active OpenSpec list is now reduced to unfinished/long-running changes only: `ecosystem-fishery-density`, `settlement-domain`, `simulation-budget-enforcement`, `civ-evo-construction`, `combat-phase-c-realtime-subtick`, `combat-system`.
+
+### Verification
+
+- `npx openspec list` — 6 active changes remain.
+- `npx openspec validate --all --strict` — **33 passed, 0 failed**.
+
+### Next
+
+- Recommended next new change: Phase E2.1 `ecosystem-overuse-detection` from `docs/WORLD_CAPABILITIES.md` §38.1.
+
 ## 2026-05-15 — Phase 3 §37.4: Household Shared Economy
 
 ### Implemented

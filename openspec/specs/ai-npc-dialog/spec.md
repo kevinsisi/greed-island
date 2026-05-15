@@ -22,29 +22,26 @@ The server SHALL persist Gemini API keys in an `api_keys` SQLite table with at l
 - **AND** the table contains exactly the rows for `k1` and `k2`.
 
 ### Requirement: NPC dialog MUST use the key pool with automatic rotation and fallback
-
-`POST /api/npc/:npcId/interact` SHALL prefer the AI-driven path whenever the key pool has at least one `active` key. It MUST iterate active keys oldest-used-first, mark a key `disabled` on HTTP 401/403/429, and skip-but-keep-active on transient errors (HTTP 5xx, network, timeout). If every active key fails or none are configured, the endpoint MUST fall back to the static dialog library so the user always receives a reply, and SHALL return `replySource='fallback'` plus the last AI error in `aiError`.
+`POST /api/npc/:npcId/interact` SHALL prefer the AI-driven path whenever the key pool has at least one `active` key. It MUST iterate active keys oldest-used-first, mark a key `disabled` on HTTP 401/403/429, and skip-but-keep-active on transient errors (HTTP 5xx, network, timeout). If every active key fails or none are configured, the endpoint MUST fall back to the static dialog library so the user always receives a reply, and SHALL return `replySource='fallback'` plus the last AI error in `aiError`. The AI system prompt MUST include grounded world context (known-person list, anti-hallucination constraints, ecological awareness, recent local events, active rumors) assembled from live runtime projections before the call is made.
 
 #### Scenario: a single quota-exhausted key disables itself
-
 - **GIVEN** the pool contains exactly one active key `k1`
 - **WHEN** the AI call returns HTTP 429
 - **THEN** `k1.status` becomes `disabled` and `k1.last_error` is populated
-- **AND** the endpoint returns a static-fallback line with `replySource='fallback'`.
+- **AND** the endpoint returns a static-fallback line with `replySource='fallback'`
 
-#### Scenario: free-text message produces an AI reply
-
+#### Scenario: free-text message produces an AI reply with grounded context
 - **GIVEN** the pool has at least one healthy active key
+- **AND** the NPC has interact memories with two other NPCs and the tile has animal population data
 - **WHEN** the player POSTs `{ "message": "你最近聽說阿鬼那邊的事嗎？" }` to `/api/npc/central.exchange.shen_ruo_yun/interact`
-- **THEN** the response includes `line.zh` and `line.en` strings whose content is NOT byte-identical to any line in `dialog.ts` for that NPC
+- **THEN** the response includes `line.zh` and `line.en` strings
 - **AND** `replySource='ai'`
-- **AND** `personalEvent.id` references a new row in `personal_events` containing the AI-generated line.
+- **AND** the system prompt sent to the AI contained the known-person list, ecological block, and anti-hallucination constraints
 
 #### Scenario: empty pool falls back without erroring
-
 - **GIVEN** `api_keys` is empty
 - **WHEN** the player sends a message
-- **THEN** the endpoint returns 200 with `replySource='fallback'` and a line drawn from `dialog.ts`.
+- **THEN** the endpoint returns 200 with `replySource='fallback'` and a line drawn from `dialog.ts`
 
 ### Requirement: Admin-only Settings endpoints MUST gate by allow-list with first-registered fallback
 
@@ -104,4 +101,65 @@ When the AI succeeds, the endpoint MUST persist a `personal_events` row containi
 - **GIVEN** an AI reply lands as `{ zh: '「來找我幹嘛？」', en: '"What do you want?"', intent: 'ask', trustDelta: -1 }`
 - **WHEN** the endpoint returns 200
 - **THEN** a new `personal_events` row exists with `line_zh='「來找我幹嘛？」'`, `intent='ask'`, `trust_after = previousTrust - 1`.
+
+### Requirement: NPC dialog prompt includes the NPC's active rumors
+
+When generating AI dialog for an NPC, the prompt builder SHALL include a rumors context block containing the NPC's active rumors from `RumorProjection`. The block MUST list up to 3 rumors ordered by descending accuracy. If the NPC has no active rumors, the block MUST be omitted or empty — it MUST NOT fabricate rumor content.
+
+#### Scenario: Active rumors appear in dialog context
+
+- **WHEN** NPC `shen_ruo_yun` holds a rumor with `topic = 'predator_death'`, `subjectId = 'fog_wolf'`, `tileId = 't_forest'`, `accuracy = 90`
+- **AND** the player POSTs a message to `/api/npc/shen_ruo_yun/interact`
+- **THEN** the AI prompt MUST include a context line such as "Heard: a fog_wolf died at t_forest (accuracy 90%)"
+- **AND** the generated reply MAY reference the wolf death
+
+#### Scenario: No rumors — block omitted
+
+- **WHEN** NPC `shen_ruo_yun` holds no active rumors
+- **AND** the player sends a message
+- **THEN** the AI prompt MUST NOT include any fabricated rumor content
+- **AND** `replySource` is unaffected (still `'ai'` or `'fallback'` per key pool state)
+
+#### Scenario: At most 3 rumors passed to prompt
+
+- **WHEN** an NPC holds 5 active rumors
+- **THEN** the prompt context block MUST include only the top 3 by accuracy
+
+### Requirement: AiDialogContext accepts optional skillLevels field
+
+`AiDialogContext` SHALL include an optional field `skillLevels?: readonly { skillId: string; level: number }[]`. When present, `buildSystemPrompt()` SHALL inject a skill block before the conversation history section listing the NPC's known skills. When absent or empty, no skill block is injected.
+
+#### Scenario: skill block appears when skillLevels is populated
+
+- **WHEN** `buildSystemPrompt()` is called with `skillLevels = [{ skillId: 'hunting', level: 2 }]`
+- **THEN** the returned prompt lines include a section naming `hunting` and level `2`
+
+#### Scenario: no skill block when skillLevels is absent
+
+- **WHEN** `buildSystemPrompt()` is called without `skillLevels`
+- **THEN** no skill-related lines are injected into the prompt
+
+### Requirement: buildSkillBlock is exported from aiDialog.ts
+
+`buildSkillBlock(skills: readonly { skillId: string; level: number }[] | undefined): string[]` SHALL be exported. It SHALL return `[]` when passed `undefined` or an empty array.
+
+#### Scenario: returns non-empty lines for valid skill list
+
+- **WHEN** `buildSkillBlock([{ skillId: 'fishing', level: 1 }])` is called
+- **THEN** the result is a non-empty string array containing `'fishing'` and `'1'`
+
+#### Scenario: returns empty array for undefined input
+
+- **WHEN** `buildSkillBlock(undefined)` is called
+- **THEN** the result is `[]`
+
+### Requirement: npc.ts handler assembles skillLevels before generateAiReply
+
+The NPC interact handler SHALL call `getNpcSkills(npcId)` on the runtime, map the result to `{ skillId, level }` pairs, and populate `dialogCtx.skillLevels` only when the array is non-empty.
+
+#### Scenario: skillLevels populated for NPC with skill history
+
+- **GIVEN** the runtime returns skill rows for the target NPC
+- **WHEN** the handler assembles `AiDialogContext`
+- **THEN** `dialogCtx.skillLevels` contains the same skills with their levels
 

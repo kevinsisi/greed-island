@@ -125,3 +125,52 @@ The runtime SHALL enforce the law that intent flows through Commands, the Rule E
 - **WHEN** a tick has no player commands
 - **THEN** the runtime MUST still collect NPC, area, building, weather, season, and world-event Commands and commit any accepted Events deterministically through the Rule Engine
 
+### Requirement: Catalog covers ecosystem migration events
+The living-world command catalog SHALL include `ANIMAL_MIGRATED` and
+`MIGRATION_WAVE_STARTED` as typed commands with validated payloads.
+`ANIMAL_MIGRATED` MUST declare `animalId`, `speciesId`, `fromTileId`, `toTileId`,
+`migratedAtTick`, and `migrationType` (`'pressure' | 'seasonal'`).
+`MIGRATION_WAVE_STARTED` MUST declare `waveId`, `speciesId`, `fromTileId`,
+`toTileId`, `startedAtTick`, and `migrationType`.
+
+#### Scenario: ANIMAL_MIGRATED with missing fromTileId is rejected
+- **WHEN** an `ANIMAL_MIGRATED` command is submitted without `fromTileId`
+- **THEN** the Rule Engine MUST reject it with code `INVALID_PAYLOAD`
+
+#### Scenario: ANIMAL_MIGRATED with identical fromTileId and toTileId is rejected
+- **WHEN** an `ANIMAL_MIGRATED` command has `fromTileId === toTileId`
+- **THEN** the Rule Engine MUST reject it with code `INVALID_PAYLOAD`
+
+#### Scenario: MIGRATION_WAVE_STARTED with invalid migrationType is rejected
+- **WHEN** a `MIGRATION_WAVE_STARTED` command carries `migrationType` outside
+  `['pressure', 'seasonal']`
+- **THEN** the Rule Engine MUST reject it with code `INVALID_PAYLOAD`
+
+### Requirement: ANIMAL_KILLED command and event are defined
+
+The system SHALL define `ANIMAL_KILLED` as a command and event type in the living-world command catalog. The payload MUST include `huntId`, `predatorSpeciesId`, `predatorAnimalId`, `preySpeciesId`, `preyAnimalId`, `tileId`, and `killedAtTick`.
+
+#### Scenario: Validator rejects mismatched tile
+- **WHEN** an `ANIMAL_KILLED` command payload has `tileId` that is empty or missing
+- **THEN** the Rule Engine MUST reject with `INVALID_PAYLOAD`
+
+#### Scenario: Validator rejects same predator and prey animal id
+- **WHEN** `predatorAnimalId === preyAnimalId`
+- **THEN** the Rule Engine MUST reject with `INVALID_PAYLOAD`
+
+### Requirement: ANIMAL_DIED_STARVATION command and event are defined
+
+The system SHALL define `ANIMAL_DIED_STARVATION` as a command and event type in the living-world command catalog. The payload MUST include `starvationId`, `predatorSpeciesId`, `predatorAnimalId`, `tileId`, and `diedAtTick`.
+
+#### Scenario: Validator rejects empty starvationId
+- **WHEN** an `ANIMAL_DIED_STARVATION` command payload has an empty or missing `starvationId`
+- **THEN** the Rule Engine MUST reject with `INVALID_PAYLOAD`
+
+### Requirement: AnimalPopulationProjection handles predation events
+
+`AnimalPopulationProjection.project()` MUST handle `ANIMAL_KILLED` (remove prey animal id from prey row) and `ANIMAL_DIED_STARVATION` (remove predator animal id from predator row). Both operations MUST be no-ops if the named animal id is not present in the row.
+
+#### Scenario: Replay is idempotent for predation events
+- **WHEN** the same EventLog containing `ANIMAL_KILLED` and `ANIMAL_DIED_STARVATION` events is replayed twice
+- **THEN** `AnimalPopulationProjection.canonicalHash()` MUST return the same value both times
+
