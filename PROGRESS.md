@@ -19,7 +19,13 @@ developer. Keep latest status at the top.
 
 #### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke verification for this follow-up.
+- Commit `014f9f5 fix(area): add inspect hints for visible elements` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25915547964` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25915547941` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.2`, tick `141223`.
+  - `https://hunter.sisihome.org/` — served updated app shell with `/assets/index-Dxo5OEGP.js`.
+  - `https://hunter.sisihome.org/api/area/t_ruin/ecology` — returned live animals (`mimic_mold:7`, `ruin_rat:1`) and 1 predator warning for inspection targets.
 
 ### Implemented
 
