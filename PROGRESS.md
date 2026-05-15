@@ -62,11 +62,18 @@ movement improvement.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `91ed7d1` pushed; CI run `25907037170` success; Deploy Dev run `25907037154` queued (kevinhome self-hosted runner not currently running — Docker image will deploy when the runner comes back up).
+
+### Archive
+
+- Delta spec synced: created new main spec `openspec/specs/district-subtile-terrain/spec.md` (3 requirements promoted from the delta).
+- Change folder moved to `openspec/changes/archive/2026-05-15-district-subtile-terrain`.
+- Also archived the umbrella `combat-system` change: Phase B (single-shot judgement) was shipped in v0.15.0; its Phase A spec was promoted to new main spec `openspec/specs/combat-runtime/spec.md` (10 requirements); Phase C is tracked separately in `combat-phase-c-realtime-subtick`; Phase D is deferred as a future change. Folder moved to `openspec/changes/archive/2026-05-15-combat-system`.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
 
 ### Outstanding
 
-- Sprint 5: `combat-system` finish (4/31 tasks remaining).
+- Sprint 6: `combat-phase-c-realtime-subtick` 0/38 — from-scratch real-time sub-tick runtime. Large slice; recommend a dedicated session.
 - Sprint 6: `combat-phase-c-realtime-subtick` (0/38; from-scratch implementation of Combat Phase C real-time sub-tick runtime).
 - Sprint 7: final verify + archive sweep.
 
