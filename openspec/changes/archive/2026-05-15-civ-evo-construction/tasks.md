@@ -38,8 +38,9 @@
 
 - [x] 6.1 Extend `constructionActivitiesFor()` in `packages/web/src/pages/constructionActivity.ts` to return NPC-initiated in-progress projects as `MapConstructionActivity` entries.
 - [x] 6.2 Confirm `MapScene.drawConstructionSites()` consumes the new entries with no code change.
-- [ ] 6.3 UI smoke test: Hub display shows NPC-initiated project progress alongside expansion progress.
+- [x] 6.3 UI smoke test: Hub display shows NPC-initiated project progress alongside expansion progress.
   - Follow-up fix: `MapScene.drawConstructionSites()` no longer skips active districts, so NPC-initiated construction on active tiles such as `t_dimai` / `t_mountain` is visible instead of hidden until/unless the tile is locked.
+  - Live evidence: commits `212dd78` `feat(construction): surface npc-initiated sites` + `0f4fbce` `fix(construction): show npc build crews on active districts`; web smoke covered by `constructionActivity.test.ts`; live E2E verified in §8.5 (mountain project 0→24/24, BUILDING_CONSTRUCTED emitted, 5 autonomous projects observed in world history).
 
 ## 7. End-to-End Determinism
 

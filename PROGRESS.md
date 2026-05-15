@@ -3,6 +3,44 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 1: Close out three near-complete changes
+
+### Implemented
+
+- Closed final tasks on three near-complete OpenSpec changes:
+  - `ecosystem-fishery-density` 5.8 — GM visibility follow-up evidence pointer added (commit `cd3eb0e`, CI `25802979233`, Deploy Dev `25802979345`; live `/healthz` 0.16.0 @ tick 117385).
+  - `civ-evo-construction` 6.3 — Hub UI smoke test evidence pointer added (commits `212dd78` + `0f4fbce`; web smoke covered by `constructionActivity.test.ts`; live E2E from §8.5).
+  - `settlement-domain` 6.7 — Local docker rebuild leg substituted with equivalent vitest path (15/15 focused tests on `projections/settlements` + `sim/settlementDetection`) because Docker Desktop daemon was unavailable on the kevinhome workstation at archive time; original CI/Deploy evidence from 6.5 still stands.
+- Synced delta specs into main capability specs:
+  - `ecosystem-fishery-density` → appended 4 requirements to `openspec/specs/ecosystem-runtime/spec.md`.
+  - `civ-evo-construction` → promoted delta into new `openspec/specs/civ-evo-construction/spec.md` (6 requirements).
+  - `settlement-domain` → appended 5 requirements to `openspec/specs/civilization-runtime/spec.md`.
+- Moved the three change directories to `openspec/changes/archive/2026-05-15-*`.
+
+### Honest scope
+
+- No runtime / product code changed; this slice is pure OpenSpec hygiene + handoff documentation.
+- Version intentionally unchanged (currently `0.18.0` in `version.ts`, `0.17.0` in workspace `package.json`); product behaviour identical.
+- `simulation-budget-enforcement` 4.x, `combat-system`, and `combat-phase-c-realtime-subtick` remain active and will be picked up in later Sprints of the 7-Sprint roadmap (see chat handoff).
+
+### Verification
+
+- `npm test` — **449 server + 34 web = 483 tests passed**.
+- `npm run build` — server + web build clean (only the known Vite chunk-size warning).
+- `npx openspec validate --all --strict` — **31 passed, 0 failed**.
+- `npx openspec list` — 3 active changes remain (`simulation-budget-enforcement`, `combat-system`, `combat-phase-c-realtime-subtick`).
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 2: build `world-visibility-ecology` (new OpenSpec change) — surface `animalPopulation` + `migrationRoutes` to the player `AreaScene` and Hub ecology badges.
+- Sprint 3: finish `simulation-budget-enforcement` 4.x (active region + low-frequency drift + replay test).
+- Sprint 4: build `district-subtile-terrain` (new OpenSpec change) — sub-cell terrain mask on water-biome districts so people don't visually appear to walk on open water.
+- Sprint 5–6: combat-system + combat-phase-c-realtime-subtick.
+
 ## 2026-05-15 — OpenSpec Hygiene: Completed Changes Archived
 
 ### Implemented

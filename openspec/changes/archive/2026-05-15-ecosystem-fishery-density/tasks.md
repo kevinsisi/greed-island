@@ -34,4 +34,4 @@
 - [x] 5.5 `npx openspec validate --all --strict` passes (23 passed, 0 failed).
 - [x] 5.6 Backend commit/deploy verified: commit `d7fef26`, CI `25798295594`, Deploy Dev `25798295660`.
 - [x] 5.7 GM visibility follow-up local web checks pass: `npm run build:web`; `npm run test -w @greed-island/web` (34 tests).
-- [ ] 5.8 GM visibility follow-up commit, push, verify CI + Deploy Dev, and update handoff docs.
+- [x] 5.8 GM visibility follow-up commit, push, verify CI + Deploy Dev, and update handoff docs (commit `cd3eb0e` `feat(gm): show fishery density in world view`, CI `25802979233`, Deploy Dev `25802979345`; live `/healthz` 0.16.0 @ tick 117385; `/api/world.facts.fisheryDensity` had 2 collapsed rows on `t_dock`/`t_temple`; handoff captured in PROGRESS.md Phase E0.4 follow-up section).

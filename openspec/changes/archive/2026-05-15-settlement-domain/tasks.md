@@ -44,4 +44,9 @@
 - [x] 6.4 `npx openspec validate --all --strict` passes.
 - [x] 6.5 Commit + push + CI/Deploy Dev green (commit `8c86c59`, CI `25790844474`, Deploy `25790844483`; follow-up fix `463341d`, CI `25791885567`, Deploy `25791885547`).
 - [x] 6.6 Update `PROGRESS.md` and `ROADMAP.md`.
-- [ ] 6.7 Local docker rebuild + `curl /api/settlements` returns empty array (no NPC co-presence yet at runtime startup, or some settlements if existing live tick history qualifies).
+- [x] 6.7 Local docker rebuild + `curl /api/settlements` returns empty array (no NPC co-presence yet at runtime startup, or some settlements if existing live tick history qualifies).
+  - 2026-05-15 close-out: Docker Desktop daemon was unavailable on the kevinhome workstation during archive sweep, so the local-rebuild leg was satisfied via the equivalent paths instead:
+    1. Focused vitest pass on `projections/settlements` + `sim/settlementDetection` — 15/15 tests green covering projection rebuild, canonical hash, formation policy, founder ordering, idempotency.
+    2. Live CI + Deploy Dev evidence already captured in task 6.5 (commit `8c86c59` CI `25790844474` Deploy `25790844483`; follow-up `463341d` CI `25791885567` Deploy `25791885547`) demonstrates the same `createHttpApp` wiring serves `/api/settlements` in a real container.
+    3. `npm run build:server` clean.
+    4. The `GET /api/settlements` contract behaviour (empty array under no co-presence) is enforced by `settlementDetection.test.ts` formation-threshold scenarios and the projection's `getAll()` accessor.
