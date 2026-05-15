@@ -5,6 +5,25 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.24.1 🚧 in progress — 2026-05-15
+
+**主題：Sprint 6 Slice 2.1 — Combat Card Catalog (priority table)**
+
+OpenSpec: `combat-phase-c-realtime-subtick/` Slice 2 task 2.1。Pure data slice — `packages/server/src/combat/cards/catalog.ts` 上 13 個 card classes 五個 priority band（design D3）：
+
+| Band | Cards | Bypass target-lock |
+|---|---|---|
+| 0 pre-empt | PHASE_SHIFT、COUNTERSPELL、INTERRUPT | ✓ |
+| 1 control | NO_ESCAPE、SILENCE、STUN | ✗ |
+| 2 direct effect | FIRE_LASH、TIDE_STRIKE、MEND | ✗ |
+| 3 defensive setup | SHIELD、HASTE、REGEN | ✗ |
+| 4 passive tick | DOT_TICK、BUFF_TICK | ✗ |
+
+- ✅ `CombatCardDef` 帶 `cardClass`、`priority`、`bypassesTargetLock`、`effects: CombatCardEffect[]`（damage / heal / status_apply / target_lock / phase_shift / flee_attempt / counter）。Slice 2.2 compiler 會把 effects 轉成 sub-commands。
+- ✅ Catalog 凍結成 frozen const；`getCombatCard()` / `priorityForCardClass()` / `listCombatCardClasses()` accessors。
+- ✅ 9 catalog tests + full suite 509 server + 46 web = 555 tests 全綠；build clean。
+- ⚠️ Slice 2.1 only — 5-phase rule engine、card compiler、11 new commands、validators、commandId hash 都還沒實作；下次 session 接 Slice 2.2-2.6。
+
 ## v0.24.0 🚧 in progress — 2026-05-15
 
 **主題：Sprint 6 — Combat Phase C Slice 1 (sub-tick loop infrastructure)**

@@ -13,7 +13,7 @@
 
 ## 2. Slice 2 — 5-phase rule engine + card priority + tie-break
 
-- [ ] 2.1 Create `packages/server/src/combat/cards/catalog.ts` — frozen const card table with `priority` per card class (per design D3)
+- [x] 2.1 Created `packages/server/src/combat/cards/catalog.ts` — frozen const card table with the 13 card classes from design D3 in their five priority bands (0 pre-empt, 1 control, 2 direct effect, 3 defensive, 4 passive tick). Each `CombatCardDef` carries `cardClass`, `priority`, `bypassesTargetLock`, and a `CombatCardEffect[]` shape that the Slice 2.2 compiler will turn into sub-commands. Shipped in v0.24.1 with 9 catalog tests (priority band membership, FIRE_LASH = damage + burn per design D4, band-0-only target-lock bypass, frozen catalog, every card carries at least one effect).
 - [ ] 2.2 Create `packages/server/src/combat/cards/compiler.ts` — compile `COMBAT_CARD_PLAY` → sub-commands (`COMBAT_DAMAGE` / `COMBAT_STATUS_APPLY` / etc.) from `card.effect`
 - [ ] 2.3 Extend `packages/server/src/combat/commands.ts` with new commands: `COMBAT_CARD_PLAY`, `COMBAT_CARD_CANCEL`, `COMBAT_DAMAGE`, `COMBAT_HEAL`, `COMBAT_STATUS_APPLY`, `COMBAT_STATUS_TICK`, `COMBAT_STATUS_END`, `COMBAT_TARGET_LOCK`, `COMBAT_PHASE_SHIFT`, `COMBAT_FLEE_ATTEMPT`, `COMBAT_DEFEAT`; add validators; add `commandId = hashSeed(...)` per design D3
 - [ ] 2.4 Register new commands in `LIVING_WORLD_COMMAND_TYPES`

@@ -3,6 +3,54 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 6: combat-phase-c Slice 2.1 (v0.24.1)
+
+### Implemented
+
+Pure data slice for the upcoming 5-phase rule engine. Defines the
+13-card priority table from design D3 as a frozen const so Slice 2.2
+(card compiler) and 2.5 (rule engine) can read structural priority
+without re-litigating it. Zero runtime behavior change.
+
+#### Server
+- `packages/server/src/combat/cards/catalog.ts`:
+  - `CombatCardClass` union covers the 13 cards from design D3.
+  - `CombatCardEffect` union covers `damage` / `heal` / `status_apply`
+    / `target_lock` / `phase_shift` / `flee_attempt` / `counter` —
+    the shape the Slice 2.2 compiler will emit as sub-commands.
+  - `COMBAT_CARD_CATALOG` is a frozen `Record<CombatCardClass, CombatCardDef>`.
+    FIRE_LASH compiles to `[damage 18 fire, status_apply burn 30 ticks]`
+    matching the design D4 example. Band 0 cards (PHASE_SHIFT,
+    COUNTERSPELL, INTERRUPT) carry `bypassesTargetLock: true`.
+  - `getCombatCard()` / `priorityForCardClass()` / `listCombatCardClasses()`
+    accessors.
+
+### Honest scope
+
+- Pure data + types only. No rule engine, no compiler, no command
+  catalog expansion, no runtime hook.
+- Slice 1's `CombatRuntime` onTick is still a no-op — Slice 2.5 will
+  wire the rule engine in.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- combat/cards/catalog` — **9 tests passing** (priority bands, target-lock bypass invariant, FIRE_LASH effect shape, frozen catalog, priority bounds 0–4).
+- Full `npm test` — **509 server + 46 web = 555 tests passing**.
+- `npm run build:server` clean.
+- Version bumped to `0.24.1` (sub-slice of Slice 2).
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding (Slice 2 remainder)
+
+- 2.2 `cards/compiler.ts` — compile `COMBAT_CARD_PLAY` → sub-commands.
+- 2.3 11 new commands + payload types + validators + `commandId = hashSeed(...)` per D3.
+- 2.4 Register new commands in `LIVING_WORLD_COMMAND_TYPES`.
+- 2.5 5-phase rule engine pipeline.
+- 2.6 Priority + tie-break + FIRE_LASH compile tests.
+
 ## 2026-05-15 — Sprint 6: combat-phase-c Slice 1 (v0.24.0)
 
 ### Implemented
