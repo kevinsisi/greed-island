@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.24.2 🚧 in progress — 2026-05-15
+
+**主題：User-reported visual bugfixes**
+
+三個玩家在 v0.24.1 deploy 上回報的視覺 bug。沒開新 OpenSpec change，但把新的契約寫進主 spec `openspec/specs/district-subtile-terrain/spec.md` + Hub ring label 寫進主 spec。
+
+- ✅ Hub 紅圈加 `⚠️` + 「掠食者飢餓」zh label（`MapScene.drawEcologyBadges`）
+- ✅ Pier 顏色 `0xc6a06b → 0x8a6d40` (weathered cedar) + `t_dock`/`t_temple` mask 減 pier 至 4 cells each
+- ✅ `t_salt_marsh` mask 重寫使 `b_salt_marsh_field_station (7,4)` 落在 land + 有走道
+- ✅ 新測試「每個水域 building anchor 必須 walkable」防止 mask/catalog drift
+- ✅ 主 spec 加 2 個新 requirement：building-anchor-walkable + warning-ring-readable-label
+- ✅ 509 server + 47 web = 556 tests 全綠；build clean；openspec validate --all --strict 34 passed
+- ✅ Commit `a747c0c` + CI `25911849730` ✓ + Deploy Dev `25911849708` ✓
+
 ## v0.24.1 🚧 in progress — 2026-05-15
 
 **主題：Sprint 6 Slice 2.1 — Combat Card Catalog (priority table)**

@@ -73,3 +73,39 @@ boat", not "standing on the sea".
 - **WHEN** AreaScene renders the NPC sprite
 - **THEN** the sprite alpha MUST be approximately 0.85
 - **AND** a `⛵` glyph MUST render above its name label
+
+### Requirement: Every building anchor in a water district SHALL be walkable
+
+Every building catalogued in `packages/server/src/buildings/catalog.ts`
+with a water-biome `tileId` MUST place its `placement` anchor on a
+sub-cell whose terrain is `land`, `pier`, `shore`, or `shallow_water`
+— never `open_water`. A mask edit that strands a building MUST fail
+tests so the player never sees a building they cannot reach.
+
+#### Scenario: All water-district building anchors resolve to a walkable terrain
+
+- **WHEN** the test suite iterates the buildings catalog and looks up
+  each water-district building's `(placement.col, placement.row)` in
+  its district mask
+- **THEN** the terrain at every such cell MUST satisfy
+  `isWalkableTerrain(terrain) === true`
+
+#### Scenario: Salt-marsh field station is reachable (regression v0.24.2)
+
+- **GIVEN** `b_salt_marsh_field_station` is placed at `(col 7, row 4)`
+- **WHEN** the `t_salt_marsh` mask is consulted at that cell
+- **THEN** the terrain MUST be walkable
+
+### Requirement: Hub predator-hunger warning SHALL carry a readable label
+
+The Hub map's predator-hunger indicator (`MapScene.drawEcologyBadges`)
+MUST attach a human-readable cue to its red ring so players can tell
+what the marker means at a glance. A bare ring is insufficient.
+
+#### Scenario: Warning ring is accompanied by glyph + caption
+
+- **GIVEN** a tile has at least one `predatorHunger` projection row
+- **WHEN** the Hub map renders ecology badges for that tile
+- **THEN** a `⚠️` glyph MUST appear at the tile's anchor area
+- **AND** a Chinese caption (`掠食者飢餓` or equivalent) MUST render
+  near the ring
