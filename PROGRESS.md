@@ -3,6 +3,65 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 2C: npc-defense-coordination (v0.21.0)
+
+### Implemented
+
+Closes the civilization-side of the ecosystem pressure loop. When an
+animal attacks an NPC and other NPCs are nearby, neighbours organise a
+counter-attack and put the predator down.
+
+#### Server
+- New living-world command `NPC_DEFENSE_PARTY_FORMED` (payload + union
+  + validator that requires `memberNpcIds.length >= 2`).
+- `config/world.ts`: `DEFENSE_REACTION_WINDOW_TICKS = 2` and
+  `DEFENSE_PARTY_MIN_MEMBERS = 2`.
+- `packages/server/src/ecosystem/defenseParty.ts`: pure deterministic
+  planner. Walks recent `ANIMAL_ATTACKED_NPC` rows within the window;
+  for each one still satisfying "attacker alive on tile" +
+  "≥ 2 non-victim NPCs on tile" + "no prior party formed for this
+  attackId", returns a `DefensePartyPlan` with lex-sorted member ids
+  and a hashSeed-derived `partyId`.
+- `packages/server/src/sim/runtime.ts`: after the predation step,
+  walks `getRecentEvents(window + 1)`, calls `planDefenseParties`,
+  and pushes `NPC_DEFENSE_PARTY_FORMED` + coordinated
+  `ANIMAL_HUNT_STARTED` / `ANIMAL_HUNT_RESOLVED` (success) /
+  `ANIMAL_KILLED` / `CARCASS_CREATED` chain attributed to the lex-min
+  member as party leader. All events carry
+  `motivation.projectPurpose = 'defense'`.
+- Defense party hunts skip the retaliation planner — the numerical
+  advantage absorbs the last-bite risk.
+
+### Honest scope
+
+- Individual party members cannot themselves take a retaliation hit.
+- No faction-coloured parties / militia structures.
+- Player avatar cannot join a party.
+- Pack predators do not retaliate as a pack against the party.
+- Existing `runtimePredation.test.ts` "no STARVED before threshold"
+  test loosened: the wolf may now be killed by a defense party before
+  starvation. Test asserts only the no-STARVED invariant; the wolf's
+  survival is incidental.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- ecosystem/defenseParty` — **9 tests passing**.
+- Full `npm test` — **478 server + 39 web = 517 tests passing**.
+- `npm run build` (server + web) — clean.
+- `npx openspec validate npc-defense-coordination --strict` — passes.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Versions bumped to `0.21.0` across `package.json` + `version.ts`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 3: finish `simulation-budget-enforcement` 4.x.
+- Sprint 4: `district-subtile-terrain`.
+- Sprint 5–6: combat-system + combat-phase-c-realtime-subtick.
+
 ## 2026-05-15 — Sprint 2B: animal-aggression (v0.20.0)
 
 ### Implemented

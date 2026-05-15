@@ -53,7 +53,9 @@ import {
   COMMAND_CAP_REJECTION_CODE,
   NPC_PARTITION_PERIOD,
   PREDATOR_STARVATION_THRESHOLD_TICKS,
-  HOUSEHOLD_GOLD_CONTRIBUTION_RATE
+  HOUSEHOLD_GOLD_CONTRIBUTION_RATE,
+  DEFENSE_REACTION_WINDOW_TICKS,
+  DEFENSE_PARTY_MIN_MEMBERS
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -71,6 +73,11 @@ import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles } from './mapGraph.js'
 import { buildAreaEcology, type AreaEcologyView } from './areaEcology.js'
 import { planAnimalAggression, planAnimalRetaliation } from '../ecosystem/aggression.js'
+import {
+  planDefenseParties,
+  type DefensePartyAttackRow,
+  type DefensePartyAlivePredator,
+} from '../ecosystem/defenseParty.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -1860,6 +1867,177 @@ export class SimulationRuntime {
                 starvedAtTick: nextTick,
                 motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}超過 ${PREDATOR_STARVATION_THRESHOLD_TICKS} ticks 無獵物，predator 死亡。`),
                 narration: `${predation.predatorSpeciesId}在${tileName}因長期缺乏獵物而死亡。`,
+              }
+            )
+          )
+        }
+      }
+    }
+
+    // ---- Sprint 2C: NPC defense party coordination ----
+    // Walk recently-committed ANIMAL_ATTACKED_NPC events; for each
+    // attack still satisfying the defense conditions (attacker alive,
+    // ≥ DEFENSE_PARTY_MIN_MEMBERS bystanders on tile, no prior party
+    // formed), emit NPC_DEFENSE_PARTY_FORMED + a coordinated hunt chain
+    // that removes the attacker. Walks the EventLog (prior ticks) so
+    // attacks from this tick do not double-fire — they will be picked
+    // up next tick.
+    const defenseLookbackTicks = DEFENSE_REACTION_WINDOW_TICKS + 1
+    const defenseRecentEvents = this.getRecentEvents(200)
+    const defenseAttackRows: DefensePartyAttackRow[] = []
+    const defensePriorAttackIds = new Set<string>()
+    for (const ev of defenseRecentEvents) {
+      if (ev.tick < nextTick - defenseLookbackTicks) continue
+      if (ev.eventType === 'ANIMAL_ATTACKED_NPC') {
+        const p = ev.payload as Record<string, unknown> | undefined
+        if (!p) continue
+        if (
+          typeof p.attackId === 'string' &&
+          typeof p.animalId === 'string' &&
+          typeof p.speciesId === 'string' &&
+          typeof p.tileId === 'string' &&
+          typeof p.npcId === 'string' &&
+          typeof p.attackedAtTick === 'number'
+        ) {
+          defenseAttackRows.push({
+            attackId: p.attackId,
+            animalId: p.animalId,
+            speciesId: p.speciesId,
+            tileId: p.tileId,
+            victimNpcId: p.npcId,
+            attackedAtTick: p.attackedAtTick,
+          })
+        }
+      } else if (ev.eventType === 'NPC_DEFENSE_PARTY_FORMED') {
+        const p = ev.payload as Record<string, unknown> | undefined
+        if (p && typeof p.reactionToAttackId === 'string') {
+          defensePriorAttackIds.add(p.reactionToAttackId)
+        }
+      }
+    }
+    if (defenseAttackRows.length > 0) {
+      const npcsByTile = new Map<string, string[]>()
+      for (const row of this.npcStateProjection.getAll()) {
+        const tile = row.state.tile
+        if (!npcsByTile.has(tile)) npcsByTile.set(tile, [])
+        npcsByTile.get(tile)!.push(row.npcId)
+      }
+      const alivePredators: DefensePartyAlivePredator[] = []
+      for (const row of this.animalPopulationProjection.list()) {
+        for (const animalId of row.animalIds) {
+          alivePredators.push({ animalId, speciesId: row.speciesId, tileId: row.tileId })
+        }
+      }
+      const defensePlans = planDefenseParties({
+        tick: nextTick,
+        recentAttacks: defenseAttackRows,
+        alivePredators,
+        npcsByTile,
+        priorPartyAttackIds: defensePriorAttackIds,
+        minMembers: DEFENSE_PARTY_MIN_MEMBERS,
+      })
+      for (const plan of defensePlans) {
+        const tileName = TILE_NAME_BY_ID[plan.tileId] ?? plan.tileId
+        const leaderNpcId = plan.memberNpcIds[0]!
+        const membersText = plan.memberNpcIds.join('、')
+        const motivation = makeMotivation(
+          `${membersText} 在${tileName}組成防禦隊伍，反擊攻擊 ${plan.victimNpcId} 的 ${plan.targetSpeciesId}。`,
+          'defense'
+        )
+        plannedHuntedAnimalIds.add(plan.targetAnimalId)
+        commands.push(
+          makeLivingWorldCommand(
+            'NPC_DEFENSE_PARTY_FORMED',
+            leaderNpcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              partyId: plan.partyId,
+              targetAnimalId: plan.targetAnimalId,
+              targetSpeciesId: plan.targetSpeciesId,
+              tileId: plan.tileId,
+              victimNpcId: plan.victimNpcId,
+              memberNpcIds: plan.memberNpcIds,
+              reactionToAttackId: plan.reactionToAttackId,
+              formedAtTick: nextTick,
+              motivation,
+              narration: `${membersText}在${tileName}組成防禦隊伍，圍剿${plan.targetSpeciesId}。`,
+            }
+          ),
+          makeLivingWorldCommand(
+            'ANIMAL_HUNT_STARTED',
+            leaderNpcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              huntId: `hunt.defense.${plan.partyId}`,
+              npcId: leaderNpcId,
+              tileId: plan.tileId,
+              targetSpeciesId: plan.targetSpeciesId,
+              targetAnimalId: plan.targetAnimalId,
+              startedAtTick: nextTick,
+              motivation,
+              narration: `${membersText}開始合力追擊${plan.targetSpeciesId}。`,
+            }
+          ),
+          makeLivingWorldCommand(
+            'ANIMAL_HUNT_RESOLVED',
+            leaderNpcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              huntId: `hunt.defense.${plan.partyId}`,
+              npcId: leaderNpcId,
+              tileId: plan.tileId,
+              targetSpeciesId: plan.targetSpeciesId,
+              targetAnimalId: plan.targetAnimalId,
+              outcome: 'success',
+              resolvedAtTick: nextTick,
+              motivation,
+              narration: `${membersText}在${tileName}合力擊倒${plan.targetSpeciesId}。`,
+            }
+          ),
+          makeLivingWorldCommand(
+            'ANIMAL_KILLED',
+            leaderNpcId,
+            'npc',
+            nextTick,
+            submittedAt,
+            {
+              huntId: `hunt.defense.${plan.partyId}`,
+              animalId: plan.targetAnimalId,
+              speciesId: plan.targetSpeciesId,
+              tileId: plan.tileId,
+              killedByNpcId: leaderNpcId,
+              killedAtTick: nextTick,
+              motivation,
+              narration: `${plan.targetSpeciesId}被防禦隊伍擊倒。`,
+            }
+          )
+        )
+        const speciesData = getSpecies(plan.targetSpeciesId)
+        if (speciesData) {
+          commands.push(
+            makeLivingWorldCommand(
+              'CARCASS_CREATED',
+              SIM_ACTOR_WORLD,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                huntId: `hunt.defense.${plan.partyId}`,
+                carcassId: `carcass.defense.${plan.partyId}`,
+                animalId: plan.targetAnimalId,
+                speciesId: plan.targetSpeciesId,
+                tileId: plan.tileId,
+                edibleYield: Math.max(1, Math.floor(speciesData.edibleYield)),
+                byproducts: speciesData.byproducts,
+                createdAtTick: nextTick,
+                motivation,
+                narration: `${plan.targetSpeciesId}的屍體留在${tileName}。`,
               }
             )
           )

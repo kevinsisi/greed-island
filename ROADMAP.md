@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.21.0 🚧 in progress — 2026-05-15
+
+**主題：Sprint 2C — NPC Defense Coordination**
+
+OpenSpec: `npc-defense-coordination/`。Closes the civilization-side of the ecosystem pressure loop noted in Part I §6.2 + §5.1 — when an animal attacks an NPC and other NPCs are nearby, the neighbours organise a counter-attack and put the predator down.
+
+- ✅ 新 command/event `NPC_DEFENSE_PARTY_FORMED` + payload + validator（要求 `memberNpcIds.length >= 2`）。
+- ✅ 新增 `config/world.ts` 常數：`DEFENSE_REACTION_WINDOW_TICKS = 2`、`DEFENSE_PARTY_MIN_MEMBERS = 2`。
+- ✅ 新增 `packages/server/src/ecosystem/defenseParty.ts`：純 deterministic planner — walks recent `ANIMAL_ATTACKED_NPC` events (window=2 ticks)，過濾 attacker 仍活著 + 同 tile 有 ≥2 非受害者 NPC + 未形成過 party；plan 帶 lex-sorted member 清單 + hashSeed-derived `partyId`。
+- ✅ Runtime 整合：predation step 後 walk recent events，每個 plan 推 `NPC_DEFENSE_PARTY_FORMED` + coordinated `ANIMAL_HUNT_STARTED` / `_RESOLVED` (`success`) / `ANIMAL_KILLED` / `CARCASS_CREATED` 鏈，全部標 `motivation.projectPurpose = 'defense'`。
+- ✅ Defense kill 跳過 retaliation planner（party 人數優勢吸收 last-bite）。
+- ✅ 9 defenseParty planner unit tests + full suite 478 server + 39 web 全綠；`openspec validate --all --strict` 34 passed。
+- ⚠️ Honest scope：member 自身無法被個別反咬；玩家本身無法加入 party；無 faction/militia 結構；非 pack predator 共同反擊。
+
 ## v0.20.0 🚧 in progress — 2026-05-15
 
 **主題：Sprint 2B — Animal Aggression**

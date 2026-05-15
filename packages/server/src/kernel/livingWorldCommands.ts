@@ -106,6 +106,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_ATTACKED_NPC',
   'ANIMAL_FLED',
   'ANIMAL_RETALIATED',
+  // Sprint 2C — NPC defense coordination
+  'NPC_DEFENSE_PARTY_FORMED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -256,6 +258,20 @@ export type AnimalRetaliatedCmd = Readonly<{
   tileId: string
   damage: AnimalDamage
   retaliatedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+// Sprint 2C — NPC defense coordination
+export type NpcDefensePartyFormedCmd = Readonly<{
+  partyId: string
+  targetAnimalId: string
+  targetSpeciesId: string
+  tileId: string
+  victimNpcId: string
+  memberNpcIds: readonly string[]
+  reactionToAttackId: string
+  formedAtTick: number
   motivation?: EventMotivation
   narration: string
 }>
@@ -881,6 +897,7 @@ export type LivingWorldCommandPayload =
   | AnimalAttackedNpcCmd
   | AnimalFledCmd
   | AnimalRetaliatedCmd
+  | NpcDefensePartyFormedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1649,6 +1666,22 @@ const VALIDATORS: Readonly<
     if (!isRecord(p.damage)) return 'damage required'
     if (typeof p.damage.mood !== 'number' || !Number.isInteger(p.damage.mood)) return 'damage.mood must be integer'
     if (typeof p.damage.health !== 'number' || !Number.isInteger(p.damage.health)) return 'damage.health must be integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  NPC_DEFENSE_PARTY_FORMED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.partyId !== 'string' || p.partyId.length === 0) return 'partyId required'
+    if (typeof p.targetAnimalId !== 'string' || p.targetAnimalId.length === 0) return 'targetAnimalId required'
+    if (typeof p.targetSpeciesId !== 'string' || p.targetSpeciesId.length === 0) return 'targetSpeciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.victimNpcId !== 'string' || p.victimNpcId.length === 0) return 'victimNpcId required'
+    if (typeof p.reactionToAttackId !== 'string' || p.reactionToAttackId.length === 0) return 'reactionToAttackId required'
+    if (typeof p.formedAtTick !== 'number' || !Number.isInteger(p.formedAtTick) || p.formedAtTick < 0) return 'formedAtTick must be non-negative integer'
+    if (!Array.isArray(p.memberNpcIds) || p.memberNpcIds.length < 2) return 'memberNpcIds requires at least 2 ids'
+    for (const id of p.memberNpcIds) {
+      if (typeof id !== 'string' || id.length === 0) return 'memberNpcIds must be non-empty strings'
+    }
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   }

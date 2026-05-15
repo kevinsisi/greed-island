@@ -103,6 +103,12 @@ export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 // consecutive cadence ticks without a successful kill on its tile starves.
 export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 
+// Sprint 2C — NPC defense coordination. Recently-committed
+// ANIMAL_ATTACKED_NPC events within this window trigger a defense
+// party check. Reset on each tick.
+export const DEFENSE_REACTION_WINDOW_TICKS = 2
+export const DEFENSE_PARTY_MIN_MEMBERS = 2
+
 // Phase 3 §37.3 — NPC culture & emergent festivals.
 export const CULTURAL_FESTIVAL_THRESHOLD = 3
 export const CULTURAL_NORM_NPC_THRESHOLD = 3
