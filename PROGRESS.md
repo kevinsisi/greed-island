@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — User-reported visual bugfixes (v0.24.2)
+
+### Implemented
+
+Three player-visible bugs reported after v0.24.1 deploy:
+
+1. **Hub red ring with no purpose** — the predator-hunger warning ring
+   from Sprint 2A had no label, so players could not read what it
+   meant. `MapScene.drawEcologyBadges` now pairs the ring with a small
+   ⚠️ glyph at the top-left of the tile anchor and a `掠食者飢餓`
+   zh label below the ring.
+2. **Water districts dominated by "wood"** — Sprint 4's pier color
+   (`0xc6a06b`) was too bright and pier coverage in the masks was too
+   high (10–12 cells per district). Pier color toned down to
+   `0x8a6d40` (weathered cedar) and `t_dock` / `t_temple` masks
+   re-authored with only 4 pier cells each.
+3. **Salt-marsh field station unreachable** — Sprint 4's
+   `t_salt_marsh` mask placed `b_salt_marsh_field_station`'s anchor
+   `(col 7, row 4)` on an `open_water` cell. The walkability gate
+   blocked all approach. New mask makes rows 4-5 a walkable rim
+   inland of the marsh ring; the building anchor and surrounding
+   cells are now `land`.
+
+#### Server / Web
+- `packages/web/src/game/terrainMask.ts`: re-authored all three
+  water-biome masks; tone-down pier RGB. Every building anchor from
+  `packages/server/src/buildings/catalog.ts` for the three water
+  districts now lands on walkable terrain.
+- `packages/web/src/game/MapScene.ts`: ecology warning ring now
+  carries a ⚠️ icon + "掠食者飢餓" label.
+- Tests: new test verifies every building anchor in the three water
+  districts is walkable (catches future mask-vs-catalog drift).
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/web -- terrainMask` — **8 tests passing** (existing 7 + new walkable-anchor invariant).
+- Full `npm test` — **509 server + 47 web = 556 tests passing**.
+- `npm run build` (server + web) — clean.
+- Version bumped to `0.24.2`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
 ## 2026-05-15 — Sprint 6: combat-phase-c Slice 2.1 (v0.24.1)
 
 ### Implemented

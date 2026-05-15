@@ -32,7 +32,11 @@ const GLYPH_TO_TERRAIN: Readonly<Record<string, SubcellTerrain>> = {
 /** Display color for each terrain. AreaScene paints these per sub-cell. */
 export const COLOR_FOR_TERRAIN: Readonly<Record<SubcellTerrain, number>> = {
   land: 0x6b8a4b, // muted moss for shore-side ground
-  pier: 0xc6a06b, // weathered cedar plank
+  // v0.24.2 — pier toned down from 0xc6a06b. Original was too bright
+  // and the user reported large "wood" patches dominating water
+  // districts. The new shade keeps the cedar feel but blends into
+  // the surrounding shore/water palette.
+  pier: 0x8a6d40,
   shore: 0x8a9aa6, // damp gray-blue sand
   shallow_water: 0x6fb8d7, // matches the existing t_dock light blue
   open_water: 0x356a80, // darker blue — visibly different from a walkable cell
@@ -50,42 +54,52 @@ export function isWalkableTerrain(terrain: SubcellTerrain): boolean {
  *   t_temple (霓港區): neon harbour with three short docks fanning out.
  *   t_salt_marsh (鹽沼外環): a rim of marsh + reed beds around open water.
  */
+// v0.24.2 — masks re-authored to honor building anchor positions
+// (`packages/server/src/buildings/catalog.ts`) and to reduce the
+// dominant pier coverage that made water districts read as "mostly
+// wood" instead of "mostly water with small dock spots".
+//
+// Building anchors that must land on walkable terrain:
+//   t_dock:        b_dock_pier (2,3), b_dock_warehouse (12,3)
+//   t_temple:      b_temple_shrine (2,0), b_temple_apartment (9,3),
+//                  b_temple_pier_cafe (5,3)
+//   t_salt_marsh:  b_salt_marsh_field_station (7,4)
 const RAW_MASKS: Readonly<Partial<Record<DistrictId, readonly string[]>>> = {
   t_dock: [
-    'LLLLLLSSSsssss.',
-    'LLLLLLSSSsssss.',
-    'LLLLLLSSSsssss.',
-    'LLLLLLSSSsssss.',
-    'LLLLLPPPPPsss..',
-    'LLLLLPPPPPsss..',
-    'LLLLLLSSSsssss.',
-    'LLLLLLSSSssss..',
-    'LLLLLLSSsss....',
-    'LLLLLLSSsss....',
+    'LLLLLLLLSSssss.',
+    'LLLLLLLLSSssss.',
+    'LLLLLLLLSSssss.',
+    'LLLLLLLLPPssLLL',
+    'LLLLLLLLPPsssss',
+    'LLLLLLLLSSsssss',
+    'LLLLLLLLSSssss.',
+    'LLLLLLLLSSssss.',
+    'LLLLLLLLSSss...',
+    'LLLLLLLLSSss...',
   ],
   t_temple: [
-    'LLLLLLSSsss....',
-    'LLLLLLPPPPss...',
-    'LLLLLLSSSsss...',
-    'LLLLLLPPPPss...',
-    'LLLLLLSSSsss...',
-    'LLLLLLPPPPss...',
-    'LLLLLLSSSsss...',
-    'LLLLLLSSSsss...',
-    'LLLLLLSSsss....',
-    'LLLLLLSSss.....',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLPPss.',
+    'LLLLLLLLLLPPss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSss.',
+    'LLLLLLLLLLLSs..',
   ],
   t_salt_marsh: [
-    'LLLLSSSSSSss...',
-    'LLLSSssSSSss...',
-    'LLLSSs..sSss...',
-    'LLSSs....sss...',
-    'LLSss......ss..',
-    'LLSss......ss..',
-    'LLSSs....sss...',
-    'LLLSSs..sSss...',
-    'LLLSSssSSSss...',
-    'LLLLSSSSSSss...',
+    'LLLLLLSSssssss.',
+    'LLLLLLSSSsssss.',
+    'LLLLLLSSSsss...',
+    'LLLLLLSSss.....',
+    'LLLLLLLLLLSss..',
+    'LLLLLLLLLLSss..',
+    'LLLLLLSSss.....',
+    'LLLLLLSSSsss...',
+    'LLLLLLSSSsssss.',
+    'LLLLLLSSssssss.',
   ],
 }
 

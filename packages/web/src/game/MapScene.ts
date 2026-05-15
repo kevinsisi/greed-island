@@ -834,9 +834,29 @@ export class MapScene extends Phaser.Scene {
       })
 
       if (summary.predatorWarning) {
+        // v0.24.2 bugfix: the bare red ring was unreadable. Pair it
+        // with a small ⚠️ glyph + zh label so players can tell at a
+        // glance what's wrong on this tile.
         const ring = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.55, 0xff5050, 0)
         ring.setStrokeStyle(2, 0xff5050, 0.55)
         layer.add(ring)
+        const warnIcon = this.add.text(anchorX - 22, anchorY - 22, '⚠️', {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#ffffff',
+        })
+        warnIcon.setOrigin(0.5, 0.5)
+        layer.add(warnIcon)
+        const warnLabel = this.add.text(anchorX, anchorY + TILE_SIZE * 0.55 + 4, '掠食者飢餓', {
+          fontFamily: '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+          fontSize: '9px',
+          color: '#ff8a8a',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        warnLabel.setOrigin(0.5, 0)
+        layer.add(warnLabel)
       }
 
       // Migration arrows on the tile edge — one tiny arrow per direction.
