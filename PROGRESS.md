@@ -3,6 +3,72 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 6: combat-phase-c Slice 1 (v0.24.0)
+
+### Implemented
+
+First of six slices that close `ARCHITECTURE.md` §11.4. Adds the
+per-combat sub-tick loop infrastructure server-side. No UI change;
+the Slice 1 tick callback is intentionally a no-op until Slice 2
+ships the 5-phase rule engine, so the existing Phase B single-shot
+combat path is unaffected.
+
+#### Server
+- `config/world.ts`:
+  - `COMBAT_TICK_RATE_MS = 100` (10 Hz default)
+  - `COMBAT_TICK_RATE_MIN_MS = 50` / `COMBAT_TICK_RATE_MAX_MS = 200`
+  - `validateCombatTickRateMs()` guard.
+- `packages/server/src/combat/runtime.ts`:
+  - `CombatRuntime` class. Keyed `setInterval` map; `spawn` and
+    `terminate` are idempotent; `shutdownAll` clears every interval;
+    `onTick` / `onError` / `setInterval` / `clearInterval` are all
+    injectable for deterministic tests.
+  - Interval callback is wrapped in try/catch. On error, the runtime
+    calls `onError({ combatId, combatTick, error })` and then
+    `terminate()`s the loop so it cannot leak.
+  - `computeUnresolvedCombats(events)` — pure helper that walks an
+    event sequence and returns combatIds with a committed
+    `COMBAT_INITIATE` but no matching `COMBAT_RESOLVE` /
+    `COMBAT_DEFEAT`.
+- `packages/server/src/sim/runtime.ts`:
+  - Field `combatRuntime = new CombatRuntime()`.
+  - `submitLivingWorldCommand` post-commit loop spawns the per-combat
+    interval on `COMBAT_INITIATE` and terminates on `COMBAT_RESOLVE` /
+    `COMBAT_DEFEAT`.
+  - Boot-time hydration: walks `store.readEvents()` via
+    `computeUnresolvedCombats` and re-spawns each unresolved combat.
+  - `stop()` calls `combatRuntime.shutdownAll()` so test teardown and
+    production shutdown both leave no orphaned timers behind.
+
+### Honest scope
+
+- Slice 1 `onTick` is a no-op. The rule engine pipeline (5-phase,
+  card priority, tie-break) ships in Slice 2.
+- `COMBAT_DEFEAT` is treated as a terminate signal even though it is
+  not registered as a command type yet — Slice 2 will register it.
+  The string match is forward-compatible.
+- Phase B (`POST /api/combat/:id/action` single-shot) is unchanged.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- combat/runtime` — **13 tests passing**.
+- Full `npm test` — **500 server + 46 web = 546 tests passing**.
+- `npm run build` (server + web) — clean.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Versions bumped to `0.24.0`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Slice 2: 5-phase rule engine + card priority + tie-break.
+- Slice 3: EventLog integration + CombatStore refactor to read-only projection.
+- Slice 4: SSE projection + new HTTP endpoints + client prediction.
+- Slice 5: Real-time UI (Phaser CombatScene + extended CombatHud).
+- Slice 6: Determinism audit + release prep.
+
 ## 2026-05-15 — Sprint 4: district-subtile-terrain (v0.23.0)
 
 ### Implemented

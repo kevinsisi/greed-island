@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.24.0 🚧 in progress — 2026-05-15
+
+**主題：Sprint 6 — Combat Phase C Slice 1 (sub-tick loop infrastructure)**
+
+OpenSpec: `combat-phase-c-realtime-subtick/` Slice 1 of 6。Server-only foundation for the real-time combat sub-tick runtime. No UI change; existing Phase B single-shot path unaffected because the Slice 1 tick callback is a no-op until Slice 2 ships the 5-phase rule engine.
+
+- ✅ 新增 `config/world.ts` 常數：`COMBAT_TICK_RATE_MS = 100`（10 Hz 預設）、`COMBAT_TICK_RATE_MIN_MS = 50`、`COMBAT_TICK_RATE_MAX_MS = 200`、`validateCombatTickRateMs()` guard。
+- ✅ 新增 `packages/server/src/combat/runtime.ts`：`CombatRuntime` class — 每場戰鬥一個 `setInterval`（keyed by `combatId`），`spawn` / `terminate` 都 idempotent，`shutdownAll` clear 全部；onTick / onError / setInterval / clearInterval 都可注入給 deterministic tests。
+- ✅ `SimulationRuntime` 在 `submitLivingWorldCommand` fan-out 後檢查每個 committed event，看到 `COMBAT_INITIATE` 就 spawn，看到 `COMBAT_RESOLVE` / `COMBAT_DEFEAT` 就 terminate。helper `readCombatIdFromEvent` 接受 Phase B `payload.combatId` 跟 living-world wrap 的 `payload.data.combatId` 兩種 shape。
+- ✅ Interval callback 包 try/catch；error → onError + terminate（避免 leak）。Slice 2 會把 onError 改成 emit `COMBAT_RESOLVE outcome=error_abort`。
+- ✅ Boot 時用純函式 `computeUnresolvedCombats(events)` 掃 EventLog，找有 INITIATE 但沒 RESOLVE/DEFEAT 的 combat 重新 spawn。
+- ✅ 13 new CombatRuntime tests（vi.useFakeTimers，覆蓋 tickRate validation、idempotent spawn/terminate、multi-combat、error abort、shutdownAll、startAtTick resume、boot hydration helper）+ full suite 500 server + 46 web = 546 全綠；build clean。
+- ⚠️ Slice 1 onTick 是 no-op；Slice 2 才會 plug in 5-phase rule engine。Slices 3-6 仍 pending（EventLog 整合、SSE prediction、Phaser CombatScene、決定性 audit）。
+
 ## v0.23.0 🚧 in progress — 2026-05-15
 
 **主題：Sprint 4 — District Sub-tile Terrain (Water-biome districts)**

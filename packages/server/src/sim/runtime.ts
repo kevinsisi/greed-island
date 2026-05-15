@@ -81,6 +81,7 @@ import {
   type DefensePartyAlivePredator,
 } from '../ecosystem/defenseParty.js'
 import { computeActiveTiles, tileShouldRunEcology } from './tileActivation.js'
+import { CombatRuntime, computeUnresolvedCombats } from '../combat/runtime.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -315,6 +316,11 @@ export class SimulationRuntime {
   // projection of EventLog).
   private readonly settlementsProjection = new SettlementsProjection()
   private settlementCopresenceHistory: ReadonlyMap<string, CopresenceHistoryRow> = new Map()
+  // Combat Phase C Slice 1 — sub-tick loop infrastructure. Spawns a
+  // per-combat setInterval on committed COMBAT_INITIATE; terminates on
+  // COMBAT_RESOLVE / COMBAT_DEFEAT. Slice 1's onTick callback is a
+  // no-op; Slice 2 will plug in the 5-phase rule engine.
+  private readonly combatRuntime = new CombatRuntime()
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -451,6 +457,10 @@ export class SimulationRuntime {
     if (this.timer === null) return
     clearInterval(this.timer)
     this.timer = null
+    // Combat Phase C Slice 1 — clear every per-combat sub-tick interval
+    // when the world tick stops, so test teardown and production
+    // shutdown both leave no orphaned timers behind.
+    this.combatRuntime.shutdownAll()
   }
 
   subscribe(listener: Listener): () => void {
@@ -954,6 +964,21 @@ export class SimulationRuntime {
     this.lastSequence = last.sequence
     this.eventCount += committed.length
     for (const ev of committed) {
+      // Combat Phase C Slice 1 — spawn / terminate the per-combat
+      // sub-tick loop in lock-step with COMBAT_INITIATE / _RESOLVE /
+      // _DEFEAT commits. The loop callback is a no-op until Slice 2
+      // ships the 5-phase rule engine.
+      if (
+        ev.eventType === 'COMBAT_INITIATE' ||
+        ev.eventType === 'COMBAT_RESOLVE' ||
+        ev.eventType === 'COMBAT_DEFEAT'
+      ) {
+        const combatId = readCombatIdFromEvent(ev)
+        if (combatId) {
+          if (ev.eventType === 'COMBAT_INITIATE') this.combatRuntime.spawn(combatId)
+          else this.combatRuntime.terminate(combatId)
+        }
+      }
       if (this.npcMemory) this.npcMemory.project(ev)
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
@@ -3521,6 +3546,13 @@ export class SimulationRuntime {
     }
     if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
       const allEvents = this.store.readEvents()
+      // Combat Phase C Slice 1 — re-spawn the sub-tick loop for any
+      // combat that committed COMBAT_INITIATE without a matching
+      // COMBAT_RESOLVE / COMBAT_DEFEAT. Pure helper over the event log;
+      // replay-safe.
+      for (const combatId of computeUnresolvedCombats(allEvents)) {
+        this.combatRuntime.spawn(combatId)
+      }
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.animalMigrationProjection.rebuildFromEvents(allEvents)
@@ -3596,6 +3628,23 @@ export class SimulationRuntime {
       this.pushRecent(narrative)
     }
   }
+}
+
+// Combat Phase C Slice 1 — pull `combatId` out of a committed Event's
+// payload. The Phase B emission shape is `{ payload: { data: {...} } }`
+// for living-world commands and `{ payload: { combatId, ... } }` for
+// the legacy combat path; we accept either.
+function readCombatIdFromEvent(event: Event): string | null {
+  const payload = event.payload as Record<string, unknown> | undefined
+  if (!payload || typeof payload !== 'object') return null
+  if (typeof payload.combatId === 'string' && payload.combatId.length > 0) {
+    return payload.combatId
+  }
+  const data = payload.data as Record<string, unknown> | undefined
+  if (data && typeof data.combatId === 'string' && data.combatId.length > 0) {
+    return data.combatId
+  }
+  return null
 }
 
 function pickFromCycle<T>(values: readonly T[], step: number): T {

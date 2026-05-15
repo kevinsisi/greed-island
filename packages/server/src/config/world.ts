@@ -118,6 +118,20 @@ export const DEFENSE_PARTY_MIN_MEMBERS = 2
 export const TILE_ACTIVITY_RECENCY_TICKS = 60
 export const TILE_INACTIVE_DRIFT_PERIOD = 10
 
+// Combat Phase C Slice 1 — sub-tick loop default rate. The runtime
+// spawns a setInterval per active combat at this rate. Range 5–20 Hz
+// (50 ms – 200 ms); default 10 Hz (100 ms). Configurable so future
+// load tests can dial it without re-deploying.
+export const COMBAT_TICK_RATE_MS = 100
+export const COMBAT_TICK_RATE_MIN_MS = 50  // 20 Hz
+export const COMBAT_TICK_RATE_MAX_MS = 200 // 5 Hz
+
+export function validateCombatTickRateMs(ms: number): boolean {
+  if (!Number.isFinite(ms)) return false
+  if (!Number.isInteger(ms)) return false
+  return ms >= COMBAT_TICK_RATE_MIN_MS && ms <= COMBAT_TICK_RATE_MAX_MS
+}
+
 // Phase 3 §37.3 — NPC culture & emergent festivals.
 export const CULTURAL_FESTIVAL_THRESHOLD = 3
 export const CULTURAL_NORM_NPC_THRESHOLD = 3

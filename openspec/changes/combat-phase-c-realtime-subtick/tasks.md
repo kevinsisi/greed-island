@@ -2,14 +2,14 @@
 
 > Six ship-able slices under v0.16.x. Each slice keeps prior slices' tests green.
 
-## 1. Slice 1 — Sub-tick loop infrastructure (server-only, no UI)
+## 1. Slice 1 — Sub-tick loop infrastructure (server-only, no UI) — ✅ shipped in v0.24.0
 
-- [ ] 1.1 Add `combatTickRate` to runtime config (default 100ms, range 5–20 Hz validated)
-- [ ] 1.2 Create `packages/server/src/combat/runtime.ts` — `CombatRuntime` class with `spawn(combatId)` / `terminate(combatId)` keyed `setInterval` map
-- [ ] 1.3 Hook `sim/runtime.ts` to listen for committed `COMBAT_INITIATE` / `COMBAT_RESOLVE` / `COMBAT_DEFEAT` and call spawn/terminate
-- [ ] 1.4 Wrap each interval callback in try/catch; on error emit `COMBAT_RESOLVE` with `outcome=error_abort` and clear the interval
-- [ ] 1.5 Boot-time hydration: scan EventLog for unresolved combats; spawn loop at `lastCommittedCombatTick + 1`
-- [ ] 1.6 Tests: spawn-on-initiate, terminate-on-resolve, error-abort cleanup, hydration after simulated crash, world+combat tick non-interference
+- [x] 1.1 Added `COMBAT_TICK_RATE_MS = 100` (default 10 Hz), `COMBAT_TICK_RATE_MIN_MS = 50` (20 Hz), `COMBAT_TICK_RATE_MAX_MS = 200` (5 Hz), and `validateCombatTickRateMs()` guard in `packages/server/src/config/world.ts`.
+- [x] 1.2 Created `packages/server/src/combat/runtime.ts` — `CombatRuntime` class with keyed `setInterval` map; `spawn` is idempotent so EventLog replay can call it freely; `terminate` is idempotent too; `shutdownAll` clears every interval; `setInterval` / `clearInterval` injectable for deterministic tests.
+- [x] 1.3 Hooked `sim/runtime.ts` to call `combatRuntime.spawn(combatId)` after every committed `COMBAT_INITIATE` and `combatRuntime.terminate(combatId)` after every committed `COMBAT_RESOLVE` / `COMBAT_DEFEAT` inside the existing `submitLivingWorldCommand` fan-out. Helper `readCombatIdFromEvent` accepts both Phase B (`payload.combatId`) and living-world wrapped (`payload.data.combatId`) shapes.
+- [x] 1.4 Interval callback wrapped in try/catch; on error the runtime calls `onError({ combatId, combatTick, error })` and `terminate()`s the loop so it cannot leak. Slice 1's default `onError` console-logs; Slice 2 will replace it with a `COMBAT_RESOLVE` emit of `outcome=error_abort`.
+- [x] 1.5 Boot-time hydration: `runtime.ts` boot path walks the EventLog via the pure helper `computeUnresolvedCombats(events)` and re-spawns each unresolved combat. `spawn` accepts an optional `startAtTick` so Slice 2 can resume mid-combat after a crash.
+- [x] 1.6 Tests: `packages/server/src/combat/runtime.test.ts` — 13 tests covering tickRateMs validation, spawn-on-call, idempotent spawn, terminate-clears-and-is-idempotent, multi-combat independence, error-abort cleanup, shutdownAll, startAtTick resume, and the boot-hydration helper. World+combat tick non-interference is guaranteed by D1 (per-combat setInterval, fully decoupled from world tick).
 
 ## 2. Slice 2 — 5-phase rule engine + card priority + tie-break
 
