@@ -101,6 +101,11 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'HOUSEHOLD_GOLD_CONTRIBUTED',
   'HOUSEHOLD_GOLD_SPENT',
   'HOUSEHOLD_INHERITANCE_ASSIGNED',
+  // Sprint 2B — Animal aggression (hungry predator attacks NPC, retaliation, flee)
+  'ANIMAL_TARGETED_NPC',
+  'ANIMAL_ATTACKED_NPC',
+  'ANIMAL_FLED',
+  'ANIMAL_RETALIATED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -201,6 +206,56 @@ export type HouseholdInheritanceAssignedCmd = Readonly<{
   heirId: string
   amount: number
   assignedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+// Sprint 2B — Animal aggression
+export type AnimalDamage = Readonly<{ mood: number; health: number }>
+
+export type AnimalTargetedNpcCmd = Readonly<{
+  attackId: string
+  animalId: string
+  speciesId: string
+  npcId: string
+  tileId: string
+  targetedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type AnimalAttackedNpcCmd = Readonly<{
+  attackId: string
+  animalId: string
+  speciesId: string
+  npcId: string
+  tileId: string
+  damage: AnimalDamage
+  attackedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type AnimalFledCmd = Readonly<{
+  fleeRouteId: string
+  animalId: string
+  speciesId: string
+  fromTileId: string
+  toTileId: string
+  reason: 'attacked' | 'injured'
+  fledAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type AnimalRetaliatedCmd = Readonly<{
+  retaliationId: string
+  animalId: string
+  speciesId: string
+  npcId: string
+  tileId: string
+  damage: AnimalDamage
+  retaliatedAtTick: number
   motivation?: EventMotivation
   narration: string
 }>
@@ -822,6 +877,10 @@ export type LivingWorldCommandPayload =
   | HouseholdGoldContributedCmd
   | HouseholdGoldSpentCmd
   | HouseholdInheritanceAssignedCmd
+  | AnimalTargetedNpcCmd
+  | AnimalAttackedNpcCmd
+  | AnimalFledCmd
+  | AnimalRetaliatedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -1538,6 +1597,58 @@ const VALIDATORS: Readonly<
     if (typeof p.heirId !== 'string' || p.heirId.length === 0) return 'heirId required'
     if (!isPositiveQuantity(p.amount)) return 'amount required'
     if (typeof p.assignedAtTick !== 'number' || !Number.isInteger(p.assignedAtTick) || p.assignedAtTick < 0) return 'assignedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  ANIMAL_TARGETED_NPC: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.attackId !== 'string' || p.attackId.length === 0) return 'attackId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.targetedAtTick !== 'number' || !Number.isInteger(p.targetedAtTick) || p.targetedAtTick < 0) return 'targetedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  ANIMAL_ATTACKED_NPC: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.attackId !== 'string' || p.attackId.length === 0) return 'attackId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.attackedAtTick !== 'number' || !Number.isInteger(p.attackedAtTick) || p.attackedAtTick < 0) return 'attackedAtTick must be non-negative integer'
+    if (!isRecord(p.damage)) return 'damage required'
+    if (typeof p.damage.mood !== 'number' || !Number.isInteger(p.damage.mood)) return 'damage.mood must be integer'
+    if (typeof p.damage.health !== 'number' || !Number.isInteger(p.damage.health)) return 'damage.health must be integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  ANIMAL_FLED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.fleeRouteId !== 'string' || p.fleeRouteId.length === 0) return 'fleeRouteId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (p.fromTileId === p.toTileId) return 'fromTileId must differ from toTileId'
+    if (p.reason !== 'attacked' && p.reason !== 'injured') return 'reason must be attacked or injured'
+    if (typeof p.fledAtTick !== 'number' || !Number.isInteger(p.fledAtTick) || p.fledAtTick < 0) return 'fledAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  ANIMAL_RETALIATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.retaliationId !== 'string' || p.retaliationId.length === 0) return 'retaliationId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.retaliatedAtTick !== 'number' || !Number.isInteger(p.retaliatedAtTick) || p.retaliatedAtTick < 0) return 'retaliatedAtTick must be non-negative integer'
+    if (!isRecord(p.damage)) return 'damage required'
+    if (typeof p.damage.mood !== 'number' || !Number.isInteger(p.damage.mood)) return 'damage.mood must be integer'
+    if (typeof p.damage.health !== 'number' || !Number.isInteger(p.damage.health)) return 'damage.health must be integer'
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   }

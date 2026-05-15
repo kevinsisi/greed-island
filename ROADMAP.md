@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.20.0 🚧 in progress — 2026-05-15
+
+**主題：Sprint 2B — Animal Aggression**
+
+OpenSpec: `animal-aggression/`。Closes the "ecosystem cannot bite" gap noted in Part I §6.2 — starving predators gain agency over NPCs on their tile, and hunted prey can land a retaliation blow before dying.
+
+- ✅ 4 個新 command/event 類型：`ANIMAL_TARGETED_NPC`、`ANIMAL_ATTACKED_NPC`、`ANIMAL_FLED`、`ANIMAL_RETALIATED` + payload types + validators in `livingWorldCommands.ts`。
+- ✅ 新增 `packages/server/src/ecosystem/aggression.ts`：純 deterministic planner — `planAnimalAggression()` 跟 `planAnimalRetaliation()`，所有 RNG 走 `hashSeed`，replay-safe。
+- ✅ Runtime 整合：predation step starvation 分支前，若同 tile 有 NPC 且 `species.aggression > 0`，改走 aggression chain（`TARGETED → ATTACKED → NPC_STATE_RECORDED + 可能 FLED`），預設 -10 mood / -10 health，clamp 0。
+- ✅ Runtime 整合：NPC hunt 路徑在 `ANIMAL_HUNT_STARTED` 後、`ANIMAL_HUNT_RESOLVED` 前，呼叫 `planAnimalRetaliation`；命中時 hunter 受 -8 mood / -6 health。
+- ✅ Narrative：`ANIMAL_TARGETED_NPC` 加入 chronicle suppression（純意圖事件），其他三個攻擊事件正常流到 `/api/events`。
+- ✅ 10 aggression planner unit tests + full suite 469 server + 39 web 全綠；`openspec validate --all --strict` 33 passed。
+- ⚠️ Honest scope：玩家本身的攻擊（player-target）未做；NPC 組隊反擊留給 Sprint 2C `npc-defense-coordination`；無 Phaser 血濺 VFX。
+
 ## v0.19.0 🚧 in progress — 2026-05-15
 
 **主題：Phase E0/E1 follow-up — World Ecology Visibility**

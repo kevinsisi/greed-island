@@ -68,15 +68,16 @@ import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
+import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles } from './mapGraph.js'
 import { buildAreaEcology, type AreaEcologyView } from './areaEcology.js'
+import { planAnimalAggression, planAnimalRetaliation } from '../ecosystem/aggression.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
 import { planAnimalReproduction } from '../ecosystem/reproduction.js'
-import { requireSpecies } from '../ecosystem/species.js'
+import { getSpecies, requireSpecies } from '../ecosystem/species.js'
 import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
 import {
@@ -1181,7 +1182,61 @@ export class SimulationRuntime {
                 motivation,
                 narration: `${npcName}在${tileName}開始追蹤${hunt.targetSpeciesId}。`
               }
-            ),
+            )
+          )
+          // Sprint 2B — Animal retaliation. The dying animal gets its
+          // last bite in. Push BEFORE HUNT_RESOLVED so the retaliation
+          // event sequence-orders ahead of the kill.
+          const retaliation = planAnimalRetaliation({
+            tick: nextTick,
+            animalId: hunt.targetAnimalId,
+            speciesId: hunt.targetSpeciesId,
+            tileId: hunt.tileId,
+            hunterNpcId: hunt.npcId,
+            species,
+          })
+          if (retaliation) {
+            const retaliationMotivation = makeMotivation(
+              `${hunt.targetSpeciesId} 不甘被獵殺，反擊 ${hunt.npcId} 留下一道傷口。`
+            )
+            commands.push(
+              makeLivingWorldCommand(
+                'ANIMAL_RETALIATED',
+                hunt.npcId,
+                'npc',
+                nextTick,
+                submittedAt,
+                {
+                  retaliationId: retaliation.retaliationId,
+                  animalId: retaliation.animalId,
+                  speciesId: retaliation.speciesId,
+                  npcId: retaliation.hunterNpcId,
+                  tileId: retaliation.tileId,
+                  damage: retaliation.damage,
+                  retaliatedAtTick: nextTick,
+                  motivation: retaliationMotivation,
+                  narration: `${hunt.targetSpeciesId}在${tileName}臨死反擊，傷到${npcName}。`,
+                }
+              )
+            )
+            const hunterStateRow = this.npcStateProjection.getByNpcId(hunt.npcId)
+            if (hunterStateRow) {
+              const nextState = {
+                ...hunterStateRow.state,
+                mood: Math.max(0, hunterStateRow.state.mood + retaliation.damage.mood),
+                health: Math.max(0, hunterStateRow.state.health + retaliation.damage.health),
+                lastActedTick: nextTick,
+              } as unknown as NpcRuntimeState
+              commands.push(
+                this.makeNpcStateRecordedCommand(
+                  { npcId: hunt.npcId, state: nextState },
+                  nextTick,
+                  submittedAt
+                )
+              )
+            }
+          }
+          commands.push(
             makeLivingWorldCommand(
               'ANIMAL_HUNT_RESOLVED',
               event.npcId,
@@ -1672,29 +1727,143 @@ export class SimulationRuntime {
         )
       )
     } else if (predation?.kind === 'starvation') {
-      const lastKill = this.predatorHungerProjection.getLastKillAtTick(predation.predatorSpeciesId, predation.tileId)
-      const hungerDuration = lastKill === null ? nextTick : nextTick - lastKill
-      if (hungerDuration >= PREDATOR_STARVATION_THRESHOLD_TICKS) {
-        const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
+      // Sprint 2B — Animal aggression. Before letting the predator
+      // starve, see if there's an NPC on the same tile and the species
+      // has any aggression. If so, swap the starvation chain for an
+      // attack chain (predator targets the NPC, lands a hit, optionally
+      // flees). Hunger counter is implicitly reset because the next
+      // tick's predatorHunger projection won't see a starvation event.
+      const tileName = TILE_NAME_BY_ID[predation.tileId] ?? predation.tileId
+      const npcsOnTile = this.npcStateProjection
+        .getAll()
+        .filter((row) => row.state.tile === predation.tileId)
+        .map((row) => row.npcId)
+      const species = getSpecies(predation.predatorSpeciesId)
+      const aggressionPlan = species
+        ? planAnimalAggression({
+            tick: nextTick,
+            predatorPopulation: this.animalPopulationProjection
+              .list()
+              .filter(
+                (row) =>
+                  row.tileId === predation.tileId &&
+                  row.speciesId === predation.predatorSpeciesId
+              ),
+            npcsOnTile,
+            species,
+            adjacentTileIds:
+              getMapAdjacency(this.lifeExpansion.unlockedTileIds)[predation.tileId] ?? [],
+          })
+        : null
+
+      if (aggressionPlan) {
+        const motivation = makeMotivation(
+          `${aggressionPlan.predatorSpeciesId} 飢餓且在${tileName}沒有獵物，轉而攻擊 ${aggressionPlan.targetNpcId}。`
+        )
         commands.push(
           makeLivingWorldCommand(
-            'ANIMAL_STARVED',
-            predation.predatorActorId,
+            'ANIMAL_TARGETED_NPC',
+            aggressionPlan.predatorActorId,
             'system',
             nextTick,
             submittedAt,
             {
-              starvationId: predation.starvationId,
-              predatorAnimalId: predation.predatorAnimalId,
-              predatorSpeciesId: predation.predatorSpeciesId,
-              tileId: predation.tileId,
-              starvationStage: predation.starvationStage,
-              starvedAtTick: nextTick,
-              motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}超過 ${PREDATOR_STARVATION_THRESHOLD_TICKS} ticks 無獵物，predator 死亡。`),
-              narration: `${predation.predatorSpeciesId}在${tileName}因長期缺乏獵物而死亡。`,
+              attackId: aggressionPlan.attackId,
+              animalId: aggressionPlan.predatorAnimalId,
+              speciesId: aggressionPlan.predatorSpeciesId,
+              npcId: aggressionPlan.targetNpcId,
+              tileId: aggressionPlan.tileId,
+              targetedAtTick: nextTick,
+              motivation,
+              narration: `${aggressionPlan.predatorSpeciesId}在${tileName}鎖定${aggressionPlan.targetNpcId}。`,
+            }
+          ),
+          makeLivingWorldCommand(
+            'ANIMAL_ATTACKED_NPC',
+            aggressionPlan.predatorActorId,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              attackId: aggressionPlan.attackId,
+              animalId: aggressionPlan.predatorAnimalId,
+              speciesId: aggressionPlan.predatorSpeciesId,
+              npcId: aggressionPlan.targetNpcId,
+              tileId: aggressionPlan.tileId,
+              damage: aggressionPlan.damage,
+              attackedAtTick: nextTick,
+              motivation,
+              narration: `${aggressionPlan.predatorSpeciesId}在${tileName}攻擊了${aggressionPlan.targetNpcId}。`,
             }
           )
         )
+        // Apply damage to the NPC via a fresh NPC_STATE_RECORDED command.
+        // The projection's NpcStateSnapshot uses `agent?: unknown` while
+        // NpcRuntimeState requires a typed `agent`; cast through the
+        // recorded shape because the validator enforces the runtime
+        // contract anyway.
+        const npcStateRow = this.npcStateProjection.getByNpcId(aggressionPlan.targetNpcId)
+        if (npcStateRow) {
+          const nextState = {
+            ...npcStateRow.state,
+            mood: Math.max(0, npcStateRow.state.mood + aggressionPlan.damage.mood),
+            health: Math.max(0, npcStateRow.state.health + aggressionPlan.damage.health),
+            lastActedTick: nextTick,
+          } as unknown as NpcRuntimeState
+          commands.push(
+            this.makeNpcStateRecordedCommand(
+              { npcId: aggressionPlan.targetNpcId, state: nextState },
+              nextTick,
+              submittedAt
+            )
+          )
+        }
+        if (aggressionPlan.fleeRouteId && aggressionPlan.fleeToTileId) {
+          commands.push(
+            makeLivingWorldCommand(
+              'ANIMAL_FLED',
+              aggressionPlan.predatorActorId,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                fleeRouteId: aggressionPlan.fleeRouteId,
+                animalId: aggressionPlan.predatorAnimalId,
+                speciesId: aggressionPlan.predatorSpeciesId,
+                fromTileId: aggressionPlan.tileId,
+                toTileId: aggressionPlan.fleeToTileId,
+                reason: 'attacked',
+                fledAtTick: nextTick,
+                motivation,
+                narration: `${aggressionPlan.predatorSpeciesId}攻擊後從${tileName}逃離到${TILE_NAME_BY_ID[aggressionPlan.fleeToTileId] ?? aggressionPlan.fleeToTileId}。`,
+              }
+            )
+          )
+        }
+      } else {
+        const lastKill = this.predatorHungerProjection.getLastKillAtTick(predation.predatorSpeciesId, predation.tileId)
+        const hungerDuration = lastKill === null ? nextTick : nextTick - lastKill
+        if (hungerDuration >= PREDATOR_STARVATION_THRESHOLD_TICKS) {
+          commands.push(
+            makeLivingWorldCommand(
+              'ANIMAL_STARVED',
+              predation.predatorActorId,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                starvationId: predation.starvationId,
+                predatorAnimalId: predation.predatorAnimalId,
+                predatorSpeciesId: predation.predatorSpeciesId,
+                tileId: predation.tileId,
+                starvationStage: predation.starvationStage,
+                starvedAtTick: nextTick,
+                motivation: makeMotivation(`${predation.predatorSpeciesId} 在${tileName}超過 ${PREDATOR_STARVATION_THRESHOLD_TICKS} ticks 無獵物，predator 死亡。`),
+                narration: `${predation.predatorSpeciesId}在${tileName}因長期缺乏獵物而死亡。`,
+              }
+            )
+          )
+        }
       }
     }
 
@@ -3396,7 +3565,9 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'GOODS_TRANSPORT_LOST' ||
     ev.eventType === 'TRADE_ROUTE_OPENED' ||
     ev.eventType === 'TRADE_ROUTE_CLOSED' ||
-    ev.eventType === 'MARKET_PRICE_DISCOVERED'
+    ev.eventType === 'MARKET_PRICE_DISCOVERED' ||
+    // Sprint 2B — intent event only; the player sees the attack itself, not the targeting.
+    ev.eventType === 'ANIMAL_TARGETED_NPC'
   ) return null
 
   if (isLivingWorldCommandType(ev.eventType)) {

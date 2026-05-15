@@ -3,6 +3,79 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 2B: animal-aggression (v0.20.0)
+
+### Implemented
+
+The ecosystem can now bite back. Two related mechanics ship together,
+both pure deterministic and replay-safe.
+
+#### Server
+- New living-world commands `ANIMAL_TARGETED_NPC`, `ANIMAL_ATTACKED_NPC`,
+  `ANIMAL_FLED`, `ANIMAL_RETALIATED` registered in
+  `packages/server/src/kernel/livingWorldCommands.ts` with payload types,
+  union variants, and validators.
+- `packages/server/src/ecosystem/aggression.ts`:
+  - `planAnimalAggression(input)` — when a predator would normally
+    starve but at least one NPC shares its tile and `species.aggression
+    > 0`, returns an `AnimalAggressionPlan` that targets a
+    deterministically-picked NPC, applies `-10 mood / -10 health`
+    damage, and optionally flees to a deterministic adjacent tile when
+    `species.fear / 100` clears a hashSeed-derived threshold.
+  - `planAnimalRetaliation(input)` — after `ANIMAL_HUNT_STARTED`,
+    species with `aggression > 0` get a deterministic retaliation roll
+    and, on hit, return an `AnimalRetaliationPlan` that injures the
+    hunter by `-8 mood / -6 health` before the kill resolves.
+- `packages/server/src/sim/runtime.ts`:
+  - In the predation step, the starvation branch now consults
+    `planAnimalAggression` first. If a plan exists the runtime emits
+    `ANIMAL_TARGETED_NPC` → `ANIMAL_ATTACKED_NPC` → re-emitted
+    `NPC_STATE_RECORDED` (mood / health clamped at 0) → optional
+    `ANIMAL_FLED`. Falls through to the existing starvation event
+    chain when no NPC is on the tile or `species.aggression == 0`.
+  - In the NPC hunt path, `planAnimalRetaliation` runs after
+    `ANIMAL_HUNT_STARTED` and pushes `ANIMAL_RETALIATED` plus a
+    re-emitted `NPC_STATE_RECORDED` for the hunter BEFORE
+    `ANIMAL_HUNT_RESOLVED`, so the dying animal lands its last bite.
+- `ANIMAL_TARGETED_NPC` added to the chronicle suppression list (it
+  is intent-only); the other three event types flow through the
+  existing `/api/events` narrative surface.
+
+### Honest scope
+
+- No player-targeted attack path; the existing `combat-system` Phase B
+  single-shot remains untouched.
+- NPC organized retaliation party is **Sprint 2C** scope.
+- No Phaser blood splatter / damage flash VFX — attacks surface only
+  in the event feed and AI narration prompts.
+- Damage tuning is a flat -10 / -10 (attack) and -8 / -6
+  (retaliation); per-species damage tuning is a later polish.
+- NPC death from health=0 is not handled in this slice; the NPC sits
+  at zero and the next tick's NPC engine decides what to do.
+
+### Verification
+
+- `npm run test -w @greed-island/server -- ecosystem/aggression` —
+  **10 new tests passing** (null-on-no-npc, null-on-zero-aggression,
+  deterministic NPC pick, flee/no-flee paths, retaliation
+  deterministic).
+- Full `npm test` — **469 server + 39 web = 508 tests passing**.
+- `npm run build` (server + web) — clean.
+- `npx openspec validate animal-aggression --strict` — passes.
+- `npx openspec validate --all --strict` — **33 passed, 0 failed**.
+- Versions bumped to `0.20.0` across `package.json` + `version.ts`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 2C: `npc-defense-coordination` (NPC hunting parties retaliate against attacking wildlife).
+- Sprint 3: finish `simulation-budget-enforcement` 4.x.
+- Sprint 4: `district-subtile-terrain`.
+- Sprint 5–6: combat-system + combat-phase-c-realtime-subtick.
+
 ## 2026-05-15 — Sprint 2A: world-visibility-ecology (v0.19.0)
 
 ### Implemented
