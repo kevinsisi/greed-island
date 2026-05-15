@@ -16,6 +16,8 @@ import type { FactionLeanId, MapAreaOverlay, MapConstructionActivity, MapNpc, Ma
 import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
 import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './constructionActivity'
+import { buildHubEcologySummaries, type HubEcologySummary } from './hubEcology'
+import type { AnimalGroupRow, MigrationRow, PredatorWarningRow } from '../api/client'
 import { activeDistrictIdsForHub } from './hubDistricts'
 
 const HUB_TILE_ID = 'hub'
@@ -135,6 +137,16 @@ export function HubPage() {
     return constructionActivitiesFor(events, npcs, constructionProjectsFromWorldFact(world.facts['lifeExpansion']))
   }, [events, npcs, world.facts])
 
+  // Sprint 2A — derive per-tile ecology summaries from WorldSnapshot.facts
+  // so the Hub map can paint species badges, predator warning rings, and
+  // migration arrows alongside the existing district visuals.
+  const ecologyByTile = useMemo<readonly HubEcologySummary[]>(() => {
+    const animals = (world.facts['animalPopulation'] as readonly AnimalGroupRow[] | undefined) ?? []
+    const migrations = (world.facts['migrationRoutes'] as readonly MigrationRow[] | undefined) ?? []
+    const predatorHunger = (world.facts['predatorHunger'] as readonly PredatorWarningRow[] | undefined) ?? []
+    return buildHubEcologySummaries({ animals, migrations, predatorHunger })
+  }, [world.facts])
+
   const mapPlayers = useMemo<MapPlayer[]>(() => {
     return nearbyPlayers.map((player) => ({
       id: player.id,
@@ -252,6 +264,7 @@ export function HubPage() {
             areaOverlays={areaOverlays}
             activeDistrictIds={activeDistrictIds}
             constructionActivities={constructionActivities}
+            ecologyByTile={ecologyByTile}
             controlsEnabled={!!token}
           />
         ) : (

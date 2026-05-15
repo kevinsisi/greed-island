@@ -20,7 +20,9 @@ import {
 import { CITY_DECORATIONS } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
 import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
+import { visualForSpecies } from './speciesPalette'
 import type { NpcActivity } from '../state/types'
+import type { HubEcologySummary } from '../pages/hubEcology'
 
 export interface MapNpc {
   id: string
@@ -107,6 +109,8 @@ export interface MapSceneInit {
   activeDistrictIds?: DistrictId[]
   /** Recent authoritative construction progress, used to show who is building locked expansion areas. */
   constructionActivities?: MapConstructionActivity[]
+  /** Sprint 2A — per-district ecology summaries for Hub badges + predator warning ring + migration arrows. */
+  ecologyByTile?: readonly HubEcologySummary[]
   /** Guests can browse the world, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
@@ -163,6 +167,8 @@ export class MapScene extends Phaser.Scene {
   private controlsEnabled = true
   private activeDistrictIds = new Set<DistrictId>(DISTRICT_IDS)
   private constructionActivities: MapConstructionActivity[] = []
+  private ecologyByTile: readonly HubEcologySummary[] = []
+  private ecologyLayer: Phaser.GameObjects.Container | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -205,6 +211,7 @@ export class MapScene extends Phaser.Scene {
     this.controlsEnabled = data.controlsEnabled ?? true
     this.activeDistrictIds = new Set(data.activeDistrictIds ?? DISTRICT_IDS)
     this.constructionActivities = data.constructionActivities ?? []
+    this.ecologyByTile = data.ecologyByTile ?? []
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -267,6 +274,7 @@ export class MapScene extends Phaser.Scene {
     this.refreshAreaOverlay()
     this.drawDistrictLabels()
     this.drawConstructionSites()
+    this.drawEcologyBadges()
     this.spawnPlayer()
     this.refreshPeerSprites()
     this.spawnNpcs()
@@ -325,6 +333,7 @@ export class MapScene extends Phaser.Scene {
     areaOverlays?: MapAreaOverlay[]
     activeDistrictIds?: DistrictId[]
     constructionActivities?: MapConstructionActivity[]
+    ecologyByTile?: readonly HubEcologySummary[]
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -361,6 +370,8 @@ export class MapScene extends Phaser.Scene {
     }
     const hasConstructionUpdate = payload.constructionActivities !== undefined
     if (hasConstructionUpdate) this.constructionActivities = payload.constructionActivities ?? []
+    const hasEcologyUpdate = payload.ecologyByTile !== undefined
+    if (hasEcologyUpdate) this.ecologyByTile = payload.ecologyByTile ?? []
     if (payload.activeDistrictIds) {
       const nextActiveDistrictIds = new Set(payload.activeDistrictIds)
       if (!sameDistrictSet(this.activeDistrictIds, nextActiveDistrictIds)) {
@@ -376,12 +387,14 @@ export class MapScene extends Phaser.Scene {
           areaOverlays: this.areaOverlays,
           activeDistrictIds: Array.from(this.activeDistrictIds),
           constructionActivities: this.constructionActivities,
+          ecologyByTile: this.ecologyByTile,
           controlsEnabled: this.controlsEnabled
         } satisfies MapSceneInit)
         return
       }
     }
     if (hasConstructionUpdate) this.redrawConstructionSites()
+    if (hasEcologyUpdate) this.drawEcologyBadges()
     this.redrawDistrictLabels()
   }
 
@@ -765,6 +778,113 @@ export class MapScene extends Phaser.Scene {
         )
       }
     }
+  }
+
+  /**
+   * Sprint 2A — world-visibility-ecology
+   *
+   * For each district that carries a HubEcologySummary:
+   *  - paint up to two species badges at the district's top-right corner
+   *    (top 2 by count desc, lex tiebreak — already sorted by the helper).
+   *  - if the tile has any predator hunger warning, overlay a dimmed red
+   *    ring on the district color block.
+   *  - if any migration wave departs or arrives at this tile, draw a thin
+   *    arrow on the edge pointing toward the neighbour direction.
+   */
+  private drawEcologyBadges(): void {
+    if (this.ecologyLayer) {
+      this.ecologyLayer.destroy(true)
+      this.ecologyLayer = null
+    }
+    if (this.ecologyByTile.length === 0) return
+    const layer = this.add.container(0, 0)
+    layer.setDepth(48)
+
+    for (const summary of this.ecologyByTile) {
+      const def = (DISTRICTS as Record<string, DistrictDef | undefined>)[summary.tileId]
+      if (!def || def.id === 't_road') continue
+      const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
+      const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+
+      // Badges in the top-right of the district anchor.
+      summary.badges.forEach((badge, idx) => {
+        const visual = visualForSpecies(badge.speciesId)
+        const bx = anchorX + 36 + idx * 36
+        const by = anchorY - 38
+        const bg = this.add.circle(bx, by, 12, 0x0d1117, 0.85)
+        bg.setStrokeStyle(1.5, visual.color, 0.95)
+        layer.add(bg)
+        const glyph = this.add.text(bx, by, visual.emoji, {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#ffffff',
+        })
+        glyph.setOrigin(0.5, 0.5)
+        layer.add(glyph)
+        const count = this.add.text(bx + 11, by + 7, `×${badge.count}`, {
+          fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
+          fontSize: '10px',
+          color: '#fff5b8',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        count.setOrigin(0, 0.5)
+        layer.add(count)
+      })
+
+      if (summary.predatorWarning) {
+        const ring = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.55, 0xff5050, 0)
+        ring.setStrokeStyle(2, 0xff5050, 0.55)
+        layer.add(ring)
+      }
+
+      // Migration arrows on the tile edge — one tiny arrow per direction.
+      // The from/to neighbours give us the rough heading; we just point
+      // toward the centre of the other district to keep the prototype look.
+      for (const dep of summary.migrationsDeparting) {
+        const target = (DISTRICTS as Record<string, DistrictDef | undefined>)[dep.toTileId]
+        if (!target || target.id === 't_road') continue
+        const ax = anchorX
+        const ay = anchorY - TILE_SIZE * 0.45
+        const angle = Math.atan2(
+          target.anchor.row - def.anchor.row,
+          target.anchor.col - def.anchor.col,
+        )
+        const arrow = this.add.text(ax, ay, '→', {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#9c6b3c',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        arrow.setOrigin(0.5, 0.5)
+        arrow.setRotation(angle)
+        layer.add(arrow)
+      }
+      for (const arr of summary.migrationsArriving) {
+        const source = (DISTRICTS as Record<string, DistrictDef | undefined>)[arr.fromTileId]
+        if (!source || source.id === 't_road') continue
+        const ax = anchorX
+        const ay = anchorY + TILE_SIZE * 0.45
+        const angle = Math.atan2(
+          def.anchor.row - source.anchor.row,
+          def.anchor.col - source.anchor.col,
+        )
+        const arrow = this.add.text(ax, ay, '→', {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#9cc36b',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        arrow.setOrigin(0.5, 0.5)
+        arrow.setRotation(angle)
+        layer.add(arrow)
+      }
+    }
+
+    this.ecologyLayer = layer
   }
 
   private redrawConstructionSites(): void {

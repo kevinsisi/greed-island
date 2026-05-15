@@ -2,7 +2,9 @@ import Phaser from 'phaser'
 import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import { visualForSpecies } from './speciesPalette'
 import type { NpcActivity } from '../state/types'
+import type { AreaEcologyView } from '../api/client'
 
 // 區域內地圖：比城市地圖小，給玩家在單一街區裡走動。
 export const AREA_TILE_SIZE = 40
@@ -137,12 +139,38 @@ export interface AreaSceneInit {
   startPosition: { x: number; y: number } | null
   /** v0.15.1：當前世界天氣（後端 fact）；用於 Phaser VFX 切換 */
   weather?: AreaWeather
+  /** Sprint 2A — server-authoritative ecology rollup for this tile. */
+  ecology?: AreaEcologyView | null
   /** Guests can browse the map, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
 
 const DROP_SPRITE_SIZE = 22
 const DROP_PICKUP_RADIUS = AREA_TILE_SIZE * 1.4
+
+/**
+ * Sprint 2A — deterministic sub-cell placement for ecology sprites.
+ *
+ * FNV-1a 32-bit hash over `tileId|salt|key`. Bigger numbers map to
+ * (col, row) inside the area canvas with a 1-cell margin so sprites
+ * don't sit on the very edge.
+ */
+function areaSubcellFromHash(key: string, tileId: string, salt: string): { x: number; y: number } {
+  let h = 2166136261 >>> 0
+  const s = `${tileId}|${salt}|${key}`
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619) >>> 0
+  }
+  const colRange = AREA_GRID_COLS - 2
+  const rowRange = AREA_GRID_ROWS - 2
+  const col = 1 + (h % colRange)
+  const row = 1 + (Math.floor(h / colRange) % rowRange)
+  return {
+    x: col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
+    y: row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2,
+  }
+}
 
 const RANK_COLOR: Record<string, number> = {
   SS: 0xffd966,
@@ -185,6 +213,10 @@ export class AreaScene extends Phaser.Scene {
   private tooFarHintTimer: Phaser.Time.TimerEvent | null = null
   private weather: AreaWeather = 'clear'
   private controlsEnabled = true
+  /** Sprint 2A — ecology rollup (animals/fishery/migration/predator) for this tile. */
+  private ecology: AreaEcologyView | null = null
+  /** Sprint 2A — animal sprites + fishery bar layer, replaced when ecology updates. */
+  private ecologyLayer: Phaser.GameObjects.Container | null = null
   /** v0.15.1：天氣 VFX layer，applyWeather 切換時整批 destroy 重畫。 */
   private weatherLayer: Phaser.GameObjects.Container | null = null
   /** v0.15.1：環境動畫的 tween 池（裝飾物擺動 / 燈火閃爍 / 水波漣漪）。 */
@@ -232,6 +264,7 @@ export class AreaScene extends Phaser.Scene {
     this.hudStrings = data.hudStrings
     this.startPosition = data.startPosition
     this.weather = data.weather ?? 'clear'
+    this.ecology = data.ecology ?? null
     this.controlsEnabled = data.controlsEnabled ?? true
   }
 
@@ -247,6 +280,7 @@ export class AreaScene extends Phaser.Scene {
     this.setupInput()
     this.setupHud()
     this.applyWeather(this.weather)
+    this.drawEcologyOverlay()
 
     this.physics.world.setBounds(0, 0, AREA_CANVAS_WIDTH, AREA_CANVAS_HEIGHT)
     this.player.setCollideWorldBounds(true)
@@ -498,6 +532,104 @@ export class AreaScene extends Phaser.Scene {
     }
     this.envTweens = []
     this.envSprites = []
+  }
+
+  /**
+   * Sprint 2A — world-visibility-ecology.
+   *
+   * For the current tile's ecology rollup:
+   *  - ≤ 5 animals of a species: render one small dot sprite per
+   *    animalId, anchored at sub-cell coords deterministically derived
+   *    from a FNV-1a hash of `(animalId, tileId, salt)`.
+   *  - ≥ 6 animals: render a single cluster sprite + count label.
+   *  - if a fishery row exists: paint a thin density bar at the bottom
+   *    edge, length proportional to density / 100.
+   *
+   * Idempotent — destroys the previous overlay before re-rendering.
+   */
+  private drawEcologyOverlay(): void {
+    if (this.ecologyLayer) {
+      this.ecologyLayer.destroy(true)
+      this.ecologyLayer = null
+    }
+    const eco = this.ecology
+    if (!eco) return
+
+    const layer = this.add.container(0, 0)
+    layer.setDepth(45)
+    this.ecologyLayer = layer
+
+    for (const row of eco.animals) {
+      const visual = visualForSpecies(row.speciesId)
+      if (row.animalIds.length <= 5) {
+        for (const animalId of row.animalIds) {
+          const { x, y } = areaSubcellFromHash(animalId, eco.tileId, 'ecology-placement')
+          const dot = this.add.circle(x, y, 7, visual.color, 0.9)
+          dot.setStrokeStyle(1, 0x0a0a0a, 0.7)
+          layer.add(dot)
+          const glyph = this.add.text(x, y - 1, visual.emoji, {
+            fontFamily:
+              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+            fontSize: '11px',
+            color: '#ffffff',
+          })
+          glyph.setOrigin(0.5, 0.5)
+          layer.add(glyph)
+        }
+      } else {
+        // Cluster at a deterministic spot derived from speciesId + tileId.
+        const { x, y } = areaSubcellFromHash(row.speciesId, eco.tileId, 'ecology-cluster')
+        const bg = this.add.circle(x, y, 14, 0x141820, 0.85)
+        bg.setStrokeStyle(2, visual.color, 0.95)
+        layer.add(bg)
+        const glyph = this.add.text(x, y, visual.emoji, {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+          fontSize: '18px',
+          color: '#ffffff',
+        })
+        glyph.setOrigin(0.5, 0.5)
+        layer.add(glyph)
+        const count = this.add.text(x + 14, y + 8, `×${row.count}`, {
+          fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
+          fontSize: '11px',
+          color: '#fff5b8',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        count.setOrigin(0, 0.5)
+        layer.add(count)
+      }
+    }
+
+    if (eco.fishery) {
+      const maxWidth = AREA_CANVAS_WIDTH - 80
+      const widthPx = Math.max(0, Math.min(eco.fishery.density / 100, 1)) * maxWidth
+      const barY = AREA_CANVAS_HEIGHT - 12
+      const bg = this.add.rectangle(40, barY, maxWidth, 6, 0x0a0a0a, 0.6)
+      bg.setOrigin(0, 0.5)
+      layer.add(bg)
+      const fill = this.add.rectangle(40, barY, widthPx, 6, eco.fishery.collapsed ? 0xe04a3a : 0x4a9cd6, 0.9)
+      fill.setOrigin(0, 0.5)
+      layer.add(fill)
+      const label = this.add.text(40, barY - 12, this.fisheryLabel(eco.fishery.density, eco.fishery.collapsed), {
+        fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
+        fontSize: '10px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 2,
+      })
+      label.setOrigin(0, 0.5)
+      layer.add(label)
+    }
+  }
+
+  private fisheryLabel(density: number, collapsed: boolean): string {
+    if (collapsed) return '魚場崩潰'
+    if (density < 20) return `漁場枯竭（${density}/100）`
+    if (density < 40) return `漁場稀少（${density}/100）`
+    if (density < 66) return `漁場中等（${density}/100）`
+    return `漁場豐富（${density}/100）`
   }
 
   /**

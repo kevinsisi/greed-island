@@ -69,6 +69,7 @@ import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, listMapTiles } from './mapGraph.js'
+import { buildAreaEcology, type AreaEcologyView } from './areaEcology.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -704,6 +705,24 @@ export class SimulationRuntime {
       .list()
       .filter((r) => r.tileId === tileId && r.count > 0)
       .map((r) => ({ speciesId: r.speciesId, count: r.count }))
+  }
+
+  /**
+   * Sprint 2A `world-visibility-ecology` — per-tile rollup of every E0/E1
+   * ecology projection (animal population, fishery density, migration
+   * waves arriving/departing, predator hunger warnings). Returns `null`
+   * for unknown tile id; otherwise an `AreaEcologyView` whose rollup may
+   * be empty for tiles with no ecology activity.
+   */
+  getAreaEcology(tileId: string): AreaEcologyView | null {
+    if (!TILE_BY_ID[tileId]) return null
+    return buildAreaEcology({
+      tileId,
+      animals: this.animalPopulationProjection.list(),
+      fishery: this.fisheryDensityProjection.getByTile(tileId),
+      migrationWaves: this.animalMigrationProjection.list(),
+      predatorHunger: this.predatorHungerProjection.list(),
+    })
   }
 
   /** Phase 3 §37.1 — fishery density for a specific tile, as a human-readable label. */

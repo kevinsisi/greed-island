@@ -156,6 +156,8 @@ export function AdminWorldPage() {
   const marketPrices = readMarketPrices(world.facts)
   const migrationWaves = readMigrationWaves(world.facts)
   const predatorHungerRows = readPredatorHunger(world.facts)
+  const animalPopulationRows = readAnimalPopulation(world.facts)
+  const totalAnimals = animalPopulationRows.reduce((sum, r) => sum + r.count, 0)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -442,6 +444,60 @@ export function AdminWorldPage() {
               <tbody>
                 {marketPrices.map((row) => (
                   <MarketPriceView key={`${row.settlementId}:${row.goodsId}`} row={row} t={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-amber-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-amber-300">
+              Animal Population
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              Phase E0/E1 — per-species, per-tile live count. Sources: `ANIMAL_SPAWNED`, `ANIMAL_REPRODUCED`, `ANIMAL_KILLED`, `ANIMAL_STARVED`, `ANIMAL_MIGRATED`. Sorted by count desc.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label="rows" value={animalPopulationRows.length} />
+            <Badge label="total animals" value={totalAnimals} />
+          </div>
+        </div>
+
+        {animalPopulationRows.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            No live animals recorded yet. Wildlife spawns deterministically per biome at cadence ticks.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">Species</th>
+                  <th className="text-left py-2 pr-4">Tile</th>
+                  <th className="text-left py-2 pr-4">Biome</th>
+                  <th className="text-right py-2 pr-4">Count</th>
+                  <th className="text-right py-2 pr-4">Last spawned</th>
+                  <th className="text-right py-2 pr-4">Last killed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {animalPopulationRows.map((row) => (
+                  <tr key={`${row.speciesId}@${row.tileId}`} className="border-t border-ground-800/50">
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-200">{row.speciesId}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-400">
+                      {tileNameById.get(row.tileId) ?? row.tileId}
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-500">{row.biomeRegion}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-200">{row.count}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-500">{row.lastSpawnedAtTick}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-500">
+                      {row.lastKilledAtTick ?? '—'}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -896,6 +952,49 @@ function transportStatusLabel(status: GoodsTransportRow['status'], t: Translator
 
 function isGoodsHolderType(value: unknown): value is GoodsHolderType {
   return value === 'npc' || value === 'building' || value === 'settlement'
+}
+
+type AnimalPopulationRow = Readonly<{
+  speciesId: string
+  tileId: string
+  biomeRegion: string
+  count: number
+  animalIds: readonly string[]
+  lastSpawnedAtTick: number
+  lastKilledAtTick: number | null
+}>
+
+function readAnimalPopulation(facts: Record<string, unknown>): AnimalPopulationRow[] {
+  const raw = facts.animalPopulation
+  if (!Array.isArray(raw)) return []
+  const result: AnimalPopulationRow[] = []
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue
+    const row = value as Partial<AnimalPopulationRow>
+    if (typeof row.speciesId !== 'string') continue
+    if (typeof row.tileId !== 'string') continue
+    if (typeof row.biomeRegion !== 'string') continue
+    if (typeof row.count !== 'number') continue
+    if (!Array.isArray(row.animalIds)) continue
+    if (typeof row.lastSpawnedAtTick !== 'number') continue
+    const lastKilledAtTick =
+      typeof row.lastKilledAtTick === 'number' ? row.lastKilledAtTick : null
+    result.push({
+      speciesId: row.speciesId,
+      tileId: row.tileId,
+      biomeRegion: row.biomeRegion,
+      count: row.count,
+      animalIds: row.animalIds,
+      lastSpawnedAtTick: row.lastSpawnedAtTick,
+      lastKilledAtTick,
+    })
+  }
+  return result.sort(
+    (a, b) =>
+      b.count - a.count ||
+      a.tileId.localeCompare(b.tileId) ||
+      a.speciesId.localeCompare(b.speciesId),
+  )
 }
 
 function readMigrationWaves(facts: Record<string, unknown>): AnimalMigrationWaveRow[] {

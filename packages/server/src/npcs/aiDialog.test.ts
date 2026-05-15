@@ -204,6 +204,24 @@ describe('buildEcologyBlock', () => {
     const joined = lines.join('\n')
     expect(joined).toContain('崩潰')
   })
+
+  it('sorts animal rows by count desc with speciesId lex tiebreak', () => {
+    const lines = buildEcologyBlock(
+      [
+        { speciesId: 'marsh_heron', count: 1 },
+        { speciesId: 'forest_deer', count: 4 },
+        { speciesId: 'fog_wolf', count: 4 },
+      ],
+      null,
+    )
+    const animalLines = lines.filter((l) => l.startsWith('  · '))
+    expect(animalLines).toHaveLength(3)
+    // count desc puts the two 4s before the 1; lex tiebreak puts
+    // 'fog_wolf' < 'forest_deer' < 'marsh_heron'.
+    expect(animalLines[0]).toContain('fog_wolf')
+    expect(animalLines[1]).toContain('forest_deer')
+    expect(animalLines[2]).toContain('marsh_heron')
+  })
 })
 
 describe('buildRecentEventsBlock', () => {

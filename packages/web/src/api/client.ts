@@ -15,6 +15,48 @@ export type ServerActiveWorldEvent = {
   payload: Record<string, unknown>
 }
 
+// Sprint 2A — world-visibility-ecology
+export type AnimalGroupRow = {
+  speciesId: string
+  tileId: string
+  biomeRegion: 'salt_marsh' | 'forest' | 'mountain' | 'desert' | 'ruin'
+  count: number
+  animalIds: readonly string[]
+}
+
+export type FisheryRow = {
+  tileId: string
+  density: number
+  harvestedTotal: number
+  collapsed: boolean
+  lastUpdatedTick: number
+}
+
+export type MigrationRow = {
+  waveId: string
+  speciesId: string
+  fromTileId: string
+  toTileId: string
+  migrationType: 'pressure' | 'seasonal'
+  startedAtTick: number
+  count: number
+}
+
+export type PredatorWarningRow = {
+  predatorSpeciesId: string
+  tileId: string
+  lastKillAtTick: number
+}
+
+export type AreaEcologyView = {
+  tileId: string
+  animals: readonly AnimalGroupRow[]
+  fishery: FisheryRow | null
+  migrationsArriving: readonly MigrationRow[]
+  migrationsDeparting: readonly MigrationRow[]
+  predatorWarnings: readonly PredatorWarningRow[]
+}
+
 export type ServerSettlement = {
   id: string
   tileId: string
@@ -928,6 +970,9 @@ export const api = {
     jsonFetch<{ settlements: readonly ServerSettlement[] }>('/settlements'),
   settlementById: (id: string) =>
     jsonFetch<ServerSettlement>(`/settlements/${encodeURIComponent(id)}`),
+  // Sprint 2A — per-tile ecology rollup (animals + fishery + migration + predator warnings)
+  areaEcology: (tileId: string) =>
+    jsonFetch<AreaEcologyView>(`/area/${encodeURIComponent(tileId)}/ecology`),
   // -- profile -------------------------------------------------------
   profile: (token: string) =>
     jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),

@@ -5,6 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.19.0 🚧 in progress — 2026-05-15
+
+**主題：Phase E0/E1 follow-up — World Ecology Visibility**
+
+OpenSpec: `world-visibility-ecology/`。Closes the implicit "player must see ecology" gap that Phases E0/E1 left open. Pure read-layer slice — no new commands or events.
+
+- ✅ 新增 `GET /api/area/:tileId/ecology`：per-tile rollup of `animalPopulation` + `fisheryDensity` + `migrationRoutes` + `predatorHunger`。
+- ✅ 新增 `packages/server/src/sim/areaEcology.ts`：純函式 builder，按 count desc / lex tiebreak 排序動物，分流 migration arriving/departing，過濾 predator warnings + fishery 到 tile。
+- ✅ `SimulationRuntime.getAreaEcology(tileId)` 委派至 builder；unknown tile 回 `null`，端點轉 404 `{ error: 'unknown tile' }`。
+- ✅ AI ecology block (`buildEcologyBlock`) 加 deterministic sort（count desc, lex tiebreak）；v0.17.0 anti-hallucination guard 維持。
+- ✅ Hub map (`MapScene`) 新增 `drawEcologyBadges()`：每 district 角落畫 top-2 species emoji + count，predator-hunger tile 加 dimmed warning ring，migration wave 在 tile 邊緣畫方向箭頭。
+- ✅ AreaScene 新增 `drawEcologyOverlay()`：≤ 5 隻 → 個體 sprite (FNV-1a hash 決定 sub-cell)；≥ 6 隻 → cluster sprite + count label；水域 tile 加底部漁場密度條。
+- ✅ AreaPage 每 12 秒拉一次 `api.areaEcology(tileId)` 餵給 AreaPhaserGame。
+- ✅ `packages/web/src/pages/AdminWorldPage.tsx` 加 "Animal Population" 面板（之前只有 migration + predator hunger）。
+- ✅ 新增 `packages/web/src/game/speciesPalette.ts`：每 species 一組 emoji + color + 漢字 fallback。
+- ✅ 新增 `packages/web/src/pages/hubEcology.ts` 純 helper（top-2 picker + predator + migration 直流），5/5 vitest 過。
+- ✅ Server 6 + Router 3 + Web hubEcology 5 + Server aiDialog +1 = focused vitest 都過；full `npm test` server + web；`npm run build`；`openspec validate --all --strict`。
+
 ## v0.18.0 🚧 in progress — 2026-05-14
 
 **主題：Phase 3 §37.4 — Household Shared Economy**

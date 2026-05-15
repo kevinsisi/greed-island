@@ -26,6 +26,7 @@ import { CardActionPipeline } from './cardCommands.js'
 import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { createBuildingsRouter } from './buildingsRouter.js'
 import { createSettlementsRouter } from './settlementsRouter.js'
+import { createAreaEcologyRouter } from './areaEcologyRouter.js'
 import { createCombatRouter } from './combatRouter.js'
 import { createTechniqueShopRouter } from './techniqueShopRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -218,6 +219,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
     })
   )
   app.use('/api', createSettlementsRouter({ runtime: options.runtime }))
+  app.use('/api', createAreaEcologyRouter({ runtime: options.runtime }))
   app.use(
     '/api',
     createCombatRouter({

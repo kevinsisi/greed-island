@@ -423,7 +423,13 @@ export function buildEcologyBlock(
   if (!hasEcology && !hasFishery) return []
   const lines: string[] = []
   if (hasEcology) {
-    for (const row of ecology) {
+    // Sprint 2A — count desc, speciesId ascending lex tiebreak, so the
+    // most-present species lead the block and order is deterministic
+    // regardless of input ordering.
+    const sorted = [...ecology].sort(
+      (a, b) => b.count - a.count || a.speciesId.localeCompare(b.speciesId)
+    )
+    for (const row of sorted) {
       lines.push(`  · ${row.speciesId}：${row.count} 隻`)
     }
   }

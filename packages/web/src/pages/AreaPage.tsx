@@ -20,6 +20,7 @@ import type { NpcSummary, NpcActivity } from '../state/types'
 import type { TranslationKey } from '../i18n/types'
 import {
   api,
+  type AreaEcologyView,
   type ServerAmbient,
   type ServerAreaState,
   type ServerBuildingView,
@@ -69,6 +70,7 @@ export function AreaPage() {
   const [nearbyBuildingId, setNearbyBuildingId] = useState<string | null>(null)
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const [playerPosition, setPlayerPosition] = useState<{ tileId: string; x: number; y: number; z: number } | null>(null)
+  const [ecology, setEcology] = useState<AreaEcologyView | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -89,6 +91,14 @@ export function AreaPage() {
         if (!cancelled) setBuildings(r.buildings)
       })
       .catch(() => {})
+    api
+      .areaEcology(tileId)
+      .then((r) => {
+        if (!cancelled) setEcology(r)
+      })
+      .catch(() => {
+        // ignore — ecology overlay is best-effort
+      })
     const id = window.setInterval(() => {
       api
         .areaState(tileId)
@@ -102,6 +112,12 @@ export function AreaPage() {
         .buildings(tileId)
         .then((r) => {
           if (!cancelled) setBuildings(r.buildings)
+        })
+        .catch(() => {})
+      api
+        .areaEcology(tileId)
+        .then((r) => {
+          if (!cancelled) setEcology(r)
         })
         .catch(() => {})
     }, 12_000)
@@ -324,6 +340,7 @@ export function AreaPage() {
           playerName={account?.displayName ?? null}
           hudStrings={hudStrings}
           weather={weather}
+          ecology={ecology}
           onNpcInteract={handleNpcInteract}
           onDropPickup={cardOverlay.pickupDrop}
           onNearbyNpcsChange={handleNearbyNpcsChange}

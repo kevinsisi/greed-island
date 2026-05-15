@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
+import type { AreaEcologyView } from '../api/client'
 import {
   AREA_CANVAS_HEIGHT,
   AREA_CANVAS_WIDTH,
@@ -69,6 +70,8 @@ export interface AreaPhaserGameProps {
   hudStrings: { interact: string; pickup: string; tooFar: string; enterBuilding?: string }
   /** v0.15.1：當前世界天氣（已 normalise）；AreaScene 用來切換 VFX */
   weather?: AreaWeather
+  /** Sprint 2A — ecology rollup for the current tile (server-authoritative). */
+  ecology?: AreaEcologyView | null
   controlsEnabled?: boolean
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
@@ -97,6 +100,7 @@ export function AreaPhaserGame({
   playerName,
   hudStrings,
   weather,
+  ecology,
   controlsEnabled = true,
   onNpcInteract,
   onDropPickup,
@@ -190,7 +194,8 @@ export function AreaPhaserGame({
       hudStrings,
       startPosition,
       controlsEnabled,
-      ...(weather ? { weather } : {})
+      ...(weather ? { weather } : {}),
+      ...(ecology !== undefined ? { ecology } : {})
     }
     game.scene.start(AreaScene.KEY, init)
     if (controlsEnabled) sceneOnPositionChange?.(initialPosition)

@@ -3,6 +3,91 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 2A: world-visibility-ecology (v0.19.0)
+
+### Implemented
+
+- Closed the implicit Phase E0/E1 visibility gap: animals, fishery,
+  migration, and predator hunger were all server-authoritative but
+  invisible to the player. After this slice, every projection has a
+  user-facing surface (Hub badges, AreaScene sprites, fishery bar,
+  admin table) and the AI dialog block carries structured per-species
+  counts.
+
+#### Server
+- `packages/server/src/sim/areaEcology.ts`: pure `buildAreaEcology()`
+  rollup of the four ecology projections, scoped to a tile, with
+  deterministic ordering (count desc, lex tiebreak) and per-direction
+  migration splits.
+- `packages/server/src/sim/runtime.ts`: new `getAreaEcology(tileId)`
+  accessor delegating to the builder; `null` for unknown tile.
+- `packages/server/src/http/areaEcologyRouter.ts`: `GET
+  /api/area/:tileId/ecology` returning `AreaEcologyView` (or `404
+  { error: 'unknown tile' }`); wired into `createHttpApp`.
+- `packages/server/src/npcs/aiDialog.ts`: `buildEcologyBlock()` now
+  sorts the supplied animals list (count desc, speciesId lex tiebreak);
+  anti-hallucination guard from v0.17.0 §37.1 preserved.
+
+#### Web
+- `packages/web/src/api/client.ts`: `AreaEcologyView` / `AnimalGroupRow`
+  / `FisheryRow` / `MigrationRow` / `PredatorWarningRow` types + new
+  `api.areaEcology(tileId)` method.
+- `packages/web/src/game/speciesPalette.ts`: per-species emoji + color
+  + 漢字 fallback.
+- `packages/web/src/pages/hubEcology.ts`: pure helper that derives
+  per-tile summaries (top 2 species + predator flag + migration
+  arriving/departing) from `WorldSnapshot.facts`.
+- `packages/web/src/game/MapScene.ts`: `drawEcologyBadges()` paints
+  species emoji + count at each district anchor, a dimmed warning ring
+  on predator-hunger tiles, and small migration arrows on the
+  appropriate tile edges. Re-renders on `applyExternalUpdate` when
+  `ecologyByTile` changes and on `scene.restart`.
+- `packages/web/src/game/AreaScene.ts`: `drawEcologyOverlay()` renders
+  individual sprites (≤ 5 per species) or a single cluster sprite
+  with `×N` label (≥ 6); water-biome tiles get a fishery density bar
+  with collapse colour cue. Sub-cell placement uses FNV-1a hash of
+  `(animalId, tileId, salt)` for replay-stable positioning.
+- `packages/web/src/pages/HubPage.tsx`: derives `ecologyByTile` from
+  `world.facts.animalPopulation / migrationRoutes / predatorHunger`
+  and passes it through `PhaserGame` to `MapScene`.
+- `packages/web/src/pages/AreaPage.tsx`: fetches `api.areaEcology(tileId)`
+  on mount and every 12 s, passes the result to `AreaPhaserGame`.
+- `packages/web/src/pages/AdminWorldPage.tsx`: new "Animal Population"
+  panel (sorts by count desc; shows lastSpawnedAtTick / lastKilledAtTick).
+
+### Honest scope
+
+- Read-only surface; no new commands, events, or projection state.
+- AreaScene fetches via REST (no SSE push); 12 s poll is fine for the
+  prototype but will need streaming when populations grow.
+- Sub-cell placement is deterministic only inside the scene render
+  pass — backend NPC presence is still keyed by `subCol/subRow/subZ`
+  and is unaffected.
+- Animal-on-NPC aggression and NPC defense parties are **out of scope**
+  here and tracked in Sprints 2B / 2C of the 9-Sprint roadmap.
+
+### Verification
+
+- `npx openspec validate world-visibility-ecology --strict` — passed.
+- `npx openspec validate --all --strict` — **32 passed, 0 failed**.
+- Focused server tests: `npm run test -w @greed-island/server -- sim/areaEcology http/areaEcologyRouter aiDialog` — **43 tests** (9 new + 34 prior).
+- Focused web tests: `npm run test -w @greed-island/web -- hubEcology` — **5 tests pass**.
+- Full `npm test` — **server + web** clean (no regressions).
+- `npm run build:server` + `npm run build:web` — clean (only the known Vite chunk-size warning).
+- Versions bumped: workspace + server + web `package.json` → `0.19.0`; server/web `version.ts` → `0.19.0`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 2B: `animal-aggression` (hungry predators attack NPC / player; animals fight back or flee).
+- Sprint 2C: `npc-defense-coordination` (NPC hunting parties retaliate against attacking wildlife).
+- Sprint 3: finish `simulation-budget-enforcement` 4.x (active region + low-frequency drift + replay test).
+- Sprint 4: `district-subtile-terrain` (sub-cell terrain mask on water-biome districts).
+- Sprint 5–6: combat-system + combat-phase-c-realtime-subtick.
+
 ## 2026-05-15 — Sprint 1: Close out three near-complete changes
 
 ### Implemented
@@ -32,7 +117,7 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `6ec68e0` pushed; CI run `25898403365` success; Deploy Dev run `25898403378` success (runner smoke check `curl http://100.83.112.20:8100/` → `web ok` at 2026-05-15T03:22:12Z).
 
 ### Outstanding
 
