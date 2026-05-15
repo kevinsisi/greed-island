@@ -62,7 +62,7 @@ movement improvement.
 
 ### CI / Deploy
 
-- Commit `91ed7d1` pushed; CI run `25907037170` success; Deploy Dev run `25907037154` queued (kevinhome self-hosted runner not currently running — Docker image will deploy when the runner comes back up).
+- Commit `91ed7d1` pushed; CI run `25907037170` success; Deploy Dev run `25907037154` queued initially (runner offline) but the subsequent closeout commit `13f068a` (Sprint 4+5 archive) caught the runner up: CI run `25908166063` success; Deploy Dev run `25908166086` success. The v0.23.0 image is live; the earlier queued deploy run is now redundant (same image content).
 
 ### Archive
 
