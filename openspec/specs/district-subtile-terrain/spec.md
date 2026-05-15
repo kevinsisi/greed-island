@@ -76,11 +76,11 @@ boat", not "standing on the sea".
 
 ### Requirement: Every building anchor in a water district SHALL be walkable
 
-Every building catalogued in `packages/server/src/buildings/catalog.ts`
-with a water-biome `tileId` MUST place its `placement` anchor on a
-sub-cell whose terrain is `land`, `pier`, `shore`, or `shallow_water`
-— never `open_water`. A mask edit that strands a building MUST fail
-tests so the player never sees a building they cannot reach.
+The mask MUST keep every catalogued building in `t_dock`, `t_temple`,
+or `t_salt_marsh` on a walkable sub-cell (`land`, `pier`, `shore`, or
+`shallow_water`) — never `open_water`. A test pass MUST regress when
+a mask edit strands a building so the player never sees a building
+they cannot reach.
 
 #### Scenario: All water-district building anchors resolve to a walkable terrain
 
@@ -98,9 +98,10 @@ tests so the player never sees a building they cannot reach.
 
 ### Requirement: Hub predator-hunger warning SHALL carry a readable label
 
-The Hub map's predator-hunger indicator (`MapScene.drawEcologyBadges`)
-MUST attach a human-readable cue to its red ring so players can tell
-what the marker means at a glance. A bare ring is insufficient.
+`MapScene.drawEcologyBadges` MUST attach a human-readable cue to the
+predator-hunger red ring (an icon glyph plus a localized caption)
+whenever the tile has any `predatorHunger` projection row. A bare
+ring is insufficient.
 
 #### Scenario: Warning ring is accompanied by glyph + caption
 
