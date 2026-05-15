@@ -32,11 +32,18 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke verification.
+- Commit `c2cafbf` pushed to `main`.
+- GitHub CI `25893553858` — success (Build/typecheck/test + OpenSpec validate).
+- GitHub Deploy Dev `25893553868` — success (Docker image build/push + desktop deploy + workflow smoke check).
+- Known non-blocking annotation remains: GitHub Actions Node.js 20 deprecation.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — `{"ok":true,"version":"0.18.0","tick":133361}`.
+  - `http://100.83.112.20:8100/healthz` — `{"ok":true,"version":"0.18.0","tick":133361}`.
+  - `https://hunter.sisihome.org/api/world` — `facts.householdEconomy` present with 5 rows at tick `133363`.
 
 ### Outstanding
 
-- Complete commit/push/CI/deploy follow-through and smoke `/healthz` plus `/api/world` `facts.householdEconomy`.
+- None for Phase 3 §37.4. Next work should continue from `docs/WORLD_CAPABILITIES.md` phase order or archive completed OpenSpec changes when appropriate.
 
 ## 2026-05-14 — Phase 3 §37.3: NPC Culture & Emergent Festivals
 
