@@ -3,6 +3,73 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 4: district-subtile-terrain (v0.23.0)
+
+### Implemented
+
+Closes the visual-honesty gap that made human sprites appear to stand
+on open water inside the three water-biome districts. The macro-tile
+graph (`MAP_ADJACENCY`) and server-side NPC sub-cell state are
+unchanged — this slice is a pure client-side rendering + player-
+movement improvement.
+
+#### Web
+- `packages/web/src/game/areaGrid.ts`: extracted the `AREA_*` grid
+  constants out of `AreaScene.ts` so non-Phaser modules can import
+  them without dragging Phaser into a Node test environment (Phaser
+  touches `window` at module load time).
+- `packages/web/src/game/terrainMask.ts`:
+  - `SubcellTerrain` union and the per-glyph map.
+  - `terrainMaskForDistrict(districtId)` returns hand-authored
+    10×15 masks for `t_dock`, `t_temple`, `t_salt_marsh`; returns
+    `null` for the five land districts (legacy path preserved).
+  - `terrainAt(districtId, col, row)` + `isWalkableTerrain(terrain)`.
+  - `COLOR_FOR_TERRAIN` palette: pier=cedar, shore=damp gray-blue,
+    shallow_water=light blue, open_water=dark blue.
+  - Defensive fallback: malformed masks (wrong row count or row
+    width) collapse to `null` so the game stays playable.
+- `AreaScene.drawBackground()`: when a mask exists for the current
+  tile, paints each sub-cell with its mask color (still using the
+  checker shade pattern to keep cell grid visible). Land districts
+  unchanged.
+- `AreaScene.isAreaWalkable(x, y)`: walkability gate over the mask.
+- `handleMovement()`: look-ahead axis-wise velocity gate; player
+  cannot step into an open-water cell. Pointer-target handlers
+  (`pointerdown` + `pointermove`) reject taps on unwalkable cells.
+- `AreaScene.applyOpenWaterHint(sprite, npc)`: fades NPC sprite alpha
+  to 0.85 and attaches a `⛵` overlay when the NPC's sub-cell maps to
+  `open_water`. Reapplied on both new sprites and existing-tweened
+  sprites so the hint stays accurate across ticks.
+
+### Honest scope
+
+- Server-side NPC sub-cell selection is unchanged; NPCs may still
+  land on water cells. The boat overlay frames that as "fishing
+  from a small boat" rather than literally standing on the sea.
+- Mask is hand-authored per district; no procedural geography.
+- `shallow_water` is walkable; only `open_water` blocks the player.
+- Land districts (5 of 8 + the salt-marsh outer ring) keep their
+  legacy single-color rendering path.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/web -- terrainMask` — **7 tests passing**.
+- Full `npm test` — **487 server + 46 web = 533 tests passing** (+7 web from terrainMask).
+- `npm run build` (server + web) — clean.
+- `npx openspec validate district-subtile-terrain --strict` — passes.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Versions bumped to `0.23.0`.
+
+### CI / Deploy
+
+- Pending push and CI run.
+
+### Outstanding
+
+- Sprint 5: `combat-system` finish (4/31 tasks remaining).
+- Sprint 6: `combat-phase-c-realtime-subtick` (0/38; from-scratch implementation of Combat Phase C real-time sub-tick runtime).
+- Sprint 7: final verify + archive sweep.
+
 ## 2026-05-15 — Sprint 3: simulation-budget-enforcement Slice 4 (v0.22.0)
 
 ### Implemented

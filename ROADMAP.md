@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.23.0 🚧 in progress — 2026-05-15
+
+**主題：Sprint 4 — District Sub-tile Terrain (Water-biome districts)**
+
+OpenSpec: `district-subtile-terrain/`。Closes the visual-honesty gap where human sprites appeared to stand on open water. The three water-biome districts (`t_dock`、`t_temple`、`t_salt_marsh`) gain a per-sub-cell terrain mask; AreaScene paints pier / shore / shallow / open water cells separately; player can no longer walk onto open water; NPCs whose server-given sub-cell lands on open water render with a `⛵` overlay so the visual reads "fishing from a small boat".
+
+- ✅ 新增 `packages/web/src/game/areaGrid.ts`：把 `AREA_*` 常數獨立出來，讓 non-Phaser 模組可以匯入而不會在 Node test env 因 `window is not defined` 爆炸。
+- ✅ 新增 `packages/web/src/game/terrainMask.ts`：`SubcellTerrain` union (`land | pier | shore | shallow_water | open_water`)、`terrainMaskForDistrict()`（三個水域 district 各自手寫 10×15 string blueprint）、`isWalkableTerrain()`、`terrainAt()`、`COLOR_FOR_TERRAIN` palette。
+- ✅ `AreaScene.drawBackground()` 依 mask 為每個 sub-cell 上色（pier=cedar、shore=damp gray、shallow=light blue、open=dark blue），land district 維持原本 single-color path。
+- ✅ `AreaScene.isAreaWalkable()` walkability gate；`handleMovement` 有 look-ahead 軸別 clamp；`pointerdown` / `pointermove` 拒絕落在 open water 的 target。
+- ✅ `AreaScene.applyOpenWaterHint()`：NPC sub-cell 落在 open water 時 sprite alpha 0.85 + `⛵` overlay；新 sprite 與 existing sprite tween 都會 reapply。
+- ✅ 7 個 terrainMask 單元測試 + full suite 487 server + 46 web 全綠（+7 web tests）；`openspec validate --all --strict` 34 passed。
+- ⚠️ Honest scope：server 端 NPC sub-cell selection 不變（mask 沒進 server-side 規則）；NPC 偶爾會被 server 放到 open water，但視覺處理為「在船上釣魚」；玩家不能踩水。
+
 ## v0.22.0 🚧 in progress — 2026-05-15
 
 **主題：Sprint 3 — Simulation Budget Enforcement Slice 4 (Regional Tile Activation)**

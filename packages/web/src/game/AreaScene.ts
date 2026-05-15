@@ -3,6 +3,13 @@ import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './dist
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
 import { visualForSpecies } from './speciesPalette'
+import {
+  COLOR_FOR_TERRAIN,
+  isWalkableTerrain,
+  terrainAt,
+  terrainMaskForDistrict,
+  type SubcellTerrain,
+} from './terrainMask'
 import type { NpcActivity } from '../state/types'
 import type { AreaEcologyView } from '../api/client'
 
@@ -147,6 +154,22 @@ export interface AreaSceneInit {
 
 const DROP_SPRITE_SIZE = 22
 const DROP_PICKUP_RADIUS = AREA_TILE_SIZE * 1.4
+
+/**
+ * Sprint 4 — pixel-level darken used by the per-sub-cell terrain
+ * rendering to give every other cell a slightly darker shade so the
+ * grid lines stay legible. Subtracts the same delta from each RGB
+ * channel and clamps at 0.
+ */
+function darken(color: number, delta: number): number {
+  const dr = (delta >> 16) & 0xff
+  const dg = (delta >> 8) & 0xff
+  const db = delta & 0xff
+  const r = Math.max(0, ((color >> 16) & 0xff) - dr)
+  const g = Math.max(0, ((color >> 8) & 0xff) - dg)
+  const b = Math.max(0, (color & 0xff) - db)
+  return (r << 16) | (g << 8) | b
+}
 
 /**
  * Sprint 2A — deterministic sub-cell placement for ecology sprites.
@@ -368,18 +391,28 @@ export class AreaScene extends Phaser.Scene {
     const roadKeys = new Set<string>()
     for (const cell of decoSet.roadCells) roadKeys.add(`${cell.col},${cell.row}`)
 
+    // Sprint 4 — per-sub-cell terrain mask for water-biome districts.
+    // Land districts return `null` and fall through to the existing
+    // single-color checker path.
+    const mask = terrainMaskForDistrict(this.tileId)
+
     const g = this.add.graphics()
     for (let row = 0; row < AREA_GRID_ROWS; row += 1) {
       for (let col = 0; col < AREA_GRID_COLS; col += 1) {
         const checker = (col + row) % 2 === 0
         const isRoad = roadKeys.has(`${col},${row}`)
-        const fill = isRoad
-          ? checker
-            ? AREA_ROAD_COLOR
-            : AREA_ROAD_SHADE
-          : checker
-            ? def.color
-            : def.shade
+        const terrain: SubcellTerrain | null = mask ? mask[row]?.[col] ?? 'land' : null
+        let fill: number
+        if (terrain && terrain !== 'land') {
+          const base = COLOR_FOR_TERRAIN[terrain]
+          // Darken the checker cells by a small fixed amount so the
+          // sub-cell grid stays visible without losing the terrain hue.
+          fill = checker ? base : darken(base, 0x101010)
+        } else if (isRoad) {
+          fill = checker ? AREA_ROAD_COLOR : AREA_ROAD_SHADE
+        } else {
+          fill = checker ? def.color : def.shade
+        }
         g.fillStyle(fill, 1)
         g.fillRect(col * AREA_TILE_SIZE, row * AREA_TILE_SIZE, AREA_TILE_SIZE, AREA_TILE_SIZE)
         g.lineStyle(1, def.border, 0.35)
@@ -1223,6 +1256,7 @@ export class AreaScene extends Phaser.Scene {
         }
         // 平滑移動到後端的新位置
         this.tweenNpcTo(existing, target.x, target.y)
+        this.applyOpenWaterHint(existing, npc)
         continue
       }
 
@@ -1362,6 +1396,7 @@ export class AreaScene extends Phaser.Scene {
       })
 
       this.attachNpcIdleAnimation(sprite, npc.id)
+      this.applyOpenWaterHint(sprite, npc)
       this.npcSprites.set(npc.id, sprite)
     }
 
@@ -1763,11 +1798,15 @@ export class AreaScene extends Phaser.Scene {
         this.suppressNextPointerTarget = false
         return
       }
+      // Sprint 4 — reject pointer targets that land on open water; no
+      // quiet drift onto unwalkable cells.
+      if (!this.isAreaWalkable(pointer.worldX, pointer.worldY)) return
       this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
     })
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (!this.controlsEnabled) return
       if (pointer.isDown) {
+        if (!this.isAreaWalkable(pointer.worldX, pointer.worldY)) return
         this.pointerTarget = { x: pointer.worldX, y: pointer.worldY }
       }
     })
@@ -1840,11 +1879,79 @@ export class AreaScene extends Phaser.Scene {
       }
     }
 
+    // Sprint 4 — sub-tile terrain walkability gate. Look ahead one
+    // half-tile and zero each axis if the projected sub-cell falls on
+    // open water. Drops the pointer target as well so the player
+    // doesn't slide into a wet cell on autopilot.
+    if (vx !== 0 || vy !== 0) {
+      const lookahead = AREA_TILE_SIZE * 0.5
+      const probeX = this.player.x + Math.sign(vx) * lookahead
+      const probeY = this.player.y + Math.sign(vy) * lookahead
+      if (vx !== 0 && !this.isAreaWalkable(probeX, this.player.y)) vx = 0
+      if (vy !== 0 && !this.isAreaWalkable(this.player.x, probeY)) vy = 0
+      if (vx === 0 && vy === 0) this.pointerTarget = null
+    }
+
     if (vx !== 0 || vy !== 0) {
       const len = Math.hypot(vx, vy) || 1
       this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
     } else {
       this.player.setVelocity(0, 0)
+    }
+  }
+
+  /**
+   * Sprint 4 — walkability gate. Returns false only when the pixel
+   * coords map to a sub-cell whose terrain is `open_water` (per the
+   * district's hand-authored mask). Land districts have no mask and
+   * always return true.
+   */
+  private isAreaWalkable(x: number, y: number): boolean {
+    if (x < 0 || y < 0) return false
+    if (x >= AREA_CANVAS_WIDTH || y >= AREA_CANVAS_HEIGHT) return false
+    const col = Math.floor(x / AREA_TILE_SIZE)
+    const row = Math.floor(y / AREA_TILE_SIZE)
+    return isWalkableTerrain(terrainAt(this.tileId, col, row))
+  }
+
+  /**
+   * Sprint 4 — boat overlay for NPCs whose server-given sub-cell lands
+   * on open water. We do not snap their sprite to land (that would
+   * invent positional state); instead we fade the sprite slightly and
+   * attach a `⛵` glyph above the name label so the player reads it
+   * as "fishing from a small boat".
+   */
+  private applyOpenWaterHint(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    npc: AreaMapNpc,
+  ): void {
+    const cellTerrain = terrainAt(this.tileId, npc.subCol ?? 0, npc.subRow ?? 0)
+    const onOpenWater = cellTerrain === 'open_water'
+    const existingOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
+    if (onOpenWater) {
+      sprite.setAlpha(0.85)
+      if (!existingOverlay) {
+        const overlay = this.add.text(sprite.x, sprite.y - NPC_SPRITE_SIZE * 1.35, '⛵', {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        })
+        overlay.setOrigin(0.5, 1)
+        overlay.setDepth(73)
+        sprite.setData('boatOverlay', overlay)
+      } else {
+        existingOverlay.setPosition(sprite.x, sprite.y - NPC_SPRITE_SIZE * 1.35)
+        existingOverlay.setVisible(true)
+      }
+    } else {
+      sprite.setAlpha(1)
+      if (existingOverlay) {
+        existingOverlay.destroy()
+        sprite.setData('boatOverlay', undefined)
+      }
     }
   }
 
