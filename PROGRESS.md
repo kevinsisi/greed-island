@@ -54,7 +54,13 @@ counter-attack and put the predator down.
 
 ### CI / Deploy
 
-- Pending push and CI run.
+- Commit `4c58ffd` pushed; CI run `25903202816` success; Deploy Dev run `25903202817` success.
+
+### Archive
+
+- Delta specs synced: created new main spec `openspec/specs/npc-defense-coordination/spec.md` (2 requirements) and appended 1 requirement to `openspec/specs/living-deterministic-world/spec.md`.
+- Change folder moved to `openspec/changes/archive/2026-05-15-npc-defense-coordination`.
+- `npx openspec validate --all --strict` after archive — **34 passed, 0 failed**.
 
 ### Outstanding
 
