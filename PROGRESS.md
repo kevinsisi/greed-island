@@ -19,7 +19,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke verification.
+- Commit `eef95bb fix(visibility): refresh area ecology overlays` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25914958543` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25914958540` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.2`, tick `141034`.
+  - `https://hunter.sisihome.org/` — served current app shell and hashed JS/CSS assets.
+  - `https://hunter.sisihome.org/api/area/t_ruin/ecology` — returned `mimic_mold:6` and 1 predator warning, confirming the deployed area ecology endpoint has animal data for area rendering.
 
 ## 2026-05-15 — User-reported visual bugfixes (v0.24.2)
 
