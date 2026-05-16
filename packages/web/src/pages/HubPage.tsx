@@ -17,6 +17,7 @@ import type { NpcSummary } from '../state/types'
 import { hubMapNpcs } from './npcProjection'
 import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './constructionActivity'
 import { buildHubEcologySummaries, type HubEcologySummary } from './hubEcology'
+import { buildHubActivitySummaries } from './hubActivity'
 import type { AnimalGroupRow, MigrationRow, PredatorWarningRow } from '../api/client'
 import { activeDistrictIdsForHub } from './hubDistricts'
 
@@ -147,6 +148,10 @@ export function HubPage() {
     return buildHubEcologySummaries({ animals, migrations, predatorHunger })
   }, [world.facts])
 
+  const activityByTile = useMemo(() => {
+    return buildHubActivitySummaries(events)
+  }, [events])
+
   const mapPlayers = useMemo<MapPlayer[]>(() => {
     return nearbyPlayers.map((player) => ({
       id: player.id,
@@ -265,6 +270,7 @@ export function HubPage() {
             activeDistrictIds={activeDistrictIds}
             constructionActivities={constructionActivities}
             ecologyByTile={ecologyByTile}
+            activityByTile={activityByTile}
             controlsEnabled={!!token}
           />
         ) : (

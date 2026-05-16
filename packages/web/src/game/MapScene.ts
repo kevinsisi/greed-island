@@ -23,6 +23,7 @@ import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
 import { visualForSpecies } from './speciesPalette'
 import type { NpcActivity } from '../state/types'
 import type { HubEcologySummary } from '../pages/hubEcology'
+import type { HubActivityKind, HubActivitySummary } from '../pages/hubActivity'
 
 export interface MapNpc {
   id: string
@@ -111,6 +112,8 @@ export interface MapSceneInit {
   constructionActivities?: MapConstructionActivity[]
   /** Sprint 2A — per-district ecology summaries for Hub badges + predator warning ring + migration arrows. */
   ecologyByTile?: readonly HubEcologySummary[]
+  /** Recent committed world events projected onto district activity markers. */
+  activityByTile?: readonly HubActivitySummary[]
   /** Guests can browse the world, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
@@ -131,6 +134,14 @@ const PEER_MOVE_TWEEN_MS = 1800
 const SPRITE_FADE_MS = 450
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
 const NPC_SUBTILE_RADIUS = TILE_SIZE * 0.9
+
+const ACTIVITY_VISUALS: Readonly<Record<HubActivityKind, { glyph: string; color: number; zh: string; en: string }>> = {
+  danger: { glyph: '!', color: 0xff5a5a, zh: '衝突', en: 'Danger' },
+  construction: { glyph: 'C', color: 0xf6c560, zh: '建造', en: 'Build' },
+  pressure: { glyph: '~', color: 0xa78bfa, zh: '壓力', en: 'Pressure' },
+  work: { glyph: 'W', color: 0x9ee0c7, zh: '工作', en: 'Work' },
+  movement: { glyph: '>', color: 0x93c5fd, zh: '走動', en: 'Move' },
+}
 
 /** 派系外框色：v0.14.0 area state overlay 用。 */
 function factionFrameColor(faction: FactionLeanId): number {
@@ -169,6 +180,8 @@ export class MapScene extends Phaser.Scene {
   private constructionActivities: MapConstructionActivity[] = []
   private ecologyByTile: readonly HubEcologySummary[] = []
   private ecologyLayer: Phaser.GameObjects.Container | null = null
+  private activityByTile: readonly HubActivitySummary[] = []
+  private activityLayer: Phaser.GameObjects.Container | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -212,6 +225,7 @@ export class MapScene extends Phaser.Scene {
     this.activeDistrictIds = new Set(data.activeDistrictIds ?? DISTRICT_IDS)
     this.constructionActivities = data.constructionActivities ?? []
     this.ecologyByTile = data.ecologyByTile ?? []
+    this.activityByTile = data.activityByTile ?? []
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -275,6 +289,7 @@ export class MapScene extends Phaser.Scene {
     this.drawDistrictLabels()
     this.drawConstructionSites()
     this.drawEcologyBadges()
+    this.drawActivityMarkers()
     this.spawnPlayer()
     this.refreshPeerSprites()
     this.spawnNpcs()
@@ -313,6 +328,7 @@ export class MapScene extends Phaser.Scene {
     this.peerSprites.clear()
     this.districtLabels.clear()
     this.constructionSiteObjects = []
+    this.activityLayer = null
     this.playerNameLabel = null
     this.overlayGraphics = null
     this.envSprites = []
@@ -334,6 +350,7 @@ export class MapScene extends Phaser.Scene {
     activeDistrictIds?: DistrictId[]
     constructionActivities?: MapConstructionActivity[]
     ecologyByTile?: readonly HubEcologySummary[]
+    activityByTile?: readonly HubActivitySummary[]
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -372,6 +389,8 @@ export class MapScene extends Phaser.Scene {
     if (hasConstructionUpdate) this.constructionActivities = payload.constructionActivities ?? []
     const hasEcologyUpdate = payload.ecologyByTile !== undefined
     if (hasEcologyUpdate) this.ecologyByTile = payload.ecologyByTile ?? []
+    const hasActivityUpdate = payload.activityByTile !== undefined
+    if (hasActivityUpdate) this.activityByTile = payload.activityByTile ?? []
     if (payload.activeDistrictIds) {
       const nextActiveDistrictIds = new Set(payload.activeDistrictIds)
       if (!sameDistrictSet(this.activeDistrictIds, nextActiveDistrictIds)) {
@@ -388,6 +407,7 @@ export class MapScene extends Phaser.Scene {
           activeDistrictIds: Array.from(this.activeDistrictIds),
           constructionActivities: this.constructionActivities,
           ecologyByTile: this.ecologyByTile,
+          activityByTile: this.activityByTile,
           controlsEnabled: this.controlsEnabled
         } satisfies MapSceneInit)
         return
@@ -395,6 +415,7 @@ export class MapScene extends Phaser.Scene {
     }
     if (hasConstructionUpdate) this.redrawConstructionSites()
     if (hasEcologyUpdate) this.drawEcologyBadges()
+    if (hasActivityUpdate) this.drawActivityMarkers()
     this.redrawDistrictLabels()
   }
 
@@ -905,6 +926,85 @@ export class MapScene extends Phaser.Scene {
     }
 
     this.ecologyLayer = layer
+  }
+
+  private drawActivityMarkers(): void {
+    this.clearActivityMarkers()
+    if (this.activityByTile.length === 0) return
+
+    const layer = this.add.container(0, 0)
+    layer.setDepth(57)
+
+    for (const summary of this.activityByTile) {
+      if (!this.isActiveDistrict(summary.districtId)) continue
+      const def = DISTRICTS[summary.districtId]
+      const primaryKind = summary.kinds[0]
+      if (!primaryKind) continue
+      const visual = ACTIVITY_VISUALS[primaryKind]
+      const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
+      const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+      const x = Math.min(Math.max(anchorX, 66), CANVAS_WIDTH - 66)
+      const y = Math.min(Math.max(anchorY + TILE_SIZE * 0.95, 22), CANVAS_HEIGHT - 28)
+
+      const pulse = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.45, visual.color, 0.08)
+      pulse.setStrokeStyle(2, visual.color, 0.5)
+      layer.add(pulse)
+      this.tweens.add({
+        targets: pulse,
+        scale: { from: 0.9, to: 1.35 },
+        alpha: { from: 0.95, to: 0.25 },
+        duration: 1100,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      })
+
+      const pillWidth = summary.latestNarration ? 136 : 96
+      const pillHeight = summary.latestNarration ? 44 : 28
+      const bg = this.add.rectangle(x, y, pillWidth, pillHeight, 0x0d1117, 0.84)
+      bg.setStrokeStyle(1.5, visual.color, 0.9)
+      layer.add(bg)
+
+      const glyphs = summary.kinds
+        .slice(0, 3)
+        .map((kind) => ACTIVITY_VISUALS[kind].glyph)
+        .join(' ')
+      const labelText = this.locale === 'zh' ? visual.zh : visual.en
+      const header = this.add.text(x, y - (summary.latestNarration ? 11 : 0), `${glyphs} ${labelText} x${summary.count}`, {
+        fontFamily:
+          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#fff5b8',
+        stroke: '#0a0a0a',
+        strokeThickness: 3,
+        align: 'center'
+      })
+      header.setOrigin(0.5, 0.5)
+      layer.add(header)
+
+      if (summary.latestNarration) {
+        const detail = this.add.text(x, y + 10, truncateActivityText(summary.latestNarration), {
+          fontFamily:
+            'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
+          fontSize: '9px',
+          color: '#d9e4ef',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+          align: 'center'
+        })
+        detail.setOrigin(0.5, 0.5)
+        layer.add(detail)
+      }
+    }
+
+    this.activityLayer = layer
+  }
+
+  private clearActivityMarkers(): void {
+    if (!this.activityLayer) return
+    for (const object of this.activityLayer.getAll()) this.tweens.killTweensOf(object)
+    this.activityLayer.destroy(true)
+    this.activityLayer = null
   }
 
   private redrawConstructionSites(): void {
@@ -1626,4 +1726,10 @@ function sameDistrictSet(a: ReadonlySet<DistrictId>, b: ReadonlySet<DistrictId>)
     if (!b.has(id)) return false
   }
   return true
+}
+
+function truncateActivityText(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, ' ')
+  if (trimmed.length <= 16) return trimmed
+  return `${trimmed.slice(0, 15)}…`
 }

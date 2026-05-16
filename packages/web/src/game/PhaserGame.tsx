@@ -3,6 +3,7 @@ import Phaser from 'phaser'
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type DistrictId } from './districts'
 import { MapScene, type MapAreaOverlay, type MapConstructionActivity, type MapNpc, type MapPlayer, type MapSceneInit } from './MapScene'
 import type { HubEcologySummary } from '../pages/hubEcology'
+import type { HubActivitySummary } from '../pages/hubActivity'
 
 export interface PhaserGameProps {
   npcs: MapNpc[]
@@ -18,6 +19,7 @@ export interface PhaserGameProps {
   activeDistrictIds?: DistrictId[]
   constructionActivities?: MapConstructionActivity[]
   ecologyByTile?: readonly HubEcologySummary[]
+  activityByTile?: readonly HubActivitySummary[]
   controlsEnabled?: boolean
 }
 
@@ -71,6 +73,7 @@ export function PhaserGame({
   activeDistrictIds,
   constructionActivities,
   ecologyByTile,
+  activityByTile,
   controlsEnabled = true
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -135,6 +138,7 @@ export function PhaserGame({
     if (activeDistrictIds) init.activeDistrictIds = activeDistrictIds
     if (constructionActivities) init.constructionActivities = constructionActivities
     if (ecologyByTile) init.ecologyByTile = ecologyByTile
+    if (activityByTile) init.activityByTile = activityByTile
     game.scene.start(MapScene.KEY, init)
 
     // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
@@ -205,6 +209,7 @@ export function PhaserGame({
     if (activeDistrictIds) update.activeDistrictIds = activeDistrictIds
     if (constructionActivities) update.constructionActivities = constructionActivities
     if (ecologyByTile) update.ecologyByTile = ecologyByTile
+    if (activityByTile) update.activityByTile = activityByTile
     const apply = () => {
       const game = gameRef.current
       if (!game) return
@@ -222,7 +227,7 @@ export function PhaserGame({
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
     }
-  }, [npcs, players, playerName, locale, hudStrings, areaOverlays, activeDistrictIds, constructionActivities, ecologyByTile, controlsEnabled])
+  }, [npcs, players, playerName, locale, hudStrings, areaOverlays, activeDistrictIds, constructionActivities, ecologyByTile, activityByTile, controlsEnabled])
 
   return (
     <div

@@ -3,6 +3,36 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Hub Map Activity Visibility (v0.24.8)
+
+### Implemented
+
+- Added projection-only Hub activity markers so the main map shows where the
+  world is currently working, moving, building, under pressure, or in conflict.
+- `packages/web/src/pages/hubActivity.ts` derives per-district activity from
+  recent committed `EventSummary` rows. It reads authoritative event payload
+  tile fields / region scopes only; it does not mutate simulation state.
+- `packages/web/src/game/MapScene.ts` renders compact pulsing district markers
+  with kind labels, counts, and short latest narration snippets.
+- The activity projection reuses `isChronicleSurfaceEvent()` for narrated
+  events, so raw internal ids remain hidden from public map text. Non-narrated
+  movement events (`NPC_MOVE`, `BUILDING_ENTER`, `BUILDING_LEAVE`) are allowed
+  as spatial pings only.
+- `packages/web/src/pages/HubPage.tsx` now passes activity summaries through
+  `PhaserGame` to the persistent Phaser scene update path.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/web -- hubActivity eventVisibility` — **10 tests passed**.
+- Full `npm test` — **520 server + 57 web = 577 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.8`.
+
+### CI / Deploy
+
+- Pending push / GitHub Actions / deploy evidence.
+
 ## 2026-05-16 — World Prompt Life Visibility Fix (v0.24.7)
 
 ### Implemented
