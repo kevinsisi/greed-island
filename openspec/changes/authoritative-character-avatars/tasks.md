@@ -19,11 +19,11 @@
 
 ## 2. Slice 2 — Area scene avatars
 
-- [ ] 2.1 Replace Area NPC square textures with humanoid avatars driven by `AreaMapNpc.activity`, `color`, `mood`, and `health`.
-- [ ] 2.2 Replace Area local player square with the same humanoid system using local input-derived `walk/idle` only.
-- [ ] 2.3 Replace Area peer player rectangles with humanoid avatars using server presence coordinates and position-delta `walk/idle` only.
-- [ ] 2.4 Preserve interaction radius, click handling, labels, health hints, open-water hints, and no-outdoor-duplicate behavior.
-- [ ] 2.5 Tests/build: existing `npcProjection` tests remain green; add focused visual-state tests for Area inputs.
+- [x] 2.1 Replace Area NPC square textures with humanoid avatars driven by `AreaMapNpc.activity`, `color`, `mood`, and `health`.
+- [x] 2.2 Replace Area local player square with the same humanoid system using local input-derived `walk/idle` only.
+- [x] 2.3 Replace Area peer player rectangles with humanoid avatars using server presence coordinates and position-delta `walk/idle` only.
+- [x] 2.4 Preserve interaction radius, click handling, labels, health hints, open-water hints, and no-outdoor-duplicate behavior.
+- [x] 2.5 Tests/build: existing `npcProjection` tests remain green; add focused visual-state tests for Area inputs.
 
 ## 3. Slice 3 — Building scene avatars
 
@@ -52,4 +52,5 @@
 
 - Planning/inspection complete.
 - Slice 1 implementation complete: pure `CharacterVisualState` helpers, source-labelled player visual derivation, focused tests, and an unwired procedural Phaser avatar factory.
-- Next actionable slice: `2.1` replace Area NPC square textures with humanoid avatars driven by authoritative scene projection inputs.
+- Slice 2 implementation complete: Area NPC, local player, and peer player visuals now use humanoid avatars while retaining existing authoritative positions and interaction rules.
+- Next actionable slice: `3.1` replace Building scene local player square with the humanoid avatar system.

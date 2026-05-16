@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Authoritative Character Avatars Slice 2
+
+### Slice 2 Implemented
+
+- Version bumped to `0.24.16`.
+- Replaced Area scene NPC square visuals with procedural humanoid avatars driven by `AreaMapNpc.activity`, `color`, `mood`, and `health`.
+- Replaced Area local-player square visuals with the same humanoid avatar system; walk/idle remains derived only from local input velocity.
+- Replaced Area peer-player rectangle visuals with humanoid avatars; walk/idle remains derived only from server social-presence coordinate deltas.
+- Preserved Area interaction radius, click handling, full-name labels, health injury hints, open-water boat hints, and existing `areaOutdoorNpcs()` no-duplicate projection behavior.
+
+### Progress
+
+- `authoritative-character-avatars`: `14/26` tasks complete (`0.1`–`0.4`, `1.1`–`1.5`, `2.1`–`2.5`).
+- Next implementation task: `3.1` replace Building scene local player square with humanoid avatar.
+
+### Verification
+
+- Focused web tests: `npm --workspace packages/web exec vitest run src/game/areaCharacterVisualState.test.ts src/game/characterVisualState.test.ts src/pages/npcProjection.test.ts` — **18 tests passed**.
+- Focused web build/typecheck: `npm run build -w @greed-island/web` — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Full `npm test` — **536 server + 68 web = 604 tests passed**.
+- Full `npm run build` — clean; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke for runtime version `0.24.16`.
+
 ## 2026-05-17 — Authoritative Character Avatars Slice 1
 
 ### Slice 1 Implemented

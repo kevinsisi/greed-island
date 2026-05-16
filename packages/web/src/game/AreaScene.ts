@@ -2,6 +2,13 @@ import Phaser from 'phaser'
 import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import { applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import {
+  characterVisualStateForAreaLocalPlayer,
+  characterVisualStateForAreaNpc,
+  characterVisualStateForAreaPeerPlayer,
+} from './areaCharacterVisualState'
+import type { CharacterFacing, CharacterPoint } from './characterVisualState'
 import { labelForSpecies, visualForSpecies } from './speciesPalette'
 import {
   COLOR_FOR_TERRAIN,
@@ -247,6 +254,8 @@ export class AreaScene extends Phaser.Scene {
   private envSprites: Phaser.GameObjects.Text[] = []
 
   private player!: Phaser.Physics.Arcade.Sprite
+  private playerAvatar: ProceduralAvatar | null = null
+  private playerFacing: CharacterFacing = 'right'
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'SPACE', Phaser.Input.Keyboard.Key>
 
@@ -375,10 +384,12 @@ export class AreaScene extends Phaser.Scene {
     if (!this.controlsEnabled) {
       this.pointerTarget = null
       this.player?.setVelocity(0, 0)
+      this.syncPlayerAvatar()
       this.syncPlayerNameLabel()
       return
     }
     this.handleMovement(delta)
+    this.syncPlayerAvatar()
     this.checkDropProximity()
     this.checkBuildingProximity()
     this.checkExitProximity()
@@ -1188,8 +1199,17 @@ export class AreaScene extends Phaser.Scene {
       this.startPosition ?? { x: AREA_CANVAS_WIDTH / 2, y: AREA_CANVAS_HEIGHT / 2 }
     )
     this.player = this.physics.add.sprite(start.x, start.y, tex)
+    this.player.setVisible(false)
     this.player.setDepth(80)
     this.player.setCollideWorldBounds(true)
+    const state = characterVisualStateForAreaLocalPlayer({
+      playerName: this.playerName,
+      x: start.x,
+      y: start.y,
+      previousFacing: this.playerFacing,
+    })
+    this.playerFacing = state.facing
+    this.playerAvatar = createProceduralHumanoidAvatar(this, state, { size: PLAYER_SPRITE_SIZE + 6, depth: 80 })
     this.refreshPlayerNameLabel()
     this.lastSavedPosition = { x: start.x, y: start.y, z: 0 }
   }
@@ -1218,12 +1238,31 @@ export class AreaScene extends Phaser.Scene {
       return
     }
     if (this.playerNameLabel.text !== label) this.playerNameLabel.setText(label)
+    if (this.playerAvatar?.label) this.playerAvatar.label.setText(label.charAt(0).toUpperCase())
     this.syncPlayerNameLabel()
   }
 
   private syncPlayerNameLabel(): void {
     if (!this.player || !this.playerNameLabel) return
     this.playerNameLabel.setPosition(this.player.x, this.player.y - PLAYER_SPRITE_SIZE * 1.25)
+  }
+
+  private syncPlayerAvatar(): void {
+    if (!this.player || !this.playerAvatar) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body | null
+    const state = characterVisualStateForAreaLocalPlayer({
+      playerName: this.playerName,
+      x: this.player.x,
+      y: this.player.y,
+      velocityX: body?.velocity.x ?? 0,
+      velocityY: body?.velocity.y ?? 0,
+      previousFacing: this.playerFacing,
+    })
+    this.playerFacing = state.facing
+    applyProceduralAvatarPose(this.playerAvatar.container, state)
+    if (this.playerAvatar.label && this.playerAvatar.label.text !== state.shortLabel) {
+      this.playerAvatar.label.setText(state.shortLabel)
+    }
   }
 
   private spawnPeerPlayers(): void {
@@ -1240,23 +1279,30 @@ export class AreaScene extends Phaser.Scene {
       const existing = this.peerSprites.get(player.id)
       if (existing) {
         const label = existing.getData('label') as Phaser.GameObjects.Text | undefined
-        const badge = existing.getData('badge') as Phaser.GameObjects.Text | undefined
         if (label && label.text !== player.displayName) label.setText(player.displayName)
-        if (badge && badge.text !== player.shortName) badge.setText(player.shortName)
+        const avatar = existing.getData('avatar') as ProceduralAvatar | undefined
+        const previousZ = existing.getData('z') as number | null | undefined
+        const previous: CharacterPoint = previousZ !== undefined
+          ? { x: existing.x, y: existing.y, z: previousZ }
+          : { x: existing.x, y: existing.y }
+        const fallback: CharacterPoint = player.z !== undefined ? { ...target, z: player.z } : target
+        const state = characterVisualStateForAreaPeerPlayer(
+          player,
+          fallback,
+          previous,
+          this.facingForAvatar(existing)
+        )
+        applyProceduralAvatarPose(existing, { ...state, x: existing.x, y: existing.y })
+        if (avatar?.label && avatar.label.text !== state.shortLabel) avatar.label.setText(state.shortLabel)
+        existing.setData('z', state.z)
         this.tweenPeerTo(existing, target.x, target.y)
         continue
       }
-      const body = this.add.rectangle(0, 0, PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, 0x9ee0c7, 1)
-      body.setStrokeStyle(2, 0x1c1300, 1)
-      const badge = this.add.text(0, 0, player.shortName, {
-        fontFamily:
-          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-        fontSize: '13px',
-        color: '#103226',
-        fontStyle: 'bold'
-      })
-      badge.setOrigin(0.5, 0.5)
-      const label = this.add.text(0, -PLAYER_SPRITE_SIZE * 0.85, player.displayName, {
+      const fallback: CharacterPoint = player.z !== undefined ? { ...target, z: player.z } : target
+      const state = characterVisualStateForAreaPeerPlayer(player, fallback)
+      const avatar = createProceduralHumanoidAvatar(this, state, { size: PLAYER_SPRITE_SIZE + 6, depth: 78 })
+      const container = avatar.container
+      const label = this.add.text(target.x, target.y - PLAYER_SPRITE_SIZE * 1.25, player.displayName, {
         fontFamily:
           'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '11px',
@@ -1265,12 +1311,12 @@ export class AreaScene extends Phaser.Scene {
         strokeThickness: 4
       })
       label.setOrigin(0.5, 1)
-      const container = this.add.container(target.x, target.y, [body, badge, label])
-      container.setDepth(78)
-      container.setData('badge', badge)
+      label.setDepth(82)
+      container.setData('avatar', avatar)
       container.setData('label', label)
       container.setData('targetX', target.x)
       container.setData('targetY', target.y)
+      container.setData('z', state.z)
       this.peerSprites.set(player.id, container)
     }
     for (const [id, sprite] of this.peerSprites) {
@@ -1301,9 +1347,11 @@ export class AreaScene extends Phaser.Scene {
 
     const startX = container.x
     const startY = container.y
+    const label = container.getData('label') as Phaser.GameObjects.Text | undefined
     const distance = Phaser.Math.Distance.Between(startX, startY, x, y)
     if (distance < 0.5) {
       container.setPosition(x, y)
+      if (label) label.setPosition(x, y - PLAYER_SPRITE_SIZE * 1.25)
       container.setData('moveTween', undefined)
       return
     }
@@ -1316,9 +1364,11 @@ export class AreaScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
       onUpdate: (_t, t: { px: number; py: number }) => {
         container.setPosition(t.px, t.py)
+        if (label) label.setPosition(t.px, t.py - PLAYER_SPRITE_SIZE * 1.25)
       },
       onComplete: () => {
         container.setPosition(x, y)
+        if (label) label.setPosition(x, y - PLAYER_SPRITE_SIZE * 1.25)
         container.setData('moveTween', undefined)
       }
     })
@@ -1328,7 +1378,13 @@ export class AreaScene extends Phaser.Scene {
   private disposePeerSprite(container: Phaser.GameObjects.Container): void {
     const moveTween = container.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (moveTween) this.tweens.remove(moveTween)
+    const label = container.getData('label') as Phaser.GameObjects.Text | undefined
+    if (label) label.destroy()
     container.destroy(true)
+  }
+
+  private facingForAvatar(container: Phaser.GameObjects.Container): CharacterFacing {
+    return container.scaleX < 0 ? 'left' : 'right'
   }
 
   private peerTarget(player: AreaMapPlayer, index: number): { x: number; y: number } {
@@ -1389,6 +1445,7 @@ export class AreaScene extends Phaser.Scene {
       const existing = this.npcSprites.get(npc.id)
       if (existing) {
         const nameLabel = existing.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+        const avatar = existing.getData('avatar') as ProceduralAvatar | undefined
         const activityIcon = existing.getData('activityIcon') as
           | Phaser.GameObjects.Text
           | undefined
@@ -1416,8 +1473,9 @@ export class AreaScene extends Phaser.Scene {
         if (currentColor !== npc.color) {
           this.applyNpcColor(existing, npc.id, npc.color)
         }
+        if (avatar?.label && avatar.label.text !== npc.shortName) avatar.label.setText(npc.shortName)
         // 平滑移動到後端的新位置
-        this.tweenNpcTo(existing, target.x, target.y)
+        this.tweenNpcTo(existing, target.x, target.y, npc)
         this.applyOpenWaterHint(existing, npc)
         continue
       }
@@ -1425,11 +1483,24 @@ export class AreaScene extends Phaser.Scene {
       // 新增 sprite — 直接落在後端指定位置
       const tex = this.makeNpcTexture(npc.id, npc.color)
       const sprite = this.physics.add.sprite(target.x, target.y, tex)
+      sprite.setVisible(false)
       sprite.setDepth(70)
       sprite.setData('npcId', npc.id)
       sprite.setData('npcColor', npc.color)
-      sprite.setInteractive({ useHandCursor: true })
-      sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+
+      const state = characterVisualStateForAreaNpc(npc, target)
+      const avatar = createProceduralHumanoidAvatar(this, state, { size: NPC_SPRITE_SIZE + 4, depth: 70 })
+      avatar.container.setSize(NPC_SPRITE_SIZE * 1.7, NPC_SPRITE_SIZE * 2.2)
+      avatar.container.setInteractive(
+        new Phaser.Geom.Rectangle(
+          -NPC_SPRITE_SIZE * 0.85,
+          -NPC_SPRITE_SIZE * 1.25,
+          NPC_SPRITE_SIZE * 1.7,
+          NPC_SPRITE_SIZE * 2.2
+        ),
+        Phaser.Geom.Rectangle.Contains
+      )
+      avatar.container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
         if (!this.controlsEnabled) {
@@ -1449,19 +1520,7 @@ export class AreaScene extends Phaser.Scene {
         }
         this.callbacks.onNpcInteract(npc.id)
       })
-
-      // sprite 中央的單字 badge — 字色用 sprite 互補色，避免被同色吃掉
-      const badgeColor = textColorForBg(npc.color)
-      const badge = this.add.text(target.x, target.y, npc.shortName, {
-        fontFamily:
-          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-        fontSize: '14px',
-        color: badgeColor,
-        fontStyle: 'bold'
-      })
-      badge.setOrigin(0.5, 0.5)
-      badge.setDepth(71)
-      sprite.setData('badge', badge)
+      sprite.setData('avatar', avatar)
 
       // 完整名字（mood < 30 → 灰；其餘 cream）
       const moodLow = typeof npc.mood === 'number' && npc.mood < 30
@@ -1580,11 +1639,12 @@ export class AreaScene extends Phaser.Scene {
   ): void {
     const existing = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
     if (existing) return
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
     let h = 5381
     for (const ch of npcId) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
     const delay = h % 800
     const tween = this.tweens.add({
-      targets: sprite,
+      targets: avatar?.body ?? sprite,
       scaleY: { from: 0.93, to: 1.06 },
       duration: 1200 + (h % 400),
       ease: 'Sine.easeInOut',
@@ -1596,44 +1656,53 @@ export class AreaScene extends Phaser.Scene {
   }
 
   /** 把當前 sprite + 旁邊所有 label 從現在位置 tween 到目標 (x,y)。 */
-  private tweenNpcTo(sprite: Phaser.Physics.Arcade.Sprite, x: number, y: number): void {
+  private tweenNpcTo(sprite: Phaser.Physics.Arcade.Sprite, x: number, y: number, npc: AreaMapNpc): void {
     const prev = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (prev) prev.stop()
-    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    const boatOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
     const startX = sprite.x
+    const startY = sprite.y
+    const targetPoint: CharacterPoint = npc.subZ !== undefined ? { x, y, z: npc.subZ } : { x, y }
+    const visualState = characterVisualStateForAreaNpc(npc, targetPoint, { x: startX, y: startY })
     const distance = Phaser.Math.Distance.Between(startX, sprite.y, x, y)
     if (distance < 0.5) {
       sprite.setPosition(x, y)
-      if (badge) badge.setPosition(x, y)
+      if (avatar) applyProceduralAvatarPose(avatar.container, visualState)
       if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
       if (activityIcon)
         activityIcon.setPosition(x + NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
       if (healthIcon)
         healthIcon.setPosition(x - NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
       if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
+      if (boatOverlay) boatOverlay.setPosition(x, y - NPC_SPRITE_SIZE * 1.35)
       return
     }
-    if (x > startX + 0.5) sprite.setFlipX(false)
-    else if (x < startX - 0.5) sprite.setFlipX(true)
     const tween = this.tweens.add({
-      targets: { px: startX, py: sprite.y },
+      targets: { px: startX, py: startY },
       px: x,
       py: y,
       duration: NPC_MOVE_TWEEN_MS,
       ease: 'Sine.easeInOut',
       onUpdate: (_t, t: { px: number; py: number }) => {
         sprite.setPosition(t.px, t.py)
-        if (badge) badge.setPosition(t.px, t.py)
+        if (avatar) applyProceduralAvatarPose(avatar.container, { ...visualState, x: t.px, y: t.py })
         if (nameLabel) nameLabel.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 0.85)
         if (activityIcon)
           activityIcon.setPosition(t.px + NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
         if (healthIcon)
           healthIcon.setPosition(t.px - NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
         if (chatBubble) chatBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.6)
+        if (boatOverlay) boatOverlay.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.35)
+      },
+      onComplete: () => {
+        sprite.setPosition(x, y)
+        if (avatar) applyProceduralAvatarPose(avatar.container, visualState)
+        if (boatOverlay) boatOverlay.setPosition(x, y - NPC_SPRITE_SIZE * 1.35)
       }
     })
     sprite.setData('moveTween', tween)
@@ -1666,8 +1735,13 @@ export class AreaScene extends Phaser.Scene {
     const key = this.makeNpcTexture(npcId, color)
     sprite.setTexture(key)
     sprite.setData('npcColor', color)
-    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
-    if (badge) badge.setColor(textColorForBg(color))
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
+    if (avatar) {
+      avatar.body.setFillStyle(color, 1)
+      avatar.leftArm.setFillStyle(color, 1)
+      avatar.rightArm.setFillStyle(color, 1)
+      if (avatar.label) avatar.label.setColor(textColorForBg(color))
+    }
   }
 
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
@@ -1675,16 +1749,18 @@ export class AreaScene extends Phaser.Scene {
     if (moveTween) this.tweens.remove(moveTween)
     const idleTween = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
     if (idleTween) this.tweens.remove(idleTween)
-    const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
-    if (badge) badge.destroy()
+    const boatOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
+    if (avatar) avatar.container.destroy(true)
     if (nameLabel) nameLabel.destroy()
     if (activityIcon) activityIcon.destroy()
     if (healthIcon) healthIcon.destroy()
     if (chatBubble) chatBubble.destroy()
+    if (boatOverlay) boatOverlay.destroy()
     sprite.destroy()
     this.npcSprites.delete(id)
   }
@@ -2089,9 +2165,11 @@ export class AreaScene extends Phaser.Scene {
   ): void {
     const cellTerrain = terrainAt(this.tileId, npc.subCol ?? 0, npc.subRow ?? 0)
     const onOpenWater = cellTerrain === 'open_water'
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
     const existingOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
+    const baseAlpha = typeof npc.health === 'number' && npc.health < 30 ? 0.78 : 1
     if (onOpenWater) {
-      sprite.setAlpha(0.85)
+      avatar?.container.setAlpha(Math.min(baseAlpha, 0.85))
       if (!existingOverlay) {
         const overlay = this.add.text(sprite.x, sprite.y - NPC_SPRITE_SIZE * 1.35, '⛵', {
           fontFamily:
@@ -2109,7 +2187,7 @@ export class AreaScene extends Phaser.Scene {
         existingOverlay.setVisible(true)
       }
     } else {
-      sprite.setAlpha(1)
+      avatar?.container.setAlpha(baseAlpha)
       if (existingOverlay) {
         existingOverlay.destroy()
         sprite.setData('boatOverlay', undefined)

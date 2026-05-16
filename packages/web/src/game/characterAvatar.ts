@@ -72,11 +72,13 @@ export function applyProceduralAvatarPose(
   const rightArm = findChild<Phaser.GameObjects.Rectangle>(container, 4)
   const leftLeg = findChild<Phaser.GameObjects.Rectangle>(container, 0)
   const rightLeg = findChild<Phaser.GameObjects.Rectangle>(container, 1)
+  const label = findChild<Phaser.GameObjects.Text>(container, 6)
 
   if (leftArm) leftArm.setRotation(0)
   if (rightArm) rightArm.setRotation(0)
   if (leftLeg) leftLeg.setRotation(0)
   if (rightLeg) rightLeg.setRotation(0)
+  if (label) label.setScale(state.facing === 'left' ? -1 : 1, 1)
   container.setAlpha(state.health !== undefined && state.health < 30 ? 0.78 : 1)
 
   switch (state.action) {
