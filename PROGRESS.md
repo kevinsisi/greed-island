@@ -3,6 +3,49 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Settlement Runtime v2 Slice 3
+
+### Slice 3 Implemented
+
+- Version bumped to `0.24.13`.
+- Wired `planSettlementCommands()` into `SimulationRuntime.runTick()` before
+  command budget partitioning, using current authoritative settlement, NPC
+  presence, goods, logistics, market, fishery, animal, and household projections.
+- Settlement state changes now go through `makeLivingWorldCommand()` and
+  `LivingWorldRuleEngine.evaluate()` before committed Events update
+  `SettlementsProjection`.
+- Added central holder alias support so formed settlement ids can read existing
+  `settlement.<tileId>` goods/logistics/market rows such as `settlement.t_central`.
+- Added atomic settlement-state command grouping after hard-cap partitioning:
+  if any state command for a settlement is rejected, all same-settlement state
+  commands from that tick are rejected together instead of partially mutating
+  the settlement row.
+- Suppressed routine settlement telemetry (`SETTLEMENT_POPULATION_UPDATED`,
+  `SETTLEMENT_STORAGE_UPDATED`, `SETTLEMENT_PRESSURE_UPDATED`,
+  `SETTLEMENT_STABILITY_CHANGED`) from server recent-event narration and web
+  chronicle/ticker surfaces.
+
+### Progress
+
+- `settlement-runtime-v2`: `15/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`, `2.1`–`2.4`, `3.1`–`3.4`).
+- Read surfaces and GM/admin observability have not started.
+- Next implementation task: `4.1` expose settlement state in snapshot facts/API
+  surfaces while preserving `/api/settlements` compatibility.
+
+### Verification
+
+- `npm run build:server` — clean after dependency install in isolated worktree.
+- Focused server tests: `npm run test -w @greed-island/server -- settlementEngine runtimeSettlementEngine` — **9 tests passed**.
+- Focused web tests: `npm run test -w @greed-island/web -- eventVisibility` — **6 tests passed**.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npm run test -w @greed-island/server -- runtimePredation` — **3 tests passed** after an initial full-suite parallel timeout in the existing starvation test.
+- Full `npm test` rerun — **535 server + 53 web = 588 tests passed**.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke for `0.24.13`.
+
 ## 2026-05-16 — Settlement Runtime v2 Slice 2
 
 ### Slice 2 Implemented

@@ -38,6 +38,13 @@ describe('isPublicNarrativeEvent', () => {
     expect(isChronicleSurfaceEvent(logistics)).toBe(false)
   })
 
+  it('keeps routine settlement telemetry out of chronicle surfaces', () => {
+    const pressure = event({ eventType: 'SETTLEMENT_PRESSURE_UPDATED', narration: 'Settlement pressure recalculated.' })
+
+    expect(isPublicNarrativeEvent(pressure)).toBe(true)
+    expect(isChronicleSurfaceEvent(pressure)).toBe(false)
+  })
+
   it('keeps raw internal ids out of world prompt surfaces', () => {
     const leakedId = event({
       eventType: 'ANIMAL_ATTACKED_NPC',

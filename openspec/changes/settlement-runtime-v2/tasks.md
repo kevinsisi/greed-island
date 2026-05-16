@@ -24,10 +24,10 @@
 
 ## 3. Slice 3 — Runtime wiring
 
-- [ ] 3.1 Wire the planner into `SimulationRuntime.runTick()` after goods/logistics/ecology projections have current inputs and before command budget partitioning.
-- [ ] 3.2 Ensure every planned state change goes through `makeLivingWorldCommand()` and `LivingWorldRuleEngine.evaluate()` before EventLog commit.
-- [ ] 3.3 Keep routine settlement events out of public ticker surfaces unless explicitly localized and meaningful.
-- [ ] 3.4 Tests: repeated identical EventLog replay produces byte-identical settlement rows; hard command cap rejects overflow deterministically without partially mutating settlement state.
+- [x] 3.1 Wire the planner into `SimulationRuntime.runTick()` after goods/logistics/ecology projections have current inputs and before command budget partitioning.
+- [x] 3.2 Ensure every planned state change goes through `makeLivingWorldCommand()` and `LivingWorldRuleEngine.evaluate()` before EventLog commit.
+- [x] 3.3 Keep routine settlement events out of public ticker surfaces unless explicitly localized and meaningful.
+- [x] 3.4 Tests: repeated identical EventLog replay produces byte-identical settlement rows; hard command cap rejects overflow deterministically without partially mutating settlement state.
 
 ## 4. Slice 4 — Read surfaces and GM observability
 
@@ -46,6 +46,6 @@
 
 ## Current Progress
 
-- Slice 2 complete locally: `11/26` tasks complete.
-- Runtime wiring has not started.
-- Next actionable slice: `3.1` wire the planner into `SimulationRuntime.runTick()`.
+- Slice 3 complete locally: `15/26` tasks complete.
+- Settlement runtime wiring is implemented; read surfaces and GM observability have not started.
+- Next actionable slice: `4.1` expose settlement state in snapshot facts/API surfaces.

@@ -66,6 +66,7 @@ import {
   type CopresenceHistoryRow,
   type DetectedSettlementFormation,
 } from './settlementDetection.js'
+import { enforceAtomicSettlementStateCommands, planSettlementCommands } from './settlementEngine.js'
 import { SettlementsProjection, type SettlementRow } from '../projections/settlements.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
@@ -2511,6 +2512,24 @@ export class SimulationRuntime {
       )
     }
 
+    commands.push(...planSettlementCommands({
+      settlements: this.settlementsProjection.getAll(),
+      npcPresence: [...this.npcEngine.snapshotAll()].map(([npcId, state]) => ({
+        npcId,
+        tileId: state.tile,
+        activity: state.activity,
+        isTraveling: state.travelRoute !== null,
+      })),
+      goodsInventory: this.goodsInventoryProjection.list(),
+      logistics: this.logisticsProjection.snapshot(),
+      marketPrices: this.marketPricesProjection.list(),
+      fisheryDensity: this.fisheryDensityProjection.list(),
+      animalPopulation: this.animalPopulationProjection.list(),
+      householdEconomy: this.householdEconomyProjection.list(),
+      currentTick: nextTick,
+      submittedAt,
+    }))
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -2534,7 +2553,9 @@ export class SimulationRuntime {
           `softCapHitCount=${this.softCapHitCount}`
       )
     }
-    const partition = applyCommandHardCap(commands, MAX_COMMANDS_PER_TICK_HARD_CAP)
+    const partition = enforceAtomicSettlementStateCommands(
+      applyCommandHardCap(commands, MAX_COMMANDS_PER_TICK_HARD_CAP)
+    )
     if (partition.rejected.length > 0) {
       this.hardCapRejectedSinceBoot += partition.rejected.length
       console.warn(
@@ -3848,6 +3869,10 @@ function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEv
     ev.eventType === 'TRADE_ROUTE_OPENED' ||
     ev.eventType === 'TRADE_ROUTE_CLOSED' ||
     ev.eventType === 'MARKET_PRICE_DISCOVERED' ||
+    ev.eventType === 'SETTLEMENT_POPULATION_UPDATED' ||
+    ev.eventType === 'SETTLEMENT_STORAGE_UPDATED' ||
+    ev.eventType === 'SETTLEMENT_PRESSURE_UPDATED' ||
+    ev.eventType === 'SETTLEMENT_STABILITY_CHANGED' ||
     // Sprint 2B — intent event only; the player sees the attack itself, not the targeting.
     ev.eventType === 'ANIMAL_TARGETED_NPC'
   ) return null

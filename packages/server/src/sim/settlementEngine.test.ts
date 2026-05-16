@@ -7,7 +7,11 @@ import type { HouseholdEconomyRow } from '../projections/householdEconomy.js'
 import type { LogisticsSnapshot } from '../projections/logistics.js'
 import type { MarketPriceRow } from '../projections/marketPrices.js'
 import type { SettlementRow } from '../projections/settlements.js'
-import { planSettlementCommands, type SettlementEngineInput } from './settlementEngine.js'
+import {
+  enforceAtomicSettlementStateCommands,
+  planSettlementCommands,
+  type SettlementEngineInput,
+} from './settlementEngine.js'
 
 describe('planSettlementCommands', () => {
   it('does not create pressure when a settlement has no authoritative population', () => {
@@ -131,6 +135,34 @@ describe('planSettlementCommands', () => {
     }))
 
     expect(commands).toEqual([])
+  })
+
+  it('keeps settlement state commands atomic when a hard cap rejects part of a group', () => {
+    const commands = planSettlementCommands(input({
+      npcPresence: presence('npc-a', 'npc-b'),
+      goodsInventory: [goods('fish', 1)],
+    }))
+    expect(commands.length).toBeGreaterThan(1)
+
+    const split = enforceAtomicSettlementStateCommands({
+      kept: commands.slice(0, -1),
+      rejected: commands.slice(-1),
+    })
+
+    expect(split.kept).toEqual([])
+    expect(split.rejected).toHaveLength(commands.length)
+  })
+
+  it('reads existing central settlement holder aliases for storage and market pressure', () => {
+    const commands = planSettlementCommands(input({
+      settlements: [settlement({ id: 'settlement.t_test.formed' })],
+      npcPresence: presence('npc-a', 'npc-b'),
+      goodsInventory: [{ ...goods('fish', 4), holderId: 'settlement.t_test' }],
+      marketPrices: [market('fish', 4, 4)],
+    }))
+
+    expect(commands.some((command) => command.commandType === 'SETTLEMENT_STORAGE_UPDATED')).toBe(true)
+    expect(commands.find((command) => command.commandType === 'SETTLEMENT_PRESSURE_UPDATED')).toBeUndefined()
   })
 })
 

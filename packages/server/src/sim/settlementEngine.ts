@@ -20,6 +20,7 @@ import { getSpecies } from '../ecosystem/species.js'
 import {
   makeLivingWorldCommand,
   type LivingWorldCommand,
+  type LivingWorldCommandType,
   type SettlementPressure,
   type SettlementStatus,
   type SettlementStorageItem,
@@ -138,6 +139,30 @@ export function planSettlementCommands(input: SettlementEngineInput): LivingWorl
   return commands
 }
 
+export function enforceAtomicSettlementStateCommands(input: {
+  kept: readonly LivingWorldCommand[]
+  rejected: readonly LivingWorldCommand[]
+}): { kept: readonly LivingWorldCommand[]; rejected: readonly LivingWorldCommand[] } {
+  const rejectedSettlementIds = new Set<string>()
+  for (const command of input.rejected) {
+    const settlementId = settlementStateCommandId(command)
+    if (settlementId) rejectedSettlementIds.add(settlementId)
+  }
+  if (rejectedSettlementIds.size === 0) return input
+
+  const kept: LivingWorldCommand[] = []
+  const rejected = [...input.rejected]
+  for (const command of input.kept) {
+    const settlementId = settlementStateCommandId(command)
+    if (settlementId && rejectedSettlementIds.has(settlementId)) {
+      rejected.push(command)
+    } else {
+      kept.push(command)
+    }
+  }
+  return { kept, rejected }
+}
+
 function populationForSettlement(
   settlement: SettlementRow,
   npcPresence: readonly SettlementNpcPresence[]
@@ -153,8 +178,9 @@ function storageForSettlement(
   settlement: SettlementRow,
   goodsInventory: readonly GoodsInventoryRow[]
 ): readonly SettlementStorageItem[] {
+  const holderIds = settlementHolderIds(settlement)
   return goodsInventory
-    .filter((row) => row.holderType === 'settlement' && row.holderId === settlement.id && row.quantity > 0)
+    .filter((row) => row.holderType === 'settlement' && holderIds.has(row.holderId) && row.quantity > 0)
     .map((row) => ({ goodsId: row.goodsId, quantity: row.quantity }))
     .sort((a, b) => a.goodsId.localeCompare(b.goodsId))
 }
@@ -177,8 +203,9 @@ function pressureForSettlement(
 
 function foodPressure(settlement: SettlementRow, population: number, input: SettlementEngineInput): number {
   const required = population * SETTLEMENT_FOOD_UNITS_PER_NPC
+  const holderIds = settlementHolderIds(settlement)
   const heldFood = input.goodsInventory
-    .filter((row) => row.holderType === 'settlement' && row.holderId === settlement.id)
+    .filter((row) => row.holderType === 'settlement' && holderIds.has(row.holderId))
     .filter((row) => isFoodGoods(row.goodsId))
     .reduce((sum, row) => sum + row.quantity, 0)
   const shortagePressure = required > 0
@@ -226,9 +253,10 @@ function economyPressure(
 }
 
 function logisticsPressure(settlement: SettlementRow, foodPressureValue: number, input: SettlementEngineInput): number {
+  const holderIds = settlementHolderIds(settlement)
   const lostTransportCount = input.logistics.transports.filter((row) =>
     row.toHolderType === 'settlement' &&
-    row.toHolderId === settlement.id &&
+    holderIds.has(row.toHolderId) &&
     row.status === 'lost' &&
     row.resolvedAtTick !== null &&
     input.currentTick - row.resolvedAtTick <= SETTLEMENT_LOGISTICS_RECENT_LOSS_WINDOW_TICKS
@@ -252,7 +280,8 @@ function logisticsPressure(settlement: SettlementRow, foodPressureValue: number,
 
 function marketScarcityPressure(settlement: SettlementRow, input: SettlementEngineInput): number {
   let maxScarcity = 0
-  for (const row of input.marketPrices.filter((entry) => entry.settlementId === settlement.id)) {
+  const holderIds = settlementHolderIds(settlement)
+  for (const row of input.marketPrices.filter((entry) => holderIds.has(entry.settlementId))) {
     if (!isFoodGoods(row.goodsId)) continue
     if (row.demandQuantity <= 0) continue
     maxScarcity = Math.max(maxScarcity, 1 - Math.min(row.supplyQuantity, row.demandQuantity) / row.demandQuantity)
@@ -279,6 +308,25 @@ function statusFromStability(stability: number, settlement: SettlementRow): Sett
 
 function isFoodGoods(goodsId: string): boolean {
   return (SETTLEMENT_FOOD_GOODS as readonly string[]).includes(goodsId)
+}
+
+function settlementHolderIds(settlement: SettlementRow): ReadonlySet<string> {
+  return new Set([settlement.id, `settlement.${settlement.tileId}`])
+}
+
+const SETTLEMENT_STATE_COMMAND_TYPES = new Set<LivingWorldCommandType>([
+  'SETTLEMENT_POPULATION_UPDATED',
+  'SETTLEMENT_STORAGE_UPDATED',
+  'SETTLEMENT_PRESSURE_UPDATED',
+  'SETTLEMENT_STABILITY_CHANGED',
+  'SETTLEMENT_DECLINED',
+  'SETTLEMENT_RECOVERED',
+])
+
+function settlementStateCommandId(command: LivingWorldCommand): string | null {
+  if (!SETTLEMENT_STATE_COMMAND_TYPES.has(command.commandType)) return null
+  const payload = command.payload as { settlementId?: unknown }
+  return typeof payload.settlementId === 'string' ? payload.settlementId : null
 }
 
 function clamp01(value: number): number {
