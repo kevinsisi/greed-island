@@ -44,7 +44,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke for `0.24.13`.
+- Commit `7d6b4b4 feat(settlement): wire pressure planner` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25963660034` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25963660028` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.13`, tick `145144`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-l-sBI4je.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — Settlement Runtime v2 Slice 2
 
