@@ -29,7 +29,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push / GitHub Actions / deploy evidence.
+- Commit `6ccab95 revert(hub): remove fake activity actors` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25962117987` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25962117999` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.10`, tick `144298`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-DuAZLT8U.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — Hub Map Activity Visual Correction (v0.24.9)
 
