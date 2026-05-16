@@ -44,7 +44,12 @@ state yet.
 
 ### CI / Deploy
 
-- Pending full verification, commit, push, CI/CD, and live smoke.
+- Commit `bb176ca feat(combat): add card effect compiler` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25958016166` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25958016157` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.3`, tick `141768`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-DAatXiI-.js`.
 
 ## 2026-05-15 — Area Ecology Visibility Bugfix
 
