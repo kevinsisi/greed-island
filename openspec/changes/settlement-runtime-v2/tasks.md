@@ -17,10 +17,10 @@
 
 ## 2. Slice 2 — SettlementEngine pressure planner
 
-- [ ] 2.1 Create pure `settlementEngine.ts` planner that accepts settlements, NPC presence, goods inventory, logistics, market prices, fishery density, animal population, household economy, and current tick.
-- [ ] 2.2 Compute bounded `food`, `safety`, `economy`, and `logistics` pressure scores using named constants from `config/world.ts`.
-- [ ] 2.3 Derive one pressure/stability command per settlement per tick at most; no duplicate pressure events in the same tick.
-- [ ] 2.4 Tests: no population means no pressure spike; low food raises food pressure; storm transport loss raises logistics pressure; fishery collapse raises food pressure; pressure values clamp to `0..100`.
+- [x] 2.1 Create pure `settlementEngine.ts` planner that accepts settlements, NPC presence, goods inventory, logistics, market prices, fishery density, animal population, household economy, and current tick.
+- [x] 2.2 Compute bounded `food`, `safety`, `economy`, and `logistics` pressure scores using named constants from `config/world.ts`.
+- [x] 2.3 Derive one pressure/stability command per settlement per tick at most; no duplicate pressure events in the same tick.
+- [x] 2.4 Tests: no population means no pressure spike; low food raises food pressure; storm transport loss raises logistics pressure; fishery collapse raises food pressure; pressure values clamp to `0..100`.
 
 ## 3. Slice 3 — Runtime wiring
 
@@ -46,6 +46,6 @@
 
 ## Current Progress
 
-- Slice 1 complete: `7/26` tasks complete.
-- Runtime pressure planner not started.
-- Next actionable slice: `2.1` create pure `settlementEngine.ts` pressure planner.
+- Slice 2 complete locally: `11/26` tasks complete.
+- Runtime wiring has not started.
+- Next actionable slice: `3.1` wire the planner into `SimulationRuntime.runTick()`.

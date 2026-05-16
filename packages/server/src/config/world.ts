@@ -168,6 +168,26 @@ export const FISHERY_DEFAULT_DENSITY = 100
 export const FISHERY_HARVEST_DELTA = 12
 export const FISHERY_COLLAPSE_THRESHOLD = 20
 
+// settlement-runtime-v2 Slice 2 — settlement pressure planner. These values
+// are deliberately simple and bounded; the pure planner turns projection rows
+// into Command intents, while Events remain the only state authority.
+export const SETTLEMENT_FOOD_GOODS = ['fish', 'meat'] as const
+export const SETTLEMENT_FOOD_UNITS_PER_NPC = 2
+export const SETTLEMENT_FOOD_SHORTAGE_MAX_PRESSURE = 85
+export const SETTLEMENT_FISHERY_COLLAPSE_PRESSURE = 30
+export const SETTLEMENT_FISHERY_LOW_DENSITY_MAX_PRESSURE = 20
+export const SETTLEMENT_MARKET_SCARCITY_MAX_PRESSURE = 45
+export const SETTLEMENT_SAFETY_PREDATOR_PRESSURE_PER_ANIMAL = 12
+export const SETTLEMENT_SAFETY_AGGRESSION_WEIGHT = 0.4
+export const SETTLEMENT_ECONOMY_HOUSEHOLD_TARGET_GOLD_PER_NPC = 5
+export const SETTLEMENT_ECONOMY_HOUSEHOLD_MAX_PRESSURE = 45
+export const SETTLEMENT_LOGISTICS_LOST_TRANSPORT_PRESSURE = 35
+export const SETTLEMENT_LOGISTICS_CLOSED_ROUTE_PRESSURE = 20
+export const SETTLEMENT_LOGISTICS_MISSING_FOOD_ROUTE_PRESSURE = 25
+export const SETTLEMENT_LOGISTICS_RECENT_LOSS_WINDOW_TICKS = TICKS_PER_HOUR
+export const SETTLEMENT_STABILITY_STRAINED_BELOW = 75
+export const SETTLEMENT_STABILITY_DECLINING_BELOW = 40
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

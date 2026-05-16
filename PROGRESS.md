@@ -3,6 +3,43 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Settlement Runtime v2 Slice 2
+
+### Slice 2 Implemented
+
+- Version bumped to `0.24.12`.
+- Added pure `packages/server/src/sim/settlementEngine.ts` planner.
+- Planner accepts settlements, authoritative NPC presence, goods inventory,
+  logistics snapshot, market prices, fishery density, animal population,
+  household economy, and current tick.
+- Planner derives deterministic settlement commands only; it does not wire into
+  `SimulationRuntime` yet and does not mutate projection state directly.
+- Added named pressure constants to `packages/server/src/config/world.ts`.
+- Computes bounded `food`, `safety`, `economy`, and `logistics` pressure scores,
+  settlement population/storage summaries, and pressure-derived stability/status.
+- Enforces at most one settlement state planning pass per settlement per tick by
+  skipping rows already updated at the current tick.
+
+### Progress
+
+- `settlement-runtime-v2`: `11/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`, `2.1`–`2.4`).
+- Runtime wiring has not started.
+- Next implementation task: `3.1` wire the pure planner into
+  `SimulationRuntime.runTick()` after authoritative projection inputs are ready.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- settlementEngine.test.ts` — **6 tests passed**.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Focused server tests: `npm run test -w @greed-island/server -- settlementEngine livingWorld settlements` — **65 tests passed**.
+- `npm run build:server` — clean.
+- Full `npm test` — **532 server + 52 web = 584 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke for `0.24.12`.
+
 ## 2026-05-16 — Settlement Runtime v2 Slice 1
 
 ### Slice 1 Implemented
