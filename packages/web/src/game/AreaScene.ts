@@ -634,6 +634,8 @@ export class AreaScene extends Phaser.Scene {
    *  - ≥ 6 animals: render a single cluster sprite + count label.
    *  - if a fishery row exists: paint a thin density bar at the bottom
    *    edge, length proportional to density / 100.
+   *  - if migration waves touch this tile: show read-only trail markers so
+   *    Hub ecology hints do not disappear when the player enters the area.
    *
    * Idempotent — destroys the previous overlay before re-rendering.
    */
@@ -706,6 +708,13 @@ export class AreaScene extends Phaser.Scene {
       }
     }
 
+    for (const wave of eco.migrationsArriving) {
+      this.addMigrationMarker(layer, wave, 'arriving')
+    }
+    for (const wave of eco.migrationsDeparting) {
+      this.addMigrationMarker(layer, wave, 'departing')
+    }
+
     if (eco.fishery) {
       const maxWidth = AREA_CANVAS_WIDTH - 80
       const widthPx = Math.max(0, Math.min(eco.fishery.density / 100, 1)) * maxWidth
@@ -735,6 +744,53 @@ export class AreaScene extends Phaser.Scene {
       label.setOrigin(0, 0.5)
       layer.add(label)
     }
+  }
+
+  private addMigrationMarker(
+    layer: Phaser.GameObjects.Container,
+    wave: AreaEcologyView['migrationsArriving'][number],
+    direction: 'arriving' | 'departing'
+  ): void {
+    const visual = visualForSpecies(wave.speciesId)
+    const { x, y } = areaSubcellFromHash(wave.waveId, this.tileId, `migration-${direction}`)
+    const isArriving = direction === 'arriving'
+    const color = isArriving ? 0x9cc36b : 0x9c6b3c
+    const arrow = isArriving ? '↘' : '↗'
+    const label = `${isArriving ? '遷徙抵達' : '遷徙離開'}：${labelForSpecies(wave.speciesId)} ×${wave.count}`
+
+    const bg = this.add.circle(x, y, 14, 0x0d1117, 0.8)
+    bg.setStrokeStyle(2, color, 0.95)
+    layer.add(bg)
+
+    const glyph = this.add.text(x - 2, y, visual.emoji, {
+      fontFamily:
+        '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+      fontSize: '16px',
+      color: '#ffffff',
+    })
+    glyph.setOrigin(0.5, 0.5)
+    layer.add(glyph)
+
+    const arrowText = this.add.text(x + 12, y - 12, arrow, {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '13px',
+      color: isArriving ? '#b9f28b' : '#d6a15c',
+      stroke: '#0a0a0a',
+      strokeThickness: 2,
+    })
+    arrowText.setOrigin(0.5, 0.5)
+    layer.add(arrowText)
+
+    const count = this.add.text(x + 14, y + 8, `×${wave.count}`, {
+      fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
+      fontSize: '11px',
+      color: '#fff5b8',
+      stroke: '#0a0a0a',
+      strokeThickness: 2,
+    })
+    count.setOrigin(0, 0.5)
+    layer.add(count)
+    layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE * 1.5, AREA_TILE_SIZE * 1.2, label))
   }
 
   private fisheryLabel(density: number, collapsed: boolean): string {

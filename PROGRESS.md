@@ -3,6 +3,36 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Area Ecology Migration Visibility Bugfix (v0.24.5)
+
+### Implemented
+
+- Fixed the player-visible mismatch where Hub ecology could show a species
+  cue for a district, but entering the Area appeared empty when the live
+  ecology row was represented by `migrationsArriving` / `migrationsDeparting`
+  rather than current `animals`.
+- `packages/web/src/game/AreaScene.ts` now renders read-only migration
+  markers for arriving and departing waves with species glyph, count, and
+  tap/click inspection text (`遷徙抵達` / `遷徙離開`).
+- This remains projection-only UI. It does not mutate world state, spawn
+  animals, start combat, or change migration authority.
+
+### Verification
+
+- Live repro before fix: `https://hunter.sisihome.org/api/area/t_desert/ecology`
+  returned `animals: []` and one `migrationsDeparting` wave for `sand_runner`
+  (`count: 1`), explaining why the Area had no visible animal marker.
+- `npm run build:web` — clean; known Vite chunk-size warning remains.
+- `npm test -w @greed-island/web` — **50 tests passed**.
+- `npm test` — **519 server + 50 web = 569 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.5`.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke.
+
 ## 2026-05-16 — Sprint 6: combat-phase-c Slice 2.3 (v0.24.4)
 
 ### Implemented
