@@ -28,7 +28,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke for runtime version `0.24.16`.
+- Commit `cb94b3d feat(characters): render area humanoid avatars` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25973959729` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25973959723` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.16`, tick `148242`.
+  - `https://hunter.sisihome.org/api/world` — served world snapshot, tick `148242`, generated at `2026-05-16T21:58:36.823Z`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-lO1Jv-Pz.js` and `/assets/index-C39z8PNL.css`.
 
 ## 2026-05-17 — Authoritative Character Avatars Slice 1
 
