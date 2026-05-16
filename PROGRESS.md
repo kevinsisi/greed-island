@@ -28,7 +28,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke for runtime version `0.24.15`.
+- Commit `3332f80 feat(characters): add avatar visual state foundation` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25973271789` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25973271778` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.15`, tick `147839`.
+  - `https://hunter.sisihome.org/api/world` — served world snapshot, tick `147839`, generated at `2026-05-16T21:24:41.829Z`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-Bj7OYpc1.js` and `/assets/index-C39z8PNL.css`.
 
 ## 2026-05-17 — Authoritative Character Avatars Planned
 
