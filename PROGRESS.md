@@ -55,6 +55,20 @@ developer. Keep latest status at the top.
 - Focused server tests in isolated worktree: `npm run test -w @greed-island/server -- livingWorld settlements` — **59 tests passed**.
 - Full `npm test` — **526 server + 52 web = 578 tests passed**.
 - `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- Merged-main focused check: `npm run test -w @greed-island/server -- livingWorld settlements` — **59 tests passed**.
+- Release version fix: `npm run build:server` — clean after updating `packages/server/src/version.ts` to `0.24.11`.
+
+### CI / Deploy
+
+- Commit `cbd4f98 feat(settlement): add authoritative state events` pushed to `main` / `origin/main`.
+- Commit `a806f6e chore(release): bump app version to 0.24.11` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25962804127` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25962804139` — **passed**, but first live smoke still reported `version: 0.24.10` because `packages/server/src/version.ts` had not been updated.
+- GitHub Actions `main CI` run `25962886302` — **passed** after version constant fix.
+- GitHub Actions `main Deploy Dev` run `25962886309` — **passed** after version constant fix.
+- Live smoke after final deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.11`, tick `144691`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-DuAZLT8U.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — Emergency Rollback: Remove Fake Hub Activity Actors (v0.24.10)
 
