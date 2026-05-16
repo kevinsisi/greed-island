@@ -24,11 +24,18 @@ describe('isPublicNarrativeEvent', () => {
     expect(isPublicNarrativeEvent(event({ eventType: 'NPC_INTERACT' }))).toBe(true)
   })
 
-  it('keeps routine productive actions out of chronicle surfaces', () => {
+  it('keeps narrated NPC work visible on chronicle surfaces', () => {
     const productive = event({ eventType: 'NPC_PRODUCTIVE_ACTION', narration: '某人補了一箱貨。' })
 
     expect(isPublicNarrativeEvent(productive)).toBe(true)
-    expect(isChronicleSurfaceEvent(productive)).toBe(false)
+    expect(isChronicleSurfaceEvent(productive)).toBe(true)
+  })
+
+  it('keeps routine logistics out of chronicle surfaces', () => {
+    const logistics = event({ eventType: 'GOODS_TRANSPORT_ARRIVED', narration: '一批魚貨抵達。' })
+
+    expect(isPublicNarrativeEvent(logistics)).toBe(true)
+    expect(isChronicleSurfaceEvent(logistics)).toBe(false)
   })
 
   it('keeps raw internal ids out of world prompt surfaces', () => {

@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — World Prompt Life Visibility Fix (v0.24.7)
+
+### Implemented
+
+- Fixed the regression where the world prompt / mobile ticker no longer felt
+  alive because narrated `NPC_PRODUCTIVE_ACTION` events were filtered out of
+  chronicle surfaces.
+- `packages/web/src/state/eventVisibility.ts` now allows narrated NPC work
+  events such as 「江月在霓港區把一段潮汐刻文重新抄正…」 to appear in the
+  ticker again.
+- The raw-id guard remains active, so narration containing internal ids such
+  as `temple.cleric.sela` or `iron_hound` is still hidden from ticker / prompt
+  surfaces until those event families get proper zh labels.
+- Routine logistics/goods/market events remain hidden to avoid flooding public
+  narrative with internal economy facts.
+
+### Verification
+
+- Live repro before fix: `/api/events?limit=50` had frequent zh NPC work
+  narrations, but `NPC_PRODUCTIVE_ACTION` was excluded from ticker surfaces.
+- Focused tests: `npm run test -w @greed-island/web -- eventVisibility` — **5 tests passed**.
+- `npm run build:web` — clean; known Vite chunk-size warning remains.
+- Full `npm test` — **520 server + 52 web = 572 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.7`.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke.
+
 ## 2026-05-16 — Sprint 6: combat-phase-c Slice 2.4 + world prompt filter (v0.24.6)
 
 ### Implemented

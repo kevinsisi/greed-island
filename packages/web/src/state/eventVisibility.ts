@@ -2,7 +2,6 @@ import type { EventSummary } from './types'
 
 const INTERNAL_EVENT_TYPES = new Set(['FACT_SET', 'WORLD_TICK'])
 const ROUTINE_CHRONICLE_EVENT_TYPES = new Set([
-  'NPC_PRODUCTIVE_ACTION',
   'GOODS_EXTRACTED',
   'GOODS_STORED',
   'GOODS_PROCESSED',
