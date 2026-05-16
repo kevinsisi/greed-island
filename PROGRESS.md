@@ -48,7 +48,12 @@ into the living-world command catalog in Slice 2.4.
 
 ### CI / Deploy
 
-- Pending full verification, commit, push, CI/CD, and live smoke.
+- Commit `73809f5 feat(combat): add phase c command catalog` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25958600313` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25958600314` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.4`, tick `142135`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-DAatXiI-.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-15 — Sprint 6: combat-phase-c Slice 2.2 (v0.24.3)
 
