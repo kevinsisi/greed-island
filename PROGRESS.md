@@ -15,8 +15,8 @@ developer. Keep latest status at the top.
 
 ### Progress
 
-- `settlement-runtime-v2`: `23/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`, `2.1`–`2.4`, `3.1`–`3.4`, `4.1`–`4.4`, `5.1`–`5.4`).
-- Commit, push, CI/CD monitoring, deploy, and live smoke (`5.5`) are next.
+- `settlement-runtime-v2`: `24/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`, `2.1`–`2.4`, `3.1`–`3.4`, `4.1`–`4.4`, `5.1`–`5.5`).
+- Slice 4 is deployed. Remaining work is future OpenSpec follow-through/archive cleanup after the change is considered fully complete.
 
 ### Verification
 
@@ -28,7 +28,15 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Not pushed yet; CI/CD and live smoke pending after full local verification and merge to `main`.
+- Commit `60007df feat(settlement): expose runtime state` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25972394252` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25972394229` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - First public smoke during restart returned `502`; retry after 20 seconds succeeded.
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.14`, tick `147351`.
+  - `https://hunter.sisihome.org/api/world` — includes `facts.settlements`, current live count `0`, tick `147353`.
+  - `https://hunter.sisihome.org/api/settlements` — preserves `{ settlements: [...] }` envelope, current live count `0`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-Bj7OYpc1.js`.
 
 ## 2026-05-16 — Settlement Runtime v2 Slice 3
 

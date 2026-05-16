@@ -42,10 +42,10 @@
 - [x] 5.2 Full `npm test` passes.
 - [x] 5.3 `npm run build` passes; known Vite chunk warning is acceptable.
 - [x] 5.4 Update `PROGRESS.md` with completed slices, verification evidence, CI/CD/deploy state, and remaining blockers.
-- [ ] 5.5 Commit, push, wait for CI/CD, and live-smoke the deployed version before reporting runtime success.
+- [x] 5.5 Commit, push, wait for CI/CD, and live-smoke the deployed version before reporting runtime success.
 
 ## Current Progress
 
-- Slice 4 complete locally: `23/26` tasks complete.
+- Slice 4 deployed: `24/26` tasks complete.
 - Settlement runtime state is exposed through snapshot facts, `/api/settlements` remains backward-compatible, and GM/admin observability reads only authoritative settlement rows.
-- Next actionable slice: commit, push, wait for CI/CD, and live-smoke (`5.5`).
+- Next actionable slice: remaining future follow-through tasks, then archive when the OpenSpec change is fully complete.
