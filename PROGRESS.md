@@ -3,6 +3,49 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-15 — Sprint 6: combat-phase-c Slice 2.2 (v0.24.3)
+
+### Implemented
+
+Pure compiler slice for the upcoming 5-phase combat rule engine. Adds
+the deterministic translation from a card play context to sub-command
+drafts, without registering new commands or mutating runtime combat
+state yet.
+
+#### Server
+
+- `packages/server/src/combat/cards/compiler.ts`:
+  - `compileCombatCardPlay()` looks up the frozen card catalog and
+    returns `null` for unknown card classes.
+  - Catalog effects now compile to Phase C sub-command drafts:
+    `COMBAT_DAMAGE`, `COMBAT_HEAL`, `COMBAT_STATUS_APPLY`,
+    `COMBAT_TARGET_LOCK`, `COMBAT_PHASE_SHIFT`, and
+    `COMBAT_FLEE_ATTEMPT`.
+  - `counter` catalog effects compile to a self-targeted
+    `COMBAT_STATUS_APPLY` (`counter_damage` / `counter_status`) because
+    Phase C's command set does not define a separate counter command.
+
+### Honest scope
+
+- Slice 2.2 is pure compiler/data only. No command validators, no
+  `LIVING_WORLD_COMMAND_TYPES` registration, no 5-phase rule-engine
+  hook, no EventLog writes, and no client UI changes.
+- Slice 2.3 remains responsible for command payload types, validators,
+  and deterministic `commandId` generation.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- combat/cards` — **14 tests passed** (9 catalog + 5 compiler).
+- `npm run build:server` — clean.
+- Full `npm test` — **514 server + 50 web = 564 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.3`.
+
+### CI / Deploy
+
+- Pending full verification, commit, push, CI/CD, and live smoke.
+
 ## 2026-05-15 — Area Ecology Visibility Bugfix
 
 ### Follow-up: Read-only Area Element Inspection
