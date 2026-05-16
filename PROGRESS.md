@@ -3,6 +3,23 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Settlement Runtime v2 Archived
+
+### Archived
+
+- Synced `settlement-runtime-v2` spec delta into `openspec/specs/civilization-runtime/spec.md`.
+- Archived the completed change to `openspec/changes/archive/2026-05-17-settlement-runtime-v2/`.
+- `settlement-runtime-v2` is no longer active; the only active OpenSpec change left is `combat-phase-c-realtime-subtick`.
+
+### Verification
+
+- Before archive: `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- After archive: `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending for archive commit. This is a spec/docs-only change and does not change runtime version or deployed behavior.
+
 ## 2026-05-17 — Settlement Runtime v2 Slice 4
 
 ### Slice 4 Implemented
