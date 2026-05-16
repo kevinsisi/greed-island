@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Authoritative Character Avatars Slice 1
+
+### Slice 1 Implemented
+
+- Version bumped to `0.24.15`.
+- Added pure renderer-only `CharacterVisualState` projection helpers for NPCs, local player, and peer player visuals.
+- NPC visual action now derives only from authoritative `NpcSummary.activity`; `move` maps to `walk`, known activities map to matching visual actions, and missing/unknown activity falls back to `idle`.
+- Player visuals are explicitly source-labelled as `local-input` or `server-player-presence`; they derive only `walk`/`idle` from local velocity or social-presence coordinate deltas and do not claim simulation authority.
+- Added an unwired procedural humanoid Phaser avatar factory with body/head/limb pose support so future scene slices can replace square markers without changing authority semantics.
+
+### Progress
+
+- `authoritative-character-avatars`: `9/26` tasks complete (`0.1`–`0.4`, `1.1`–`1.5`).
+- Next implementation task: `2.1` replace Area NPC square textures with humanoid avatars driven by authoritative scene projection inputs.
+
+### Verification
+
+- Focused web tests: `npm --workspace packages/web exec vitest run src/game/characterVisualState.test.ts` — **8 tests passed**.
+- Focused web build/typecheck: `npm run build -w @greed-island/web` — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Full `npm test` — **536 server + 64 web = 600 tests passed**.
+- Full `npm run build` — clean; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke for runtime version `0.24.15`.
+
 ## 2026-05-17 — Authoritative Character Avatars Planned
 
 ### Planned

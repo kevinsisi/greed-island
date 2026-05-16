@@ -11,11 +11,11 @@
 
 ## 1. Slice 1 — Pure visual projection and renderer foundation
 
-- [ ] 1.1 Add `CharacterVisualState` and pure mapping helpers for NPC, local player, and peer player render states.
-- [ ] 1.2 Map NPC `activity` to visual action without inventing activity; missing/unknown activity falls back to `idle`.
-- [ ] 1.3 Mark player visual actions with source (`local-input` or `server-player-presence`) so they are not confused with simulation authority.
-- [ ] 1.4 Add tests for NPC activity mapping, player walk/idle derivation, and source labeling.
-- [ ] 1.5 Add a reusable procedural humanoid avatar factory for Phaser scenes without changing existing scene behavior yet.
+- [x] 1.1 Add `CharacterVisualState` and pure mapping helpers for NPC, local player, and peer player render states.
+- [x] 1.2 Map NPC `activity` to visual action without inventing activity; missing/unknown activity falls back to `idle`.
+- [x] 1.3 Mark player visual actions with source (`local-input` or `server-player-presence`) so they are not confused with simulation authority.
+- [x] 1.4 Add tests for NPC activity mapping, player walk/idle derivation, and source labeling.
+- [x] 1.5 Add a reusable procedural humanoid avatar factory for Phaser scenes without changing existing scene behavior yet.
 
 ## 2. Slice 2 — Area scene avatars
 
@@ -51,5 +51,5 @@
 ## Current Progress
 
 - Planning/inspection complete.
-- Implementation has not started.
-- Next actionable slice: `1.1` define pure visual projection types and mapping helpers.
+- Slice 1 implementation complete: pure `CharacterVisualState` helpers, source-labelled player visual derivation, focused tests, and an unwired procedural Phaser avatar factory.
+- Next actionable slice: `2.1` replace Area NPC square textures with humanoid avatars driven by authoritative scene projection inputs.
