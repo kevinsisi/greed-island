@@ -3,6 +3,40 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Authoritative Character Avatars Planned
+
+### Planned
+
+- Created OpenSpec change `authoritative-character-avatars` to replace square/pixel NPC and player markers with humanoid avatars.
+- Scope keeps avatars renderer-only: NPC action derives from server-authoritative `NpcSummary.activity`; player walk/idle animation is local/social presentation unless a future server action field is added.
+- Explicitly forbids fake Hub crowds, fake pedestrians, decorative activity actors, and frontend-invented NPC action.
+- First implementation slice should use procedural humanoid avatars because no committed human sprite sheet/atlas assets exist in the repo.
+- The change also updates the stale `living-world` frontend-wander contract so renderer animation may animate pose/limbs but must not invent map-coordinate drift.
+
+### OpenSpec Artifacts
+
+- `openspec/changes/authoritative-character-avatars/proposal.md`
+- `openspec/changes/authoritative-character-avatars/design.md`
+- `openspec/changes/authoritative-character-avatars/tasks.md`
+- `openspec/changes/authoritative-character-avatars/specs/living-world/spec.md`
+- `openspec/changes/authoritative-character-avatars/specs/npc-humanity-ai-memory/spec.md`
+- `openspec/changes/authoritative-character-avatars/specs/social-system/spec.md`
+
+### Progress
+
+- `authoritative-character-avatars`: `4/26` tasks complete (`0.1`–`0.4`).
+- Implementation has not started.
+- Next implementation task: `1.1` add pure `CharacterVisualState` projection types and mapping helpers.
+
+### Verification
+
+- `npx openspec validate authoritative-character-avatars --strict` — **passed**.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+
+### CI / Deploy
+
+- Pending for OpenSpec planning commit. This is a docs/spec-only change and does not change runtime version or deployed behavior.
+
 ## 2026-05-17 — Settlement Runtime v2 Archived
 
 ### Archived
