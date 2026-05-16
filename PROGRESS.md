@@ -46,7 +46,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke.
+- Commit `21206e9 feat(combat): register phase c commands` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25960888343` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25960888339` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.6`, tick `143554`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-Cq9FmgMz.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — Area Ecology Migration Visibility Bugfix (v0.24.5)
 
