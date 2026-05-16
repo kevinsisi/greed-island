@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — OpenSpec Plan: Settlement Runtime v2 (planning only)
+
+### Planned
+
+- Created OpenSpec change `settlement-runtime-v2` to turn settlements from
+  formation-only records into authoritative civilization state.
+- Scope is server-authoritative settlement state only: population summary,
+  settlement-held storage summary, bounded pressure scores, stability, decline
+  / recovery status, and GM/admin observability.
+- Explicitly out of scope: fake Hub crowds, fake activity actors, decorative
+  population markers, settlement conquest/split/destruction, new player
+  founding commands, and new pollution/forest systems.
+- The change modifies `civilization-runtime` and is intended to build on current
+  `v0.24.10` systems: `SETTLEMENT_FORMED`, goods inventory, logistics, market
+  prices, fishery/ecology projections, household economy, and authoritative NPC
+  presence.
+
+### OpenSpec Artifacts
+
+- `openspec/changes/settlement-runtime-v2/proposal.md`
+- `openspec/changes/settlement-runtime-v2/design.md`
+- `openspec/changes/settlement-runtime-v2/tasks.md`
+- `openspec/changes/settlement-runtime-v2/specs/civilization-runtime/spec.md`
+
+### Progress
+
+- Planning progress: `2/26` tasks complete (`0.1` OpenSpec artifacts created,
+  `0.2` open questions resolved for Slice 1 defaults).
+- Runtime implementation has not started.
+- Next implementation task: `1.1` extend `livingWorldCommands.ts` with typed
+  settlement state commands/events.
+
+### Verification
+
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+
 ## 2026-05-16 — Emergency Rollback: Remove Fake Hub Activity Actors (v0.24.10)
 
 ### Implemented
