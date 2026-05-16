@@ -31,7 +31,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push / GitHub Actions / deploy evidence.
+- Commit `297579f feat(hub): show map activity markers` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25961477797` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25961477786` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.8`, tick `143912`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-HJE-JiiX.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — World Prompt Life Visibility Fix (v0.24.7)
 
