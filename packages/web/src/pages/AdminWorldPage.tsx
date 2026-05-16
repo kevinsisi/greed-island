@@ -3,6 +3,7 @@ import { PageHeader } from '../components/common/PageHeader'
 import { useI18n, type TranslationKey } from '../i18n'
 import { useAuth } from '../state/AuthContext'
 import { useWorldState } from '../state/WorldStateContext'
+import { readSettlementRows, settlementStorageTotal, type SettlementRow } from './adminSettlementProjection'
 
 type FisheryDensityRow = Readonly<{
   tileId: string
@@ -154,6 +155,7 @@ export function AdminWorldPage() {
   const logistics = readLogistics(world.facts)
   const productionChains = readProductionChains(world.facts)
   const marketPrices = readMarketPrices(world.facts)
+  const settlementRows = readSettlementRows(world.facts)
   const migrationWaves = readMigrationWaves(world.facts)
   const predatorHungerRows = readPredatorHunger(world.facts)
   const animalPopulationRows = readAnimalPopulation(world.facts)
@@ -162,6 +164,8 @@ export function AdminWorldPage() {
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
   const totalGoods = goodsRows.reduce((sum, row) => sum + row.quantity, 0)
+  const totalSettlementPopulation = settlementRows.reduce((sum, row) => sum + row.populationNpcIds.length, 0)
+  const pressuredSettlementCount = settlementRows.filter((row) => row.status === 'strained' || row.status === 'declining').length
   const openRouteCount = logistics.routes.filter((row) => row.open).length
   const lostTransportCount = logistics.transports.filter((row) => row.status === 'lost').length
   const lowestDensity = fisheryRows.reduce<number | null>(
@@ -203,6 +207,51 @@ export function AdminWorldPage() {
         <StatCard label={t('admin.world.statLogisticsRows')} value={logistics.transports.length} />
         <StatCard label={t('admin.world.statProductionRows')} value={productionChains.processed.length} />
         <StatCard label={t('admin.world.statMarketRows')} value={marketPrices.length} />
+        <StatCard label={t('admin.world.statSettlementRows')} value={settlementRows.length} />
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-teal-700/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-teal-300">
+              {t('admin.world.settlementsHeading')}
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              {t('admin.world.settlementsDescription')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label={t('admin.world.settlementPopulation')} value={totalSettlementPopulation} />
+            <Badge label={t('admin.world.settlementPressured')} value={pressuredSettlementCount} danger={pressuredSettlementCount > 0} />
+          </div>
+        </div>
+
+        {settlementRows.length === 0 ? (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            {t('admin.world.settlementsEmpty')}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">{t('admin.world.colSettlement')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colStatus')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colStability')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colPressure')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colPopulation')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colStorage')}</th>
+                  <th className="text-left py-2 pr-4">{t('admin.world.colUpdated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settlementRows.map((row) => (
+                  <SettlementView key={row.id} row={row} tileName={tileNameById.get(row.tileId) ?? row.tileId} t={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="gi-panel p-5 flex flex-col gap-4 border-cyan-700/30">
@@ -639,6 +688,59 @@ function FisheryRow({ row, tileName, t }: { row: FisheryDensityRow; tileName: st
   )
 }
 
+function SettlementView({ row, tileName, t }: { row: SettlementRow; tileName: string; t: Translator }) {
+  const pressureMax = Math.max(row.pressure.food, row.pressure.safety, row.pressure.economy, row.pressure.logistics)
+  const statusClass = row.status === 'declining'
+    ? 'text-rust-300'
+    : row.status === 'strained'
+      ? 'text-amber-300'
+      : row.status === 'recovering'
+        ? 'text-moss-300'
+        : 'text-teal-300'
+  return (
+    <tr className="border-t border-ground-800/50">
+      <td className="py-3 pr-4 text-ground-100">
+        <div>{tileName}</div>
+        <div className="font-mono text-[11px] text-ground-500">{row.id}</div>
+      </td>
+      <td className="py-3 pr-4">
+        <span className={statusClass}>{settlementStatusLabel(row.status, t)}</span>
+      </td>
+      <td className="py-3 pr-4 min-w-[10rem]">
+        <div className="flex items-center gap-3">
+          <div className="h-2 w-24 overflow-hidden rounded-full bg-ground-800">
+            <div
+              className={['h-full rounded-full', row.stability < 50 ? 'bg-rust-500' : row.stability < 75 ? 'bg-amber-500' : 'bg-teal-400'].join(' ')}
+              style={{ width: `${Math.max(0, Math.min(100, row.stability))}%` }}
+            />
+          </div>
+          <span className="font-mono text-xs text-ground-200">{row.stability}</span>
+        </div>
+      </td>
+      <td className="py-3 pr-4 font-mono text-[11px] text-ground-300">
+        <div>{t('admin.world.pressureFood')}: {row.pressure.food}</div>
+        <div>{t('admin.world.pressureSafety')}: {row.pressure.safety}</div>
+        <div>{t('admin.world.pressureEconomy')}: {row.pressure.economy}</div>
+        <div>{t('admin.world.pressureLogistics')}: {row.pressure.logistics}</div>
+        <div className={pressureMax >= 70 ? 'text-rust-300' : pressureMax >= 40 ? 'text-amber-300' : 'text-ground-500'}>
+          {t('admin.world.pressureMax')}: {pressureMax}
+        </div>
+      </td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div className="font-mono text-xs text-teal-300">{row.populationNpcIds.length}</div>
+        <div className="font-mono text-[11px] text-ground-500">{t('admin.world.founders')}: {row.founderNpcIds.length}</div>
+      </td>
+      <td className="py-3 pr-4 text-ground-300">
+        <div className="font-mono text-xs text-ground-200">{settlementStorageTotal(row)}</div>
+        <div className="font-mono text-[11px] text-ground-500">
+          {row.storage.length === 0 ? t('admin.world.none') : row.storage.map((item) => `${item.goodsId}:${item.quantity}`).join(', ')}
+        </div>
+      </td>
+      <td className="py-3 pr-4 font-mono text-xs text-ground-400">{row.updatedAtTick}</td>
+    </tr>
+  )
+}
+
 function GoodsRow({ row, tileName, t }: { row: GoodsInventoryRow; tileName: string; t: Translator }) {
   return (
     <tr className="border-t border-ground-800/50">
@@ -942,6 +1044,13 @@ function holderTypeLabel(holderType: GoodsHolderType, t: Translator): string {
   if (holderType === 'npc') return t('admin.world.holderNpc')
   if (holderType === 'building') return t('admin.world.holderBuilding')
   return t('admin.world.holderSettlement')
+}
+
+function settlementStatusLabel(status: SettlementRow['status'], t: Translator): string {
+  if (status === 'declining') return t('admin.world.settlementStatusDeclining')
+  if (status === 'strained') return t('admin.world.settlementStatusStrained')
+  if (status === 'recovering') return t('admin.world.settlementStatusRecovering')
+  return t('admin.world.settlementStatusStable')
 }
 
 function transportStatusLabel(status: GoodsTransportRow['status'], t: Translator): string {

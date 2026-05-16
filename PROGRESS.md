@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Settlement Runtime v2 Slice 4
+
+### Slice 4 Implemented
+
+- Version bumped to `0.24.14`.
+- Exposed authoritative settlement projection rows through `WorldSnapshot.facts.settlements`.
+- Kept `/api/settlements` backward-compatible by preserving the `{ settlements: [...] }` envelope and existing formation fields while returning the enriched settlement state rows.
+- Added GM/admin settlement observability on the world observer page: status, stability, pressure scores, population count, founder count, storage summary, and updated tick.
+- Added a pure web projection helper for settlement facts so the frontend only renders server-authoritative settlement rows and does not invent fake Hub people, crowds, or decorative activity actors.
+
+### Progress
+
+- `settlement-runtime-v2`: `23/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`, `2.1`–`2.4`, `3.1`–`3.4`, `4.1`–`4.4`, `5.1`–`5.4`).
+- Commit, push, CI/CD monitoring, deploy, and live smoke (`5.5`) are next.
+
+### Verification
+
+- Focused server tests: `npm --workspace packages/server exec vitest run src/sim/runtimeSettlementEngine.test.ts src/http/settlementsRouter.test.ts` — **2 tests passed**.
+- Focused web tests: `npm --workspace packages/web exec vitest run src/pages/adminSettlementProjection.test.ts` — **2 tests passed** before adding the declining-state case, then included in full test run below.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Full `npm test` — **536 server + 56 web = 592 tests passed**.
+- `npm run build` — clean; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Not pushed yet; CI/CD and live smoke pending after full local verification and merge to `main`.
+
 ## 2026-05-16 — Settlement Runtime v2 Slice 3
 
 ### Slice 3 Implemented

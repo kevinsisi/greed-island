@@ -495,6 +495,7 @@ export class SimulationRuntime {
         lifeExpansion: this.lifeExpansion,
         animalPopulation: this.animalPopulationProjection.list(),
         fisheryDensity: this.fisheryDensityProjection.list(),
+        settlements: this.getSettlements(),
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
         marketPrices: this.marketPricesProjection.list(),

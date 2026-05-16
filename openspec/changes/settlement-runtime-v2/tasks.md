@@ -31,21 +31,21 @@
 
 ## 4. Slice 4 — Read surfaces and GM observability
 
-- [ ] 4.1 Expose settlement state in `WorldSnapshot.facts` and keep `/api/settlements` backward-compatible for existing formation fields.
-- [ ] 4.2 Update GM/admin observer page to show settlement status, population count, storage summary, pressure, stability, and updated tick.
-- [ ] 4.3 Add web tests for empty settlement state, stable settlement, and declining settlement display.
-- [ ] 4.4 Confirm Hub map still does not render fake people, fake crowds, or decorative activity actors.
+- [x] 4.1 Expose settlement state in `WorldSnapshot.facts` and keep `/api/settlements` backward-compatible for existing formation fields.
+- [x] 4.2 Update GM/admin observer page to show settlement status, population count, storage summary, pressure, stability, and updated tick.
+- [x] 4.3 Add web tests for empty settlement state, stable settlement, and declining settlement display.
+- [x] 4.4 Confirm Hub map still does not render fake people, fake crowds, or decorative activity actors.
 
 ## 5. Slice 5 — Verification, docs, release follow-through
 
-- [ ] 5.1 `npx openspec validate --all --strict` passes.
-- [ ] 5.2 Full `npm test` passes.
-- [ ] 5.3 `npm run build` passes; known Vite chunk warning is acceptable.
-- [ ] 5.4 Update `PROGRESS.md` with completed slices, verification evidence, CI/CD/deploy state, and remaining blockers.
+- [x] 5.1 `npx openspec validate --all --strict` passes.
+- [x] 5.2 Full `npm test` passes.
+- [x] 5.3 `npm run build` passes; known Vite chunk warning is acceptable.
+- [x] 5.4 Update `PROGRESS.md` with completed slices, verification evidence, CI/CD/deploy state, and remaining blockers.
 - [ ] 5.5 Commit, push, wait for CI/CD, and live-smoke the deployed version before reporting runtime success.
 
 ## Current Progress
 
-- Slice 3 complete locally: `15/26` tasks complete.
-- Settlement runtime wiring is implemented; read surfaces and GM observability have not started.
-- Next actionable slice: `4.1` expose settlement state in snapshot facts/API surfaces.
+- Slice 4 complete locally: `23/26` tasks complete.
+- Settlement runtime state is exposed through snapshot facts, `/api/settlements` remains backward-compatible, and GM/admin observability reads only authoritative settlement rows.
+- Next actionable slice: commit, push, wait for CI/CD, and live-smoke (`5.5`).

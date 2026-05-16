@@ -42,6 +42,9 @@ describe('SimulationRuntime settlement engine wiring', () => {
       expect(row?.populationNpcIds.length).toBeGreaterThan(0)
       expect(row?.pressure.food).toBeGreaterThan(0)
 
+      const snapshotSettlements = runtime.getSnapshot().facts.settlements
+      expect(snapshotSettlements).toEqual(runtime.getSettlements())
+
       runtime.stop()
       const restored = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
       try {
