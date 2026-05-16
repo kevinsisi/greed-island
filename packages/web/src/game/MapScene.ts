@@ -23,7 +23,6 @@ import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
 import { visualForSpecies } from './speciesPalette'
 import type { NpcActivity } from '../state/types'
 import type { HubEcologySummary } from '../pages/hubEcology'
-import type { HubActivityKind, HubActivitySummary } from '../pages/hubActivity'
 
 export interface MapNpc {
   id: string
@@ -112,8 +111,6 @@ export interface MapSceneInit {
   constructionActivities?: MapConstructionActivity[]
   /** Sprint 2A — per-district ecology summaries for Hub badges + predator warning ring + migration arrows. */
   ecologyByTile?: readonly HubEcologySummary[]
-  /** Recent committed world events projected onto district activity markers. */
-  activityByTile?: readonly HubActivitySummary[]
   /** Guests can browse the world, but player movement/actions require login. */
   controlsEnabled?: boolean
 }
@@ -134,14 +131,6 @@ const PEER_MOVE_TWEEN_MS = 1800
 const SPRITE_FADE_MS = 450
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
 const NPC_SUBTILE_RADIUS = TILE_SIZE * 0.9
-
-const ACTIVITY_VISUALS: Readonly<Record<HubActivityKind, { color: number }>> = {
-  danger: { color: 0xff5a5a },
-  construction: { color: 0xf6c560 },
-  pressure: { color: 0xa78bfa },
-  work: { color: 0x9ee0c7 },
-  movement: { color: 0x93c5fd },
-}
 
 /** 派系外框色：v0.14.0 area state overlay 用。 */
 function factionFrameColor(faction: FactionLeanId): number {
@@ -180,8 +169,6 @@ export class MapScene extends Phaser.Scene {
   private constructionActivities: MapConstructionActivity[] = []
   private ecologyByTile: readonly HubEcologySummary[] = []
   private ecologyLayer: Phaser.GameObjects.Container | null = null
-  private activityByTile: readonly HubActivitySummary[] = []
-  private activityLayer: Phaser.GameObjects.Container | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -225,7 +212,6 @@ export class MapScene extends Phaser.Scene {
     this.activeDistrictIds = new Set(data.activeDistrictIds ?? DISTRICT_IDS)
     this.constructionActivities = data.constructionActivities ?? []
     this.ecologyByTile = data.ecologyByTile ?? []
-    this.activityByTile = data.activityByTile ?? []
     if (data.areaOverlays) this.areaOverlays = data.areaOverlays
   }
 
@@ -289,7 +275,6 @@ export class MapScene extends Phaser.Scene {
     this.drawDistrictLabels()
     this.drawConstructionSites()
     this.drawEcologyBadges()
-    this.drawActivityMarkers()
     this.spawnPlayer()
     this.refreshPeerSprites()
     this.spawnNpcs()
@@ -328,7 +313,6 @@ export class MapScene extends Phaser.Scene {
     this.peerSprites.clear()
     this.districtLabels.clear()
     this.constructionSiteObjects = []
-    this.activityLayer = null
     this.playerNameLabel = null
     this.overlayGraphics = null
     this.envSprites = []
@@ -350,7 +334,6 @@ export class MapScene extends Phaser.Scene {
     activeDistrictIds?: DistrictId[]
     constructionActivities?: MapConstructionActivity[]
     ecologyByTile?: readonly HubEcologySummary[]
-    activityByTile?: readonly HubActivitySummary[]
     controlsEnabled?: boolean
   }): void {
     if (payload.controlsEnabled !== undefined) {
@@ -389,8 +372,6 @@ export class MapScene extends Phaser.Scene {
     if (hasConstructionUpdate) this.constructionActivities = payload.constructionActivities ?? []
     const hasEcologyUpdate = payload.ecologyByTile !== undefined
     if (hasEcologyUpdate) this.ecologyByTile = payload.ecologyByTile ?? []
-    const hasActivityUpdate = payload.activityByTile !== undefined
-    if (hasActivityUpdate) this.activityByTile = payload.activityByTile ?? []
     if (payload.activeDistrictIds) {
       const nextActiveDistrictIds = new Set(payload.activeDistrictIds)
       if (!sameDistrictSet(this.activeDistrictIds, nextActiveDistrictIds)) {
@@ -407,7 +388,6 @@ export class MapScene extends Phaser.Scene {
           activeDistrictIds: Array.from(this.activeDistrictIds),
           constructionActivities: this.constructionActivities,
           ecologyByTile: this.ecologyByTile,
-          activityByTile: this.activityByTile,
           controlsEnabled: this.controlsEnabled
         } satisfies MapSceneInit)
         return
@@ -415,7 +395,6 @@ export class MapScene extends Phaser.Scene {
     }
     if (hasConstructionUpdate) this.redrawConstructionSites()
     if (hasEcologyUpdate) this.drawEcologyBadges()
-    if (hasActivityUpdate) this.drawActivityMarkers()
     this.redrawDistrictLabels()
   }
 
@@ -926,122 +905,6 @@ export class MapScene extends Phaser.Scene {
     }
 
     this.ecologyLayer = layer
-  }
-
-  private drawActivityMarkers(): void {
-    this.clearActivityMarkers()
-    if (this.activityByTile.length === 0) return
-
-    const layer = this.add.container(0, 0)
-    layer.setDepth(59)
-
-    for (const summary of this.activityByTile) {
-      if (!this.isActiveDistrict(summary.districtId)) continue
-      const def = DISTRICTS[summary.districtId]
-      const primaryKind = summary.kinds[0]
-      if (!primaryKind) continue
-      const visual = ACTIVITY_VISUALS[primaryKind]
-      const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
-      const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
-
-      const pulse = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.42, visual.color, 0)
-      pulse.setStrokeStyle(primaryKind === 'danger' ? 2 : 1.25, visual.color, primaryKind === 'danger' ? 0.45 : 0.22)
-      layer.add(pulse)
-      this.tweens.add({
-        targets: pulse,
-        scale: { from: 0.9, to: primaryKind === 'danger' ? 1.35 : 1.14 },
-        alpha: { from: 0.68, to: 0.18 },
-        duration: primaryKind === 'danger' ? 760 : 1500,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      })
-
-      const actorCount = Math.min(5, Math.max(summary.kinds.length, Math.min(summary.count, 4)))
-      for (let idx = 0; idx < actorCount; idx += 1) {
-        const kind = summary.kinds[idx % summary.kinds.length] ?? primaryKind
-        const actorVisual = ACTIVITY_VISUALS[kind]
-        const start = activityPointFor(def, idx, 0)
-        const end = activityPointFor(def, idx, kind === 'work' || kind === 'construction' ? 1 : 2)
-        const actor = this.add.container(start.x, start.y)
-        actor.setDepth(59 + idx * 0.01)
-
-        const shadow = this.add.ellipse(0, 6, 13, 5, 0x050608, 0.42)
-        const body = this.add.circle(0, 0, 5.5, actorVisual.color, 0.95)
-        body.setStrokeStyle(1.25, 0x0a0a0a, 0.88)
-        const head = this.add.circle(0, -6.5, 3.4, 0xfff5b8, 0.95)
-        head.setStrokeStyle(1, 0x0a0a0a, 0.8)
-        actor.add([shadow, body, head])
-
-        if (kind === 'construction') {
-          const tool = this.add.rectangle(5.5, -1, 9, 2, 0x0a0a0a, 0.9)
-          tool.setRotation(-0.7)
-          actor.add(tool)
-        }
-        if (kind === 'danger') {
-          const spark = this.add.circle(7, -8, 2.2, 0xfff5b8, 0.95)
-          actor.add(spark)
-        }
-
-        layer.add(actor)
-        this.animateActivityActor(actor, kind, end.x, end.y, idx)
-      }
-    }
-
-    this.activityLayer = layer
-  }
-
-  private animateActivityActor(
-    actor: Phaser.GameObjects.Container,
-    kind: HubActivityKind,
-    targetX: number,
-    targetY: number,
-    idx: number
-  ): void {
-    if (kind === 'work' || kind === 'construction') {
-      this.tweens.add({
-        targets: actor,
-        x: targetX,
-        y: targetY,
-        angle: kind === 'construction' ? { from: -3, to: 5 } : { from: -1, to: 1 },
-        duration: 850 + idx * 120,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      })
-      return
-    }
-
-    if (kind === 'danger') {
-      this.tweens.add({
-        targets: actor,
-        x: targetX,
-        y: targetY,
-        alpha: { from: 1, to: 0.62 },
-        duration: 420 + idx * 45,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      })
-      return
-    }
-
-    this.tweens.add({
-      targets: actor,
-      x: targetX,
-      y: targetY,
-      duration: kind === 'movement' ? 1900 + idx * 180 : 2600 + idx * 220,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    })
-  }
-
-  private clearActivityMarkers(): void {
-    if (!this.activityLayer) return
-    for (const object of this.activityLayer.getAll()) this.tweens.killTweensOf(object)
-    this.activityLayer.destroy(true)
-    this.activityLayer = null
   }
 
   private redrawConstructionSites(): void {
@@ -1763,28 +1626,4 @@ function sameDistrictSet(a: ReadonlySet<DistrictId>, b: ReadonlySet<DistrictId>)
     if (!b.has(id)) return false
   }
   return true
-}
-
-function activityPointFor(def: DistrictDef, idx: number, phase: number): { x: number; y: number } {
-  const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
-  const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
-  const seed = hashActivitySeed(def.id, idx, phase)
-  const angle = (seed % 360) * (Math.PI / 180)
-  const radiusX = 16 + (seed % 29)
-  const radiusY = 12 + ((seed >> 3) % 22)
-  return {
-    x: Math.min(Math.max(anchorX + Math.cos(angle) * radiusX, 14), CANVAS_WIDTH - 14),
-    y: Math.min(Math.max(anchorY + Math.sin(angle) * radiusY, 18), CANVAS_HEIGHT - 14)
-  }
-}
-
-function hashActivitySeed(id: string, idx: number, phase: number): number {
-  let hash = 2166136261
-  for (let i = 0; i < id.length; i += 1) {
-    hash ^= id.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  hash ^= idx * 374761393
-  hash ^= phase * 668265263
-  return Math.abs(hash)
 }

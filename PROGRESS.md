@@ -3,6 +3,34 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Emergency Rollback: Remove Fake Hub Activity Actors (v0.24.10)
+
+### Implemented
+
+- Removed the failed Hub activity overlay entirely. The previous v0.24.8/v0.24.9
+  attempts projected events into extra fake map actors, which violated the core
+  product rule that NPCs are people, not decorative stand-ins.
+- Deleted `packages/web/src/pages/hubActivity.ts` and its tests.
+- Removed `activityByTile` plumbing from `HubPage`, `PhaserGame`, and `MapScene`.
+- Removed all generated activity markers / ambient fake actors from `MapScene`.
+- Hub now returns to rendering only existing authoritative layers: real routed
+  NPC projection, players, area overlays, construction projection, ecology
+  badges/migration/predator warnings, decorations, and normal controls.
+
+### Verification
+
+- Code search confirmed no remaining frontend references to `hubActivity`,
+  `activityByTile`, `HubActivity`, `drawActivityMarkers`, `animateActivityActor`,
+  or `activityPointFor`.
+- Full `npm test` — **520 server + 52 web = 572 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.10`.
+
+### CI / Deploy
+
+- Pending push / GitHub Actions / deploy evidence.
+
 ## 2026-05-16 — Hub Map Activity Visual Correction (v0.24.9)
 
 ### Implemented
