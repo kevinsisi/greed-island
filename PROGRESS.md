@@ -3,6 +3,53 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Sprint 6: combat-phase-c Slice 2.3 (v0.24.4)
+
+### Implemented
+
+Command catalog slice for Phase C combat. Defines the typed payload
+surface and validation rules needed before the commands are registered
+into the living-world command catalog in Slice 2.4.
+
+#### Server
+
+- `packages/server/src/combat/commands.ts`:
+  - Added Phase C command types: `COMBAT_CARD_PLAY`,
+    `COMBAT_CARD_CANCEL`, `COMBAT_DAMAGE`, `COMBAT_HEAL`,
+    `COMBAT_STATUS_APPLY`, `COMBAT_STATUS_TICK`,
+    `COMBAT_STATUS_END`, `COMBAT_TARGET_LOCK`,
+    `COMBAT_PHASE_SHIFT`, `COMBAT_FLEE_ATTEMPT`, and
+    `COMBAT_DEFEAT`.
+  - Added payload types and `validateCombatPayload()` validators for
+    all Phase B + Phase C combat commands.
+  - Added `makeCombatCommandId()`, using
+    `hashSeed(commandType, actorId, tick, combatTick, payloadCanonical)`
+    with canonical JSON payload ordering for replay-stable IDs.
+- `packages/server/src/combat/commands.test.ts`:
+  - Covers command catalog membership, card-class validation, sub-command
+    validators, malformed payload rejection, and canonical command id
+    determinism.
+
+### Honest scope
+
+- Slice 2.3 does not register these new command types in
+  `LIVING_WORLD_COMMAND_TYPES`; that remains Slice 2.4.
+- No 5-phase rule-engine execution or EventLog write path is enabled yet;
+  runtime behavior remains unchanged.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/server -- combat` — **39 tests passed**.
+- `npm run build:server` — clean.
+- Full `npm test` — **519 server + 50 web = 569 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.4`.
+
+### CI / Deploy
+
+- Pending full verification, commit, push, CI/CD, and live smoke.
+
 ## 2026-05-15 — Sprint 6: combat-phase-c Slice 2.2 (v0.24.3)
 
 ### Implemented
