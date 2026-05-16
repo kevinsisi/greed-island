@@ -32,7 +32,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push / GitHub Actions / deploy evidence.
+- Commit `e4c1136 fix(hub): animate activity as life actors` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25961873379` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25961873370` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.9`, tick `144154`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-DxDfN1Gl.js` and `/assets/index-D5NBLDnv.css`.
 
 ## 2026-05-16 — Hub Map Activity Visibility (v0.24.8)
 
