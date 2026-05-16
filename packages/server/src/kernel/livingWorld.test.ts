@@ -384,6 +384,60 @@ describe('living-world rule engine', () => {
         discoveredAtTick: 16,
         narration: 'market price discovered'
       }),
+      makeLivingWorldCommand('SETTLEMENT_FORMED', 'system', 'system', 16, 16, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        formedAtTick: 16,
+        founderNpcIds: ['npc-a', 'npc-b', 'npc-c'],
+        narration: 'settlement formed'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_POPULATION_UPDATED', 'system', 'system', 17, 17, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        populationNpcIds: ['npc-a', 'npc-b', 'npc-c'],
+        updatedAtTick: 17,
+        narration: 'settlement population updated'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_STORAGE_UPDATED', 'system', 'system', 18, 18, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        storage: [
+          { goodsId: 'fish', quantity: 12 },
+          { goodsId: 'refined_salt', quantity: 4 },
+        ],
+        updatedAtTick: 18,
+        narration: 'settlement storage updated'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_PRESSURE_UPDATED', 'system', 'system', 19, 19, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        pressure: { food: 20, safety: 10, economy: 30, logistics: 40 },
+        updatedAtTick: 19,
+        narration: 'settlement pressure updated'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_STABILITY_CHANGED', 'system', 'system', 20, 20, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        stability: 72,
+        status: 'strained',
+        changedAtTick: 20,
+        narration: 'settlement stability changed'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_DECLINED', 'system', 'system', 21, 21, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        stability: 24,
+        declinedAtTick: 21,
+        narration: 'settlement declined'
+      }),
+      makeLivingWorldCommand('SETTLEMENT_RECOVERED', 'system', 'system', 22, 22, {
+        settlementId: 'settlement.t_central',
+        tileId: 't_central',
+        stability: 68,
+        status: 'recovering',
+        recoveredAtTick: 22,
+        narration: 'settlement recovered'
+      }),
       makeLivingWorldCommand('HOUSEHOLD_GOLD_CONTRIBUTED', 'npc-a', 'npc', 17, 17, {
         householdId: 'household-a',
         npcId: 'npc-a',
@@ -566,6 +620,51 @@ describe('living-world rule engine', () => {
     const result = ruleEngine.evaluate(cmd)
     expect(result.accepted).toBe(false)
     if (!result.accepted) expect(result.rejection.reason).toBe('amount required')
+  })
+
+  it('rejects unsorted settlement population ids', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SETTLEMENT_POPULATION_UPDATED', 'system', 'system', 17, 17, {
+      settlementId: 'settlement.t_central',
+      tileId: 't_central',
+      populationNpcIds: ['npc-b', 'npc-a'],
+      updatedAtTick: 17,
+      narration: 'settlement population updated'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('populationNpcIds must be sorted ascending and unique')
+  })
+
+  it('rejects malformed settlement pressure payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SETTLEMENT_PRESSURE_UPDATED', 'system', 'system', 19, 19, {
+      settlementId: 'settlement.t_central',
+      tileId: 't_central',
+      pressure: { food: 101, safety: 10, economy: 30, logistics: 40 },
+      updatedAtTick: 19,
+      narration: 'settlement pressure updated'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('food pressure must be integer 0-100')
+  })
+
+  it('rejects unsorted settlement storage goods', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SETTLEMENT_STORAGE_UPDATED', 'system', 'system', 18, 18, {
+      settlementId: 'settlement.t_central',
+      tileId: 't_central',
+      storage: [
+        { goodsId: 'refined_salt', quantity: 4 },
+        { goodsId: 'fish', quantity: 12 },
+      ],
+      updatedAtTick: 18,
+      narration: 'settlement storage updated'
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('storage goods ids must be sorted ascending and unique')
   })
 
   it('rejects malformed animal reproduction parent ids', () => {

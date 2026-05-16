@@ -3,7 +3,22 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
-## 2026-05-16 — OpenSpec Plan: Settlement Runtime v2 (planning only)
+## 2026-05-16 — Settlement Runtime v2 Slice 1
+
+### Slice 1 Implemented
+
+- Version bumped to `0.24.11`.
+- Added typed settlement state commands/events to `livingWorldCommands.ts`:
+  `SETTLEMENT_POPULATION_UPDATED`, `SETTLEMENT_STORAGE_UPDATED`,
+  `SETTLEMENT_PRESSURE_UPDATED`, `SETTLEMENT_STABILITY_CHANGED`,
+  `SETTLEMENT_DECLINED`, and `SETTLEMENT_RECOVERED`.
+- Added payload validators for sorted/unique population ids, sorted storage goods
+  ids, non-negative storage quantities, `0..100` pressure/stability scores,
+  settlement status bands, and deterministic tick metadata.
+- Extended `SettlementsProjection` from formation-only rows into authoritative
+  settlement state rows with population summary, storage summary, pressure,
+  stability, status, and `updatedAtTick` defaults.
+- Added focused tests for rule-engine acceptance/rejection and projection replay.
 
 ### Planned
 
@@ -29,15 +44,17 @@ developer. Keep latest status at the top.
 
 ### Progress
 
-- Planning progress: `2/26` tasks complete (`0.1` OpenSpec artifacts created,
-  `0.2` open questions resolved for Slice 1 defaults).
-- Runtime implementation has not started.
-- Next implementation task: `1.1` extend `livingWorldCommands.ts` with typed
-  settlement state commands/events.
+- `settlement-runtime-v2`: `7/26` tasks complete (`0.1`, `0.2`, `1.1`–`1.5`).
+- Runtime pressure planner has not started.
+- Next implementation task: `2.1` create pure `settlementEngine.ts` pressure
+  planner.
 
 ### Verification
 
 - `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Focused server tests in isolated worktree: `npm run test -w @greed-island/server -- livingWorld settlements` — **59 tests passed**.
+- Full `npm test` — **526 server + 52 web = 578 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
 
 ## 2026-05-16 — Emergency Rollback: Remove Fake Hub Activity Actors (v0.24.10)
 

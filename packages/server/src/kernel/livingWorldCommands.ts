@@ -82,6 +82,13 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'COMBAT_DEFEAT',
   // Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime)
   'SETTLEMENT_FORMED',
+  // settlement-runtime-v2 Slice 1 — authoritative settlement state events.
+  'SETTLEMENT_POPULATION_UPDATED',
+  'SETTLEMENT_STORAGE_UPDATED',
+  'SETTLEMENT_PRESSURE_UPDATED',
+  'SETTLEMENT_STABILITY_CHANGED',
+  'SETTLEMENT_DECLINED',
+  'SETTLEMENT_RECOVERED',
   // Phase E0.2 — Ecosystem Runtime (Layer 2.5)
   'ANIMAL_SPAWNED',
   // Phase E0.3 — Simple hunting
@@ -521,6 +528,76 @@ export type SettlementFormedCmd = Readonly<{
   narration: string
 }>
 
+export type SettlementPressure = Readonly<{
+  food: number
+  safety: number
+  economy: number
+  logistics: number
+}>
+
+export type SettlementStatus = 'stable' | 'strained' | 'declining' | 'recovering'
+
+export type SettlementStorageItem = Readonly<{
+  goodsId: string
+  quantity: number
+}>
+
+export type SettlementPopulationUpdatedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  populationNpcIds: readonly string[]
+  updatedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementStorageUpdatedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  storage: readonly SettlementStorageItem[]
+  updatedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementPressureUpdatedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  pressure: SettlementPressure
+  updatedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementStabilityChangedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  stability: number
+  status: SettlementStatus
+  changedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementDeclinedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  stability: number
+  declinedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementRecoveredCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  stability: number
+  status: 'stable' | 'recovering'
+  recoveredAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type AnimalSpawnedCmd = Readonly<{
   animal: Animal
   spawnedAtTick: number
@@ -898,6 +975,12 @@ export type LivingWorldCommandPayload =
   | CombatFleeAttemptPayload
   | CombatDefeatPayload
   | SettlementFormedCmd
+  | SettlementPopulationUpdatedCmd
+  | SettlementStorageUpdatedCmd
+  | SettlementPressureUpdatedCmd
+  | SettlementStabilityChangedCmd
+  | SettlementDeclinedCmd
+  | SettlementRecoveredCmd
   | AnimalSpawnedCmd
   | AnimalHuntStartedCmd
   | AnimalHuntResolvedCmd
@@ -1297,6 +1380,67 @@ const VALIDATORS: Readonly<
         return 'founderNpcIds must be sorted ascending and unique'
       }
     }
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_POPULATION_UPDATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!Array.isArray(p.populationNpcIds)) return 'populationNpcIds required'
+    const idsErr = validateSortedUniqueStrings(p.populationNpcIds, 'populationNpcIds')
+    if (idsErr) return idsErr
+    if (!isNonNegativeInteger(p.updatedAtTick)) return 'updatedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_STORAGE_UPDATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!Array.isArray(p.storage)) return 'storage required'
+    const storageErr = validateSettlementStorage(p.storage)
+    if (storageErr) return storageErr
+    if (!isNonNegativeInteger(p.updatedAtTick)) return 'updatedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_PRESSURE_UPDATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    const pressureErr = validateSettlementPressure(p.pressure)
+    if (pressureErr) return pressureErr
+    if (!isNonNegativeInteger(p.updatedAtTick)) return 'updatedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_STABILITY_CHANGED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!isPressureScore(p.stability)) return 'stability must be integer 0-100'
+    if (!isSettlementStatus(p.status)) return 'status invalid'
+    if (!isNonNegativeInteger(p.changedAtTick)) return 'changedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_DECLINED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!isPressureScore(p.stability)) return 'stability must be integer 0-100'
+    if (!isNonNegativeInteger(p.declinedAtTick)) return 'declinedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!isPressureScore(p.stability)) return 'stability must be integer 0-100'
+    if (p.status !== 'stable' && p.status !== 'recovering') return 'status must be stable or recovering'
+    if (!isNonNegativeInteger(p.recoveredAtTick)) return 'recoveredAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -1941,6 +2085,45 @@ function validateHuntCommon(value: Record<string, unknown>): string | null {
   return null
 }
 
+function validateSettlementCommon(value: Record<string, unknown>): string | null {
+  if (typeof value.settlementId !== 'string' || value.settlementId.length === 0) return 'settlementId required'
+  if (typeof value.tileId !== 'string' || value.tileId.length === 0) return 'tileId required'
+  return null
+}
+
+function validateSettlementPressure(value: unknown): string | null {
+  if (!isRecord(value)) return 'pressure required'
+  for (const key of ['food', 'safety', 'economy', 'logistics']) {
+    if (!isPressureScore(value[key])) return `${key} pressure must be integer 0-100`
+  }
+  return null
+}
+
+function validateSettlementStorage(value: readonly unknown[]): string | null {
+  let previousGoodsId: string | null = null
+  for (const item of value) {
+    if (!isRecord(item)) return 'storage entries must be objects'
+    if (typeof item.goodsId !== 'string' || item.goodsId.length === 0) return 'storage goodsId required'
+    if (!isNonNegativeQuantity(item.quantity)) return 'storage quantity must be non-negative number'
+    if (previousGoodsId !== null && previousGoodsId >= item.goodsId) {
+      return 'storage goods ids must be sorted ascending and unique'
+    }
+    previousGoodsId = item.goodsId
+  }
+  return null
+}
+
+function validateSortedUniqueStrings(value: readonly unknown[], fieldName: string): string | null {
+  for (let i = 0; i < value.length; i += 1) {
+    const current = value[i]
+    if (typeof current !== 'string' || current.length === 0) return `${fieldName} entries must be non-empty strings`
+    if (i > 0 && (value[i - 1] as string) >= current) {
+      return `${fieldName} must be sorted ascending and unique`
+    }
+  }
+  return null
+}
+
 function validateGoodsHolderPayload(value: Record<string, unknown>): string | null {
   if (!isGoodsHolderType(value.holderType)) return 'holderType invalid'
   if (typeof value.holderId !== 'string' || value.holderId.length === 0) return 'holderId required'
@@ -1984,6 +2167,14 @@ function isNonNegativeQuantity(value: unknown): value is number {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isPressureScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
+}
+
+function isSettlementStatus(value: unknown): value is SettlementStatus {
+  return value === 'stable' || value === 'strained' || value === 'declining' || value === 'recovering'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

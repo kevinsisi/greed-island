@@ -9,11 +9,11 @@
 
 ## 1. Slice 1 — Domain, commands, projection
 
-- [ ] 1.1 Extend `livingWorldCommands.ts` with typed settlement commands/events: `SETTLEMENT_POPULATION_UPDATED`, `SETTLEMENT_STORAGE_UPDATED`, `SETTLEMENT_PRESSURE_UPDATED`, `SETTLEMENT_STABILITY_CHANGED`, `SETTLEMENT_DECLINED`, `SETTLEMENT_RECOVERED`.
-- [ ] 1.2 Define payload validators with bounded numeric ranges, positive/non-negative quantities, sorted ids, and deterministic tick metadata.
-- [ ] 1.3 Extend `SettlementsProjection` from formation-only rows to settlement state rows while preserving existing `/api/settlements` fields.
-- [ ] 1.4 Add `rebuildFromEvents()` canonical-hash tests for formation plus every new settlement event type.
-- [ ] 1.5 Add rule-engine tests proving every new command compiles to a typed event and invalid payloads are rejected.
+- [x] 1.1 Extend `livingWorldCommands.ts` with typed settlement commands/events: `SETTLEMENT_POPULATION_UPDATED`, `SETTLEMENT_STORAGE_UPDATED`, `SETTLEMENT_PRESSURE_UPDATED`, `SETTLEMENT_STABILITY_CHANGED`, `SETTLEMENT_DECLINED`, `SETTLEMENT_RECOVERED`.
+- [x] 1.2 Define payload validators with bounded numeric ranges, positive/non-negative quantities, sorted ids, and deterministic tick metadata.
+- [x] 1.3 Extend `SettlementsProjection` from formation-only rows to settlement state rows while preserving existing `/api/settlements` fields.
+- [x] 1.4 Add `rebuildFromEvents()` canonical-hash tests for formation plus every new settlement event type.
+- [x] 1.5 Add rule-engine tests proving every new command compiles to a typed event and invalid payloads are rejected.
 
 ## 2. Slice 2 — SettlementEngine pressure planner
 
@@ -46,6 +46,6 @@
 
 ## Current Progress
 
-- Planning started: `2/26` tasks complete.
-- Implementation not started.
-- Next actionable slice: `1.1` command catalog and payload validators.
+- Slice 1 complete: `7/26` tasks complete.
+- Runtime pressure planner not started.
+- Next actionable slice: `2.1` create pure `settlementEngine.ts` pressure planner.
