@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Hub Map Activity Visual Correction (v0.24.9)
+
+### Implemented
+
+- Corrected the first Hub activity visualization pass. The v0.24.8 text/pill
+  markers made the map feel like a dashboard and still did not sell NPC life.
+- `packages/web/src/game/MapScene.ts` now renders recent activity as small
+  event-driven ambient life actors inside each active district:
+  - work / construction actors bob and move locally;
+  - movement actors walk across short local paths;
+  - danger actors jitter/flash faster;
+  - pressure actors drift slowly.
+- Removed the large activity text pills and narration snippets from the map.
+  The Hub map now stays visual-first: motion communicates life, while detailed
+  narration remains on ticker/chronicle surfaces.
+- This remains projection-only UI from committed events; it does not spawn NPCs,
+  change authoritative presence, or mutate simulation state.
+
+### Verification
+
+- Focused tests: `npm run test -w @greed-island/web -- hubActivity eventVisibility` — **10 tests passed**.
+- `npm run build:web` — clean; known Vite chunk-size warning remains.
+- Full `npm test` — **520 server + 57 web = 577 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- Version bumped to `0.24.9`.
+
+### CI / Deploy
+
+- Pending push / GitHub Actions / deploy evidence.
+
 ## 2026-05-16 — Hub Map Activity Visibility (v0.24.8)
 
 ### Implemented

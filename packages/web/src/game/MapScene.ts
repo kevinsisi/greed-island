@@ -135,12 +135,12 @@ const SPRITE_FADE_MS = 450
 /** Sub-tile 子格 → district 內的相對偏移半徑（避免擠在 anchor 上） */
 const NPC_SUBTILE_RADIUS = TILE_SIZE * 0.9
 
-const ACTIVITY_VISUALS: Readonly<Record<HubActivityKind, { glyph: string; color: number; zh: string; en: string }>> = {
-  danger: { glyph: '!', color: 0xff5a5a, zh: '衝突', en: 'Danger' },
-  construction: { glyph: 'C', color: 0xf6c560, zh: '建造', en: 'Build' },
-  pressure: { glyph: '~', color: 0xa78bfa, zh: '壓力', en: 'Pressure' },
-  work: { glyph: 'W', color: 0x9ee0c7, zh: '工作', en: 'Work' },
-  movement: { glyph: '>', color: 0x93c5fd, zh: '走動', en: 'Move' },
+const ACTIVITY_VISUALS: Readonly<Record<HubActivityKind, { color: number }>> = {
+  danger: { color: 0xff5a5a },
+  construction: { color: 0xf6c560 },
+  pressure: { color: 0xa78bfa },
+  work: { color: 0x9ee0c7 },
+  movement: { color: 0x93c5fd },
 }
 
 /** 派系外框色：v0.14.0 area state overlay 用。 */
@@ -933,7 +933,7 @@ export class MapScene extends Phaser.Scene {
     if (this.activityByTile.length === 0) return
 
     const layer = this.add.container(0, 0)
-    layer.setDepth(57)
+    layer.setDepth(59)
 
     for (const summary of this.activityByTile) {
       if (!this.isActiveDistrict(summary.districtId)) continue
@@ -943,61 +943,98 @@ export class MapScene extends Phaser.Scene {
       const visual = ACTIVITY_VISUALS[primaryKind]
       const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
       const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
-      const x = Math.min(Math.max(anchorX, 66), CANVAS_WIDTH - 66)
-      const y = Math.min(Math.max(anchorY + TILE_SIZE * 0.95, 22), CANVAS_HEIGHT - 28)
 
-      const pulse = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.45, visual.color, 0.08)
-      pulse.setStrokeStyle(2, visual.color, 0.5)
+      const pulse = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.42, visual.color, 0)
+      pulse.setStrokeStyle(primaryKind === 'danger' ? 2 : 1.25, visual.color, primaryKind === 'danger' ? 0.45 : 0.22)
       layer.add(pulse)
       this.tweens.add({
         targets: pulse,
-        scale: { from: 0.9, to: 1.35 },
-        alpha: { from: 0.95, to: 0.25 },
-        duration: 1100,
+        scale: { from: 0.9, to: primaryKind === 'danger' ? 1.35 : 1.14 },
+        alpha: { from: 0.68, to: 0.18 },
+        duration: primaryKind === 'danger' ? 760 : 1500,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut'
       })
 
-      const pillWidth = summary.latestNarration ? 136 : 96
-      const pillHeight = summary.latestNarration ? 44 : 28
-      const bg = this.add.rectangle(x, y, pillWidth, pillHeight, 0x0d1117, 0.84)
-      bg.setStrokeStyle(1.5, visual.color, 0.9)
-      layer.add(bg)
+      const actorCount = Math.min(5, Math.max(summary.kinds.length, Math.min(summary.count, 4)))
+      for (let idx = 0; idx < actorCount; idx += 1) {
+        const kind = summary.kinds[idx % summary.kinds.length] ?? primaryKind
+        const actorVisual = ACTIVITY_VISUALS[kind]
+        const start = activityPointFor(def, idx, 0)
+        const end = activityPointFor(def, idx, kind === 'work' || kind === 'construction' ? 1 : 2)
+        const actor = this.add.container(start.x, start.y)
+        actor.setDepth(59 + idx * 0.01)
 
-      const glyphs = summary.kinds
-        .slice(0, 3)
-        .map((kind) => ACTIVITY_VISUALS[kind].glyph)
-        .join(' ')
-      const labelText = this.locale === 'zh' ? visual.zh : visual.en
-      const header = this.add.text(x, y - (summary.latestNarration ? 11 : 0), `${glyphs} ${labelText} x${summary.count}`, {
-        fontFamily:
-          'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-        fontSize: '11px',
-        color: '#fff5b8',
-        stroke: '#0a0a0a',
-        strokeThickness: 3,
-        align: 'center'
-      })
-      header.setOrigin(0.5, 0.5)
-      layer.add(header)
+        const shadow = this.add.ellipse(0, 6, 13, 5, 0x050608, 0.42)
+        const body = this.add.circle(0, 0, 5.5, actorVisual.color, 0.95)
+        body.setStrokeStyle(1.25, 0x0a0a0a, 0.88)
+        const head = this.add.circle(0, -6.5, 3.4, 0xfff5b8, 0.95)
+        head.setStrokeStyle(1, 0x0a0a0a, 0.8)
+        actor.add([shadow, body, head])
 
-      if (summary.latestNarration) {
-        const detail = this.add.text(x, y + 10, truncateActivityText(summary.latestNarration), {
-          fontFamily:
-            'Inter, "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-          fontSize: '9px',
-          color: '#d9e4ef',
-          stroke: '#0a0a0a',
-          strokeThickness: 2,
-          align: 'center'
-        })
-        detail.setOrigin(0.5, 0.5)
-        layer.add(detail)
+        if (kind === 'construction') {
+          const tool = this.add.rectangle(5.5, -1, 9, 2, 0x0a0a0a, 0.9)
+          tool.setRotation(-0.7)
+          actor.add(tool)
+        }
+        if (kind === 'danger') {
+          const spark = this.add.circle(7, -8, 2.2, 0xfff5b8, 0.95)
+          actor.add(spark)
+        }
+
+        layer.add(actor)
+        this.animateActivityActor(actor, kind, end.x, end.y, idx)
       }
     }
 
     this.activityLayer = layer
+  }
+
+  private animateActivityActor(
+    actor: Phaser.GameObjects.Container,
+    kind: HubActivityKind,
+    targetX: number,
+    targetY: number,
+    idx: number
+  ): void {
+    if (kind === 'work' || kind === 'construction') {
+      this.tweens.add({
+        targets: actor,
+        x: targetX,
+        y: targetY,
+        angle: kind === 'construction' ? { from: -3, to: 5 } : { from: -1, to: 1 },
+        duration: 850 + idx * 120,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      })
+      return
+    }
+
+    if (kind === 'danger') {
+      this.tweens.add({
+        targets: actor,
+        x: targetX,
+        y: targetY,
+        alpha: { from: 1, to: 0.62 },
+        duration: 420 + idx * 45,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      })
+      return
+    }
+
+    this.tweens.add({
+      targets: actor,
+      x: targetX,
+      y: targetY,
+      duration: kind === 'movement' ? 1900 + idx * 180 : 2600 + idx * 220,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    })
   }
 
   private clearActivityMarkers(): void {
@@ -1728,8 +1765,26 @@ function sameDistrictSet(a: ReadonlySet<DistrictId>, b: ReadonlySet<DistrictId>)
   return true
 }
 
-function truncateActivityText(text: string): string {
-  const trimmed = text.trim().replace(/\s+/g, ' ')
-  if (trimmed.length <= 16) return trimmed
-  return `${trimmed.slice(0, 15)}…`
+function activityPointFor(def: DistrictDef, idx: number, phase: number): { x: number; y: number } {
+  const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
+  const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+  const seed = hashActivitySeed(def.id, idx, phase)
+  const angle = (seed % 360) * (Math.PI / 180)
+  const radiusX = 16 + (seed % 29)
+  const radiusY = 12 + ((seed >> 3) % 22)
+  return {
+    x: Math.min(Math.max(anchorX + Math.cos(angle) * radiusX, 14), CANVAS_WIDTH - 14),
+    y: Math.min(Math.max(anchorY + Math.sin(angle) * radiusY, 18), CANVAS_HEIGHT - 14)
+  }
+}
+
+function hashActivitySeed(id: string, idx: number, phase: number): number {
+  let hash = 2166136261
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  hash ^= idx * 374761393
+  hash ^= phase * 668265263
+  return Math.abs(hash)
 }
