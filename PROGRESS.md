@@ -31,7 +31,12 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, CI/CD, and live smoke.
+- Commit `6c182cd fix(area): show ecology migration markers` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25959029159` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25959029154` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.5`, tick `142391`.
+  - `https://hunter.sisihome.org/` — served app shell with `/assets/index-Dj9-INkz.js` and `/assets/index-TQXzi4kY.css`.
 
 ## 2026-05-16 — Sprint 6: combat-phase-c Slice 2.3 (v0.24.4)
 
