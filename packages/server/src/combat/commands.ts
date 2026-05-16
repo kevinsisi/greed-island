@@ -153,8 +153,8 @@ export const COMBAT_COMMAND_TYPES = [
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
   'COMBAT_RESOLVE',
-  // Combat Phase C — Slice 2.3 command payload catalog. These are not
-  // registered into LIVING_WORLD_COMMAND_TYPES until Slice 2.4.
+  // Combat Phase C — Slice 2.3 command payload catalog; registered into
+  // LIVING_WORLD_COMMAND_TYPES in Slice 2.4.
   'COMBAT_CARD_PLAY',
   'COMBAT_CARD_CANCEL',
   'COMBAT_DAMAGE',

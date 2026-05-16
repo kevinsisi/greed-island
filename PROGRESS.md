@@ -3,6 +3,51 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-16 — Sprint 6: combat-phase-c Slice 2.4 + world prompt filter (v0.24.6)
+
+### Implemented
+
+- Completed OpenSpec `combat-phase-c-realtime-subtick` task 2.4.
+- `packages/server/src/kernel/livingWorldCommands.ts` now registers all 11
+  Phase C combat command types in `LIVING_WORLD_COMMAND_TYPES`:
+  `COMBAT_CARD_PLAY`, `COMBAT_CARD_CANCEL`, `COMBAT_DAMAGE`, `COMBAT_HEAL`,
+  `COMBAT_STATUS_APPLY`, `COMBAT_STATUS_TICK`, `COMBAT_STATUS_END`,
+  `COMBAT_TARGET_LOCK`, `COMBAT_PHASE_SHIFT`, `COMBAT_FLEE_ATTEMPT`, and
+  `COMBAT_DEFEAT`.
+- Living-world validation for the new command types delegates to
+  `validateCombatPayload()` from `packages/server/src/combat/commands.ts`.
+- Added a focused living-world catalog test covering acceptance of every
+  Phase C command type.
+- Fixed the player-visible world prompt issue where ticker surfaces could
+  display raw internal identifiers such as `iron_hound` or
+  `temple.cleric.sela`. `isChronicleSurfaceEvent()` now keeps narration with
+  internal ids out of ticker / chronicle surfaces until those event families
+  have proper zh labels.
+
+### Honest scope
+
+- Slice 2.4 only registers and validates the command catalog. It does not
+  execute Phase C commands, write Phase C combat events, or enable the 5-phase
+  rule engine; that remains Slice 2.5.
+- The world prompt fix is a presentation guard. It prevents raw ids from
+  surfacing in ticker prompts, but server-side narration localization for
+  animal / household event families is still future cleanup.
+
+### Verification
+
+- Focused server tests: `npm run test -w @greed-island/server -- livingWorld combat/commands` — **50 tests passed**.
+- Focused web tests: `npm run test -w @greed-island/web -- eventVisibility` — **4 tests passed**.
+- `npm run build:server` — clean.
+- Full `npm test` — **520 server + 51 web = 571 tests passed**.
+- `npm run build` (server + web) — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npx openspec list` — `combat-phase-c-realtime-subtick` is now **10/38 tasks**.
+- Version bumped to `0.24.6`.
+
+### CI / Deploy
+
+- Pending commit, push, CI/CD, and live smoke.
+
 ## 2026-05-16 — Area Ecology Migration Visibility Bugfix (v0.24.5)
 
 ### Implemented

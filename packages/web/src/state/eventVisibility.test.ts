@@ -30,4 +30,14 @@ describe('isPublicNarrativeEvent', () => {
     expect(isPublicNarrativeEvent(productive)).toBe(true)
     expect(isChronicleSurfaceEvent(productive)).toBe(false)
   })
+
+  it('keeps raw internal ids out of world prompt surfaces', () => {
+    const leakedId = event({
+      eventType: 'ANIMAL_ATTACKED_NPC',
+      narration: 'iron_hound在地脈層攻擊了temple.cleric.sela。',
+    })
+
+    expect(isPublicNarrativeEvent(leakedId)).toBe(true)
+    expect(isChronicleSurfaceEvent(leakedId)).toBe(false)
+  })
 })

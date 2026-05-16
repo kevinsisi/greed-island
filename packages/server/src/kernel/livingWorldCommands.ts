@@ -19,6 +19,20 @@ import {
 } from './types.js'
 import type { Animal } from '../ecosystem/species.js'
 import { SKILL_IDS } from '../config/world.js'
+import {
+  validateCombatPayload,
+  type CombatCardCancelPayload,
+  type CombatCardPlayPayload,
+  type CombatDamagePayload,
+  type CombatDefeatPayload,
+  type CombatFleeAttemptPayload,
+  type CombatHealPayload,
+  type CombatPhaseShiftPayload,
+  type CombatStatusApplyPayload,
+  type CombatStatusEndPayload,
+  type CombatStatusTickPayload,
+  type CombatTargetLockPayload,
+} from '../combat/commands.js'
 
 export const LIVING_WORLD_ACTOR_TYPES = ['player', 'npc', 'system'] as const
 export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
@@ -52,6 +66,20 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
   'COMBAT_RESOLVE',
+  // Combat Phase C Slice 2.4 — register the sub-tick command catalog.
+  // Rule-engine execution remains disabled until Slice 2.5 wires these
+  // commands into the 5-phase combat pipeline.
+  'COMBAT_CARD_PLAY',
+  'COMBAT_CARD_CANCEL',
+  'COMBAT_DAMAGE',
+  'COMBAT_HEAL',
+  'COMBAT_STATUS_APPLY',
+  'COMBAT_STATUS_TICK',
+  'COMBAT_STATUS_END',
+  'COMBAT_TARGET_LOCK',
+  'COMBAT_PHASE_SHIFT',
+  'COMBAT_FLEE_ATTEMPT',
+  'COMBAT_DEFEAT',
   // Phase 1 §33.4 — Settlement domain (Layer 3 Civilization Runtime)
   'SETTLEMENT_FORMED',
   // Phase E0.2 — Ecosystem Runtime (Layer 2.5)
@@ -858,6 +886,17 @@ export type LivingWorldCommandPayload =
   | CombatInitiateCmd
   | CombatPlayerActionCmd
   | CombatResolveCmd
+  | CombatCardPlayPayload
+  | CombatCardCancelPayload
+  | CombatDamagePayload
+  | CombatHealPayload
+  | CombatStatusApplyPayload
+  | CombatStatusTickPayload
+  | CombatStatusEndPayload
+  | CombatTargetLockPayload
+  | CombatPhaseShiftPayload
+  | CombatFleeAttemptPayload
+  | CombatDefeatPayload
   | SettlementFormedCmd
   | AnimalSpawnedCmd
   | AnimalHuntStartedCmd
@@ -1196,6 +1235,17 @@ const VALIDATORS: Readonly<
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
+  COMBAT_CARD_PLAY: (p) => validateCombatPayload('COMBAT_CARD_PLAY', p),
+  COMBAT_CARD_CANCEL: (p) => validateCombatPayload('COMBAT_CARD_CANCEL', p),
+  COMBAT_DAMAGE: (p) => validateCombatPayload('COMBAT_DAMAGE', p),
+  COMBAT_HEAL: (p) => validateCombatPayload('COMBAT_HEAL', p),
+  COMBAT_STATUS_APPLY: (p) => validateCombatPayload('COMBAT_STATUS_APPLY', p),
+  COMBAT_STATUS_TICK: (p) => validateCombatPayload('COMBAT_STATUS_TICK', p),
+  COMBAT_STATUS_END: (p) => validateCombatPayload('COMBAT_STATUS_END', p),
+  COMBAT_TARGET_LOCK: (p) => validateCombatPayload('COMBAT_TARGET_LOCK', p),
+  COMBAT_PHASE_SHIFT: (p) => validateCombatPayload('COMBAT_PHASE_SHIFT', p),
+  COMBAT_FLEE_ATTEMPT: (p) => validateCombatPayload('COMBAT_FLEE_ATTEMPT', p),
+  COMBAT_DEFEAT: (p) => validateCombatPayload('COMBAT_DEFEAT', p),
   PLAYER_INTERVENE: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) {

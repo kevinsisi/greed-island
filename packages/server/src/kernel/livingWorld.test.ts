@@ -435,6 +435,90 @@ describe('living-world rule engine', () => {
     if (!result.accepted) expect(result.rejection.code).toBe('UNKNOWN_COMMAND')
   })
 
+  it('registers Phase C combat commands in the living-world catalog', () => {
+    const { ruleEngine } = makeHarness()
+    const base = { combatId: 'combat.phase-c', combatTick: 3 }
+    const samples: LivingWorldCommand[] = [
+      makeLivingWorldCommand('COMBAT_CARD_PLAY', 'player-1', 'player', 20, 20, {
+        ...base,
+        cardClass: 'FIRE_LASH',
+        targetActorId: 'npc-1',
+      }),
+      makeLivingWorldCommand('COMBAT_CARD_CANCEL', 'player-1', 'player', 20, 20, {
+        ...base,
+        cancelCommandId: 'cmd-old',
+        reason: 'player_cancel',
+      }),
+      makeLivingWorldCommand('COMBAT_DAMAGE', 'system.combat', 'system', 20, 20, {
+        ...base,
+        sourceActorId: 'player-1',
+        targetActorId: 'npc-1',
+        amount: 18,
+        cardClass: 'FIRE_LASH',
+        element: 'fire',
+      }),
+      makeLivingWorldCommand('COMBAT_HEAL', 'system.combat', 'system', 20, 20, {
+        ...base,
+        sourceActorId: 'player-1',
+        targetActorId: 'player-1',
+        amount: 12,
+        cardClass: 'MEND',
+      }),
+      makeLivingWorldCommand('COMBAT_STATUS_APPLY', 'system.combat', 'system', 20, 20, {
+        ...base,
+        sourceActorId: 'player-1',
+        targetActorId: 'npc-1',
+        statusId: 'burn',
+        remainingTicks: 30,
+        potency: 2,
+        cardClass: 'FIRE_LASH',
+      }),
+      makeLivingWorldCommand('COMBAT_STATUS_TICK', 'system.combat', 'system', 20, 20, {
+        ...base,
+        targetActorId: 'npc-1',
+        statusId: 'burn',
+        remainingTicksAfter: 29,
+        potency: 2,
+      }),
+      makeLivingWorldCommand('COMBAT_STATUS_END', 'system.combat', 'system', 20, 20, {
+        ...base,
+        targetActorId: 'npc-1',
+        statusId: 'burn',
+        reason: 'expired',
+      }),
+      makeLivingWorldCommand('COMBAT_TARGET_LOCK', 'system.combat', 'system', 20, 20, {
+        ...base,
+        sourceActorId: 'player-1',
+        targetActorId: 'npc-1',
+        durationTicks: 10,
+        cardClass: 'NO_ESCAPE',
+      }),
+      makeLivingWorldCommand('COMBAT_PHASE_SHIFT', 'player-1', 'player', 20, 20, {
+        ...base,
+        actorId: 'player-1',
+        phase: 'ethereal',
+        cardClass: 'PHASE_SHIFT',
+      }),
+      makeLivingWorldCommand('COMBAT_FLEE_ATTEMPT', 'player-1', 'player', 20, 20, {
+        ...base,
+        actorId: 'player-1',
+        cardClass: 'NO_ESCAPE',
+      }),
+      makeLivingWorldCommand('COMBAT_DEFEAT', 'system.combat', 'system', 20, 20, {
+        ...base,
+        actorId: 'npc-1',
+        defeatedByActorId: 'player-1',
+        finalHp: 0,
+      }),
+    ]
+
+    for (const cmd of samples) {
+      expect(isLivingWorldCommandType(cmd.commandType)).toBe(true)
+      const result = ruleEngine.evaluate(cmd)
+      expect(result.accepted, `${cmd.commandType} should accept`).toBe(true)
+    }
+  })
+
   it('rejects malformed payload', () => {
     const { ruleEngine } = makeHarness()
     const cmd = makeLivingWorldCommand(

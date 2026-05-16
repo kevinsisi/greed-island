@@ -20,6 +20,11 @@ const ROUTINE_CHRONICLE_EVENT_TYPES = new Set([
   'ANIMAL_REPRODUCED',
 ])
 
+const INTERNAL_ID_PATTERNS = [
+  /\b[a-z]+(?:\.[a-z0-9_]+){2,}\b/i,
+  /\b[a-z]+_[a-z0-9_]+\b/i,
+]
+
 export function isPublicNarrativeEvent(event: EventSummary): boolean {
   if (INTERNAL_EVENT_TYPES.has(event.eventType)) return false
   return event.narration !== null && event.narration !== undefined && event.narration.trim().length > 0
@@ -27,5 +32,10 @@ export function isPublicNarrativeEvent(event: EventSummary): boolean {
 
 export function isChronicleSurfaceEvent(event: EventSummary): boolean {
   if (!isPublicNarrativeEvent(event)) return false
+  if (containsInternalIdentifier(event.narration ?? '')) return false
   return !ROUTINE_CHRONICLE_EVENT_TYPES.has(event.eventType)
+}
+
+function containsInternalIdentifier(narration: string): boolean {
+  return INTERNAL_ID_PATTERNS.some((pattern) => pattern.test(narration))
 }
