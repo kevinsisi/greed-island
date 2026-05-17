@@ -32,7 +32,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit/push/CI/CD. Live deployment remains `0.24.21` until the v0.24.22 commit is pushed and the dev deploy completes.
+- Commit `8c554a2 feat(combat): project combat store from events` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25995517848` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25995517831` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.22`; health tick advanced `153379 → 153383`.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `153379` to `153383` over 20 seconds; generated at `2026-05-17T15:56:01.987Z` and `2026-05-17T15:56:22.085Z`.
+  - Recent `greed-island-server` logs since deploy: 6 lines checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
 
 ## 2026-05-17 — Combat Phase C Live Sub-Tick Wiring
 
