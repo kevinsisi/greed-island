@@ -71,7 +71,7 @@ describe('combat.cards.compiler', () => {
         payload: {
           combatId: 'combat_2_2',
           actorId: 'actor_a',
-          phase: 'shifted',
+          phase: 'alt',
           cardClass: 'PHASE_SHIFT',
         },
       },

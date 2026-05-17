@@ -76,7 +76,7 @@ const CATALOG: Readonly<Record<CombatCardClass, CombatCardDef>> = {
     cardClass: 'PHASE_SHIFT',
     priority: 0,
     bypassesTargetLock: true,
-    effects: [{ kind: 'phase_shift', phase: 'shifted' }],
+    effects: [{ kind: 'phase_shift', phase: 'alt' }],
   },
   COUNTERSPELL: {
     cardClass: 'COUNTERSPELL',
@@ -96,7 +96,7 @@ const CATALOG: Readonly<Record<CombatCardClass, CombatCardDef>> = {
     cardClass: 'NO_ESCAPE',
     priority: 1,
     bypassesTargetLock: false,
-    effects: [{ kind: 'status_apply', statusId: 'rooted', remainingTicks: 30 }],
+    effects: [{ kind: 'target_lock', durationTicks: 10 }],
   },
   SILENCE: {
     cardClass: 'SILENCE',

@@ -67,6 +67,11 @@ describe('combat.cards.catalog', () => {
     })
   })
 
+  it('NO_ESCAPE applies the target-lock effect used by priority validation', () => {
+    const card = getCombatCard('NO_ESCAPE')!
+    expect(card.effects).toEqual([{ kind: 'target_lock', durationTicks: 10 }])
+  })
+
   it('priorityForCardClass returns the matching band for known cards', () => {
     expect(priorityForCardClass('PHASE_SHIFT')).toBe(0)
     expect(priorityForCardClass('STUN')).toBe(1)

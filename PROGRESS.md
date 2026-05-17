@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Combat Phase C Sub-Tick Rule Engine
+
+### Slice Implemented
+
+- Version bumped to `0.24.20` so `/healthz` can visibly prove this combat slice is deployed.
+- Added pure `evaluateCombatSubTick()` in `packages/server/src/combat/ruleEngine.ts` for the Phase C five-phase pipeline: `STATUS_TICK → CARD_PLAY → DAMAGE/HEAL → DEFEAT → RESOLVE`.
+- Card plays are filtered by `combatId` / `combatTick`, sorted deterministically by `(priority asc, actorId asc, commandId asc)`, validated against defeat/target-lock state, accepted/rejected, and compiled through the existing glyph-card catalog/compiler.
+- Same-sub-tick control effects are visible to later lower-priority cards: `NO_ESCAPE` now compiles to `COMBAT_TARGET_LOCK`, later non-bypass card plays from/against locked actors reject deterministically, and `PHASE_SHIFT` puts the actor in `alt` phase so lower-priority target locks fail against the shifted actor.
+- The evaluator deterministically derives sub-tick events plus resulting hp/status/target-lock projections; `FIRE_LASH` now resolves to damage plus burn status in the Phase C pure rule engine.
+- Phase B `evaluateCombatRound()` remains unchanged for the existing HTTP `/api/combat/:id/action` compatibility path.
+- Live EventLog transaction/SSE/runtime queue wiring is intentionally left as the next Slice 2 task (`2.5b`) rather than falsely marking the full integration clause complete.
+
+### Progress
+
+- `combat-phase-c-realtime-subtick`: `12/39` tasks complete; completed `2.5a` and `2.6`; next task is `2.5b` live pending-command queue + single SQLite transaction + post-commit SSE flush.
+
+### Verification
+
+- Focused combat tests: `npm --workspace packages/server exec vitest run src/combat/ruleEngine.test.ts src/combat/commands.test.ts src/combat/cards/compiler.test.ts src/combat/cards/catalog.test.ts` — **35 tests passed**.
+- Server build/typecheck: `npm run build:server` — clean.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npm test` — **547 server + 75 web = 622 tests passed**.
+- `npm run build` — server build and web production bundle completed; known Vite chunk-size warning remains.
+- `git diff --check` — clean; Windows CRLF warnings only.
+- `npx openspec list` — `combat-phase-c-realtime-subtick 12/39 tasks` remains the only active change.
+- Separate general reviewer gate — first two passes found deterministic ordering issues; fixes were applied; final pass returned `No findings`.
+
+### CI / Deploy
+
+- Pending commit, push, GitHub Actions CI/CD, and live smoke for `/healthz version=0.24.20`, tick advancement, and clean recent server logs.
+
 ## 2026-05-17 — Version Marker Hotfix
 
 ### Hotfix Implemented

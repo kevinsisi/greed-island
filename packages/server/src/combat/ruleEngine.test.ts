@@ -1,9 +1,35 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateCombatRound } from './ruleEngine.js'
+import {
+  evaluateCombatRound,
+  evaluateCombatSubTick,
+  type CombatPendingCardPlayCommand,
+} from './ruleEngine.js'
 import { COMBAT_INITIAL_HP, hashSeed, seededRandInt } from './commands.js'
+import type { CombatCardClass } from './cards/catalog.js'
 
 const PLAYER = { actorId: 'acct_42', greed: 0.5, patience: 0.5, health: 80 }
 const NPC = { actorId: 'npc_test', greed: 0.6, patience: 0.4, health: 80 }
+
+function cardPlay(input: {
+  commandId: string
+  actorId: string
+  cardClass: CombatCardClass
+  targetActorId: string
+  combatId?: string
+  combatTick?: number
+}): CombatPendingCardPlayCommand {
+  return {
+    commandType: 'COMBAT_CARD_PLAY',
+    commandId: input.commandId,
+    actorId: input.actorId,
+    payload: {
+      combatId: input.combatId ?? 'combat_phase_c',
+      combatTick: input.combatTick ?? 4,
+      cardClass: input.cardClass,
+      targetActorId: input.targetActorId,
+    },
+  }
+}
 
 describe('combat rule engine — Phase B', () => {
   it('hashSeed is deterministic and excludes wall-clock', () => {
@@ -123,5 +149,300 @@ describe('combat rule engine — Phase B', () => {
     const ignored = r.events.find((e) => e.eventType === 'COMBAT_CARD_IGNORED')
     expect(ignored).toBeDefined()
     expect((ignored?.payload as { cardId?: number }).cardId).toBe(1001)
+  })
+})
+
+describe('combat rule engine — Phase C sub-tick pipeline', () => {
+  it('priority 0 PHASE_SHIFT bypasses target-lock while priority >=1 cards reject', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'actor_b', hp: 100 },
+      ],
+      targetLocks: [{ targetActorId: 'actor_a', sourceActorId: 'actor_b', remainingTicks: 2 }],
+      pendingCommands: [
+        cardPlay({ commandId: 'cmd_fire', actorId: 'actor_a', cardClass: 'FIRE_LASH', targetActorId: 'actor_b' }),
+        cardPlay({ commandId: 'cmd_phase', actorId: 'actor_a', cardClass: 'PHASE_SHIFT', targetActorId: 'actor_b' }),
+      ],
+    })
+
+    const accepted = result.events.find((event) => event.eventType === 'COMBAT_CARD_PLAY_ACCEPTED')
+    const rejected = result.events.find((event) => event.eventType === 'COMBAT_CARD_PLAY_REJECTED')
+
+    expect(accepted?.commandId).toBe('cmd_phase')
+    expect(accepted?.payload.cardClass).toBe('PHASE_SHIFT')
+    expect(rejected?.commandId).toBe('cmd_fire')
+    expect(rejected?.payload.reason).toBe('target_locked')
+    expect(result.events.some((event) => event.eventType === 'COMBAT_PHASE_SHIFT')).toBe(true)
+    expect(result.targetLocksAfter).toEqual([
+      { targetActorId: 'actor_a', sourceActorId: 'actor_b', remainingTicks: 1 },
+    ])
+  })
+
+  it('same-sub-tick target locks from higher-priority cards reject later locked actors', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'actor_b', hp: 100 },
+      ],
+      pendingCommands: [
+        cardPlay({ commandId: 'cmd_fire', actorId: 'actor_b', cardClass: 'FIRE_LASH', targetActorId: 'actor_a' }),
+        cardPlay({ commandId: 'cmd_lock', actorId: 'actor_a', cardClass: 'NO_ESCAPE', targetActorId: 'actor_b' }),
+      ],
+    })
+
+    expect(result.events.map((event) => `${event.eventType}:${event.commandId ?? 'none'}`)).toEqual([
+      'COMBAT_CARD_PLAY_ACCEPTED:cmd_lock',
+      'COMBAT_TARGET_LOCK:cmd_lock',
+      'COMBAT_CARD_PLAY_REJECTED:cmd_fire',
+    ])
+    expect(result.events[2]?.payload.reason).toBe('target_locked')
+    expect(result.actorHpAfter.actor_a).toBe(100)
+    expect(result.actorHpAfter.actor_b).toBe(100)
+    expect(result.targetLocksAfter).toEqual([
+      { targetActorId: 'actor_b', sourceActorId: 'actor_a', remainingTicks: 10, cardClass: 'NO_ESCAPE' },
+    ])
+  })
+
+  it('PHASE_SHIFT causes lower-priority NO_ESCAPE target lock to fail against the shifted actor', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'actor_b', hp: 100 },
+      ],
+      pendingCommands: [
+        cardPlay({ commandId: 'cmd_lock', actorId: 'actor_a', cardClass: 'NO_ESCAPE', targetActorId: 'actor_b' }),
+        cardPlay({ commandId: 'cmd_phase', actorId: 'actor_b', cardClass: 'PHASE_SHIFT', targetActorId: 'actor_a' }),
+      ],
+    })
+
+    expect(result.events.map((event) => `${event.eventType}:${event.commandId ?? 'none'}`)).toEqual([
+      'COMBAT_CARD_PLAY_ACCEPTED:cmd_phase',
+      'COMBAT_PHASE_SHIFT:cmd_phase',
+      'COMBAT_CARD_PLAY_ACCEPTED:cmd_lock',
+      'COMBAT_TARGET_LOCK_FAIL:cmd_lock',
+    ])
+    expect(result.events[1]?.payload.phase).toBe('alt')
+    expect(result.events[3]?.payload.reason).toBe('target_phase_shifted')
+    expect(result.targetLocksAfter).toEqual([])
+  })
+
+  it('FIRE_LASH compiles into COMBAT_DAMAGE plus burn COMBAT_STATUS_APPLY', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'actor_b', hp: 100 },
+      ],
+      pendingCommands: [
+        cardPlay({ commandId: 'cmd_fire', actorId: 'actor_a', cardClass: 'FIRE_LASH', targetActorId: 'actor_b' }),
+      ],
+    })
+
+    const effectEvents = result.events.filter((event) =>
+      event.eventType === 'COMBAT_DAMAGE' || event.eventType === 'COMBAT_STATUS_APPLY'
+    )
+
+    expect(effectEvents.map((event) => event.eventType)).toEqual([
+      'COMBAT_DAMAGE',
+      'COMBAT_STATUS_APPLY',
+    ])
+    expect(effectEvents[0]?.payload).toMatchObject({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      sourceActorId: 'actor_a',
+      targetActorId: 'actor_b',
+      amount: 18,
+      cardClass: 'FIRE_LASH',
+      element: 'fire',
+    })
+    expect(effectEvents[1]?.payload).toMatchObject({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      sourceActorId: 'actor_a',
+      targetActorId: 'actor_b',
+      statusId: 'burn',
+      remainingTicks: 30,
+      potency: 2,
+      cardClass: 'FIRE_LASH',
+    })
+    expect(result.actorHpAfter.actor_b).toBe(82)
+  })
+
+  it('same-priority card plays resolve by actorId then commandId, not input order', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_c',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_b', hp: 100 },
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'npc_target', hp: 100 },
+      ],
+      pendingCommands: [
+        cardPlay({ commandId: 'cmd_b', actorId: 'actor_b', cardClass: 'FIRE_LASH', targetActorId: 'npc_target' }),
+        cardPlay({ commandId: 'cmd_a', actorId: 'actor_a', cardClass: 'FIRE_LASH', targetActorId: 'npc_target' }),
+      ],
+    })
+
+    const acceptedCommandIds = result.events
+      .filter((event) => event.eventType === 'COMBAT_CARD_PLAY_ACCEPTED')
+      .map((event) => event.commandId)
+    const damageSources = result.events
+      .filter((event) => event.eventType === 'COMBAT_DAMAGE')
+      .map((event) => event.payload.sourceActorId)
+
+    expect(acceptedCommandIds).toEqual(['cmd_a', 'cmd_b'])
+    expect(damageSources).toEqual(['actor_a', 'actor_b'])
+    expect(result.actorHpAfter.npc_target).toBe(64)
+  })
+
+  it('uses deterministic fallback ordering for duplicate command ids', () => {
+    const input = {
+      combatId: 'combat_duplicate_commands',
+      combatTick: 4,
+      actors: [
+        { actorId: 'actor_a', hp: 80 },
+        { actorId: 'npc_target', hp: 100 },
+      ],
+      pendingCommands: [
+        cardPlay({
+          combatId: 'combat_duplicate_commands',
+          commandId: 'cmd_duplicate',
+          actorId: 'actor_a',
+          cardClass: 'MEND',
+          targetActorId: 'actor_a',
+        }),
+        cardPlay({
+          combatId: 'combat_duplicate_commands',
+          commandId: 'cmd_duplicate',
+          actorId: 'actor_a',
+          cardClass: 'FIRE_LASH',
+          targetActorId: 'npc_target',
+        }),
+      ],
+    } as const
+
+    const a = evaluateCombatSubTick(input)
+    const b = evaluateCombatSubTick({
+      ...input,
+      pendingCommands: [...input.pendingCommands].reverse(),
+    })
+
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b))
+    expect(
+      a.events
+        .filter((event) => event.eventType === 'COMBAT_CARD_PLAY_ACCEPTED')
+        .map((event) => event.payload.cardClass)
+    ).toEqual(['FIRE_LASH', 'MEND'])
+  })
+
+  it('fixed seed inputs replay to byte-identical sub-tick results', () => {
+    const input = {
+      combatId: 'combat_replay_phase_c',
+      combatTick: 9,
+      actors: [
+        { actorId: 'actor_b', hp: 100 },
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'npc_target', hp: 100 },
+      ],
+      statuses: [
+        { targetActorId: 'npc_target', statusId: 'burn', remainingTicks: 2, potency: 2 },
+        {
+          targetActorId: 'npc_target',
+          statusId: 'ward',
+          remainingTicks: 3,
+          sourceActorId: 'actor_a',
+          potency: 2,
+          cardClass: 'REGEN',
+        },
+        {
+          targetActorId: 'npc_target',
+          statusId: 'ward',
+          remainingTicks: 3,
+          sourceActorId: 'actor_a',
+          potency: 1,
+          cardClass: 'SHIELD',
+        },
+      ],
+      targetLocks: [
+        { targetActorId: 'unused_locked', remainingTicks: 3, sourceActorId: 'actor_a', cardClass: 'STUN' },
+        { targetActorId: 'unused_locked', remainingTicks: 3, sourceActorId: 'actor_a', cardClass: 'NO_ESCAPE' },
+      ],
+      pendingCommands: [
+        cardPlay({
+          commandId: 'cmd_b',
+          actorId: 'actor_b',
+          cardClass: 'FIRE_LASH',
+          targetActorId: 'npc_target',
+          combatId: 'combat_replay_phase_c',
+          combatTick: 9,
+        }),
+        cardPlay({
+          commandId: 'cmd_a',
+          actorId: 'actor_a',
+          cardClass: 'FIRE_LASH',
+          targetActorId: 'npc_target',
+          combatId: 'combat_replay_phase_c',
+          combatTick: 9,
+        }),
+      ],
+    } as const
+
+    const a = evaluateCombatSubTick(input)
+    const b = evaluateCombatSubTick({
+      ...input,
+      actors: [...input.actors].reverse(),
+      statuses: [...input.statuses].reverse(),
+      targetLocks: [...input.targetLocks].reverse(),
+      pendingCommands: [...input.pendingCommands].reverse(),
+    })
+
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b))
+  })
+
+  it('orders phases STATUS_TICK -> CARD_PLAY -> DAMAGE/HEAL -> DEFEAT -> RESOLVE', () => {
+    const result = evaluateCombatSubTick({
+      combatId: 'combat_phase_order',
+      combatTick: 7,
+      playerActorId: 'actor_a',
+      npcActorId: 'npc_target',
+      actors: [
+        { actorId: 'actor_a', hp: 100 },
+        { actorId: 'npc_target', hp: 18 },
+      ],
+      statuses: [{ targetActorId: 'npc_target', statusId: 'burn', remainingTicks: 2, potency: 2 }],
+      pendingCommands: [
+        cardPlay({
+          commandId: 'cmd_fire',
+          actorId: 'actor_a',
+          cardClass: 'FIRE_LASH',
+          targetActorId: 'npc_target',
+          combatId: 'combat_phase_order',
+          combatTick: 7,
+        }),
+      ],
+    })
+
+    const eventTypes = result.events.map((event) => event.eventType)
+    const statusTickIndex = eventTypes.indexOf('COMBAT_STATUS_TICK')
+    const acceptedIndex = eventTypes.indexOf('COMBAT_CARD_PLAY_ACCEPTED')
+    const damageIndex = eventTypes.indexOf('COMBAT_DAMAGE')
+    const defeatIndex = eventTypes.indexOf('COMBAT_DEFEAT')
+    const resolveIndex = eventTypes.indexOf('COMBAT_RESOLVE')
+
+    expect(statusTickIndex).toBeGreaterThanOrEqual(0)
+    expect(acceptedIndex).toBeGreaterThan(statusTickIndex)
+    expect(damageIndex).toBeGreaterThan(acceptedIndex)
+    expect(defeatIndex).toBeGreaterThan(damageIndex)
+    expect(resolveIndex).toBeGreaterThan(defeatIndex)
+    expect(result.actorHpAfter.npc_target).toBe(0)
+    expect(result.resolved?.outcome).toBe('player_victory')
   })
 })
