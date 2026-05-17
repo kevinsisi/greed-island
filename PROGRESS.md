@@ -32,7 +32,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, GitHub Actions CI/CD, and live smoke for `/healthz version=0.24.20`, tick advancement, and clean recent server logs.
+- Commit `14ebc80 feat(combat): add deterministic sub-tick rule engine` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25992009748` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25992009752` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.20` on two stable reads; health tick advanced `151557 → 151561`.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `151557` to `151561` over 20 seconds; generated at `2026-05-17T13:23:21.444Z` and `2026-05-17T13:23:41.514Z`.
+  - Recent `greed-island-server` logs since deploy: 7 lines checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
 
 ## 2026-05-17 — Version Marker Hotfix
 
