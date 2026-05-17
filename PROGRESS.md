@@ -3,6 +3,27 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Authoritative Character Avatars Archived
+
+### Archived
+
+- Archived completed OpenSpec change `authoritative-character-avatars` to `openspec/changes/archive/2026-05-17-authoritative-character-avatars/`.
+- Merged avatar authority requirements into canonical specs:
+  - `openspec/specs/living-world/spec.md`: renderer-only humanoid avatar animation must not invent NPC position/activity or local wander.
+  - `openspec/specs/npc-humanity-ai-memory/spec.md`: NPC avatar rendering must preserve globally unique server-authoritative presence across Hub, Area, and Building.
+  - `openspec/specs/social-system/spec.md`: player avatar rendering must distinguish social presence/local input visuals from simulation authority.
+- `authoritative-character-avatars` is no longer active; the remaining active OpenSpec change is `combat-phase-c-realtime-subtick`.
+- Version remains `0.24.18`; this is docs/spec-only archive cleanup after the deployed avatar rollout.
+
+### Verification
+
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npx openspec list` — only `combat-phase-c-realtime-subtick` remains active.
+
+### CI / Deploy
+
+- Pending archive commit/push, GitHub Actions CI/CD, and post-deploy health/tick smoke. No runtime behavior change is expected.
+
 ## 2026-05-17 — Authoritative Character Avatars Hub/Building
 
 ### Hub/Building Implemented
