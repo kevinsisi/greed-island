@@ -16,8 +16,8 @@ developer. Keep latest status at the top.
 
 ### Progress
 
-- `authoritative-character-avatars`: `27/28` tasks complete (`0.1`–`4.5`, `5.1`–`5.4`).
-- Remaining task: `5.5` commit/push, wait for CI/CD, confirm deploy, and live-smoke before reporting runtime success.
+- `authoritative-character-avatars`: `28/28` tasks complete.
+- Release follow-through complete for `0.24.18`; next step is future archive cleanup once the change is accepted as complete.
 
 ### Verification
 
@@ -29,8 +29,15 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit/push, GitHub Actions CI/CD, deploy confirmation, and live smoke.
-- Required live smoke after deploy: `/healthz` reports `0.24.18`; tick advances over 10–20 seconds; recent server logs contain no `SQLITE_CONSTRAINT_UNIQUE` and no `[sim] tick failed`; Hub/Area/Building no longer show square player/NPC markers.
+- Commit `d723299 feat(characters): render hub and building avatars` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25988861336` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25988861339` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after deploy:
+  - First public request during restart returned transient `502`; retry after the stack responded succeeded.
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.18` on two stable reads.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `149821` to `149825` over 20 seconds; generated at `2026-05-17T10:57:41.538Z` and `2026-05-17T10:58:01.612Z`.
+  - Recent `greed-island-server` logs since deploy: 8 lines checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
+  - Visual smoke screenshots captured with Playwright show humanoid character markers and no square player/NPC character markers in Hub, Area, and Building scenes: `C:\Users\Kevin\AppData\Local\Temp\gi-hub-avatar-smoke.png`, `C:\Users\Kevin\AppData\Local\Temp\gi-area-avatar-smoke.png`, `C:\Users\Kevin\AppData\Local\Temp\gi-building-avatar-smoke.png`.
 
 ## 2026-05-17 — Runtime Tick Hotfix
 

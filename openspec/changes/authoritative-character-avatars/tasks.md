@@ -46,7 +46,7 @@
 - [x] 5.2 Full `npm test` passes.
 - [x] 5.3 `npm run build` passes; known Vite chunk warning is acceptable.
 - [x] 5.4 Update `PROGRESS.md` with implementation status, verification evidence, CI/CD/deploy state, and remaining blockers.
-- [ ] 5.5 Commit, push, wait for CI/CD, and live-smoke before reporting runtime success.
+- [x] 5.5 Commit, push, wait for CI/CD, and live-smoke before reporting runtime success.
 
 ## Current Progress
 
@@ -55,5 +55,4 @@
 - Slice 2 implementation complete: Area NPC, local player, and peer player visuals now use humanoid avatars while retaining existing authoritative positions and interaction rules.
 - Slice 3 implementation complete: Building local player and occupant NPC visuals now use humanoid avatars while retaining owner affordance, interaction, exit handling, and labels.
 - Slice 4 implementation complete: Hub local player, peer players, and routed travelling NPC visuals now use humanoid avatars without adding fake crowds, fake pedestrians, decorative activity actors, or frontend-invented NPC action.
-- Local verification complete: focused avatar/projection tests, web build, strict OpenSpec validation, full test suite, and full build pass.
-- Remaining work: commit/push, CI/CD wait, deploy confirmation, and live smoke.
+- Release follow-through complete: commit pushed, CI/CD passed, deploy completed, and live smoke confirmed `0.24.18`, tick advancement, clean recent logs, and Hub/Area/Building humanoid avatar rendering.
