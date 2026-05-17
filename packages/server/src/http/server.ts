@@ -36,6 +36,7 @@ import { SqliteEventStore } from '../kernel/eventStore.js'
 import { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import { createLivingWorldRouter } from './livingWorldRouter.js'
+import { CombatStore } from '../combat/combatStore.js'
 
 // Owner emails always promoted to admin on boot. Hardcoded so a fresh
 // deploy gives the project owner GM access without env-var hand-holding.
@@ -75,7 +76,10 @@ export function createHttpApp(options: HttpAppOptions): Express {
   // Living World v0.10.0：Buildings + AmbientNarrator (jobs store comes
   // first so the card router can read player energy via jobs.getWallet())
   const jobsStore = new PlayerJobsStore(options.db)
+  options.runtime.attachPlayerJobsStore(jobsStore)
   options.runtime.attachAmbientNarrator(settingsStore)
+  const combatStore = new CombatStore(options.db)
+  options.runtime.attachCombatStore(combatStore)
 
   const cardCatalog = options.runtime.getCardCatalog()
   const cardWorldStore = new CardWorldStore(options.db, cardCatalog)
@@ -223,7 +227,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
   app.use(
     '/api',
     createCombatRouter({
-      db: options.db,
+      store: combatStore,
       runtime: options.runtime,
       jobs: jobsStore,
       social: socialStore,

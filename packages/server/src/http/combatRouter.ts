@@ -22,10 +22,6 @@ import type { SimulationRuntime } from '../sim/runtime.js'
 import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import type { SocialStore } from './socialStore.js'
 import { CombatStore } from '../combat/combatStore.js'
-import {
-  evaluateCombatRound,
-  type CombatActorTraits,
-} from '../combat/ruleEngine.js'
 import { COMBAT_INITIAL_HP, COMBAT_NPC_INCAP_TICKS } from '../combat/commands.js'
 import {
   makeLivingWorldCommand,
@@ -34,7 +30,7 @@ import {
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 
 export function createCombatRouter(input: {
-  db: import('better-sqlite3').Database
+  store: CombatStore
   runtime: SimulationRuntime
   jobs: PlayerJobsStore
   social: SocialStore
@@ -42,7 +38,7 @@ export function createCombatRouter(input: {
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
-  const store = new CombatStore(input.db)
+  const store = input.store
 
   router.get('/combat/active', auth, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
@@ -127,16 +123,6 @@ export function createCombatRouter(input: {
     }
 
     const combatId = `combat_${currentTick}_${accountId}_${targetNpcId}_${hashCanonicalJson({ accountId, targetNpcId, currentTick }).slice(0, 8)}`
-    const session = store.createSession({
-      combatId,
-      playerAccountId: accountId,
-      npcId: targetNpcId,
-      tileId: playerLoc.tile_id,
-      startedTick: currentTick,
-      playerHp: COMBAT_INITIAL_HP,
-      npcHp: COMBAT_INITIAL_HP,
-    })
-
     const narration = `${npcSummary.name.zh ?? targetNpcId} 對玩家 #${accountId} 起手。`
     const command = makeLivingWorldCommand(
       'COMBAT_INITIATE',
@@ -155,21 +141,18 @@ export function createCombatRouter(input: {
         narration,
       }
     )
-    input.runtime.submitLivingWorldCommand(command)
 
-    store.appendLog({
-      combatId,
-      tick: currentTick,
-      combatRound: 0,
-      eventType: 'COMBAT_INITIATE',
-      payload: {
-        playerAccountId: accountId,
-        npcId: targetNpcId,
-        tile: playerLoc.tile_id,
-        playerHp: COMBAT_INITIAL_HP,
-        npcHp: COMBAT_INITIAL_HP,
-      },
-    })
+    const committed = input.runtime.submitLivingWorldCommand(command)
+    if (!committed) {
+      res.status(500).json({ error: 'COMBAT_INITIATE_REJECTED' })
+      return
+    }
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(500).json({ error: 'COMBAT_PROJECTION_MISSING' })
+      return
+    }
 
     res.json({ session: toClientSession(session), log: store.listLog(combatId) })
   })
@@ -211,118 +194,20 @@ export function createCombatRouter(input: {
       return
     }
 
-    const playerHealth = 80 // 玩家固定值（沒有 mood/health 系統就先用 80）
-    const npcHealth = Math.max(20, Math.min(100, npcSummary.health ?? 80))
-
-    const playerTraits: CombatActorTraits & { actorId: string } = {
-      actorId: String(accountId),
-      // patience/greed 給玩家固定中性值；之後若導入 player profile 可改
-      patience: 0.5,
-      greed: 0.5,
-      health: playerHealth,
-    }
-    const npcTraits: CombatActorTraits & { actorId: string } = {
-      actorId: session.npc_id,
-      patience: parseTrait(profile.personality.patience),
-      greed: parseTrait(profile.personality.greed),
-      health: npcHealth,
-    }
-
-    const nextRound = session.combat_round + 1
     const cardIdInput = typeof body.cardId === 'number' ? body.cardId : undefined
 
-    const result = evaluateCombatRound({
+    const submitted = input.runtime.submitCombatRoundAction({
+      accountId,
       combatId,
-      combatRound: nextRound,
-      playerHp: session.player_hp,
-      npcHp: session.npc_hp,
-      playerAction: action,
-      ...(cardIdInput !== undefined ? { playerCardId: cardIdInput } : {}),
-      player: playerTraits,
-      npc: npcTraits,
+      action,
+      ...(cardIdInput !== undefined ? { cardId: cardIdInput } : {}),
     })
-
-    const currentTick = input.runtime.getCurrentTick()
-
-    // Append log + EventLog event for each rule engine output
-    for (const ev of result.events) {
-      store.appendLog({
-        combatId,
-        tick: currentTick,
-        combatRound: nextRound,
-        eventType: ev.eventType,
-        payload: ev.payload,
-      })
+    if (!submitted) {
+      res.status(500).json({ error: 'COMBAT_ACTION_REJECTED' })
+      return
     }
 
-    // 1) Submit COMBAT_PLAYER_ACTION via LivingWorld pipeline (architecture compliance)
-    const playerActionNarration = `玩家選擇 ${action}（回合 ${nextRound}）。`
-    const playerCmd = makeLivingWorldCommand(
-      'COMBAT_PLAYER_ACTION',
-      String(accountId),
-      'player' as LivingWorldActorType,
-      currentTick,
-      Date.now(),
-      {
-        combatId,
-        playerAccountId: String(accountId),
-        npcId: session.npc_id,
-        combatRound: nextRound,
-        action,
-        ...(cardIdInput !== undefined ? { cardId: cardIdInput } : {}),
-        narration: playerActionNarration,
-      }
-    )
-    input.runtime.submitLivingWorldCommand(playerCmd)
-
-    // 2) Update session state
-    const resolvedTick = result.resolved ? currentTick : null
-    const updatedSession = store.updateAfterRound({
-      combatId,
-      nextRound,
-      playerHp: result.playerHpAfter,
-      npcHp: result.npcHpAfter,
-      resolved: result.resolved
-        ? { outcome: result.resolved.outcome, tick: currentTick }
-        : null,
-    })
-
-    // 3) If resolved, emit COMBAT_RESOLVE LivingWorld command + side-effects
-    if (result.resolved) {
-      const resolveNarration = `戰鬥結束：${result.resolved.outcome}（${nextRound} 回合）。`
-      const resolveCmd = makeLivingWorldCommand(
-        'COMBAT_RESOLVE',
-        String(accountId),
-        'player' as LivingWorldActorType,
-        currentTick,
-        Date.now(),
-        {
-          combatId,
-          playerAccountId: String(accountId),
-          npcId: session.npc_id,
-          outcome: result.resolved.outcome,
-          durationRounds: nextRound,
-          finalPlayerHp: result.playerHpAfter,
-          finalNpcHp: result.npcHpAfter,
-          playerEnergyToZero: result.resolved.playerEnergyToZero,
-          npcIncapacitatedTicks: result.resolved.npcIncapacitatedTicks,
-          narration: resolveNarration,
-        }
-      )
-      input.runtime.submitLivingWorldCommand(resolveCmd)
-
-      // 玩家敗北 → energy=0
-      if (result.resolved.playerEnergyToZero) {
-        input.jobs.setEnergy(accountId, 0)
-      }
-      // NPC 敗北 → 倒地 incap N ticks
-      if (result.resolved.npcIncapacitatedTicks > 0) {
-        store.incapacitateNpc(
-          session.npc_id,
-          currentTick + result.resolved.npcIncapacitatedTicks
-        )
-      }
-    }
+    const { result, session: updatedSession } = submitted
 
     res.json({
       session: toClientSession(updatedSession),
@@ -351,9 +236,4 @@ function toClientSession(s: import('../combat/combatStore.js').CombatSessionRow)
     initialHp: COMBAT_INITIAL_HP,
     npcIncapTicks: COMBAT_NPC_INCAP_TICKS,
   }
-}
-
-function parseTrait(v: number | string | undefined): number {
-  if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, Math.min(1, v))
-  return 0.5
 }

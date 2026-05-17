@@ -23,10 +23,10 @@
 
 ## 3. Slice 3 — EventLog integration + CombatStore as projection (§11.4 closure)
 
-- [ ] 3.1 Refactor `packages/server/src/combat/combatStore.ts` — remove all write paths except reducer; `CombatStore` exposes read-only queries
+- [x] 3.1 Refactored `packages/server/src/combat/combatStore.ts` into a committed-EventLog projection: removed public `createSession`, `updateAfterRound`, `appendLog`, and `incapacitateNpc` write paths; `CombatStore` now exposes read queries plus reducer entrypoints `projectEvent()` / `rebuildFromEvents()`; new legacy `combat_log` rows are deterministic projection rows, while boot preserves existing legacy projection rows when historical Phase B EventLog actions lack full result snapshots. Shipped in v0.24.22.
 - [ ] 3.2 Add combat-event reducers to `packages/server/src/kernel/reducer.ts` (one case per new event type from 2.3)
 - [ ] 3.3 Extend `packages/server/src/kernel/livingWorldCommands.ts` to fan combat commands into the new ruleEngine
-- [ ] 3.4 Verify HTTP handlers no longer write to `CombatStore` directly; only via reducer
+- [x] 3.4 Verified HTTP handlers no longer write to `CombatStore` directly: `combatRouter` submits living-world commands, then reads the committed projection; focused static coverage blocks direct calls to removed write methods. Shipped in v0.24.22.
 - [ ] 3.5 Tests: replay identical EventLog twice → byte-identical `CombatStore` state; boot-time rehydrate from EventLog; HTTP-handler-no-direct-write static check; legacy `card_action_log` rows derivable from canonical EventLog
 
 ## 4. Slice 4 — SSE projection + new HTTP endpoints + client prediction

@@ -61,6 +61,7 @@ import {
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
+import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import {
   detectSettlementFormation,
   type CopresenceHistoryRow,
@@ -86,6 +87,13 @@ import { CombatRuntime, computeUnresolvedCombats } from '../combat/runtime.js'
 import {
   CombatSubTickCoordinator,
 } from '../combat/subTickCoordinator.js'
+import type { CombatSessionRow, CombatStore } from '../combat/combatStore.js'
+import type { CombatPlayerActionKind } from '../combat/commands.js'
+import {
+  evaluateCombatRound,
+  type CombatActorTraits,
+  type CombatRoundResult,
+} from '../combat/ruleEngine.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -182,6 +190,10 @@ const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 const COMBAT_BOOT_EVENT_TYPES = [
   'COMBAT_INITIATE',
+  'COMBAT_PLAYER_ACTION',
+  'COMBAT_DEFEND',
+  'COMBAT_FLEE',
+  'COMBAT_CARD_IGNORED',
   'COMBAT_CARD_PLAY',
   'COMBAT_STATUS_TICK',
   'COMBAT_STATUS_END',
@@ -197,6 +209,11 @@ const COMBAT_BOOT_EVENT_TYPES = [
   'COMBAT_DEFEAT',
   'COMBAT_RESOLVE',
 ] as const
+const COMBAT_RULE_ENGINE_OWNED_COMMANDS = new Set<string>([
+  'COMBAT_PLAYER_ACTION',
+  'COMBAT_RESOLVE',
+])
+const PLAYER_JOBS_BOOT_EVENT_TYPES = ['PLAYER_ENERGY_SET'] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -343,6 +360,8 @@ export class SimulationRuntime {
   // commands, commits one EventLog transaction, then fans out events.
   private readonly combatRuntime: CombatRuntime
   private readonly combatSubTicks = new CombatSubTickCoordinator()
+  private combatStore: CombatStore | null = null
+  private playerJobsStore: PlayerJobsStore | null = null
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -479,13 +498,142 @@ export class SimulationRuntime {
   }
 
   stop(): void {
-    if (this.timer === null) return
-    clearInterval(this.timer)
-    this.timer = null
+    if (this.timer !== null) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
     // Combat Phase C Slice 1 — clear every per-combat sub-tick interval
     // when the world tick stops, so test teardown and production
     // shutdown both leave no orphaned timers behind.
     this.combatRuntime.shutdownAll()
+  }
+
+  attachCombatStore(store: CombatStore): void {
+    this.combatStore = store
+    const combatEvents = this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES)
+    if (
+      this.combatStore.hasProjectionRows() &&
+      (this.store.countEvents() > BOOT_PROJECTION_REBUILD_EVENT_LIMIT ||
+        !this.combatStore.canSafelyRebuildFromEvents(combatEvents))
+    ) {
+      console.warn('[boot] kept existing CombatStore projection; historical EventLog lacks full Phase B action snapshots')
+      return
+    }
+    this.combatStore.rebuildFromEvents(combatEvents)
+  }
+
+  attachPlayerJobsStore(store: PlayerJobsStore): void {
+    this.playerJobsStore = store
+    for (const event of this.store.readEventsByTypes(PLAYER_JOBS_BOOT_EVENT_TYPES)) {
+      this.playerJobsStore.projectEvent(event)
+    }
+  }
+
+  submitCombatRoundAction(input: {
+    accountId: number
+    combatId: string
+    action: CombatPlayerActionKind
+    cardId?: number
+  }): { result: CombatRoundResult; session: CombatSessionRow } | null {
+    const combatStore = this.combatStore
+    if (!combatStore) return null
+    const session = combatStore.getSession(input.combatId)
+    if (!session || session.player_account_id !== input.accountId || session.state !== 'active') return null
+
+    const profile = this.findProfile(session.npc_id)
+    const npcSummary = this.getNpcs().find((npc) => npc.id === session.npc_id)
+    if (!profile || !npcSummary) return null
+
+    const playerTraits: CombatActorTraits & { actorId: string } = {
+      actorId: String(input.accountId),
+      patience: 0.5,
+      greed: 0.5,
+      health: 80,
+    }
+    const npcTraits: CombatActorTraits & { actorId: string } = {
+      actorId: session.npc_id,
+      patience: parseCombatTrait(profile.personality.patience),
+      greed: parseCombatTrait(profile.personality.greed),
+      health: Math.max(20, Math.min(100, npcSummary.health ?? 80)),
+    }
+
+    const currentTick = this.getCurrentTick()
+    const nextRound = session.combat_round + 1
+    const result = evaluateCombatRound({
+      combatId: input.combatId,
+      combatRound: nextRound,
+      playerHp: session.player_hp,
+      npcHp: session.npc_hp,
+      playerAction: input.action,
+      ...(input.cardId !== undefined ? { playerCardId: input.cardId } : {}),
+      player: playerTraits,
+      npc: npcTraits,
+    })
+
+    const playerEvent = this.commitLivingWorldCommand(makeLivingWorldCommand(
+      'COMBAT_PLAYER_ACTION',
+      String(input.accountId),
+      'player',
+      currentTick,
+      Date.now(),
+      {
+        combatId: input.combatId,
+        playerAccountId: String(input.accountId),
+        npcId: session.npc_id,
+        combatRound: nextRound,
+        action: input.action,
+        ...(input.cardId !== undefined ? { cardId: input.cardId } : {}),
+        playerHpAfter: result.playerHpAfter,
+        npcHpAfter: result.npcHpAfter,
+        events: result.events,
+        narration: `玩家選擇 ${input.action}（回合 ${nextRound}）。`,
+      }
+    ))
+    if (!playerEvent) return null
+
+    if (result.resolved) {
+      const resolveEvent = this.commitLivingWorldCommand(makeLivingWorldCommand(
+        'COMBAT_RESOLVE',
+        String(input.accountId),
+        'player',
+        currentTick,
+        Date.now(),
+        {
+          combatId: input.combatId,
+          playerAccountId: String(input.accountId),
+          npcId: session.npc_id,
+          outcome: result.resolved.outcome,
+          durationRounds: nextRound,
+          finalPlayerHp: result.playerHpAfter,
+          finalNpcHp: result.npcHpAfter,
+          playerEnergyToZero: result.resolved.playerEnergyToZero,
+          npcIncapacitatedTicks: result.resolved.npcIncapacitatedTicks,
+          narration: `戰鬥結束：${result.resolved.outcome}（${nextRound} 回合）。`,
+        }
+      ))
+      if (!resolveEvent) return null
+
+      if (result.resolved.playerEnergyToZero) {
+        const energyEvent = this.commitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_ENERGY_SET',
+          String(input.accountId),
+          'player',
+          currentTick,
+          Date.now(),
+          {
+            playerAccountId: String(input.accountId),
+            energy: 0,
+            reason: 'combat_defeat',
+            sourceCombatId: input.combatId,
+            narration: '玩家戰鬥敗北，體力歸零。',
+          }
+        ))
+        if (!energyEvent) return null
+      }
+    }
+
+    const updatedSession = combatStore.getSession(input.combatId)
+    return updatedSession ? { result, session: updatedSession } : null
   }
 
   subscribe(listener: Listener): () => void {
@@ -974,8 +1122,20 @@ export class SimulationRuntime {
    *   - intentClass 必須在進這個 method 之前由 caller 決定（可由 AI 預先分類，
    *     但 AI 不直接寫 EventLog）
    *   - Rule Engine 在這層驗證命令格式、產生 deterministic event id
+   *   - Phase B combat outcome commands must enter through submitCombatRoundAction(),
+   *     where the combat rule engine computes the result snapshot before commit.
    */
   submitLivingWorldCommand(command: LivingWorldCommand): Event | null {
+    if (COMBAT_RULE_ENGINE_OWNED_COMMANDS.has(command.commandType)) {
+      console.warn(
+        `[runtime] rejected direct ${command.commandType}; use submitCombatRoundAction()`
+      )
+      return null
+    }
+    return this.commitLivingWorldCommand(command)
+  }
+
+  private commitLivingWorldCommand(command: LivingWorldCommand): Event | null {
     const result = this.livingWorldRuleEngine.evaluate(command)
     if (!result.accepted) {
       console.warn(
@@ -1018,6 +1178,8 @@ export class SimulationRuntime {
   ): void {
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
     for (const ev of committed) {
+      this.combatStore?.projectEvent(ev)
+      this.playerJobsStore?.projectEvent(ev)
       if (projectCombatSubTicks) this.combatSubTicks.projectEvent(ev)
       // Combat Phase C — spawn / terminate the per-combat sub-tick
       // loop in lock-step with COMBAT_INITIATE / _RESOLVE / _DEFEAT
@@ -3724,6 +3886,15 @@ function readCombatIdFromEvent(event: Event): string | null {
     return data.combatId
   }
   return null
+}
+
+function parseCombatTrait(value: number | string | undefined): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.min(1, value))
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return Math.max(0, Math.min(1, parsed))
+  }
+  return 0.5
 }
 
 function pickFromCycle<T>(values: readonly T[], step: number): T {

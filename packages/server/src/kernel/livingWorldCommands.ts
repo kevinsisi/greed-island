@@ -61,6 +61,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
   'PLAYER_INTERVENE',
+  'PLAYER_ENERGY_SET',
   'NPC_DIALOG_HOLD',
   // v0.15.0 — Combat Phase B (single-shot judgement)
   'COMBAT_INITIATE',
@@ -471,6 +472,14 @@ export type PlayerIntervenecmd = Readonly<{
   narration: string
 }>
 
+export type PlayerEnergySetCmd = Readonly<{
+  playerAccountId: string
+  energy: number
+  reason: 'combat_defeat'
+  sourceCombatId?: string
+  narration: string
+}>
+
 export type NpcDialogHoldCmd = Readonly<{
   playerAccountId: string
   npcId: string
@@ -499,6 +508,13 @@ export type CombatPlayerActionCmd = Readonly<{
   action: 'attack' | 'defend' | 'flee'
   /** Phase B 預留紋卡欄位；rule engine 看到時寫 COMBAT_CARD_IGNORED warning */
   cardId?: number
+  /** Phase B projection snapshot emitted by the combat rule engine. */
+  playerHpAfter: number
+  npcHpAfter: number
+  events: readonly Readonly<{
+    eventType: string
+    payload: Readonly<Record<string, unknown>>
+  }>[]
   narration: string
 }>
 
@@ -959,6 +975,7 @@ export type LivingWorldCommandPayload =
   | RareWindowCloseCmd
   | WorldTickCmd
   | PlayerIntervenecmd
+  | PlayerEnergySetCmd
   | NpcDialogHoldCmd
   | CombatInitiateCmd
   | CombatPlayerActionCmd
@@ -1296,6 +1313,9 @@ const VALIDATORS: Readonly<
     if (typeof p.combatRound !== 'number' || p.combatRound < 0) return 'combatRound required'
     if (p.action !== 'attack' && p.action !== 'defend' && p.action !== 'flee') return 'invalid action'
     if (typeof p.cardId !== 'undefined' && typeof p.cardId !== 'number') return 'cardId must be number or unset'
+    if (typeof p.playerHpAfter !== 'number' || !Number.isFinite(p.playerHpAfter)) return 'playerHpAfter required'
+    if (typeof p.npcHpAfter !== 'number' || !Number.isFinite(p.npcHpAfter)) return 'npcHpAfter required'
+    if (!Array.isArray(p.events)) return 'events required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -1347,6 +1367,19 @@ const VALIDATORS: Readonly<
       return 'intentClass must be mediate / provoke / watch / threaten'
     }
     if (typeof p.message !== 'string') return 'message required (can be empty string)'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  PLAYER_ENERGY_SET: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) {
+      return 'playerAccountId required'
+    }
+    if (typeof p.energy !== 'number' || !Number.isFinite(p.energy)) return 'energy required'
+    if (p.reason !== 'combat_defeat') return 'invalid reason'
+    if (typeof p.sourceCombatId !== 'undefined' && typeof p.sourceCombatId !== 'string') {
+      return 'sourceCombatId must be string or unset'
+    }
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

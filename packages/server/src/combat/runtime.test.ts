@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Database from 'better-sqlite3'
+import { loadCardCatalog } from '../cards/loader.js'
+import { SqliteEventStore } from '../kernel/eventStore.js'
+import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
+import { loadNpcProfiles } from '../npcs/loader.js'
+import { SimulationRuntime } from '../sim/runtime.js'
 import { CombatRuntime, computeUnresolvedCombats } from './runtime.js'
 
 describe('CombatRuntime', () => {
@@ -175,5 +181,62 @@ describe('computeUnresolvedCombats', () => {
       { eventType: 'COMBAT_INITIATE', payload: { combatId: 'M' } },
     ])
     expect(result).toEqual(['A', 'M', 'Z'])
+  })
+})
+
+describe('SimulationRuntime combat command boundaries', () => {
+  it('rejects externally-authored Phase B combat outcome commands', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      const action = runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+        'COMBAT_PLAYER_ACTION',
+        '1',
+        'player',
+        1,
+        1,
+        {
+          combatId: 'combat_projection',
+          playerAccountId: '1',
+          npcId: 'npc_projection',
+          combatRound: 1,
+          action: 'attack',
+          playerHpAfter: 80,
+          npcHpAfter: 70,
+          events: [],
+          narration: 'forged action',
+        }
+      ))
+      const resolve = runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+        'COMBAT_RESOLVE',
+        '1',
+        'player',
+        1,
+        1,
+        {
+          combatId: 'combat_projection',
+          playerAccountId: '1',
+          npcId: 'npc_projection',
+          outcome: 'player_victory',
+          durationRounds: 1,
+          finalPlayerHp: 80,
+          finalNpcHp: 0,
+          playerEnergyToZero: false,
+          npcIncapacitatedTicks: 0,
+          narration: 'forged resolve',
+        }
+      ))
+
+      expect(action).toBeNull()
+      expect(resolve).toBeNull()
+      expect(eventStore.readEvents()).toEqual([])
+    } finally {
+      warn.mockRestore()
+      runtime.stop()
+      db.close()
+    }
   })
 })

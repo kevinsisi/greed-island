@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — CombatStore EventLog Projection
+
+### Slice Implemented
+
+- Version bumped to `0.24.22` so `/healthz` can visibly prove the CombatStore projection deploy.
+- Refactored `CombatStore` into a committed-EventLog projection: removed public direct write paths (`createSession`, `updateAfterRound`, `appendLog`, `incapacitateNpc`) and kept read queries plus `projectEvent()` / `rebuildFromEvents()` reducer entrypoints.
+- `SimulationRuntime` now owns the Phase B `/combat/:id/action` compatibility helper: it computes `evaluateCombatRound()` inside runtime, commits `COMBAT_PLAYER_ACTION` / `COMBAT_RESOLVE`, and fans committed events into `CombatStore` projection.
+- HTTP combat handlers now share the runtime-attached `CombatStore`, submit commands, and read the committed projection; static coverage blocks direct write-method regressions and HTTP-side outcome authoring.
+- Boot replay rebuilds `CombatStore` from combat EventLog events when safe, but preserves existing legacy `combat_sessions` / `combat_log` projection rows when historical Phase B action events lack full result snapshots.
+- `COMBAT_DAMAGE`, `COMBAT_HEAL`, and standalone `COMBAT_DEFEAT` projection branches are idempotent under duplicate committed-event fanout; standalone defeat now records the correct world `resolved_tick` and outcome.
+- Player defeat energy-to-zero is now authored as a committed `PLAYER_ENERGY_SET` event and projected by `PlayerJobsStore`, rather than direct HTTP mutation.
+
+### Progress
+
+- `combat-phase-c-realtime-subtick`: `15/39` tasks complete; completed Slice 3 tasks `3.1` and `3.4`. Remaining Slice 3 work is `3.2`, `3.3`, and the still-open `3.5` legacy `card_action_log` derivability coverage.
+
+### Verification
+
+- Focused projection/boundary tests: `npm --workspace packages/server exec vitest run src/sim/runtimeCombatStoreProjection.test.ts src/buildings/playerJobsStore.test.ts src/combat/combatStore.test.ts src/combat/runtime.test.ts src/kernel/livingWorld.test.ts` — **72 tests passed**.
+- Server build/typecheck: `npm run build:server` — clean.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npm test` — **570 server + 75 web = 645 tests passed**.
+- `npm run build` — server build and web production bundle completed; known Vite chunk-size warning remains.
+- `git diff --check` — clean; Windows CRLF warnings only.
+- `npx openspec list` — `combat-phase-c-realtime-subtick 15/39 tasks` remains the only active change.
+- Separate read-only reviewer gate — first pass found `COMBAT_DEFEAT` resolved tick/outcome plus defeat-energy side-effect risks; fixes were applied; final pass returned **No findings**. A residual boot-preservation gap called out by review is now covered by `runtimeCombatStoreProjection.test.ts`.
+
+### CI / Deploy
+
+- Pending commit/push/CI/CD. Live deployment remains `0.24.21` until the v0.24.22 commit is pushed and the dev deploy completes.
+
 ## 2026-05-17 — Combat Phase C Live Sub-Tick Wiring
 
 ### Slice Implemented

@@ -3,6 +3,7 @@
 import type Database from 'better-sqlite3'
 import type { PlayerJobRecord, Shift } from './types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR } from '../config/world.js'
+import type { Event } from '../kernel/types.js'
 
 type DatabaseConnection = Database.Database
 
@@ -101,15 +102,16 @@ export class PlayerJobsStore {
   }
 
   setEnergy(accountId: number, energy: number): WalletRecord {
-    const current = this.getWallet(accountId)
-    const clamped = Math.max(ENERGY_MIN, Math.min(ENERGY_MAX, Math.floor(energy)))
-    const updatedAt = Date.now()
-    this.db
-      .prepare(
-        'UPDATE player_wallet SET energy = ?, updated_at = ? WHERE account_id = ?'
-      )
-      .run(clamped, updatedAt, accountId)
-    return { ...current, energy: clamped, updatedAt }
+    return this.setEnergyAt(accountId, energy, Date.now())
+  }
+
+  projectEvent(event: Event): void {
+    if (event.eventType !== 'PLAYER_ENERGY_SET') return
+    const payload = readLivingPayload(event.payload)
+    const accountId = readAccountId(payload, 'playerAccountId')
+    const energy = readNumber(payload, 'energy')
+    if (accountId === null || energy === null) return
+    this.setEnergyAt(accountId, energy, event.occurredAt, { skipIfCurrentNewer: true })
   }
 
   addEnergy(accountId: number, delta: number): WalletRecord {
@@ -210,6 +212,58 @@ export class PlayerJobsStore {
       lastShiftTick: input.tick
     }
   }
+
+  private setEnergyAt(
+    accountId: number,
+    energy: number,
+    updatedAt: number,
+    options: { skipIfCurrentNewer?: boolean } = {},
+  ): WalletRecord {
+    const clamped = Math.max(ENERGY_MIN, Math.min(ENERGY_MAX, Math.floor(energy)))
+    const current = this.db
+      .prepare('SELECT * FROM player_wallet WHERE account_id = ?')
+      .get(accountId) as WalletRow | undefined
+    if (current && options.skipIfCurrentNewer && current.updated_at > updatedAt) {
+      return toWalletRecord(current)
+    }
+    if (!current) {
+      this.db
+        .prepare(
+          'INSERT INTO player_wallet (account_id, gold, energy, updated_at) VALUES (?, 0, ?, ?)'
+        )
+        .run(accountId, clamped, updatedAt)
+      return { accountId, gold: 0, energy: clamped, updatedAt }
+    }
+    this.db
+      .prepare(
+        'UPDATE player_wallet SET energy = ?, updated_at = ? WHERE account_id = ?'
+      )
+      .run(clamped, updatedAt, accountId)
+    return { ...toWalletRecord(current), energy: clamped, updatedAt }
+  }
+}
+
+function readLivingPayload(payload: unknown): Readonly<Record<string, unknown>> {
+  if (!isRecord(payload)) return {}
+  if (isRecord(payload.data)) return payload.data
+  return payload
+}
+
+function readAccountId(payload: Readonly<Record<string, unknown>>, key: string): number | null {
+  const value = payload[key]
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value
+  if (typeof value !== 'string' || value.length === 0) return null
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function readNumber(payload: Readonly<Record<string, unknown>>, key: string): number | null {
+  const value = payload[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function toWalletRecord(row: WalletRow): WalletRecord {
