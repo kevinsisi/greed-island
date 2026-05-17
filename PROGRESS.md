@@ -3,6 +3,24 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Version Marker Hotfix
+
+### Hotfix Implemented
+
+- Version bumped to `0.24.19` as a release marker after the avatar OpenSpec archive deploy.
+- Reason: the archive step was treated as docs/spec-only, so `packages/server/src/version.ts` stayed at `0.24.18` even though the archive commits deployed successfully. `/healthz` reads `APP_VERSION`, so the live site still showed `0.24.18` after the archive stage.
+- No runtime behavior changes beyond the visible version marker.
+
+### Verification
+
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npm run build:server` — clean.
+- `npm run build -w @greed-island/web` — clean; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit/push, CI/CD, and live `/healthz` confirmation for `0.24.19`.
+
 ## 2026-05-17 — Authoritative Character Avatars Archived
 
 ### Archived
@@ -13,7 +31,7 @@ developer. Keep latest status at the top.
   - `openspec/specs/npc-humanity-ai-memory/spec.md`: NPC avatar rendering must preserve globally unique server-authoritative presence across Hub, Area, and Building.
   - `openspec/specs/social-system/spec.md`: player avatar rendering must distinguish social presence/local input visuals from simulation authority.
 - `authoritative-character-avatars` is no longer active; the remaining active OpenSpec change is `combat-phase-c-realtime-subtick`.
-- Version remains `0.24.18`; this is docs/spec-only archive cleanup after the deployed avatar rollout.
+- Archive cleanup itself shipped as docs/spec-only after the deployed avatar rollout; a follow-up version marker hotfix bumps `/healthz` to `0.24.19` so the live release is visibly distinct.
 
 ### Verification
 
