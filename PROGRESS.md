@@ -32,7 +32,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit, push, GitHub Actions CI/CD, and live smoke for `/healthz version=0.24.21`, tick advancement, and clean recent server logs.
+- Commit `b1567c3 feat(combat): wire live sub-tick coordinator` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25993027804` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25993027798` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.21`; health tick advanced `152115 → 152119`.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `152115` to `152119` over 20 seconds; generated at `2026-05-17T14:10:13.425Z` and `2026-05-17T14:10:33.515Z`.
+  - Recent `greed-island-server` logs since deploy: 1 line checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
 
 ## 2026-05-17 — Combat Phase C Sub-Tick Rule Engine
 
