@@ -83,6 +83,9 @@ import {
 } from '../ecosystem/defenseParty.js'
 import { computeActiveTiles, tileShouldRunEcology } from './tileActivation.js'
 import { CombatRuntime, computeUnresolvedCombats } from '../combat/runtime.js'
+import {
+  CombatSubTickCoordinator,
+} from '../combat/subTickCoordinator.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planFisheryHarvest } from '../ecosystem/fishery.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
@@ -177,6 +180,23 @@ const SEASON_CADENCE_TICKS = TICKS_PER_HOUR
 const RARE_WINDOW_PERIOD_TICKS = TICKS_PER_MINUTE * 10
 const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
+const COMBAT_BOOT_EVENT_TYPES = [
+  'COMBAT_INITIATE',
+  'COMBAT_CARD_PLAY',
+  'COMBAT_STATUS_TICK',
+  'COMBAT_STATUS_END',
+  'COMBAT_CARD_PLAY_ACCEPTED',
+  'COMBAT_CARD_PLAY_REJECTED',
+  'COMBAT_DAMAGE',
+  'COMBAT_HEAL',
+  'COMBAT_STATUS_APPLY',
+  'COMBAT_TARGET_LOCK',
+  'COMBAT_TARGET_LOCK_FAIL',
+  'COMBAT_PHASE_SHIFT',
+  'COMBAT_FLEE_ATTEMPT',
+  'COMBAT_DEFEAT',
+  'COMBAT_RESOLVE',
+] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -317,11 +337,12 @@ export class SimulationRuntime {
   // projection of EventLog).
   private readonly settlementsProjection = new SettlementsProjection()
   private settlementCopresenceHistory: ReadonlyMap<string, CopresenceHistoryRow> = new Map()
-  // Combat Phase C Slice 1 — sub-tick loop infrastructure. Spawns a
+  // Combat Phase C — sub-tick loop + pending command coordinator. Spawns a
   // per-combat setInterval on committed COMBAT_INITIATE; terminates on
-  // COMBAT_RESOLVE / COMBAT_DEFEAT. Slice 1's onTick callback is a
-  // no-op; Slice 2 will plug in the 5-phase rule engine.
-  private readonly combatRuntime = new CombatRuntime()
+  // COMBAT_RESOLVE / COMBAT_DEFEAT. The onTick path drains queued card
+  // commands, commits one EventLog transaction, then fans out events.
+  private readonly combatRuntime: CombatRuntime
+  private readonly combatSubTicks = new CombatSubTickCoordinator()
   private readonly eventEngine = new WorldEventEngine()
   private readonly npcEngine: NpcEngine
   private readonly areaEngine: AreaStateEngine
@@ -354,6 +375,9 @@ export class SimulationRuntime {
     private readonly cards: CardCatalog,
     private readonly tickDurationMs: number = TICK_DURATION_MS
   ) {
+    this.combatRuntime = new CombatRuntime({
+      onTick: (input) => this.processCombatSubTick(input),
+    })
     this.npcEngine = new NpcEngine(profiles)
     this.areaEngine = new AreaStateEngine(MAP_TILES.map((t) => t.id))
     this.buildingRuntime = new BuildingRuntime()
@@ -965,11 +989,40 @@ export class SimulationRuntime {
     const last = committed[committed.length - 1]!
     this.lastSequence = last.sequence
     this.eventCount += committed.length
+    this.publishCommittedEvents(committed)
+    return committed[0] ?? null
+  }
+
+  private processCombatSubTick(input: { combatId: string; combatTick: number }): void {
+    this.combatSubTicks.processTick({
+      combatId: input.combatId,
+      combatTick: input.combatTick,
+      tick: this.currentTick,
+      occurredAt: Date.now(),
+      commit: (drafts) => {
+        const committed = this.store.appendEvents(drafts)
+        if (committed.length > 0) {
+          const last = committed[committed.length - 1]!
+          this.lastSequence = last.sequence
+          this.eventCount += committed.length
+        }
+        return committed
+      },
+      afterCommit: (events) => this.publishCommittedEvents(events, { projectCombatSubTicks: false }),
+    })
+  }
+
+  private publishCommittedEvents(
+    committed: readonly Event[],
+    options: { projectCombatSubTicks?: boolean } = {}
+  ): void {
+    const projectCombatSubTicks = options.projectCombatSubTicks ?? true
     for (const ev of committed) {
-      // Combat Phase C Slice 1 — spawn / terminate the per-combat
-      // sub-tick loop in lock-step with COMBAT_INITIATE / _RESOLVE /
-      // _DEFEAT commits. The loop callback is a no-op until Slice 2
-      // ships the 5-phase rule engine.
+      if (projectCombatSubTicks) this.combatSubTicks.projectEvent(ev)
+      // Combat Phase C — spawn / terminate the per-combat sub-tick
+      // loop in lock-step with COMBAT_INITIATE / _RESOLVE / _DEFEAT
+      // commits. The loop callback drains the pending card queue and
+      // commits sub-tick events through EventLog before fanout.
       if (
         ev.eventType === 'COMBAT_INITIATE' ||
         ev.eventType === 'COMBAT_RESOLVE' ||
@@ -1009,7 +1062,15 @@ export class SimulationRuntime {
         }
       }
     }
-    return committed[0] ?? null
+  }
+
+  private hydrateCombatRuntimeFromEvents(events: readonly Event[]): void {
+    this.combatSubTicks.rebuildFromEvents(events)
+    for (const combatId of computeUnresolvedCombats(events)) {
+      this.combatRuntime.spawn(combatId, {
+        startAtTick: this.combatSubTicks.resumeTickForCombat(combatId, events),
+      })
+    }
   }
 
   private runTickSafely(): void {
@@ -3568,13 +3629,7 @@ export class SimulationRuntime {
     }
     if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
       const allEvents = this.store.readEvents()
-      // Combat Phase C Slice 1 — re-spawn the sub-tick loop for any
-      // combat that committed COMBAT_INITIATE without a matching
-      // COMBAT_RESOLVE / COMBAT_DEFEAT. Pure helper over the event log;
-      // replay-safe.
-      for (const combatId of computeUnresolvedCombats(allEvents)) {
-        this.combatRuntime.spawn(combatId)
-      }
+      this.hydrateCombatRuntimeFromEvents(allEvents)
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
       this.animalMigrationProjection.rebuildFromEvents(allEvents)
@@ -3589,6 +3644,8 @@ export class SimulationRuntime {
       this.householdEconomyProjection.rebuildFromEvents(allEvents)
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
+    } else {
+      this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state

@@ -174,6 +174,16 @@ export class SqliteEventStore {
     return rows.reverse().map(rowToEvent)
   }
 
+  readEventsByTypes(eventTypes: readonly string[]): Event[] {
+    const types = [...new Set(eventTypes.filter((type) => type.length > 0))]
+    if (types.length === 0) return []
+    const placeholders = types.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(`SELECT * FROM event_log WHERE event_type IN (${placeholders}) ORDER BY sequence ASC`)
+      .all(...types) as EventRow[]
+    return rows.map(rowToEvent)
+  }
+
   readEventsByTickWindow(input: EventTickWindowRead): EventTickWindowResult {
     const eventTypes = [...new Set(input.eventTypes.filter((type) => type.length > 0))]
     if (eventTypes.length === 0) return { events: [], limited: false }

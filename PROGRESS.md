@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Combat Phase C Live Sub-Tick Wiring
+
+### Slice Implemented
+
+- Version bumped to `0.24.21` so `/healthz` can visibly prove the live sub-tick wiring deploy.
+- Added `CombatSubTickCoordinator`, a server-side runtime coordinator for Phase C card sub-ticks.
+- `COMBAT_CARD_PLAY` commands submitted through `SimulationRuntime.submitLivingWorldCommand()` are validated by `LivingWorldRuleEngine`, committed to EventLog, and then projected into the coordinator queue so crash/redeploy replay can recover unresolved plays.
+- `CombatRuntime` now calls the coordinator on each per-combat tick; due queued commands are resolved by `evaluateCombatSubTick()` against the coordinator's minimal EventLog-derived combat projection.
+- Sub-tick outputs are converted into deterministic `EventDraft`s and committed through a single `SqliteEventStore.appendEvents()` call, which is the SQLite transaction boundary for the batch.
+- Runtime projection/listener fanout runs only from the coordinator's `afterCommit` callback, after EventLog commit succeeds. Failed commits keep pending commands queued for retry and skip fanout.
+- Boot hydration rebuilds the coordinator from combat EventLog events before respawning unresolved combat loops at the highest committed resolved combat-local tick.
+- This does not add new HTTP card endpoints yet; Slice 4 still owns `POST /api/combat/:id/play`, cancel, snapshot, SSE payload shape, and client prediction.
+
+### Progress
+
+- `combat-phase-c-realtime-subtick`: `13/39` tasks complete; completed `2.5b`; next tasks move into Slice 3 EventLog integration / CombatStore projection cleanup.
+
+### Verification
+
+- Focused combat runtime tests: `npm --workspace packages/server exec vitest run src/combat/subTickCoordinator.test.ts src/combat/runtime.test.ts src/combat/ruleEngine.test.ts src/combat/commands.test.ts src/combat/cards/compiler.test.ts src/combat/cards/catalog.test.ts` — **60 tests passed**.
+- Server build/typecheck: `npm run build:server` — clean.
+- `npx openspec validate --all --strict` — **34 passed, 0 failed**.
+- `npm test` — **559 server + 75 web = 634 tests passed**.
+- `npm run build` — server build and web production bundle completed; known Vite chunk-size warning remains.
+- `git diff --check` — clean; Windows CRLF warnings only.
+- `npx openspec list` — `combat-phase-c-realtime-subtick 13/39 tasks` remains the only active change.
+
+### CI / Deploy
+
+- Pending commit, push, GitHub Actions CI/CD, and live smoke for `/healthz version=0.24.21`, tick advancement, and clean recent server logs.
+
 ## 2026-05-17 — Combat Phase C Sub-Tick Rule Engine
 
 ### Slice Implemented
