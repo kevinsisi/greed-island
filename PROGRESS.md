@@ -22,7 +22,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending archive commit/push, GitHub Actions CI/CD, and post-deploy health/tick smoke. No runtime behavior change is expected.
+- Commit `6d763f2 docs(openspec): archive avatar rollout` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25989202269` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25989202273` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after archive deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.18` on two stable reads.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `149995` to `149999` over 20 seconds; generated at `2026-05-17T11:12:10.928Z` and `2026-05-17T11:12:31.017Z`.
+  - Recent `greed-island-server` logs since deploy: 8 lines checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
 
 ## 2026-05-17 — Authoritative Character Avatars Hub/Building
 
