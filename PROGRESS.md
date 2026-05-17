@@ -19,7 +19,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit/push, CI/CD, and live `/healthz` confirmation for `0.24.19`.
+- Commit `8acd72a chore(release): bump version marker to 0.24.19` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25991023264` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests. Node.js 20 deprecation annotation is non-blocking.
+- GitHub Actions `main Deploy Dev` run `25991023269` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed. Node.js 20 deprecation annotation is non-blocking.
+- Live smoke after version marker deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.19` on two stable reads.
+  - `https://hunter.sisihome.org/api/world` — tick advanced from `151024` to `151028` over 20 seconds; generated at `2026-05-17T12:38:28.396Z` and `2026-05-17T12:38:48.496Z`.
+  - Recent `greed-island-server` logs since deploy: 8 lines checked, **0** matches for `SQLITE_CONSTRAINT_UNIQUE` and **0** matches for `[sim] tick failed`.
 
 ## 2026-05-17 — Authoritative Character Avatars Archived
 
