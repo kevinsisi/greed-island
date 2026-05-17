@@ -21,7 +21,13 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending commit/push and CI/CD/live smoke.
+- Commit `7cfd33f fix(runtime): recover deterministic event replays` pushed to `main` / `origin/main`.
+- GitHub Actions `main CI` run `25988204180` — **passed**: OpenSpec validate, server typecheck, web typecheck + bundle, server tests.
+- GitHub Actions `main Deploy Dev` run `25988204169` — **passed**: Docker images built/pushed, desktop deploy completed, smoke check passed.
+- Live smoke after deploy:
+  - `https://hunter.sisihome.org/healthz` — healthy, `version: 0.24.17`; observed tick advancing from `149447` to `149453` after deploy.
+  - `https://hunter.sisihome.org/api/world` — served world snapshot at tick `149447`, generated at `2026-05-17T10:25:20.234Z`.
+  - Server logs for the recent post-deploy window contained no `SQLITE_CONSTRAINT_UNIQUE` and no `[sim] tick failed` entries.
 
 ## 2026-05-17 — Authoritative Character Avatars Slice 2
 
