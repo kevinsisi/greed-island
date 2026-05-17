@@ -18,6 +18,12 @@ type EventRow = Readonly<{
   deterministic_key: string
 }>
 
+type EventDraftRow = Omit<EventRow, 'sequence'>
+
+type EventRowCompareOptions = Readonly<{
+  ignoreOccurredAt?: boolean
+}>
+
 type RejectionRow = Readonly<{
   rejection_id: number
   command_id: string
@@ -68,8 +74,24 @@ export class SqliteEventStore {
       return []
     }
 
+    const selectExistingEvent = this.db.prepare(`
+      SELECT
+        sequence,
+        event_id,
+        event_type,
+        occurred_at,
+        actor_id,
+        command_id,
+        tick,
+        ruleset_version,
+        payload_json,
+        version,
+        deterministic_key
+      FROM event_log
+      WHERE event_id = ?
+    `)
     const insertEvent = this.db.prepare(`
-      INSERT INTO event_log (
+      INSERT OR IGNORE INTO event_log (
         event_id,
         event_type,
         occurred_at,
@@ -96,19 +118,41 @@ export class SqliteEventStore {
 
     const transaction = this.db.transaction((eventDrafts: readonly EventDraft[]) => {
       const committed: Event[] = []
+      const batchEventIds = new Map<string, EventDraftRow>()
       for (const draft of eventDrafts) {
+        const row = draftToEventDraftRow(draft)
+        const batchDuplicate = batchEventIds.get(draft.eventId)
+        if (batchDuplicate) {
+          if (!eventDraftRowsMatch(batchDuplicate, row, { ignoreOccurredAt: true })) {
+            throw new Error(`Conflicting event draft for deterministic eventId ${draft.eventId}`)
+          }
+          continue
+        }
+        batchEventIds.set(draft.eventId, row)
+
         const insertResult = insertEvent.run({
-          eventId: draft.eventId,
-          eventType: draft.eventType,
-          occurredAt: draft.occurredAt,
-          actorId: draft.actorId,
-          commandId: draft.commandId ?? null,
-          tick: draft.tick ?? null,
-          rulesetVersion: draft.rulesetVersion ?? null,
-          payloadJson: toCanonicalJson(draft.payload),
-          version: draft.version,
-          deterministicKey: draft.deterministicKey
+          eventId: row.event_id,
+          eventType: row.event_type,
+          occurredAt: row.occurred_at,
+          actorId: row.actor_id,
+          commandId: row.command_id,
+          tick: row.tick,
+          rulesetVersion: row.ruleset_version,
+          payloadJson: row.payload_json,
+          version: row.version,
+          deterministicKey: row.deterministic_key
         })
+        if (insertResult.changes === 0) {
+          const existing = selectExistingEvent.get(draft.eventId) as EventRow | undefined
+          if (!existing) {
+            throw new Error(`Failed to append deterministic eventId ${draft.eventId}`)
+          }
+          if (!eventRowsMatch(existing, row, { ignoreOccurredAt: true })) {
+            throw new Error(`Conflicting persisted event for deterministic eventId ${draft.eventId}`)
+          }
+          committed.push(rowToEvent(existing))
+          continue
+        }
         committed.push({ ...draft, sequence: Number(insertResult.lastInsertRowid) })
       }
       return committed
@@ -368,4 +412,46 @@ function rowToEvent(row: EventRow): Event {
     version: row.version,
     deterministicKey: row.deterministic_key
   }
+}
+
+function draftToEventDraftRow(draft: EventDraft): EventDraftRow {
+  return {
+    event_id: draft.eventId,
+    event_type: draft.eventType,
+    occurred_at: draft.occurredAt,
+    actor_id: draft.actorId,
+    command_id: draft.commandId ?? null,
+    tick: draft.tick ?? null,
+    ruleset_version: draft.rulesetVersion ?? null,
+    payload_json: toCanonicalJson(draft.payload),
+    version: draft.version,
+    deterministic_key: draft.deterministicKey
+  }
+}
+
+function eventRowsMatch(
+  existing: EventRow,
+  draft: EventDraftRow,
+  options: EventRowCompareOptions = {}
+): boolean {
+  return eventDraftRowsMatch(existing, draft, options)
+}
+
+function eventDraftRowsMatch(
+  left: EventDraftRow,
+  right: EventDraftRow,
+  options: EventRowCompareOptions = {}
+): boolean {
+  return (
+    left.event_id === right.event_id &&
+    left.event_type === right.event_type &&
+    (options.ignoreOccurredAt === true || left.occurred_at === right.occurred_at) &&
+    left.actor_id === right.actor_id &&
+    left.command_id === right.command_id &&
+    left.tick === right.tick &&
+    left.ruleset_version === right.ruleset_version &&
+    left.payload_json === right.payload_json &&
+    left.version === right.version &&
+    left.deterministic_key === right.deterministic_key
+  )
 }

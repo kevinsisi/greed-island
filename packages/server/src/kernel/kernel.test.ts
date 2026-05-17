@@ -305,14 +305,44 @@ describe('simulation kernel', () => {
     expect(store.countEvents()).toBe(0)
   })
 
-  it('rolls back the whole event batch when any append fails', () => {
+  it('treats identical deterministic event re-appends as idempotent', () => {
     const { store } = createKernelHarness()
     const [draft] = createAcceptedDrafts([createSetFactCommand('cmd-rollback', 'player-1', 'x', 1)])
     if (draft === undefined) {
       throw new Error('Expected event draft')
     }
 
-    expect(() => store.appendEvents([draft, draft])).toThrow()
+    const [first] = store.appendEvents([draft])
+    const [second] = store.appendEvents([{ ...draft, occurredAt: draft.occurredAt + 1000 }])
+
+    expect(first?.sequence).toBe(1)
+    expect(second?.sequence).toBe(1)
+    expect(second?.occurredAt).toBe(draft.occurredAt)
+    expect(store.countEvents()).toBe(1)
+  })
+
+  it('deduplicates identical deterministic events inside one append batch', () => {
+    const { store } = createKernelHarness()
+    const [draft] = createAcceptedDrafts([createSetFactCommand('cmd-duplicate-event', 'player-1', 'x', 1)])
+    if (draft === undefined) {
+      throw new Error('Expected event draft')
+    }
+
+    const committed = store.appendEvents([draft, { ...draft, occurredAt: draft.occurredAt + 1000 }])
+
+    expect(committed).toHaveLength(1)
+    expect(store.countEvents()).toBe(1)
+  })
+
+  it('rolls back the whole event batch when deterministic event ids conflict', () => {
+    const { store } = createKernelHarness()
+    const [draft] = createAcceptedDrafts([createSetFactCommand('cmd-conflict', 'player-1', 'x', 1)])
+    if (draft === undefined) {
+      throw new Error('Expected event draft')
+    }
+    const conflicting = { ...draft, payload: { key: 'x', value: 2 } }
+
+    expect(() => store.appendEvents([draft, conflicting])).toThrow(/Conflicting event draft/)
     expect(store.countEvents()).toBe(0)
   })
 })

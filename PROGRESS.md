@@ -3,6 +3,26 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Runtime Tick Hotfix
+
+### Hotfix Implemented
+
+- Version bumped to `0.24.17`.
+- Investigated live NPC freeze: `/healthz` and `/api/world` stayed at tick `149446`; server logs showed repeated `SQLITE_CONSTRAINT_UNIQUE` failures on `event_log.event_id` during every simulation tick.
+- Updated `SqliteEventStore.appendEvents()` to make deterministic event re-appends idempotent when the existing event content matches, while still rejecting conflicting same-`event_id` drafts.
+- Kept append-only semantics intact: no existing EventLog rows are updated or deleted; idempotent recovery returns the already committed event sequence.
+
+### Verification
+
+- Focused server tests: `npm --workspace packages/server exec vitest run src/kernel/kernel.test.ts src/sim/runtimeGoodsInventory.test.ts src/sim/runtimePredation.test.ts` — **23 tests passed**.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Full `npm test` — **538 server + 68 web = 606 tests passed**.
+- Build evidence: `npm run build` completed server build and web production bundle; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit/push and CI/CD/live smoke.
+
 ## 2026-05-17 — Authoritative Character Avatars Slice 2
 
 ### Slice 2 Implemented
