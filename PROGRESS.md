@@ -3,6 +3,35 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-17 — Authoritative Character Avatars Hub/Building
+
+### Hub/Building Implemented
+
+- Version bumped to `0.24.18`.
+- Added Building visual-state mapping so the local player uses local-input `walk/idle` only, and occupant NPC avatars derive action/color from server-provided occupant activity/color.
+- Replaced Building visible square markers with procedural humanoid avatars while keeping invisible physics anchors, owner halo, NPC interaction, exit handling, labels, and activity icons.
+- Added Hub visual-state mapping so local player movement derives only from local input velocity, peer player movement derives only from social-presence coordinate deltas, and routed travelling NPC action derives only from authoritative NPC activity.
+- Replaced Hub local player, peer player, and routed travelling NPC square/rectangle visuals with procedural humanoid avatars while keeping Hub sparse: no local-area NPCs, building occupants, fake people, fake crowds, decorative activity actors, or frontend-invented NPC actions were added.
+- Updated Hub traveller diagnostics so `window.__giHubTravellerDiagnostics()` reports the visible avatar container state rather than the now-hidden physics proxy sprite.
+
+### Progress
+
+- `authoritative-character-avatars`: `27/28` tasks complete (`0.1`–`4.5`, `5.1`–`5.4`).
+- Remaining task: `5.5` commit/push, wait for CI/CD, confirm deploy, and live-smoke before reporting runtime success.
+
+### Verification
+
+- Focused web tests: `npm --workspace packages/web exec vitest run src/game/hubCharacterVisualState.test.ts src/game/buildingCharacterVisualState.test.ts src/game/areaCharacterVisualState.test.ts src/game/characterVisualState.test.ts src/pages/npcProjection.test.ts` — **25 tests passed**.
+- Focused web build/typecheck: `npm run build -w @greed-island/web` — clean; known Vite chunk-size warning remains.
+- `npx openspec validate --all --strict` — **35 passed, 0 failed**.
+- Full `npm test` — **538 server + 75 web = 613 tests passed**.
+- Full `npm run build` — server build and web production bundle completed; known Vite chunk-size warning remains.
+
+### CI / Deploy
+
+- Pending commit/push, GitHub Actions CI/CD, deploy confirmation, and live smoke.
+- Required live smoke after deploy: `/healthz` reports `0.24.18`; tick advances over 10–20 seconds; recent server logs contain no `SQLITE_CONSTRAINT_UNIQUE` and no `[sim] tick failed`; Hub/Area/Building no longer show square player/NPC markers.
+
 ## 2026-05-17 — Runtime Tick Hotfix
 
 ### Hotfix Implemented

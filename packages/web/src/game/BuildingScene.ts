@@ -1,6 +1,14 @@
 import Phaser from 'phaser'
 import type { ServerBuildingDef } from '../api/client'
 import { activityGlyphFor, textColorForBg } from './npcVisuals'
+import { applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import {
+  BUILDING_NPC_FALLBACK_COLOR,
+  BUILDING_PLAYER_COLOR,
+  characterVisualStateForBuildingLocalPlayer,
+  characterVisualStateForBuildingNpc,
+} from './buildingCharacterVisualState'
+import type { CharacterFacing } from './characterVisualState'
 import type { NpcActivity } from '../state/types'
 
 // 建築物室內小場景：10x6 cell、每 cell 32px。內部裝飾從 building.interior
@@ -11,10 +19,9 @@ const NPC_SPRITE_SIZE = 22
 const PLAYER_SPEED = 130
 const EXIT_RADIUS = INTERIOR_CELL * 1.15
 
-const PLAYER_COLOR = 0xfff5b8
 const PLAYER_OUTLINE = 0x1a1407
 /** 後端沒給 color 時的 fallback */
-const NPC_FALLBACK_COLOR = 0xb6e3ff
+const NPC_FALLBACK_COLOR = BUILDING_NPC_FALLBACK_COLOR
 /** Owner 多一道金邊 */
 const OWNER_OUTLINE = 0xffd966
 const FLOOR_LIGHT = 0x2a2438
@@ -76,6 +83,8 @@ export class BuildingScene extends Phaser.Scene {
   private controlsEnabled = true
 
   private player!: Phaser.Physics.Arcade.Sprite
+  private playerAvatar: ProceduralAvatar | null = null
+  private playerFacing: CharacterFacing = 'right'
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'E' | 'SPACE', Phaser.Input.Keyboard.Key>
 
@@ -113,9 +122,11 @@ export class BuildingScene extends Phaser.Scene {
     if (!this.controlsEnabled) {
       this.pointerTarget = null
       this.player?.setVelocity(0, 0)
+      this.syncPlayerAvatar()
       return
     }
     this.handleMovement()
+    this.syncPlayerAvatar()
   }
 
   applyExternalUpdate(payload: { npcs?: BuildingSceneNpc[]; controlsEnabled?: boolean }): void {
@@ -198,11 +209,33 @@ export class BuildingScene extends Phaser.Scene {
   }
 
   private spawnPlayer(): void {
-    const tex = this.makeSquareTexture('bld-player', PLAYER_SPRITE_SIZE, PLAYER_COLOR, PLAYER_OUTLINE, 2)
+    const tex = this.makeSquareTexture('bld-player', PLAYER_SPRITE_SIZE, BUILDING_PLAYER_COLOR, PLAYER_OUTLINE, 2)
     const sx = INTERIOR_CELL * 1.5
     const sy = this.canvasHeight() - INTERIOR_CELL * 0.8
     this.player = this.physics.add.sprite(sx, sy, tex)
+    this.player.setVisible(false)
     this.player.setDepth(80)
+    const state = characterVisualStateForBuildingLocalPlayer({
+      x: sx,
+      y: sy,
+      previousFacing: this.playerFacing,
+    })
+    this.playerFacing = state.facing
+    this.playerAvatar = createProceduralHumanoidAvatar(this, state, { size: PLAYER_SPRITE_SIZE + 6, depth: 80 })
+  }
+
+  private syncPlayerAvatar(): void {
+    if (!this.player || !this.playerAvatar) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body | null
+    const state = characterVisualStateForBuildingLocalPlayer({
+      x: this.player.x,
+      y: this.player.y,
+      velocityX: body?.velocity.x ?? 0,
+      velocityY: body?.velocity.y ?? 0,
+      previousFacing: this.playerFacing,
+    })
+    this.playerFacing = state.facing
+    applyProceduralAvatarPose(this.playerAvatar.container, state)
   }
 
   private drawExitHotspot(): void {
@@ -264,23 +297,55 @@ export class BuildingScene extends Phaser.Scene {
 
       const existing = this.npcSprites.get(npc.id)
       if (existing) {
+        const avatar = existing.getData('avatar') as ProceduralAvatar | undefined
+        const ownerHalo = existing.getData('ownerHalo') as Phaser.GameObjects.Ellipse | undefined
+        const activityIcon = existing.getData('activityIcon') as Phaser.GameObjects.Text | undefined
         existing.setData('anchorX', ax)
         existing.setData('anchorY', ay)
         const nameLabel = existing.getData('nameLabel') as Phaser.GameObjects.Text | undefined
         if (nameLabel && nameLabel.text !== npc.name) nameLabel.setText(npc.name)
+        const state = characterVisualStateForBuildingNpc(npc, { x: existing.x, y: existing.y }, { x: existing.x, y: existing.y })
+        existing.setData('visualState', state)
+        if (avatar) {
+          this.applyNpcAvatarColor(avatar, state.color)
+          applyProceduralAvatarPose(avatar.container, state)
+          if (avatar.label && avatar.label.text !== npc.shortName) avatar.label.setText(npc.shortName)
+        }
+        if (ownerHalo) ownerHalo.setVisible(npc.isOwner)
+        if (activityIcon) {
+          const iconGlyph = activityGlyphFor(npc.activity)
+          activityIcon.setText(iconGlyph)
+          activityIcon.setVisible(iconGlyph.length > 0)
+        }
         return
       }
 
       const fillColor = npc.color ?? NPC_FALLBACK_COLOR
-      const badgeColor = npc.color === undefined ? '#1a1407' : textColorForBg(fillColor)
-      const outline = npc.isOwner ? OWNER_OUTLINE : 0x1a1407
-      const outlineWidth = npc.isOwner ? 3 : 2
       const tex = this.npcTextureKey(npc.id, fillColor)
-      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, outline, outlineWidth)
+      this.makeSquareTexture(tex, NPC_SPRITE_SIZE, fillColor, 0x1a1407, 2)
       const sprite = this.physics.add.sprite(ax, ay, tex)
+      sprite.setVisible(false)
       sprite.setDepth(70)
-      sprite.setInteractive({ useHandCursor: true })
-      sprite.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+
+      const state = characterVisualStateForBuildingNpc(npc, { x: ax, y: ay })
+      const ownerHalo = this.add.ellipse(ax, ay + NPC_SPRITE_SIZE * 0.12, NPC_SPRITE_SIZE * 1.18, NPC_SPRITE_SIZE * 1.45, 0x000000, 0)
+      ownerHalo.setStrokeStyle(2, OWNER_OUTLINE, 0.95)
+      ownerHalo.setDepth(69)
+      ownerHalo.setVisible(npc.isOwner)
+      sprite.setData('ownerHalo', ownerHalo)
+
+      const avatar = createProceduralHumanoidAvatar(this, state, { size: NPC_SPRITE_SIZE + 4, depth: 70 })
+      avatar.container.setSize(NPC_SPRITE_SIZE * 1.7, NPC_SPRITE_SIZE * 2.2)
+      avatar.container.setInteractive(
+        new Phaser.Geom.Rectangle(
+          -NPC_SPRITE_SIZE * 0.85,
+          -NPC_SPRITE_SIZE * 1.25,
+          NPC_SPRITE_SIZE * 1.7,
+          NPC_SPRITE_SIZE * 2.2
+        ),
+        Phaser.Geom.Rectangle.Contains
+      )
+      avatar.container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         pointer.event?.stopPropagation?.()
         this.suppressNextPointerTarget = true
         if (!this.controlsEnabled) {
@@ -289,16 +354,8 @@ export class BuildingScene extends Phaser.Scene {
         }
         this.callbacks.onNpcInteract(npc.id)
       })
-
-      const badge = this.add.text(ax, ay, npc.shortName, {
-        fontFamily:
-          '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-        fontSize: '12px',
-        color: badgeColor,
-        fontStyle: 'bold'
-      })
-      badge.setOrigin(0.5, 0.5)
-      badge.setDepth(71)
+      sprite.setData('avatar', avatar)
+      sprite.setData('visualState', state)
 
       const label = this.add.text(ax, ay - NPC_SPRITE_SIZE * 0.85, npc.name, {
         fontFamily:
@@ -311,31 +368,28 @@ export class BuildingScene extends Phaser.Scene {
       label.setOrigin(0.5, 1)
       label.setDepth(72)
       sprite.setData('nameLabel', label)
-      sprite.setData('badge', badge)
       sprite.setData('anchorX', ax)
       sprite.setData('anchorY', ay)
 
       // 活動 emoji（idle 不顯示） — 釘在 sprite 右上肩，跟著 bob tween 一起更新
       const iconGlyph = activityGlyphFor(npc.activity)
-      let iconText: Phaser.GameObjects.Text | null = null
-      if (iconGlyph) {
-        iconText = this.add.text(
-          ax + NPC_SPRITE_SIZE * 0.55,
-          ay - NPC_SPRITE_SIZE * 0.55,
-          iconGlyph,
-          {
-            fontFamily:
-              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
-            fontSize: '13px',
-            color: '#ffffff',
-            stroke: '#0a0a0a',
-            strokeThickness: 2
-          }
-        )
-        iconText.setOrigin(0.5, 0.5)
-        iconText.setDepth(73)
-        sprite.setData('activityIcon', iconText)
-      }
+      const iconText = this.add.text(
+        ax + NPC_SPRITE_SIZE * 0.55,
+        ay - NPC_SPRITE_SIZE * 0.55,
+        iconGlyph,
+        {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
+          fontSize: '13px',
+          color: '#ffffff',
+          stroke: '#0a0a0a',
+          strokeThickness: 2
+        }
+      )
+      iconText.setOrigin(0.5, 0.5)
+      iconText.setDepth(73)
+      iconText.setVisible(iconGlyph.length > 0)
+      sprite.setData('activityIcon', iconText)
 
       // gentle bob tween（每位 NPC 不同節奏；idle 呼吸動畫，不是 wander）
       const tween = this.tweens.add({
@@ -349,12 +403,12 @@ export class BuildingScene extends Phaser.Scene {
           const ax2 = sprite.getData('anchorX') as number
           const ay2 = sprite.getData('anchorY') as number
           const ny = ay2 + target.t
+          const currentState = sprite.getData('visualState') as ReturnType<typeof characterVisualStateForBuildingNpc> | undefined
           sprite.setPosition(ax2, ny)
-          badge.setPosition(ax2, ny)
+          ownerHalo.setPosition(ax2, ny + NPC_SPRITE_SIZE * 0.12)
+          applyProceduralAvatarPose(avatar.container, { ...(currentState ?? state), x: ax2, y: ny })
           label.setPosition(ax2, ny - NPC_SPRITE_SIZE * 0.85)
-          if (iconText) {
-            iconText.setPosition(ax2 + NPC_SPRITE_SIZE * 0.55, ny - NPC_SPRITE_SIZE * 0.55)
-          }
+          iconText.setPosition(ax2 + NPC_SPRITE_SIZE * 0.55, ny - NPC_SPRITE_SIZE * 0.55)
         }
       })
       sprite.setData('tween', tween)
@@ -365,15 +419,24 @@ export class BuildingScene extends Phaser.Scene {
       if (seen.has(id)) continue
       const tween = sprite.getData('tween') as Phaser.Tweens.Tween | undefined
       if (tween) this.tweens.remove(tween)
-      const badge = sprite.getData('badge') as Phaser.GameObjects.Text | undefined
+      const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
+      const ownerHalo = sprite.getData('ownerHalo') as Phaser.GameObjects.Ellipse | undefined
       const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
       const iconText = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
-      badge?.destroy()
+      avatar?.container.destroy(true)
+      ownerHalo?.destroy()
       nameLabel?.destroy()
       iconText?.destroy()
       sprite.destroy()
       this.npcSprites.delete(id)
     }
+  }
+
+  private applyNpcAvatarColor(avatar: ProceduralAvatar, color: number): void {
+    avatar.body.setFillStyle(color, 1)
+    avatar.leftArm.setFillStyle(color, 1)
+    avatar.rightArm.setFillStyle(color, 1)
+    avatar.label?.setColor(textColorForBg(color))
   }
 
   private npcTextureKey(id: string, color?: number): string {
