@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Ecosystem boot fix (v0.25.3)
+
+### Problem Fixed
+
+Production EventLog exceeds `BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000` after ~17 minutes.
+The `else` branch in the boot hydration path only rebuilt combat projections — all four
+ecosystem projections (`AnimalPopulation`, `AnimalMigration`, `PredatorHunger`, `FisheryDensity`)
+were left empty on every Docker restart. Animals appeared at 1/minute per tile after restart,
+but full historical population was silently lost. This is why animals didn't appear in the UI.
+
+### Fix
+
+`packages/server/src/sim/runtime.ts`:
+- Added `ECOSYSTEM_BOOT_EVENT_TYPES` constant listing 8 ecosystem event types.
+- Added selective `readEventsByTypes` + `rebuildFromEvents` for all 4 ecosystem projections
+  in the large-log `else` branch (alongside `hydrateCombatRuntimeFromEvents`).
+
+### Verification
+
+- Build: `npm run build:server` — clean.
+- Tests: 84/84 server files, 572/572 tests pass.
+- Pushed: `9c7098a` — CI/deploy triggered.
+
+### Next Steps
+
+1. Verify animals appear in production after deploy:
+   - Check `https://hunter.sisihome.org/api/area/t_forest/ecology` — `animals` array should be non-empty.
+2. Bump `APP_VERSION` to `0.25.3` (minor fix release).
+3. Start planning next OpenSpec change (Phase D: persistent combat outcomes — faction/economy/NPC memory from `COMBAT_RESOLVE.worldEffects`, closes §11.2).
+
+---
+
 ## 2026-05-18 — Archive + version bump (v0.25.2)
 
 ### Work Done
@@ -19,14 +51,11 @@ developer. Keep latest status at the top.
 
 ### CI / Deploy
 
-- Pending push (commit below).
+- Pushed: `084be22`.
 
 ### Next Steps
 
-1. Investigate why animals don't appear on any tile (`hunter.sisihome.org/api/area/t_forest/ecology`).
-   - If `animals: []` — world data issue (fresh world or over-predation wiped population). Need to query production EventLog.
-   - If animals exist in API but don't render — client-side Phaser rendering bug.
-2. Start planning next OpenSpec change (Phase D: persistent combat outcomes, faction/economy/NPC memory).
+~~Investigate why animals don't appear on any tile~~ — root cause found and fixed (see above).
 
 ---
 
