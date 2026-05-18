@@ -118,6 +118,19 @@ export const DEFENSE_PARTY_MIN_MEMBERS = 2
 export const TILE_ACTIVITY_RECENCY_TICKS = 60
 export const TILE_INACTIVE_DRIFT_PERIOD = 10
 
+// Phase E2 — ecosystem pressure, collapse, and recovery.
+// Species extinction: once total population = 0 for this many cadence ticks, SPECIES_EXTINCT fires.
+export const SPECIES_EXTINCT_GRACE_TICKS = 3 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+// Pressure planner: emit ECOSYSTEM_PRESSURE_RAISED when NPC work-actions on high-pressure
+// buildings in one cadence window reach this count.
+export const ECOSYSTEM_PRESSURE_WORK_THRESHOLD = 5
+// Recovery: if no high-pressure actions occur for this many ticks, emit RECOVERED.
+export const ECOSYSTEM_PRESSURE_RECOVERY_TICKS = 2 * TICKS_PER_MINUTE
+// Fishery passive regeneration: density points per reproduction cadence tick.
+export const FISHERY_RECOVERY_RATE = 5
+// Hysteresis buffer above FISHERY_COLLAPSE_THRESHOLD before FISHERY_RECOVERED fires.
+export const FISHERY_RECOVERY_BUFFER = 10
+
 // Combat Phase C Slice 1 — sub-tick loop default rate. The runtime
 // spawns a setInterval per active combat at this rate. Range 5–20 Hz
 // (50 ms – 200 ms); default 10 Hz (100 ms). Configurable so future

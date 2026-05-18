@@ -1399,4 +1399,72 @@ describe('deterministic replay', () => {
       expect(a.events[0]!.deterministicKey).not.toBe(b.events[0]!.deterministicKey)
     }
   })
+
+  it('accepts SPECIES_EXTINCTION_WARNING with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SPECIES_EXTINCTION_WARNING', 'system', 'system', 100, 100, {
+      speciesId: 'fog_wolf', tileId: 't_forest', population: 2, threshold: 3, tick: 100,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
+
+  it('rejects SPECIES_EXTINCTION_WARNING with missing threshold', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SPECIES_EXTINCTION_WARNING', 'system', 'system', 100, 100, {
+      speciesId: 'fog_wolf', tileId: 't_forest', population: 2, threshold: 0, tick: 100,
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('threshold must be positive integer')
+  })
+
+  it('accepts SPECIES_EXTINCT with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SPECIES_EXTINCT', 'system', 'system', 200, 200, {
+      speciesId: 'fog_wolf', lastSeenTick: 180, affectedTileIds: ['t_forest'], narration: null,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
+
+  it('accepts SPECIES_RECOVERED with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('SPECIES_RECOVERED', 'system', 'system', 300, 300, {
+      speciesId: 'fog_wolf', tileId: 't_forest', population: 5, tick: 300,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
+
+  it('accepts FISHERY_RECOVERED with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('FISHERY_RECOVERED', 'system', 'system', 400, 400, {
+      tileId: 't_salt_marsh', density: 35, tick: 400,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
+
+  it('accepts ECOSYSTEM_PRESSURE_RAISED with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RAISED', 'system', 'system', 50, 50, {
+      tileId: 't_forest', pressureLevel: 40, tick: 50,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
+
+  it('rejects ECOSYSTEM_PRESSURE_RAISED with pressureLevel > 100', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RAISED', 'system', 'system', 50, 50, {
+      tileId: 't_forest', pressureLevel: 101, tick: 50,
+    })
+    const result = ruleEngine.evaluate(cmd)
+    expect(result.accepted).toBe(false)
+    if (!result.accepted) expect(result.rejection.reason).toBe('pressureLevel must be integer 0–100')
+  })
+
+  it('accepts ECOSYSTEM_PRESSURE_RECOVERED with valid payload', () => {
+    const { ruleEngine } = makeHarness()
+    const cmd = makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RECOVERED', 'system', 'system', 60, 60, {
+      tileId: 't_forest', tick: 60,
+    })
+    expect(ruleEngine.evaluate(cmd).accepted).toBe(true)
+  })
 })

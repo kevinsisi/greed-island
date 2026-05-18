@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ECOSYSTEM_ANIMAL_SUBGRID_COLUMNS, ECOSYSTEM_ANIMAL_SUBGRID_ROWS, ECOSYSTEM_SPAWN_CADENCE_TICKS } from '../config/world.js'
 import type { MapTileDef } from '../sim/mapGraph.js'
-import { carryingCapacityForTile, ecosystemRegionForTile, planAnimalSpawns } from './animalSpawning.js'
+import { carryingCapacityForTile, ecosystemRegionForTile, planAnimalSpawns, spawnRateModifier } from './animalSpawning.js'
 import { requireSpecies } from './species.js'
 
 describe('animal spawning policy', () => {
@@ -50,6 +50,28 @@ describe('animal spawning policy', () => {
       getPopulation: (speciesId) => carryingCapacityForTile(requireSpecies(speciesId)),
     })
     expect(plans).toEqual([])
+  })
+})
+
+describe('spawnRateModifier', () => {
+  it('returns 1.0 for high-tolerance species at low pressure', () => {
+    expect(spawnRateModifier({ civilizationTolerance: 60 }, 30)).toBe(1.0)
+  })
+
+  it('returns 0.3 for low-tolerance species (< 30) when pressure > 50', () => {
+    expect(spawnRateModifier({ civilizationTolerance: 10 }, 60)).toBe(0.3)
+  })
+
+  it('returns 0.1 for any species when pressure > 75', () => {
+    expect(spawnRateModifier({ civilizationTolerance: 80 }, 80)).toBe(0.1)
+  })
+
+  it('returns 1.0 when pressure is zero', () => {
+    expect(spawnRateModifier({ civilizationTolerance: 10 }, 0)).toBe(1.0)
+  })
+
+  it('high-tolerance species also gets 0.1 at extreme pressure', () => {
+    expect(spawnRateModifier({ civilizationTolerance: 80 }, 80)).toBe(0.1)
   })
 })
 

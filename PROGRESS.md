@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Phase E2: Ecosystem Pressure & Collapse (v0.27.0)
+
+### Work Done
+
+Phase E2 closes the feedback loop between civilization actions and ecosystem consequences.
+
+**New planners:**
+- `packages/server/src/ecosystem/extinctionPlanner.ts` — `planSpeciesExtinctionCheck` pure function. Emits `SPECIES_EXTINCTION_WARNING` (per-tile when count < threshold), `SPECIES_EXTINCT` (total = 0 for warned species), `SPECIES_RECOVERED` (extinct species re-detected).
+- `packages/server/src/ecosystem/pressurePlanner.ts` — `planEcosystemPressure` pure function. Returns `'raise'`/`'recover'`/`null` based on NPC work action count and idle time.
+- `packages/server/src/ecosystem/fishery.ts` — added `planFisheryPassiveRegen` for passive density recovery.
+
+**New projections:**
+- `packages/server/src/projections/speciesExtinction.ts` — `SpeciesExtinctionProjection` with `stable/warning/extinct` lifecycle.
+- `packages/server/src/projections/ecosystemRegion.ts` — `EcosystemRegionProjection` with per-tile pressure/pollution levels.
+
+**Updated:**
+- `livingWorldCommands.ts` — 6 new command types + payload types: `SPECIES_EXTINCTION_WARNING`, `SPECIES_EXTINCT`, `SPECIES_RECOVERED`, `FISHERY_RECOVERED`, `ECOSYSTEM_PRESSURE_RAISED`, `ECOSYSTEM_PRESSURE_RECOVERED`.
+- `projections/fisheryDensity.ts` — handles `FISHERY_RECOVERED` event (density update + collapse recovery).
+- `ecosystem/animalSpawning.ts` — added `spawnRateModifier` (pressure reduces low-tolerance species spawns) + `getPressureLevel` input.
+- `sim/runtime.ts` — instantiated new projections, wired into boot hydration, fan-out loops, reproduction cadence (extinction check, fishery regen, pressure planner), snapshot facts.
+- `kernel/chronicleRenderer.ts` — `SPECIES_EXTINCT`/`SPECIES_RECOVERED` → Chinese narration; warning/pressure/fishery recovery events suppressed.
+- `web/src/pages/AdminWorldPage.tsx` — "生態壓力" section with species status table and tile pressure table.
+- `config/world.ts` — 5 new constants: `SPECIES_EXTINCT_GRACE_TICKS`, `ECOSYSTEM_PRESSURE_WORK_THRESHOLD`, `ECOSYSTEM_PRESSURE_RECOVERY_TICKS`, `FISHERY_RECOVERY_RATE`, `FISHERY_RECOVERY_BUFFER`.
+
+**OpenSpec:** `ecosystem-pressure-collapse` change — all 33 tasks complete.
+
+### Verification
+
+- TypeScript: clean (both packages)
+- Tests: 111 files, 724 tests, all pass
+- Web build: clean
+- `openspec validate --all --strict`: 35/35 pass
+- Docker: rebuild pending
+
+---
+
 ## 2026-05-18 — Ecosystem Balance & Migration Wave Fix (v0.26.1)
 
 ### Problems Fixed

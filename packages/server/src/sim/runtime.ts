@@ -57,7 +57,10 @@ import {
   DEFENSE_REACTION_WINDOW_TICKS,
   DEFENSE_PARTY_MIN_MEMBERS,
   TILE_ACTIVITY_RECENCY_TICKS,
-  TILE_INACTIVE_DRIFT_PERIOD
+  TILE_INACTIVE_DRIFT_PERIOD,
+  ECOSYSTEM_PRESSURE_WORK_THRESHOLD,
+  FISHERY_COLLAPSE_THRESHOLD,
+  FISHERY_RECOVERY_BUFFER,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -101,7 +104,9 @@ import {
   type CombatRoundResult,
 } from '../combat/ruleEngine.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
-import { planFisheryHarvest } from '../ecosystem/fishery.js'
+import { planSpeciesExtinctionCheck } from '../ecosystem/extinctionPlanner.js'
+import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fishery.js'
+import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
@@ -167,6 +172,8 @@ import { SkillXpProjection } from '../projections/skillXp.js'
 import { CulturalElementProjection } from '../projections/culturalElement.js'
 import { planFestivalSeed, planRitualSeed, planNormSeed } from './culturalSeeders.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
+import { SpeciesExtinctionProjection } from '../projections/speciesExtinction.js'
+import { EcosystemRegionProjection } from '../projections/ecosystemRegion.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
 import { MarketPricesProjection, type MarketPriceRow } from '../projections/marketPrices.js'
@@ -231,6 +238,12 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'MIGRATION_WAVE_STARTED',
   'FISHERY_HARVESTED',
   'FISHERY_COLLAPSED',
+  'FISHERY_RECOVERED',
+  'SPECIES_EXTINCTION_WARNING',
+  'SPECIES_EXTINCT',
+  'SPECIES_RECOVERED',
+  'ECOSYSTEM_PRESSURE_RAISED',
+  'ECOSYSTEM_PRESSURE_RECOVERED',
 ] as const
 // Goods projection event types — read selectively during fast-boot so
 // inventory/logistics/market/production projections survive restarts on large logs.
@@ -416,6 +429,10 @@ export class SimulationRuntime {
   private readonly skillXpProjection = new SkillXpProjection()
   private readonly culturalElementProjection = new CulturalElementProjection()
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
+  private readonly speciesExtinctionProjection = new SpeciesExtinctionProjection()
+  private readonly ecosystemRegionProjection = new EcosystemRegionProjection()
+  // Per-tick NPC work action counts per tile for ecosystem pressure tracking
+  private tileWorkActionCounts = new Map<string, number>()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
   private readonly logisticsProjection = new LogisticsProjection()
   private readonly marketPricesProjection = new MarketPricesProjection()
@@ -701,6 +718,8 @@ export class SimulationRuntime {
         lifeExpansion: this.lifeExpansion,
         animalPopulation: this.animalPopulationProjection.list(),
         fisheryDensity: this.fisheryDensityProjection.list(),
+        extinctionWarnings: this.speciesExtinctionProjection.list(),
+        ecosystemRegions: this.ecosystemRegionProjection.list(),
         settlements: this.getSettlements(),
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
@@ -1340,6 +1359,8 @@ export class SimulationRuntime {
       this.rumorProjection.project(ev)
       this.skillXpProjection.project(ev)
       this.fisheryDensityProjection.project(ev)
+      this.speciesExtinctionProjection.project(ev)
+      this.ecosystemRegionProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
       this.marketPricesProjection.project(ev)
@@ -1536,6 +1557,10 @@ export class SimulationRuntime {
             }
           )
         )
+        // Track build/service work actions per tile for ecosystem pressure
+        if (event.domain === 'build' || event.domain === 'service') {
+          this.tileWorkActionCounts.set(event.tile, (this.tileWorkActionCounts.get(event.tile) ?? 0) + 1)
+        }
         const lifeForHunt = profile ? deriveNpcLifeView({
           profile,
           state: this.npcEngine.getState(event.npcId) ?? makeFallbackNpcState(event.tile, nextTick),
@@ -2033,6 +2058,7 @@ export class SimulationRuntime {
       tick: nextTick,
       tiles: listMapTiles(this.lifeExpansion.unlockedTileIds),
       getPopulation: (speciesId, tileId) => this.animalPopulationProjection.countSpeciesOnTile(speciesId, tileId),
+      getPressureLevel: (tileId) => this.ecosystemRegionProjection.getForTile(tileId).pressureLevel,
     })) {
       const tileName = TILE_NAME_BY_ID[spawn.animal.tileId] ?? spawn.animal.tileId
       commands.push(
@@ -2554,6 +2580,58 @@ export class SimulationRuntime {
         )
       )
     }
+
+    // ---- Phase E2.1: species extinction check ----
+    for (const intent of planSpeciesExtinctionCheck({
+      tick: nextTick,
+      animalPopulation: this.animalPopulationProjection.list(),
+      extinctionProjection: this.speciesExtinctionProjection,
+    })) {
+      if (intent.type === 'SPECIES_EXTINCTION_WARNING') {
+        commands.push(makeLivingWorldCommand('SPECIES_EXTINCTION_WARNING', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          speciesId: intent.speciesId, tileId: intent.tileId, population: intent.population, threshold: intent.threshold, tick: intent.tick, narration: null,
+        }))
+      } else if (intent.type === 'SPECIES_EXTINCT') {
+        commands.push(makeLivingWorldCommand('SPECIES_EXTINCT', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          speciesId: intent.speciesId, lastSeenTick: intent.lastSeenTick, affectedTileIds: intent.affectedTileIds, narration: null,
+        }))
+      } else if (intent.type === 'SPECIES_RECOVERED') {
+        commands.push(makeLivingWorldCommand('SPECIES_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          speciesId: intent.speciesId, tileId: intent.tileId, population: intent.population, tick: intent.tick, narration: null,
+        }))
+      }
+    }
+
+    // ---- Phase E2.2: fishery passive regen ----
+    for (const regen of planFisheryPassiveRegen({ tick: nextTick, fisheryRows: this.fisheryDensityProjection.list() })) {
+      const hadCollapsed = this.fisheryDensityProjection.getByTile(regen.tileId)?.collapsed ?? false
+      commands.push(makeLivingWorldCommand('FISHERY_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+        tileId: regen.tileId, density: regen.density, tick: regen.tick, narration: hadCollapsed && regen.density > FISHERY_COLLAPSE_THRESHOLD + FISHERY_RECOVERY_BUFFER ? `${TILE_NAME_BY_ID[regen.tileId] ?? regen.tileId}的漁場逐漸恢復。` : null,
+      }))
+    }
+
+    // ---- Phase E2.3: ecosystem pressure planner ----
+    for (const [tileId, workCount] of this.tileWorkActionCounts) {
+      const row = this.ecosystemRegionProjection.getForTile(tileId)
+      const decision = planEcosystemPressure({
+        tick: nextTick,
+        tileId,
+        recentWorkActions: workCount,
+        currentPressureLevel: row.pressureLevel,
+        lastPressureRaisedTick: row.lastPressureRaisedTick,
+      })
+      if (decision === 'raise') {
+        const newLevel = Math.min(100, row.pressureLevel + 20)
+        commands.push(makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RAISED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          tileId, pressureLevel: newLevel, tick: nextTick, narration: null,
+        }))
+      } else if (decision === 'recover') {
+        commands.push(makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          tileId, tick: nextTick, narration: null,
+        }))
+      }
+    }
+    this.tileWorkActionCounts = new Map()
 
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
@@ -3326,6 +3404,8 @@ export class SimulationRuntime {
         this.skillXpProjection.project(ev)
         this.culturalElementProjection.project(ev)
         this.fisheryDensityProjection.project(ev)
+        this.speciesExtinctionProjection.project(ev)
+        this.ecosystemRegionProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
         this.marketPricesProjection.project(ev)
@@ -3934,6 +4014,8 @@ export class SimulationRuntime {
       this.skillXpProjection.rebuildFromEvents(allEvents)
       this.culturalElementProjection.rebuildFromEvents(allEvents)
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
+      this.speciesExtinctionProjection.rebuildFromEvents(allEvents)
+      this.ecosystemRegionProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
       this.marketPricesProjection.rebuildFromEvents(allEvents)
@@ -3950,6 +4032,8 @@ export class SimulationRuntime {
       this.animalMigrationProjection.rebuildFromEvents(ecoEvents)
       this.predatorHungerProjection.rebuildFromEvents(ecoEvents)
       this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
+      this.speciesExtinctionProjection.rebuildFromEvents(ecoEvents)
+      this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
       // Goods projections — rebuild from goods event types so inventory/logistics/
       // market state survives server restarts on large event logs.
       const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)

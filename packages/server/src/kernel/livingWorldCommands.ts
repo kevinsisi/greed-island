@@ -144,6 +144,13 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_RETALIATED',
   // Sprint 2C — NPC defense coordination
   'NPC_DEFENSE_PARTY_FORMED',
+  // Phase E2 — Ecosystem pressure, collapse, and recovery
+  'SPECIES_EXTINCTION_WARNING',
+  'SPECIES_EXTINCT',
+  'SPECIES_RECOVERED',
+  'FISHERY_RECOVERED',
+  'ECOSYSTEM_PRESSURE_RAISED',
+  'ECOSYSTEM_PRESSURE_RECOVERED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -739,6 +746,50 @@ export type FisheryCollapsedCmd = Readonly<{
   narration: string
 }>
 
+export type FisheryRecoveredCmd = Readonly<{
+  tileId: string
+  density: number
+  tick: number
+  narration: string | null
+}>
+
+export type SpeciesExtinctionWarningCmd = Readonly<{
+  speciesId: string
+  tileId: string
+  population: number
+  threshold: number
+  tick: number
+  narration: string | null
+}>
+
+export type SpeciesExtinctCmd = Readonly<{
+  speciesId: string
+  lastSeenTick: number
+  affectedTileIds: readonly string[]
+  narration: string | null
+}>
+
+export type SpeciesRecoveredCmd = Readonly<{
+  speciesId: string
+  tileId: string
+  population: number
+  tick: number
+  narration: string | null
+}>
+
+export type EcosystemPressureRaisedCmd = Readonly<{
+  tileId: string
+  pressureLevel: number
+  tick: number
+  narration: string | null
+}>
+
+export type EcosystemPressureRecoveredCmd = Readonly<{
+  tileId: string
+  tick: number
+  narration: string | null
+}>
+
 export const GOODS_HOLDER_TYPES = ['npc', 'building', 'settlement'] as const
 export type GoodsHolderType = (typeof GOODS_HOLDER_TYPES)[number]
 
@@ -1010,6 +1061,12 @@ export type LivingWorldCommandPayload =
   | MeatHarvestedCmd
   | FisheryHarvestedCmd
   | FisheryCollapsedCmd
+  | FisheryRecoveredCmd
+  | SpeciesExtinctionWarningCmd
+  | SpeciesExtinctCmd
+  | SpeciesRecoveredCmd
+  | EcosystemPressureRaisedCmd
+  | EcosystemPressureRecoveredCmd
   | GoodsExtractedCmd
   | GoodsStoredCmd
   | GoodsProcessedCmd
@@ -1911,7 +1968,54 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
-  }
+  },
+  SPECIES_EXTINCTION_WARNING: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.population !== 'number' || !Number.isInteger(p.population) || p.population < 0) return 'population must be non-negative integer'
+    if (typeof p.threshold !== 'number' || !Number.isInteger(p.threshold) || p.threshold <= 0) return 'threshold must be positive integer'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  SPECIES_EXTINCT: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.lastSeenTick)) return 'lastSeenTick must be non-negative integer'
+    if (!Array.isArray(p.affectedTileIds)) return 'affectedTileIds must be array'
+    for (const id of p.affectedTileIds) {
+      if (typeof id !== 'string' || id.length === 0) return 'affectedTileIds must be non-empty strings'
+    }
+    return null
+  },
+  SPECIES_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.population !== 'number' || !Number.isInteger(p.population) || p.population <= 0) return 'population must be positive integer'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  FISHERY_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.density !== 'number' || !Number.isFinite(p.density) || p.density <= 0) return 'density must be positive'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  ECOSYSTEM_PRESSURE_RAISED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.pressureLevel !== 'number' || !Number.isInteger(p.pressureLevel) || p.pressureLevel < 0 || p.pressureLevel > 100) return 'pressureLevel must be integer 0–100'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  ECOSYSTEM_PRESSURE_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
 }
 
 export class LivingWorldRuleEngine {

@@ -21,10 +21,13 @@ export type AnimalSpawnPlan = Readonly<{
 
 export type AnimalPopulationLookup = (speciesId: string, tileId: string) => number
 
+export type TilePressureLookup = (tileId: string) => number
+
 export type PlanAnimalSpawnsInput = Readonly<{
   tick: number
   tiles: readonly MapTileDef[]
   getPopulation: AnimalPopulationLookup
+  getPressureLevel?: TilePressureLookup
 }>
 
 type EligibleTile = Readonly<{
@@ -49,9 +52,12 @@ export function planAnimalSpawns(input: PlanAnimalSpawnsInput): readonly AnimalS
   const activeTile = eligibleTiles[Math.floor(input.tick / ECOSYSTEM_SPAWN_CADENCE_TICKS) % eligibleTiles.length]
   if (!activeTile) return []
 
+  const pressureLevel = input.getPressureLevel?.(activeTile.tile.id) ?? 0
+
   const candidates = listSpeciesByRegion(activeTile.region)
     .filter((species) => species.rarity !== 'legendary')
     .filter((species) => input.getPopulation(species.id, activeTile.tile.id) < carryingCapacityForTile(species))
+    .filter((species) => passesSpawnRateModifier(species, pressureLevel, activeTile.tile.id, input.tick))
     .sort((a, b) => spawnRank(a, activeTile.tile.id, input.tick).localeCompare(spawnRank(b, activeTile.tile.id, input.tick)))
 
   return candidates
@@ -122,4 +128,18 @@ function hashToGrid(hex: string, max: number): number {
   const parsed = Number.parseInt(hex, 16)
   if (!Number.isFinite(parsed)) return 0
   return parsed % max
+}
+
+export function spawnRateModifier(species: Pick<Species, 'civilizationTolerance'>, pressureLevel: number): number {
+  if (pressureLevel > 75) return 0.1
+  if (species.civilizationTolerance < 30 && pressureLevel > 50) return 0.3
+  return 1.0
+}
+
+function passesSpawnRateModifier(species: Species, pressureLevel: number, tileId: string, tick: number): boolean {
+  const modifier = spawnRateModifier(species, pressureLevel)
+  if (modifier >= 1.0) return true
+  const hash = hashCanonicalJson({ scheme: 'spawn-pressure-modifier.v1', speciesId: species.id, tileId, tick })
+  const roll = Number.parseInt(hash.slice(0, 8), 16) / 0xffffffff
+  return roll < modifier
 }

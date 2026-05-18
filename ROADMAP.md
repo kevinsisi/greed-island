@@ -5,6 +5,31 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.27.0 ✅ shipped — 2026-05-18
+
+**主題：Phase E2 — Ecosystem Pressure & Collapse**
+
+OpenSpec: `ecosystem-pressure-collapse/`。
+
+- ✅ 6 new command types: `SPECIES_EXTINCTION_WARNING`, `SPECIES_EXTINCT`, `SPECIES_RECOVERED`, `FISHERY_RECOVERED`, `ECOSYSTEM_PRESSURE_RAISED`, `ECOSYSTEM_PRESSURE_RECOVERED`.
+- ✅ New projections: `SpeciesExtinctionProjection` (stable/warning/extinct lifecycle), `EcosystemRegionProjection` (per-tile pressure/pollution).
+- ✅ New planners: `extinctionPlanner.ts` (per-species check), `pressurePlanner.ts` (raise/recover logic), `fishery.ts` passive regen.
+- ✅ `animalSpawning.ts` spawn rate modifier: high-pressure tiles suppress low-tolerance species.
+- ✅ `runtime.ts`: new projections instantiated + boot hydrated + event fan-out wired + E2 planners run on reproduction cadence.
+- ✅ `chronicleRenderer.ts`: SPECIES_EXTINCT/RECOVERED → Chinese narration; warning/pressure/fishery-recovery events suppressed.
+- ✅ `/admin/world` "生態壓力" section: species extinction table + tile pressure table.
+- ✅ 111 test files, 724 tests pass; web build clean; `openspec validate --all --strict` 35/35.
+
+## v0.26.1 ✅ shipped — 2026-05-18
+
+**主題：Ecosystem Balance Fix — migration wave accumulation + predator extinction**
+
+- ✅ `AnimalMigrationProjection`: delete wave on `ANIMAL_MIGRATED` (instantaneous migration; no accumulation).
+- ✅ Predator `carryingCapacity` ≥ 30 (effective ≥ 2 after divisor) to enable reproduction.
+- ✅ `PREDATOR_STARVATION_THRESHOLD_TICKS` 5×→20× cadence ticks (20 minutes wall-clock).
+- ✅ `ECOSYSTEM_MAX_SPAWNS_PER_ACTIVE_TILE` 1→2.
+- ✅ Tests updated for new migration wave deletion and spawn rate.
+
 ## v0.25.1 ✅ shipped — 2026-05-18
 
 **主題：Sprint 6 Slice 5 — Real-time combat UI (Phaser CombatScene + extended CombatHud)**

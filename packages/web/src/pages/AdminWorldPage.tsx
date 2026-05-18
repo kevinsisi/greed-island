@@ -160,6 +160,8 @@ export function AdminWorldPage() {
   const predatorHungerRows = readPredatorHunger(world.facts)
   const animalPopulationRows = readAnimalPopulation(world.facts)
   const totalAnimals = animalPopulationRows.reduce((sum, r) => sum + r.count, 0)
+  const extinctionWarnings = readExtinctionWarnings(world.facts)
+  const ecosystemRegions = readEcosystemRegions(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -646,6 +648,85 @@ export function AdminWorldPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      <section className="gi-panel p-5 flex flex-col gap-4 border-emerald-900/30">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-sm uppercase tracking-tightest text-emerald-400">
+              生態壓力 Ecosystem Pressure
+            </h2>
+            <p className="text-[12px] text-ground-400 leading-relaxed">
+              Phase E2 — species extinction status and per-tile ecosystem pressure driven by NPC work actions.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
+            <Badge label="warned/extinct" value={extinctionWarnings.length} danger={extinctionWarnings.some(r => r.status === 'extinct')} />
+            <Badge label="pressured tiles" value={ecosystemRegions.length} />
+          </div>
+        </div>
+
+        {extinctionWarnings.length > 0 && (
+          <div className="overflow-x-auto">
+            <h3 className="text-[11px] uppercase tracking-tightest text-ground-500 mb-2">Species Status</h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">Species</th>
+                  <th className="text-left py-2 pr-4">Status</th>
+                  <th className="text-left py-2 pr-4">Affected Tiles</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extinctionWarnings.map((row) => (
+                  <tr key={row.speciesId} className="border-t border-ground-800/50">
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-200">{row.speciesId}</td>
+                    <td className="py-2 pr-4 font-mono text-xs">
+                      {row.status === 'extinct' ? <span className="text-red-400">☠️ extinct</span> : <span className="text-amber-400">⚠️ warning</span>}
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-400">
+                      {row.status === 'extinct' ? `@tick ${row.extinctSince ?? '?'}` : row.warningTileIds.join(', ') || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {ecosystemRegions.length > 0 && (
+          <div className="overflow-x-auto">
+            <h3 className="text-[11px] uppercase tracking-tightest text-ground-500 mb-2">Tile Pressure</h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+                  <th className="text-left py-2 pr-4">Tile</th>
+                  <th className="text-right py-2 pr-4">Pressure</th>
+                  <th className="text-right py-2 pr-4">Pollution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ecosystemRegions.map((row) => (
+                  <tr key={row.tileId} className="border-t border-ground-800/50">
+                    <td className="py-2 pr-4 font-mono text-xs text-ground-200">{row.tileId}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs">
+                      <span className={row.pressureLevel > 75 ? 'text-red-400' : row.pressureLevel > 50 ? 'text-amber-400' : 'text-ground-300'}>
+                        {row.pressureLevel}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs text-ground-400">{row.pollutionLevel}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {extinctionWarnings.length === 0 && ecosystemRegions.length === 0 && (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
+            ✅ All species stable. No tile pressure recorded.
           </div>
         )}
       </section>
@@ -1140,4 +1221,40 @@ function isPredatorHungerRow(value: unknown): value is PredatorHungerRow {
     typeof row.tileId === 'string' &&
     typeof row.lastKillAtTick === 'number'
   )
+}
+
+type SpeciesExtinctionRow = Readonly<{
+  speciesId: string
+  status: 'warning' | 'extinct'
+  warningTileIds: readonly string[]
+  extinctSince: number | null
+  lastWarningTick: number | null
+}>
+
+type EcosystemRegionRow = Readonly<{
+  tileId: string
+  pressureLevel: number
+  pollutionLevel: number
+  lastPressureRaisedTick: number | null
+  lastRecoveredTick: number | null
+}>
+
+function readExtinctionWarnings(facts: Record<string, unknown>): SpeciesExtinctionRow[] {
+  const raw = facts.extinctionWarnings
+  if (!Array.isArray(raw)) return []
+  return raw.filter((v): v is SpeciesExtinctionRow => {
+    if (!v || typeof v !== 'object') return false
+    const r = v as Partial<SpeciesExtinctionRow>
+    return typeof r.speciesId === 'string' && (r.status === 'warning' || r.status === 'extinct')
+  }).sort((a, b) => a.speciesId.localeCompare(b.speciesId))
+}
+
+function readEcosystemRegions(facts: Record<string, unknown>): EcosystemRegionRow[] {
+  const raw = facts.ecosystemRegions
+  if (!Array.isArray(raw)) return []
+  return raw.filter((v): v is EcosystemRegionRow => {
+    if (!v || typeof v !== 'object') return false
+    const r = v as Partial<EcosystemRegionRow>
+    return typeof r.tileId === 'string' && typeof r.pressureLevel === 'number'
+  }).sort((a, b) => b.pressureLevel - a.pressureLevel || a.tileId.localeCompare(b.tileId))
 }

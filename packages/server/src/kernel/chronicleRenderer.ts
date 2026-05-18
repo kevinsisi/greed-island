@@ -290,6 +290,20 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (event.eventType === 'ANIMAL_KILLED') return null
   if (event.eventType === 'ANIMAL_STARVED') return null
   if (event.eventType === 'ANIMAL_REPRODUCED') return null
+  if (event.eventType === 'SPECIES_EXTINCTION_WARNING') return null
+  if (event.eventType === 'FISHERY_RECOVERED') return null
+  if (event.eventType === 'ECOSYSTEM_PRESSURE_RAISED') return null
+  if (event.eventType === 'ECOSYSTEM_PRESSURE_RECOVERED') return null
+  if (event.eventType === 'SPECIES_EXTINCT') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : event.actorId
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${speciesId} 已在此區域絕種` }
+  }
+  if (event.eventType === 'SPECIES_RECOVERED') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : event.actorId
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${speciesId} 族群恢復` }
+  }
   if (event.eventType.startsWith('GOODS_')) return null
   if (event.eventType.startsWith('HOUSEHOLD_GOLD_')) return null
   if (event.eventType === 'HOUSEHOLD_INHERITANCE_ASSIGNED') return null

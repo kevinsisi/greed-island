@@ -1,6 +1,8 @@
 import {
   FISHERY_COLLAPSE_THRESHOLD,
+  FISHERY_DEFAULT_DENSITY,
   FISHERY_HARVEST_DELTA,
+  FISHERY_RECOVERY_RATE,
 } from '../config/world.js'
 import type { MapTileDef } from '../sim/mapGraph.js'
 import type { FisheryDensityRow } from '../projections/fisheryDensity.js'
@@ -37,6 +39,25 @@ export function planFisheryHarvest(input: {
     collapsed: densityBefore > FISHERY_COLLAPSE_THRESHOLD && densityAfter <= FISHERY_COLLAPSE_THRESHOLD,
     tick: input.tick,
   }
+}
+
+export type FisheryRegenPlan = Readonly<{
+  tileId: string
+  density: number
+  tick: number
+}>
+
+export function planFisheryPassiveRegen(input: {
+  tick: number
+  fisheryRows: readonly FisheryDensityRow[]
+}): readonly FisheryRegenPlan[] {
+  return input.fisheryRows
+    .filter((r) => r.density > 0 && r.density < FISHERY_DEFAULT_DENSITY)
+    .map((r) => ({
+      tileId: r.tileId,
+      density: Math.min(FISHERY_DEFAULT_DENSITY, r.density + FISHERY_RECOVERY_RATE),
+      tick: input.tick,
+    }))
 }
 
 export function isFisheryTile(tile: Pick<MapTileDef, 'id' | 'biome'>): boolean {
