@@ -220,6 +220,18 @@ const COMBAT_RULE_ENGINE_OWNED_COMMANDS = new Set<string>([
   'COMBAT_RESOLVE',
 ])
 const PLAYER_JOBS_BOOT_EVENT_TYPES = ['PLAYER_ENERGY_SET'] as const
+// Ecosystem projection event types — read selectively during fast-boot so
+// animal/fishery/migration projections survive restarts on large event logs.
+const ECOSYSTEM_BOOT_EVENT_TYPES = [
+  'ANIMAL_SPAWNED',
+  'ANIMAL_KILLED',
+  'ANIMAL_REPRODUCED',
+  'ANIMAL_MIGRATED',
+  'ANIMAL_STARVED',
+  'MIGRATION_WAVE_STARTED',
+  'FISHERY_HARVESTED',
+  'FISHERY_COLLAPSED',
+] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -3915,6 +3927,14 @@ export class SimulationRuntime {
       this.settlementsProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
+      // Ecosystem projections are small relative to the full event log —
+      // rebuild them from only animal/fishery event types so the ecology
+      // overlay survives server restarts on large event logs.
+      const ecoEvents = this.store.readEventsByTypes(ECOSYSTEM_BOOT_EVENT_TYPES)
+      this.animalPopulationProjection.rebuildFromEvents(ecoEvents)
+      this.animalMigrationProjection.rebuildFromEvents(ecoEvents)
+      this.predatorHungerProjection.rebuildFromEvents(ecoEvents)
+      this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
