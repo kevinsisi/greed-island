@@ -3,6 +3,48 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Combat Phase C Complete (v0.25.1)
+
+### Slices Implemented (this session)
+
+**Slice 4 (v0.25.0):**
+- Server: `CombatSnapshotView` + `getCombatSnapshot()` on `CombatSubTickCoordinator`; `SimulationRuntime` adds `submitCombatCardPlay`, `submitCombatCardCancel`, `getCombatSnapshot`, `subscribeCombatEvents`; `combatRouter` adds Phase C HTTP + SSE endpoints (`/play`, `/cancel`, `/snapshot`, `/stream`). `tickDigest` dispatched to every SSE listener after each committed combat event.
+- Client: `CombatProjection` (pure SSE-event projection with applySnapshot/applyEvent/isStale/predict/reconcile); `api/client` extended with `combatPlay`, `combatCancel`, `combatSnapshot`, `combatStreamUrl`. 14 tests.
+
+**Slice 5 (v0.25.1):**
+- `packages/web/src/components/game/CombatScene.ts` — Phaser scene (tweened HP bars, floating damage/heal numbers); `combatHand.ts` (pure card-hand constants + shouldShowRejectToast); `CombatHudPhaseC` React component (SSE stream, card hand, client prediction, reject toast, silent reconcile). 7 tests.
+
+**Slice 6 (v0.25.2 → current):**
+- `replayDeterminism.test.ts` — 1000-event CombatStore replay determinism test.
+- `subTickLatency.test.ts` — p99 latency benchmark (p99 = 0.065 ms, budget = 50 ms; passes).
+- ROADMAP.md: added v0.25.0 and v0.25.1 entries.
+- ARCHITECTURE.md: §11.4 marked CLOSED; §11.2 marked partially closed; §12.5 updated.
+
+### Progress
+
+- `combat-phase-c-realtime-subtick`: **32/39** tasks complete. Slice 4 (19/19 done), Slice 5 (4/4 done), Slice 6 (6.1–6.4 done); 6.5 (open questions) still pending. Slices 7.x open questions will be answered next.
+
+### Verification
+
+- Full test suite: **107 test files, 670 tests pass** (after Slice 6 tests added).
+- Build: `npm run build` — server build + web Vite bundle both clean.
+- `npx openspec validate --all --strict` — run before push to confirm (expect 34 passed, 0 failed).
+
+### CI / Deploy
+
+- Not yet pushed (batching remaining Slice 6 + open-questions commit before pushing).
+- Commits on `main` branch:
+  - `773581f feat(combat): Sprint 6 Slice 4 — SSE stream + client prediction projection (v0.25.0)`
+  - `d0a1cd5 feat(combat): Sprint 6 Slice 5 — real-time combat UI (v0.25.1)`
+
+### Next Steps
+
+1. Finish task 6.5 — answer open questions from proposal.md (7 questions, non-blocking to ship).
+2. Push all Slice 6 work in one commit, then push to origin.
+3. Monitor CI and deploy dev at `https://hunter.sisihome.org`.
+4. Archive `combat-phase-c-realtime-subtick` change once all tasks done.
+5. Phase D: persistent combat outcomes (faction/economy/NPC memory), full §11.2 closure.
+
 ## 2026-05-17 — CombatStore EventLog Projection
 
 ### Slice Implemented

@@ -76,10 +76,19 @@ Card priority table 0..4 with deterministic tie-break `(priority desc, actorId a
   - AI ambient combat narrator hooks.
   - NPC card AI planner (Phase C uses `seededRandInt(deckSize)` from Phase B).
 
-## Open Questions
+## Open Questions — Answered (v0.25.x)
 
-1. Multi-tick card channeling vs instant-cast only in v1?
-2. NPC card AI: keep `seededRandInt(deck)` for v1, planner in Phase D — confirm?
-3. Damage formula: do card stats (power/element/crit%) **replace** Phase B fixed formula, or **layer** on top?
-4. Snapshot retention duration after combat resolves?
-5. AoE cards (nullable target) in v1, or strictly single-target?
+1. **Multi-tick card channeling vs instant-cast only in v1?**
+   → **Instant-cast only in v1.** All Phase C cards resolve within the same sub-tick they are submitted for. Multi-tick channeling deferred to Phase D. (Confirmed by Phase C implementation: `evaluateCombatSubTick` resolves all pending commands in one pass.)
+
+2. **NPC card AI: keep `seededRandInt(deck)` for v1, planner in Phase D — confirm?**
+   → **Confirmed: `seededRandInt` approach retained for v1.** Phase C NPC card play is driven by the Phase B `seededRandInt(deckSize)` style selection inside `CombatRuntime` tick callback. Planner (intent-weighted, persona-aware) deferred to Phase D.
+
+3. **Damage formula: card stats replace Phase B fixed formula, or layer on top?**
+   → **Replace for Phase C.** Phase C cards use `effect.power` directly (e.g. FIRE_LASH = 18, TIDE_STRIKE = 22) as the authoritative damage value. The Phase B `base + greedBoost - patienceMitigation + crit` formula applies only to Phase B `/action` commands. The two paths are separate and the Phase B compat shim remains intact through v0.16.x.
+
+4. **Snapshot retention duration after combat resolves?**
+   → **No explicit TTL in v1.** `CombatSubTickCoordinator` retains the in-memory projection indefinitely until server restart. The `GET /api/combat/:id/snapshot` endpoint returns the last known snapshot even after `resolved = true`. Explicit TTL or garbage-collection deferred to Phase D.
+
+5. **AoE cards (nullable target) in v1, or strictly single-target?**
+   → **Strictly single-target in v1.** All Phase C card effects require a non-null `targetActorId`. The compiler rejects cards without a target. AoE (nullable target, multi-target fan-out) deferred to Phase D.

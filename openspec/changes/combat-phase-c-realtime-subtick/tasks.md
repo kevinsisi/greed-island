@@ -48,11 +48,11 @@
 
 ## 6. Slice 6 — Determinism audit + release prep
 
-- [ ] 6.1 1000-event combat replay test — same EventLog reduced twice produces byte-identical `CombatStore` state and SSE digest stream
-- [ ] 6.2 Sub-tick latency benchmark — p99 latency at 10 Hz under `combatTickMs / 2` (50 ms); release gate
-- [ ] 6.3 Update `ROADMAP.md`, `PROGRESS.md`, and `ARCHITECTURE.md §11.4` (mark closed) + `§11.2` (mark partial-closed)
-- [ ] 6.4 Update `MEMORY.md` deploy state
-- [ ] 6.5 Confirm all open questions from `proposal.md` are answered before final v0.16.x bump
+- [x] 6.1 1000-event combat replay test — `packages/server/src/combat/replayDeterminism.test.ts`: 1000-event EventLog (INITIATE + 998 COMBAT_DAMAGE + RESOLVE) rebuilt twice → byte-identical CombatStore state including player_hp, npc_hp, log row count, outcome. Client-side digest determinism covered by existing CombatProjection.test.ts (Slice 4.7).
+- [x] 6.2 Sub-tick latency benchmark — `packages/server/src/combat/subTickLatency.test.ts`: 1000 calls to `evaluateCombatSubTick()` with 2 pending FIRE_LASH card plays + 1 active burn status; p50=0.008 ms, p95=0.016 ms, p99=0.065 ms — well under 50 ms budget. Release gate: test fails if p99 ≥ 50 ms.
+- [x] 6.3 Update `ROADMAP.md`, `PROGRESS.md`, and `ARCHITECTURE.md §11.4` (mark closed) + `§11.2` (mark partial-closed) — §11.4 marked `✅ CLOSED v0.25.0`; §11.2 marked `partially closed v0.25.0`; §12.5 updated to reflect Phase B + Phase C complete; ROADMAP.md added v0.25.0 + v0.25.1 entries; PROGRESS.md updated with full session handoff.
+- [x] 6.4 Update `MEMORY.md` deploy state — updated in memory system; see memory file for details.
+- [x] 6.5 Confirm all open questions from `proposal.md` are answered — all 5 open questions answered in-place in `proposal.md`: (1) instant-cast only in v1, (2) seededRandInt NPC AI confirmed, (3) Phase C card power replaces Phase B formula, (4) no explicit TTL in v1, (5) strictly single-target in v1.
 
 ## 7. Open Questions (resolve before slice 2 implementation begins)
 

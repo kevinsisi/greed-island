@@ -651,15 +651,21 @@ boot-time seed drops. This item is no longer a current non-conformance,
 but card state remains transitional under §11.2 until it is unified with
 canonical `event_log` or formally specified as an equivalent sub-log.
 
-### 11.2 Card State Has A Separate Event Log
+### 11.2 Card State Has A Separate Event Log (partially closed v0.25.0)
 
 The card pipeline writes to `card_action_log` and mutates
-`world_card_drops` / codex tables in the same transaction. It is durable
-and command-shaped, but it is not yet unified with the canonical
-simulation `event_log`, so card state is not fully covered by
-`WorldState = Reduce(EventLog)`. Either fold card events into the
-canonical EventLog or explicitly model card_action_log as a replayed
-sub-event-log with equivalent guarantees and tests.
+`world_card_drops` / codex tables in the same transaction.
+
+**Partial closure (v0.25.0):** Combat card play (`COMBAT_CARD_PLAY`,
+`COMBAT_CARD_CANCEL`, all sub-tick combat events) now join the canonical
+`event_log` and are projected deterministically. Combat card state is
+fully covered by `WorldState = Reduce(EventLog)`.
+
+**Remaining gap:** Non-combat card drops (`card_action_log`, codex rows,
+`world_card_drops`) are still durable but not yet unified with canonical
+EventLog. Full closure requires folding world-card-drop events into
+canonical log or formally speccing `card_action_log` as an equivalent
+sub-log with the same replay guarantees and tests.
 
 ### 11.3 Jobs And Wallet Are Direct Projection Mutations
 
@@ -670,12 +676,15 @@ Player jobs, wages, energy loss/restoration, and purchases must become
 Commands that resolve into Events before the world can claim full
 Reality Rule compliance.
 
-### 11.4 Combat Store Side Effects Are Not Fully Event-Sourced
+### 11.4 Combat Store Side Effects Are Not Fully Event-Sourced ✅ CLOSED v0.25.0
 
-Combat initiate/action/resolve submit living-world Commands, but the
-combat session/log store and some defeat side effects are still updated
-directly. Combat state and persistent consequences need to be fully
-replayable from committed combat/world Events.
+**Closed in v0.24.22 / v0.25.0 (combat-phase-c-realtime-subtick Slice 3 + 4).**
+`CombatStore` is now a read-only projection of the canonical EventLog.
+Direct write methods (`createSession`, `updateAfterRound`, `appendLog`,
+`incapacitateNpc`) were removed. All combat state changes flow
+Command → Rule Engine → EventLog → `projectEvent()` fanout. Boot replay
+rebuilds `CombatStore` from events. 1000-event determinism test in
+`replayDeterminism.test.ts` verifies byte-identical rebuild.
 
 ### 11.5 FACT_SET Snapshot Path Is Transitional
 
@@ -808,10 +817,13 @@ and combat-derived world consequences.
 **Current modules:** `combat/*`, combat router, combat store, Phase B
 single-shot command flow.
 
-**Current status:** Partial. Phase B proves Command -> Rule Engine -> Event
-for simple combat, but §11.4 remains open because session/log side effects and
-some consequences are not fully event-sourced. Phase C must make CombatStore a
-read-only projection before combat can claim architecture compliance.
+**Current status:** Phase B + Phase C complete (v0.25.1). Phase C adds:
+10 Hz sub-tick loop, 5-phase rule engine, 14-card catalog, `CombatStore` as
+read-only EventLog projection (§11.4 closed), COMBAT_CARD_PLAY/CANCEL in
+canonical EventLog (§11.2 partial-closed), SSE stream + client prediction,
+`CombatHudPhaseC` React component with Phaser canvas. Phase B single-shot
+path retained through v0.16.x compat. Persistent outcomes (faction, NPC
+memory, economy) still pending Phase D.
 
 **Boundary:** Combat is not a detached minigame. Persistent outcomes must feed
 Layer 3 faction/territory/economy, Layer 2 NPC memory, Layer 2.5 species

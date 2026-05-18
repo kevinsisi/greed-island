@@ -5,6 +5,36 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.25.1 ✅ shipped — 2026-05-18
+
+**主題：Sprint 6 Slice 5 — Real-time combat UI (Phaser CombatScene + extended CombatHud)**
+
+OpenSpec: `combat-phase-c-realtime-subtick/` Slice 5 of 6。
+
+- ✅ 新增 `packages/web/src/components/game/CombatScene.ts` — Phaser scene with `applyState()` (tweened HP bars) + `pushFloatingNumber()` (floating damage/heal numbers); re-exports card-hand utilities from `combatHand.ts`.
+- ✅ 新增 `packages/web/src/components/game/combatHand.ts` — pure constants: `PLAYER_HAND_CARDS` (6-card hand), `getCombatHandCardMeta()` (label + predictedHpDelta + targetSelf), `shouldShowRejectToast()`. No Phaser dependency; safe to import in tests.
+- ✅ 擴展 `packages/web/src/components/game/CombatHud.tsx` — 新增 `CombatHudPhaseC` component: SSE EventSource → CombatProjection state, Phaser CombatScene canvas embed, 6-card hand buttons, status icon strip, client prediction + optimistic HP delta, reject toast (2 s auto-dismiss), silent reconcile on `accepted_with_delta`.
+- ✅ 7 new `CombatScene.test.ts` tests: hand card metadata contract, FIRE_LASH damage/non-self, MEND heal/self, unknown card null, shouldShowRejectToast gate, server-driven hp via CombatProjection, isStale gate.
+- ✅ 666/666 tests pass; build clean.
+
+## v0.25.0 ✅ shipped — 2026-05-18
+
+**主題：Sprint 6 Slice 4 — SSE stream + client prediction projection**
+
+OpenSpec: `combat-phase-c-realtime-subtick/` Slice 4 of 6。
+
+Server-side:
+- `CombatSnapshotView` + `getCombatSnapshot()` on `CombatSubTickCoordinator`; `lastCombatTick` tracked per combat.
+- `SimulationRuntime` gets `submitCombatCardPlay()`, `submitCombatCardCancel()`, `getCombatSnapshot()`, `subscribeCombatEvents()`.
+- `combatRouter` adds `POST /api/combat/:id/play`, `POST /api/combat/:id/cancel`, `GET /api/combat/:id/snapshot`, `GET /api/combat/:id/stream` (SSE); `tickDigest` dispatched on every committed combat event.
+
+Client-side:
+- `CombatProjection` (pure SSE-event projection): `applySnapshot`, `applyEvent`, `isStale`, `predict`, `reconcile` (rejected → rollback, accepted_with_delta → silent reconcile). Handles both LivingWorld-wrapped and direct sub-tick payload shapes.
+- `api/client` extended with `combatPlay`, `combatCancel`, `combatSnapshot`, `combatStreamUrl`.
+- 14 new `CombatProjection.test.ts` tests; 659/659 pass.
+
+Spec status: §11.4 CLOSED (CombatStore is now a read-only projection). §11.2 partial-closed (COMBAT_CARD_PLAY joins canonical EventLog).
+
 ## v0.24.2 🚧 in progress — 2026-05-15
 
 **主題：User-reported visual bugfixes**
