@@ -4,7 +4,7 @@
 
 Defines the goods substrate: a typed catalog of tradeable entities, five core Commands/Events that model the lifecycle of goods (`GOODS_EXTRACTED → GOODS_STORED → GOODS_PROCESSED → GOODS_CONSUMED / GOODS_DESTROYED`), and a `GoodsInventoryProjection` that tracks per-owner quantities. This is Phase 2 slice 1 — the foundation that later logistics, production chain, and market slices will build on.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Goods species catalog is a frozen const
 

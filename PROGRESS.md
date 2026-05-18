@@ -3,6 +3,50 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Phase 2 Goods Primitives (v0.26.0)
+
+### Work Done
+
+Phase 2 slice 1: goods substrate foundation — catalog, commands/events, inventory projection, HTTP endpoint.
+
+**New files:**
+- `packages/server/src/goods/catalog.ts` — 10-species frozen `GOODS_CATALOG` (`meat`, `fish`, `brine`, `lumber`, `ore`, `grain`, `refined_salt`, `iron_ingot`, `bread`, `tools`) with `goodsId`, `nameZh`, `unit`, `tier`. `listGoodsSpecies()` / `getGoodsSpecies(id)`.
+- `packages/server/src/goods/catalog.test.ts` — 4 unit tests (length, array frozen, entries frozen, unknown → undefined).
+- `packages/server/src/http/goodsRouter.ts` — `GET /api/goods/inventory/:ownerId` reads `GoodsInventoryProjection`, returns non-zero entries with catalog metadata (`goodsId`, `quantity`, `nameZh`, `unit`). No auth required.
+- `packages/server/src/http/goodsRouter.test.ts` — 2 tests (non-zero entries only, unknown owner → []).
+
+**Wired into existing infrastructure (already existed pre-v0.26.0):**
+- 5 GOODS command/event types in `livingWorldCommands.ts` (`GOODS_EXTRACTED`, `GOODS_STORED`, `GOODS_PROCESSED`, `GOODS_CONSUMED`, `GOODS_DESTROYED`)
+- `GoodsInventoryProjection` in `projections/goodsInventory.ts` — full applyEvent + rebuildFromEvents + canonicalHash
+- E0 hooks in `runtime.ts`: `MEAT_HARVESTED` → `GOODS_EXTRACTED:meat`; `FISHERY_HARVESTED` → `GOODS_EXTRACTED:fish`
+
+**Boot path additions (`runtime.ts`):**
+- `GOODS_BOOT_EVENT_TYPES` constant (11 goods + logistics event types).
+- `goodsInventoryProjection.rebuildFromEvents(goodsEvents)` wired into large-log `else` boot branch (same pattern as v0.25.3 ecosystem projections).
+
+**OpenSpec:**
+- `goods-primitives` change: all 8 sections complete (48/48 subtasks).
+- Delta spec `openspec/changes/goods-primitives/specs/goods-primitives/spec.md` uses `## ADDED Requirements`.
+- `npx openspec validate --all --strict` — 34 passed, 0 failed.
+
+### Verification
+
+- Build: `npm run build:server` — clean.
+- Tests: 86 server files, 578+ tests, all pass.
+- OpenSpec: 34/34 passed.
+
+### CI / Deploy
+
+- Pushed: (see commit).
+
+### Next Steps
+
+1. Archive `goods-primitives` OpenSpec change.
+2. Phase 2 slice 2: Logistics projection (`GOODS_TRANSPORT_*` events) — trade routes between settlements.
+3. Phase 2 slice 3: Market prices projection (`MARKET_PRICE_DISCOVERED`) — supply/demand clearing.
+
+---
+
 ## 2026-05-18 — Ecosystem boot fix (v0.25.3)
 
 ### Problem Fixed

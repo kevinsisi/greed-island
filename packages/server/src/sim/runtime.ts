@@ -232,6 +232,21 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'FISHERY_HARVESTED',
   'FISHERY_COLLAPSED',
 ] as const
+// Goods projection event types — read selectively during fast-boot so
+// inventory/logistics/market/production projections survive restarts on large logs.
+const GOODS_BOOT_EVENT_TYPES = [
+  'GOODS_EXTRACTED',
+  'GOODS_STORED',
+  'GOODS_PROCESSED',
+  'GOODS_CONSUMED',
+  'GOODS_DESTROYED',
+  'TRADE_ROUTE_OPENED',
+  'TRADE_ROUTE_CLOSED',
+  'GOODS_TRANSPORT_STARTED',
+  'GOODS_TRANSPORT_ARRIVED',
+  'GOODS_TRANSPORT_LOST',
+  'MARKET_PRICE_DISCOVERED',
+] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -3935,6 +3950,13 @@ export class SimulationRuntime {
       this.animalMigrationProjection.rebuildFromEvents(ecoEvents)
       this.predatorHungerProjection.rebuildFromEvents(ecoEvents)
       this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
+      // Goods projections — rebuild from goods event types so inventory/logistics/
+      // market state survives server restarts on large event logs.
+      const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)
+      this.goodsInventoryProjection.rebuildFromEvents(goodsEvents)
+      this.logisticsProjection.rebuildFromEvents(goodsEvents)
+      this.marketPricesProjection.rebuildFromEvents(goodsEvents)
+      this.productionChainsProjection.rebuildFromEvents(goodsEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
