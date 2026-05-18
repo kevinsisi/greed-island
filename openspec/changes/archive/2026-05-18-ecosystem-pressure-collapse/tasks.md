@@ -67,4 +67,4 @@
 - [x] 12.3 Web build passes (`npm run build:web`).
 - [x] 12.4 `npx openspec validate --all --strict` passes.
 - [x] 12.5 Bump version to v0.27.0, update `PROGRESS.md` and `ROADMAP.md`.
-- [ ] 12.6 Commit, push, verify CI + Docker deploy smoke.
+- [x] 12.6 Commit, push, verify CI + Docker deploy smoke.
