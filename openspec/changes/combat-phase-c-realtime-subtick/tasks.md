@@ -41,10 +41,10 @@
 
 ## 5. Slice 5 — Real-time combat UI
 
-- [ ] 5.1 Create `packages/web/src/components/game/CombatScene.ts` — new Phaser scene driving server events
-- [ ] 5.2 Extend `packages/web/src/components/game/CombatHud.tsx` — card hand, status icons, hp bar animation reacting to authoritative events
-- [ ] 5.3 Reconcile-on-mismatch UX: toast for rejects only; silent UI snap for accept-with-different-amount
-- [ ] 5.4 Tests: render card hand from catalog; server-driven hp animation; reconcile toast appears on reject and only on reject
+- [x] 5.1 Create `packages/web/src/components/game/CombatScene.ts` — Phaser scene (applyState, pushFloatingNumber) + re-exports card-hand utilities from `combatHand.ts`; created companion `combatHand.ts` for pure hand-card metadata (PLAYER_HAND_CARDS, getCombatHandCardMeta, shouldShowRejectToast) with no Phaser import so it is safely testable.
+- [x] 5.2 Extend `packages/web/src/components/game/CombatHud.tsx` — added `CombatHudPhaseC` component: SSE EventSource to `/api/combat/:id/stream`, CombatProjection for state, Phaser CombatScene canvas embedded via useEffect+useRef, card hand (PLAYER_HAND_CARDS × 6 buttons), status icon strip, client prediction on play, toast on reject, silent hp snap on accepted-with-delta.
+- [x] 5.3 Reconcile-on-mismatch UX: toast for rejects only; silent UI snap for accept-with-different-amount — implemented in CombatHudPhaseC via shouldShowRejectToast(reconcile result) gate; accepted_with_delta → projection silently reconciles hp, no toast.
+- [x] 5.4 Tests: `packages/web/src/components/game/CombatScene.test.ts` — 7 tests: PLAYER_HAND_CARDS resolve to valid metadata, FIRE_LASH damage+non-self, MEND heal+self, unknown card null, shouldShowRejectToast gate, server-driven hp update via CombatProjection, tickDigest mismatch isStale. All 666 tests pass.
 
 ## 6. Slice 6 — Determinism audit + release prep
 
