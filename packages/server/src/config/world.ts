@@ -82,7 +82,7 @@ export const SETTLEMENT_FORMATION_MIN_TICKS = 12
 // eligible tile per cadence tick, so ecosystem growth stays bounded under
 // the Phase 1 per-tick command budget.
 export const ECOSYSTEM_SPAWN_CADENCE_TICKS = TICKS_PER_MINUTE
-export const ECOSYSTEM_MAX_SPAWNS_PER_ACTIVE_TILE = 1
+export const ECOSYSTEM_MAX_SPAWNS_PER_ACTIVE_TILE = 2
 
 // Animal positions are deterministic sub-tile coordinates derived from
 // hashSeed(speciesId, tileId, tick). Keep these named so rendering scale can
@@ -101,7 +101,7 @@ export const ECOSYSTEM_MIGRATION_PRESSURE_THRESHOLD = 0.8
 
 // Phase E1.4 — predator mortality. A predator that has gone this many
 // consecutive cadence ticks without a successful kill on its tile starves.
-export const PREDATOR_STARVATION_THRESHOLD_TICKS = 5 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+export const PREDATOR_STARVATION_THRESHOLD_TICKS = 20 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 
 // Sprint 2C — NPC defense coordination. Recently-committed
 // ANIMAL_ATTACKED_NPC events within this window trigger a defense

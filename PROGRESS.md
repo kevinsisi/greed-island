@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Ecosystem Balance & Migration Wave Fix (v0.26.1)
+
+### Problems Fixed
+
+**Map freeze (migration wave accumulation)**
+`AnimalMigrationProjection` incremented wave count on `ANIMAL_MIGRATED` but never removed waves. After ~21k ticks, t_mountain had 237 in-flight waves and t_dimai had 198 — every area ecology API call serialized all of them, hanging the client. Fix: delete wave on `ANIMAL_MIGRATED` (migration is instantaneous). Cap API response at 8 waves per direction as a safety net.
+
+**No species diversity / predator extinction**
+`ECOSYSTEM_TILE_CARRYING_CAPACITY_DIVISOR = 12` gave predators effective capacity of 1 (base capacity 6–16 ÷ 12 = 0–1). With effective capacity ≤ 1, reproduction requires ≥ 2 animals of the same species on the same tile — impossible. Predators went extinct within a few hours. Prey species (deer, rabbits) filled every tile. Fix: raised all predator base `carryingCapacity` to ≥ 30 (effective ≥ 2).
+
+**Starvation too fast**
+`PREDATOR_STARVATION_THRESHOLD_TICKS = 5 × 12 = 60` ticks (5 minutes wall-clock). Fix: raised to `20 × 12 = 240` ticks (20 minutes).
+
+**Too few initial spawns**
+`ECOSYSTEM_MAX_SPAWNS_PER_ACTIVE_TILE = 1` — world populated very slowly. Raised to 2.
+
+### Files Changed
+
+- `packages/server/src/config/world.ts` — `MAX_SPAWNS_PER_ACTIVE_TILE` 1→2; `PREDATOR_STARVATION_THRESHOLD_TICKS` 5×→20×
+- `packages/server/src/ecosystem/species.ts` — all predator `carryingCapacity` ≥ 30; reduced dominant prey (deer, rabbit) to reduce monoculture
+- `packages/server/src/projections/animalMigration.ts` — `ANIMAL_MIGRATED` deletes wave instead of incrementing count
+- `packages/server/src/sim/areaEcology.ts` — cap migrations arriving/departing at 8 per direction
+- Tests: `animalMigration.test.ts`, `animalSpawning.test.ts`, `runtimeAnimalSpawning.test.ts`, `runtimeMigration.test.ts`, `runtimePredation.test.ts` updated to reflect new behavior
+
+### Verification
+
+- Build: clean
+- Tests: 86 files, 578 tests, all pass
+- Docker: v0.26.0 running (rebuild pending for v0.26.1)
+
+---
+
 ## 2026-05-18 — Phase 2 Goods Primitives (v0.26.0)
 
 ### Work Done

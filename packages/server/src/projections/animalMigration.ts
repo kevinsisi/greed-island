@@ -45,9 +45,9 @@ export class AnimalMigrationProjection {
     if (event.eventType === ANIMAL_MIGRATED) {
       const payload = readMigratedPayload(event)
       if (!payload) return
-      const wave = this.waves.get(payload.waveId)
-      if (!wave) return
-      this.waves.set(payload.waveId, { ...wave, count: wave.count + 1 })
+      // Migration is instantaneous — wave completes the moment the animal moves.
+      // Remove so waves don't accumulate indefinitely in long-running worlds.
+      this.waves.delete(payload.waveId)
     }
   }
 

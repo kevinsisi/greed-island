@@ -19,8 +19,8 @@ describe('SimulationRuntime animal spawning', () => {
       }
 
       const spawnEvents = eventStore.readEvents().filter((event) => event.eventType === 'ANIMAL_SPAWNED')
-      expect(spawnEvents).toHaveLength(1)
-      expect(runtime.getAnimalPopulation()).toHaveLength(1)
+      expect(spawnEvents).toHaveLength(2)
+      expect(runtime.getAnimalPopulation()).toHaveLength(2)
       expect(runtime.getRecentEvents(50).some((event) => event.eventType === 'ANIMAL_SPAWNED')).toBe(false)
 
       runtime.stop()

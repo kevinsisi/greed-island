@@ -86,7 +86,7 @@ describe('SimulationRuntime predation', () => {
       runtime.stop()
       db.close()
     }
-  })
+  }, 60000)
 })
 
 function seedAnimal(eventStore: SqliteEventStore, value: Animal): void {

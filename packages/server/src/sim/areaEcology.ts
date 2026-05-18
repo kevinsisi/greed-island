@@ -99,12 +99,14 @@ export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
   const migrationsArriving: MigrationRow[] = input.migrationWaves
     .filter((wave) => wave.toTileId === input.tileId)
     .map(toMigrationRow)
-    .sort(sortMigration)
+    .sort((a, b) => b.startedAtTick - a.startedAtTick || sortMigration(a, b))
+    .slice(0, 8)
 
   const migrationsDeparting: MigrationRow[] = input.migrationWaves
     .filter((wave) => wave.fromTileId === input.tileId)
     .map(toMigrationRow)
-    .sort(sortMigration)
+    .sort((a, b) => b.startedAtTick - a.startedAtTick || sortMigration(a, b))
+    .slice(0, 8)
 
   const predatorWarnings: PredatorWarningRow[] = input.predatorHunger
     .filter((row) => row.tileId === input.tileId)

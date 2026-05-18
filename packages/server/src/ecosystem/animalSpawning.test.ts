@@ -32,9 +32,11 @@ describe('animal spawning policy', () => {
     const b = planAnimalSpawns(input)
 
     expect(a).toEqual(b)
-    expect(a).toHaveLength(1)
+    expect(a).toHaveLength(2)
     expect(a[0]?.animal.tileId).toBe('t_mountain')
     expect(a[0]?.animal.biomeRegion).toBe('mountain')
+    expect(a[1]?.animal.tileId).toBe('t_mountain')
+    expect(a[1]?.animal.biomeRegion).toBe('mountain')
     expect(a[0]?.animal.position.subCol).toBeGreaterThanOrEqual(0)
     expect(a[0]?.animal.position.subCol).toBeLessThan(ECOSYSTEM_ANIMAL_SUBGRID_COLUMNS)
     expect(a[0]?.animal.position.subRow).toBeGreaterThanOrEqual(0)

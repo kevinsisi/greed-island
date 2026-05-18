@@ -20,13 +20,12 @@ describe('AnimalMigrationProjection', () => {
     })
   })
 
-  it('increments count on ANIMAL_MIGRATED with known waveId', () => {
+  it('removes wave row on ANIMAL_MIGRATED with known waveId', () => {
     const proj = new AnimalMigrationProjection()
     proj.project(waveStarted('wave-1', 'forest_deer', 't_forest', 't_mountain', 'pressure', 100))
+    expect(proj.list()).toHaveLength(1)
     proj.project(animalMigrated('wave-1', 'deer-a', 'forest_deer', 't_forest', 't_mountain', 100))
-    proj.project(animalMigrated('wave-1', 'deer-b', 'forest_deer', 't_forest', 't_mountain', 100))
-
-    expect(proj.list()[0]?.count).toBe(2)
+    expect(proj.list()).toHaveLength(0)
   })
 
   it('ignores ANIMAL_MIGRATED with unknown waveId', () => {
@@ -35,16 +34,15 @@ describe('AnimalMigrationProjection', () => {
     expect(proj.list()).toHaveLength(0)
   })
 
-  it('first-write-wins on duplicate MIGRATION_WAVE_STARTED', () => {
+  it('first-write-wins on duplicate MIGRATION_WAVE_STARTED for active wave', () => {
     const proj = new AnimalMigrationProjection()
     proj.project(waveStarted('wave-1', 'forest_deer', 't_forest', 't_mountain', 'pressure', 100))
-    proj.project(animalMigrated('wave-1', 'deer-a', 'forest_deer', 't_forest', 't_mountain', 100))
     proj.project(waveStarted('wave-1', 'forest_deer', 't_forest', 't_mountain', 'seasonal', 200))
 
     const row = proj.list()[0]!
     expect(row.migrationType).toBe('pressure')
     expect(row.startedAtTick).toBe(100)
-    expect(row.count).toBe(1)
+    expect(row.count).toBe(0)
   })
 
   it('rebuild from events yields same result as incremental projection', () => {
