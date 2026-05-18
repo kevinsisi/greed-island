@@ -1167,6 +1167,32 @@ export const api = {
       headers: authHeaders(token),
       body: JSON.stringify(cardId !== undefined ? { action, cardId } : { action })
     }),
+  // ── Combat (Phase C, v0.25.x) ──
+  combatPlay: (token: string, combatId: string, cardClass: string, targetActorId: string) =>
+    jsonFetch<{ accepted: true; commandId: string }>(
+      `/combat/${encodeURIComponent(combatId)}/play`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ cardClass, targetActorId }),
+      }
+    ),
+  combatCancel: (token: string, combatId: string, commandId: string) =>
+    jsonFetch<{ cancelled: boolean; commandId: string }>(
+      `/combat/${encodeURIComponent(combatId)}/cancel`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ commandId }),
+      }
+    ),
+  combatSnapshot: (token: string, combatId: string) =>
+    jsonFetch<import('../state/CombatProjection.js').CombatSseSnapshot>(
+      `/combat/${encodeURIComponent(combatId)}/snapshot`,
+      { headers: authHeaders(token) }
+    ),
+  combatStreamUrl: (combatId: string): string =>
+    `${API_BASE}/combat/${encodeURIComponent(combatId)}/stream`,
   // ── Technique shop (Phase B, v0.15.0) ──
   shopTechniques: (token: string) =>
     jsonFetch<{ items: ServerTechniqueShopItem[]; locationTile: string }>(

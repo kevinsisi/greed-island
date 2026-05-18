@@ -86,9 +86,15 @@ import { computeActiveTiles, tileShouldRunEcology } from './tileActivation.js'
 import { CombatRuntime, computeUnresolvedCombats } from '../combat/runtime.js'
 import {
   CombatSubTickCoordinator,
+  type CombatSnapshotView,
 } from '../combat/subTickCoordinator.js'
 import type { CombatSessionRow, CombatStore } from '../combat/combatStore.js'
-import type { CombatPlayerActionKind } from '../combat/commands.js'
+import {
+  makeCombatCommandId,
+  type CombatCardPlayPayload,
+  type CombatCardCancelPayload,
+  type CombatPlayerActionKind,
+} from '../combat/commands.js'
 import {
   evaluateCombatRound,
   type CombatActorTraits,
@@ -360,6 +366,7 @@ export class SimulationRuntime {
   // commands, commits one EventLog transaction, then fans out events.
   private readonly combatRuntime: CombatRuntime
   private readonly combatSubTicks = new CombatSubTickCoordinator()
+  private readonly combatEventListeners = new Map<string, Set<(event: Event, tickDigest: string) => void>>()
   private combatStore: CombatStore | null = null
   private playerJobsStore: PlayerJobsStore | null = null
   private readonly eventEngine = new WorldEventEngine()
@@ -1135,6 +1142,93 @@ export class SimulationRuntime {
     return this.commitLivingWorldCommand(command)
   }
 
+  /** Phase C — submit a COMBAT_CARD_PLAY command for the next sub-tick. */
+  submitCombatCardPlay(input: {
+    accountId: number
+    combatId: string
+    cardClass: string
+    targetActorId: string
+  }): { commandId: string } | null {
+    const snapshot = this.combatSubTicks.getCombatSnapshot(input.combatId)
+    if (!snapshot || snapshot.resolved) return null
+    const combatTick = snapshot.lastCombatTick + 1
+    const payload: CombatCardPlayPayload = {
+      combatId: input.combatId,
+      combatTick,
+      cardClass: input.cardClass as import('../combat/cards/catalog.js').CombatCardClass,
+      targetActorId: input.targetActorId,
+    }
+    const commandId = makeCombatCommandId({
+      commandType: 'COMBAT_CARD_PLAY',
+      actorId: String(input.accountId),
+      tick: this.currentTick,
+      combatTick,
+      payload,
+    })
+    const command = makeLivingWorldCommand(
+      'COMBAT_CARD_PLAY',
+      String(input.accountId),
+      'player',
+      this.currentTick,
+      Date.now(),
+      payload,
+      commandId,
+    )
+    const committed = this.submitLivingWorldCommand(command)
+    if (!committed) return null
+    return { commandId }
+  }
+
+  /** Phase C — cancel a queued card play for the next sub-tick. */
+  submitCombatCardCancel(input: {
+    accountId: number
+    combatId: string
+    cancelCommandId: string
+  }): boolean {
+    const snapshot = this.combatSubTicks.getCombatSnapshot(input.combatId)
+    if (!snapshot || snapshot.resolved) return false
+    const payload: CombatCardCancelPayload = {
+      combatId: input.combatId,
+      combatTick: snapshot.lastCombatTick + 1,
+      cancelCommandId: input.cancelCommandId,
+      reason: 'player_cancel',
+    }
+    const command = makeLivingWorldCommand(
+      'COMBAT_CARD_CANCEL',
+      String(input.accountId),
+      'player',
+      this.currentTick,
+      Date.now(),
+      payload,
+    )
+    return this.submitLivingWorldCommand(command) !== null
+  }
+
+  /** Phase C — return current in-memory combat snapshot for the snapshot endpoint. */
+  getCombatSnapshot(combatId: string): CombatSnapshotView | null {
+    return this.combatSubTicks.getCombatSnapshot(combatId)
+  }
+
+  /** Phase C — subscribe to committed events for a specific combat. Returns unsubscribe fn. */
+  subscribeCombatEvents(
+    combatId: string,
+    cb: (event: Event, tickDigest: string) => void
+  ): () => void {
+    let set = this.combatEventListeners.get(combatId)
+    if (!set) {
+      set = new Set()
+      this.combatEventListeners.set(combatId, set)
+    }
+    set.add(cb)
+    return () => {
+      const s = this.combatEventListeners.get(combatId)
+      if (s) {
+        s.delete(cb)
+        if (s.size === 0) this.combatEventListeners.delete(combatId)
+      }
+    }
+  }
+
   private commitLivingWorldCommand(command: LivingWorldCommand): Event | null {
     const result = this.livingWorldRuleEngine.evaluate(command)
     if (!result.accepted) {
@@ -1194,6 +1288,19 @@ export class SimulationRuntime {
         if (combatId) {
           if (ev.eventType === 'COMBAT_INITIATE') this.combatRuntime.spawn(combatId)
           else this.combatRuntime.terminate(combatId)
+        }
+      }
+      // Combat Phase C SSE — push committed combat events to subscribed clients
+      const evCombatId = readCombatIdFromEvent(ev)
+      if (evCombatId) {
+        const listeners = this.combatEventListeners.get(evCombatId)
+        if (listeners && listeners.size > 0) {
+          const tickDigest = this.combatSubTicks.getCombatSnapshot(evCombatId)?.tickDigest ?? ''
+          for (const cb of listeners) {
+            try { cb(ev, tickDigest) } catch (err) {
+              console.error('[runtime] combat SSE listener error', err)
+            }
+          }
         }
       }
       if (this.npcMemory) this.npcMemory.project(ev)

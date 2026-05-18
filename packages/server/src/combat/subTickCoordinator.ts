@@ -7,6 +7,16 @@ import {
 } from '../kernel/types.js'
 import type { CombatCardClass } from './cards/catalog.js'
 import type { CombatCardPlayPayload } from './commands.js'
+
+export type CombatSnapshotView = Readonly<{
+  combatId: string
+  lastCombatTick: number
+  actors: ReadonlyArray<Readonly<{ actorId: string; hp: number; maxHp: number }>>
+  statuses: readonly CombatActiveStatus[]
+  targetLocks: readonly CombatActiveTargetLock[]
+  resolved: boolean
+  tickDigest: string
+}>
 import {
   evaluateCombatSubTick,
   type CombatActiveStatus,
@@ -48,6 +58,7 @@ type CombatProjection = {
   statuses: CombatActiveStatus[]
   targetLocks: CombatActiveTargetLock[]
   resolved: boolean
+  lastCombatTick: number
 }
 
 const COMBAT_PROGRESS_EVENT_TYPES = new Set([
@@ -96,6 +107,13 @@ export class CombatSubTickCoordinator {
     const combatId = readString(payload, 'combatId')
     if (!combatId) return
 
+    // Track lastCombatTick for any event that carries it (enables boot hydration accuracy)
+    const ct = readNumber(payload, 'combatTick')
+    const combatForTick = this.combats.get(combatId)
+    if (combatForTick && ct !== null && ct > combatForTick.lastCombatTick) {
+      combatForTick.lastCombatTick = ct
+    }
+
     switch (event.eventType) {
       case 'COMBAT_INITIATE':
         this.projectInitiate(combatId, payload)
@@ -106,6 +124,9 @@ export class CombatSubTickCoordinator {
       case 'COMBAT_CARD_PLAY_ACCEPTED':
       case 'COMBAT_CARD_PLAY_REJECTED':
         this.removePendingByCommandId(event.commandId)
+        return
+      case 'COMBAT_CARD_CANCEL':
+        this.removePendingByCommandId(readString(payload, 'cancelCommandId') ?? undefined)
         return
       case 'COMBAT_DAMAGE':
         this.projectDamage(combatId, payload)
@@ -208,10 +229,35 @@ export class CombatSubTickCoordinator {
 
     const committed = input.commit(drafts)
     applyResult(combat, result)
+    combat.lastCombatTick = input.combatTick
     if (result.resolved) this.clearPendingForCombat(input.combatId)
     else this.removePending([...staleCommands, ...pendingCommands])
     input.afterCommit?.(committed)
     return committed
+  }
+
+  getCombatSnapshot(combatId: string): CombatSnapshotView | null {
+    const combat = this.combats.get(combatId)
+    if (!combat) return null
+    const actors = [...combat.hp.entries()]
+      .sort(([a], [b]) => compareLex(a, b))
+      .map(([actorId, hp]) => ({ actorId, hp, maxHp: combat.maxHp.get(actorId) ?? hp }))
+    const tickDigest = hashCanonicalJson({
+      combatId,
+      combatTick: combat.lastCombatTick,
+      hp: Object.fromEntries([...combat.hp.entries()].sort(([a], [b]) => compareLex(a, b))),
+      statuses: combat.statuses,
+      targetLocks: combat.targetLocks,
+    })
+    return {
+      combatId,
+      lastCombatTick: combat.lastCombatTick,
+      actors,
+      statuses: combat.statuses,
+      targetLocks: combat.targetLocks,
+      resolved: combat.resolved,
+      tickDigest,
+    }
   }
 
   private projectInitiate(combatId: string, payload: Readonly<Record<string, unknown>>): void {
@@ -236,6 +282,7 @@ export class CombatSubTickCoordinator {
       statuses: [],
       targetLocks: [],
       resolved: false,
+      lastCombatTick: 0,
     })
   }
 

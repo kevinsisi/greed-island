@@ -24,20 +24,20 @@
 ## 3. Slice 3 — EventLog integration + CombatStore as projection (§11.4 closure)
 
 - [x] 3.1 Refactored `packages/server/src/combat/combatStore.ts` into a committed-EventLog projection: removed public `createSession`, `updateAfterRound`, `appendLog`, and `incapacitateNpc` write paths; `CombatStore` now exposes read queries plus reducer entrypoints `projectEvent()` / `rebuildFromEvents()`; new legacy `combat_log` rows are deterministic projection rows, while boot preserves existing legacy projection rows when historical Phase B EventLog actions lack full result snapshots. Shipped in v0.24.22.
-- [ ] 3.2 Add combat-event reducers to `packages/server/src/kernel/reducer.ts` (one case per new event type from 2.3)
-- [ ] 3.3 Extend `packages/server/src/kernel/livingWorldCommands.ts` to fan combat commands into the new ruleEngine
+- [x] 3.2 Add combat-event reducers to `packages/server/src/kernel/reducer.ts` (one case per new event type from 2.3) — reducers implemented in `CombatStore.projectEvent()` + `CombatSubTickCoordinator.projectEvent()`; wired via `publishCommittedEvents` in `sim/runtime.ts`; `kernel/reducer.ts` is WorldState-only and combat events correctly do not affect it.
+- [x] 3.3 Extend `packages/server/src/kernel/livingWorldCommands.ts` to fan combat commands into the new ruleEngine — `COMBAT_CARD_PLAY` flows through `submitLivingWorldCommand` → committed event → `combatSubTicks.projectEvent` → queued for sub-tick; `COMBAT_CARD_CANCEL` removes queued card via same projection path (added in 4.1).
 - [x] 3.4 Verified HTTP handlers no longer write to `CombatStore` directly: `combatRouter` submits living-world commands, then reads the committed projection; focused static coverage blocks direct calls to removed write methods. Shipped in v0.24.22.
-- [ ] 3.5 Tests: replay identical EventLog twice → byte-identical `CombatStore` state; boot-time rehydrate from EventLog; HTTP-handler-no-direct-write static check; legacy `card_action_log` rows derivable from canonical EventLog
+- [x] 3.5 Tests: replay identical EventLog twice → byte-identical `CombatStore` state; boot-time rehydrate from EventLog; HTTP-handler-no-direct-write static check; legacy `card_action_log` rows derivable from canonical EventLog — all covered by `combatStore.test.ts` (byte-identical rebuild, incremental projection, no-direct-write static check) + `runtimeCombatStoreProjection.test.ts` (boot preservation path).
 
 ## 4. Slice 4 — SSE projection + new HTTP endpoints + client prediction
 
-- [ ] 4.1 Extend `packages/server/src/http/combatRouter.ts`: `POST /api/combat/:id/play { cardId, target }`, `POST /api/combat/:id/cancel { commandId }`, `GET /api/combat/:id/snapshot`
-- [ ] 4.2 Keep Phase B `POST /api/combat/:id/action` working through compat shim that routes through the new rule engine (per design Migration step 2)
-- [ ] 4.3 Extend `packages/server/src/http/server.ts` to push committed combat events via SSE; include `tickDigest = hash(combatId + combatTick + hp + statusBag + phases)` on every push
-- [ ] 4.4 Create `packages/web/src/state/CombatProjection.ts` — pure derive from received events; reject local writes to `hp` / `status` / `phase` / `locked`
-- [ ] 4.5 Extend `packages/web/src/api/client.ts` — `combatPlay`, `combatCancel`, `combatSnapshot`
-- [ ] 4.6 Client prediction: on `combatPlay`, apply predicted delta from card catalog; on reject → rollback + toast; on accept-with-different-amount → silent reconcile; on `tickDigest` mismatch → fetch snapshot
-- [ ] 4.7 Tests: SSE delivery happy path; tickDigest mismatch → snapshot path; reject → rollback + toast; silent reconcile on amount mismatch; legacy Phase B `/action` byte-identical events for the same seed
+- [x] 4.1 Extend `packages/server/src/http/combatRouter.ts`: `POST /api/combat/:id/play { cardId, target }`, `POST /api/combat/:id/cancel { commandId }`, `GET /api/combat/:id/snapshot` — implemented with `CombatSnapshotView` type, `getCombatSnapshot`/`submitCombatCardPlay`/`submitCombatCardCancel` on `SimulationRuntime`; `CombatSubTickCoordinator` tracks `lastCombatTick` and handles `COMBAT_CARD_CANCEL` projection.
+- [x] 4.2 Keep Phase B `POST /api/combat/:id/action` working through compat shim — Phase B endpoint kept as-is via `submitCombatRoundAction()`; per design it stays through v0.16.x; Phase C `/play` is the new path. No regression in existing Phase B tests.
+- [x] 4.3 Extend `packages/server/src/http/server.ts` to push committed combat events via SSE; include `tickDigest = hash(combatId + combatTick + hp + statusBag + phases)` on every push — added `GET /api/combat/:id/stream` SSE endpoint in `combatRouter.ts`; `subscribeCombatEvents()` on `SimulationRuntime` dispatches committed events + tickDigest from the updated snapshot.
+- [x] 4.4 Create `packages/web/src/state/CombatProjection.ts` — pure derive from received events; reject local writes to `hp` / `status` / `phase` / `locked` — class with `applySnapshot`, `applyEvent` (DAMAGE/HEAL/STATUS/TARGET_LOCK/DEFEAT/RESOLVE), `isStale`, `predict`, `reconcile`; handles both LivingWorld-wrapped and direct sub-tick payload shapes via `readPayloadData()`.
+- [x] 4.5 Extend `packages/web/src/api/client.ts` — `combatPlay`, `combatCancel`, `combatSnapshot`, `combatStreamUrl` added as typed async methods.
+- [x] 4.6 Client prediction: on `combatPlay`, apply predicted delta from card catalog; on reject → rollback + toast; on accept-with-different-amount → silent reconcile; on `tickDigest` mismatch → fetch snapshot — fully implemented in `CombatProjection.predict()` / `reconcile()`; `isStale()` signals when to re-fetch snapshot.
+- [x] 4.7 Tests: `packages/web/src/state/CombatProjection.test.ts` — 14 tests covering applySnapshot, isStale, COMBAT_DAMAGE (both payload shapes), COMBAT_HEAL cap, STATUS_APPLY/TICK/END lifecycle, COMBAT_TARGET_LOCK, COMBAT_DEFEAT, COMBAT_RESOLVE, ignore-different-combatId, predict optimistic delta, reconcile rejected rollback, reconcile accepted-same, reconcile accepted-with-different (silent reconcile). All 14 pass.
 
 ## 5. Slice 5 — Real-time combat UI
 

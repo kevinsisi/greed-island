@@ -157,6 +157,129 @@ export function createCombatRouter(input: {
     res.json({ session: toClientSession(session), log: store.listLog(combatId) })
   })
 
+  // ── Phase C endpoints ────────────────────────────────────────────────
+  router.post('/combat/:id/play', auth, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const combatId = req.params.id ?? ''
+    const body = (req.body ?? {}) as { cardClass?: unknown; targetActorId?: unknown }
+
+    const cardClass = typeof body.cardClass === 'string' && body.cardClass.length > 0 ? body.cardClass : null
+    const targetActorId = typeof body.targetActorId === 'string' && body.targetActorId.length > 0 ? body.targetActorId : null
+    if (!cardClass || !targetActorId) {
+      res.status(400).json({ error: 'CARD_CLASS_AND_TARGET_REQUIRED' })
+      return
+    }
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(404).json({ error: 'COMBAT_NOT_FOUND' })
+      return
+    }
+    if (session.player_account_id !== accountId) {
+      res.status(403).json({ error: 'FORBIDDEN' })
+      return
+    }
+    if (session.state !== 'active') {
+      res.status(409).json({ error: 'COMBAT_RESOLVED' })
+      return
+    }
+
+    const result = input.runtime.submitCombatCardPlay({ accountId, combatId, cardClass, targetActorId })
+    if (!result) {
+      res.status(409).json({ error: 'CARD_PLAY_REJECTED' })
+      return
+    }
+    res.json({ accepted: true, commandId: result.commandId })
+  })
+
+  router.post('/combat/:id/cancel', auth, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const combatId = req.params.id ?? ''
+    const body = (req.body ?? {}) as { commandId?: unknown }
+
+    const cancelCommandId = typeof body.commandId === 'string' && body.commandId.length > 0 ? body.commandId : null
+    if (!cancelCommandId) {
+      res.status(400).json({ error: 'COMMAND_ID_REQUIRED' })
+      return
+    }
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(404).json({ error: 'COMBAT_NOT_FOUND' })
+      return
+    }
+    if (session.player_account_id !== accountId) {
+      res.status(403).json({ error: 'FORBIDDEN' })
+      return
+    }
+
+    const cancelled = input.runtime.submitCombatCardCancel({ accountId, combatId, cancelCommandId })
+    res.json({ cancelled, commandId: cancelCommandId })
+  })
+
+  router.get('/combat/:id/snapshot', auth, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const combatId = req.params.id ?? ''
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(404).json({ error: 'COMBAT_NOT_FOUND' })
+      return
+    }
+    if (session.player_account_id !== accountId) {
+      res.status(403).json({ error: 'FORBIDDEN' })
+      return
+    }
+
+    const snapshot = input.runtime.getCombatSnapshot(combatId)
+    if (!snapshot) {
+      res.status(404).json({ error: 'SNAPSHOT_NOT_FOUND' })
+      return
+    }
+    res.json(snapshot)
+  })
+
+  router.get('/combat/:id/stream', auth, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const combatId = req.params.id ?? ''
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(404).json({ error: 'COMBAT_NOT_FOUND' })
+      return
+    }
+    if (session.player_account_id !== accountId) {
+      res.status(403).json({ error: 'FORBIDDEN' })
+      return
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+    res.write('retry: 5000\n\n')
+
+    const snapshot = input.runtime.getCombatSnapshot(combatId)
+    if (snapshot) sendCombatSseEvent(res, 'snapshot', snapshot)
+
+    const unsubscribe = input.runtime.subscribeCombatEvents(combatId, (ev, tickDigest) => {
+      sendCombatSseEvent(res, 'event', { eventType: ev.eventType, payload: ev.payload, tickDigest })
+    })
+
+    const keepalive = setInterval(() => { res.write(': keepalive\n\n') }, 25_000)
+
+    const cleanup = () => {
+      clearInterval(keepalive)
+      unsubscribe()
+      try { res.end() } catch { /* socket already closed */ }
+    }
+
+    req.on('close', cleanup)
+    req.on('error', cleanup)
+  })
+
+  // ── Phase B (compat, kept through v0.16.x) ───────────────────────────
   router.post('/combat/:id/action', auth, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
     const combatId = req.params.id ?? ''
@@ -218,6 +341,11 @@ export function createCombatRouter(input: {
   })
 
   return router
+}
+
+function sendCombatSseEvent(res: import('express').Response, name: string, payload: unknown): void {
+  res.write(`event: ${name}\n`)
+  res.write(`data: ${JSON.stringify(payload)}\n\n`)
 }
 
 function toClientSession(s: import('../combat/combatStore.js').CombatSessionRow) {
