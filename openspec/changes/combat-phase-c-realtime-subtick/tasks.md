@@ -56,8 +56,8 @@
 
 ## 7. Open Questions (resolve before slice 2 implementation begins)
 
-- [ ] 7.1 Multi-tick card channeling vs instant-cast only in v1?
-- [ ] 7.2 NPC card AI: keep `seededRandInt(deck)` from Phase B for v1, planner in Phase D — confirm?
-- [ ] 7.3 Damage formula: card stats replace Phase B formula, or layer on top?
-- [ ] 7.4 Snapshot retention duration after combat resolves?
-- [ ] 7.5 AoE cards (nullable target) in v1, or strictly single-target?
+- [x] 7.1 Multi-tick card channeling vs instant-cast only in v1? → instant-cast only; channeling deferred to Phase D.
+- [x] 7.2 NPC card AI: keep `seededRandInt(deck)` from Phase B for v1, planner in Phase D — confirm? → confirmed: seededRandInt for v1.
+- [x] 7.3 Damage formula: card stats replace Phase B formula, or layer on top? → Phase C card `power` replaces Phase B formula; two paths are separate.
+- [x] 7.4 Snapshot retention duration after combat resolves? → no explicit TTL in v1; deferred to Phase D.
+- [x] 7.5 AoE cards (nullable target) in v1, or strictly single-target? → strictly single-target in v1.
