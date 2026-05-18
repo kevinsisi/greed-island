@@ -3,6 +3,33 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-18 — Archive + version bump (v0.25.2)
+
+### Work Done
+
+- Archived `combat-phase-c-realtime-subtick` OpenSpec change (39/39 tasks done, all shipped).
+- Synced 9 Phase C requirements from delta spec into canonical `openspec/specs/combat-runtime/spec.md`.
+- Bumped `APP_VERSION` from `0.24.22` → `0.25.2` in `packages/server/src/version.ts`.
+
+### Verification
+
+- Build: `npm run build:server` — clean.
+- Tests: 84 server files (572 tests) + 21 web files (96 tests) = 668 tests, all pass.
+- `npx openspec validate --all --strict` — 33 passed, 0 failed (no active changes).
+
+### CI / Deploy
+
+- Pending push (commit below).
+
+### Next Steps
+
+1. Investigate why animals don't appear on any tile (`hunter.sisihome.org/api/area/t_forest/ecology`).
+   - If `animals: []` — world data issue (fresh world or over-predation wiped population). Need to query production EventLog.
+   - If animals exist in API but don't render — client-side Phaser rendering bug.
+2. Start planning next OpenSpec change (Phase D: persistent combat outcomes, faction/economy/NPC memory).
+
+---
+
 ## 2026-05-18 — Combat Phase C Complete (v0.25.1)
 
 ### Slices Implemented (this session)
