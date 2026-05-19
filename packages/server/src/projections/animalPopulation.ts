@@ -20,6 +20,7 @@ const ANIMAL_KILLED = 'ANIMAL_KILLED'
 const ANIMAL_REPRODUCED = 'ANIMAL_REPRODUCED'
 const ANIMAL_MIGRATED = 'ANIMAL_MIGRATED'
 const ANIMAL_STARVED = 'ANIMAL_STARVED'
+const PLAYER_HUNTED_ANIMAL = 'PLAYER_HUNTED_ANIMAL'
 
 export class AnimalPopulationProjection {
   private rows = new Map<string, AnimalPopulationRow>()
@@ -75,6 +76,23 @@ export class AnimalPopulationProjection {
         count: animalIds.length,
         animalIds,
         lastKilledAtTick: payload.starvedAtTick,
+        lastSequence: event.sequence,
+      })
+      return
+    }
+
+    if (event.eventType === PLAYER_HUNTED_ANIMAL) {
+      const payload = readHuntPayload(event)
+      if (!payload) return
+      const key = populationKey(payload.speciesId, payload.tileId)
+      const existing = this.rows.get(key)
+      if (!existing || !existing.animalIds.includes(payload.animalId)) return
+      const animalIds = existing.animalIds.filter((id) => id !== payload.animalId).sort()
+      this.rows.set(key, {
+        ...existing,
+        count: animalIds.length,
+        animalIds,
+        lastKilledAtTick: payload.tick,
         lastSequence: event.sequence,
       })
       return
@@ -207,6 +225,17 @@ function readMigratedPayload(event: Event): { animalId: string; speciesId: strin
   if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return null
   if (typeof p.migratedAtTick !== 'number' || !Number.isInteger(p.migratedAtTick) || p.migratedAtTick < 0) return null
   return { animalId: p.animalId, speciesId: p.speciesId, fromTileId: p.fromTileId, toTileId: p.toTileId, migratedAtTick: p.migratedAtTick }
+}
+
+function readHuntPayload(event: Event): { animalId: string; speciesId: string; tileId: string; tick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.animalId !== 'string' || p.animalId.length === 0) return null
+  if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return null
+  if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
+  if (typeof p.tick !== 'number' || !Number.isInteger(p.tick) || p.tick < 0) return null
+  return { animalId: p.animalId, speciesId: p.speciesId, tileId: p.tileId, tick: p.tick }
 }
 
 function populationKey(speciesId: string, tileId: string): string {

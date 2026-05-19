@@ -1,4 +1,4 @@
-import { FISHERY_COLLAPSE_THRESHOLD, FISHERY_DEFAULT_DENSITY, FISHERY_RECOVERY_BUFFER } from '../config/world.js'
+import { FISHERY_COLLAPSE_THRESHOLD, FISHERY_DEFAULT_DENSITY, FISHERY_HARVEST_DELTA, FISHERY_RECOVERY_BUFFER } from '../config/world.js'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
 
@@ -14,6 +14,7 @@ export type FisheryDensityRow = Readonly<{
 const FISHERY_HARVESTED = 'FISHERY_HARVESTED'
 const FISHERY_COLLAPSED = 'FISHERY_COLLAPSED'
 const FISHERY_RECOVERED = 'FISHERY_RECOVERED'
+const PLAYER_FISHED = 'PLAYER_FISHED'
 
 export class FisheryDensityProjection {
   private rows = new Map<string, FisheryDensityRow>()
@@ -50,6 +51,22 @@ export class FisheryDensityProjection {
       })
       return
     }
+    if (event.eventType === PLAYER_FISHED) {
+      const payload = readPlayerFishPayload(event)
+      if (!payload) return
+      const before = this.getByTile(payload.tileId) ?? defaultRow(payload.tileId)
+      const delta = FISHERY_HARVEST_DELTA * payload.quantity
+      const newDensity = Math.max(0, before.density - delta)
+      this.rows.set(payload.tileId, {
+        ...before,
+        density: newDensity,
+        harvestedTotal: before.harvestedTotal + delta,
+        lastUpdatedTick: payload.tick,
+        lastSequence: event.sequence,
+      })
+      return
+    }
+
     if (event.eventType === FISHERY_RECOVERED) {
       const payload = readRecoveredPayload(event)
       if (!payload) return
@@ -81,6 +98,16 @@ export class FisheryDensityProjection {
 
 function defaultRow(tileId: string): FisheryDensityRow {
   return { tileId, density: FISHERY_DEFAULT_DENSITY, harvestedTotal: 0, collapsed: false, lastUpdatedTick: 0, lastSequence: 0 }
+}
+
+function readPlayerFishPayload(event: Event): { tileId: string; quantity: number; tick: number } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.tileId !== 'string' || p.tileId.length === 0) return null
+  if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return null
+  if (typeof p.tick !== 'number' || !Number.isInteger(p.tick) || p.tick < 0) return null
+  return { tileId: p.tileId, quantity: p.quantity, tick: p.tick }
 }
 
 function readHarvestPayload(event: Event): { tileId: string; delta: number; densityAfter: number; harvestedAtTick: number } | null {

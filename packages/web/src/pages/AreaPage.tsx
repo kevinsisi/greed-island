@@ -297,24 +297,34 @@ export function AreaPage() {
     window.setTimeout(() => setActionFeedback(null), 2000)
   }, [])
 
+  const refreshEcology = useCallback(() => {
+    api.areaEcology(tileId).then((eco) => setEcology(eco)).catch(() => {})
+  }, [tileId])
+
   const handleAnimalHunt = useCallback(
     (speciesId: string, animalId: string) => {
       if (!token) return
       api
         .playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
-        .then((r) => showFeedback(r.accepted, r.accepted ? '獵捕成功' : (r.reason ?? '未能獵捕')))
+        .then((r) => {
+          showFeedback(r.accepted, r.accepted ? '獵捕成功' : (r.reason ?? '未能獵捕'))
+          if (r.accepted) refreshEcology()
+        })
         .catch(() => showFeedback(false, '動作失敗'))
     },
-    [token, tileId, showFeedback]
+    [token, tileId, showFeedback, refreshEcology]
   )
 
   const handleFish = useCallback(() => {
     if (!token) return
     api
       .playerAction(token, 'PLAYER_FISHED', { tileId, quantity: 1 })
-      .then((r) => showFeedback(r.accepted, r.accepted ? '捕魚成功' : (r.reason ?? '漁場無魚')))
+      .then((r) => {
+        showFeedback(r.accepted, r.accepted ? '捕魚成功' : (r.reason ?? '漁場無魚'))
+        if (r.accepted) refreshEcology()
+      })
       .catch(() => showFeedback(false, '動作失敗'))
-  }, [token, tileId, showFeedback])
+  }, [token, tileId, showFeedback, refreshEcology])
 
   const toggleTab = useCallback((tab: DrawerTab) => {
     setDrawerTab((prev) => (prev === tab ? null : tab))

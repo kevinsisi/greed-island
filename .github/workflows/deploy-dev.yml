@@ -26,9 +26,12 @@ name: Deploy Dev
 #                         under Git-Bash on Windows)
 
 on:
-  push:
-    branches:
-      - main
+  # Only deploy after CI passes on main — prevents broken builds from reaching the desktop.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # Keep manual trigger for hotfix deploys; bypasses CI gate by operator intent.
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +47,9 @@ jobs:
   publish:
     name: Build & push Docker images
     runs-on: ubuntu-latest
+    # For workflow_run: only proceed when CI succeeded.
+    # For workflow_dispatch: always proceed (operator override).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -51,11 +57,17 @@ jobs:
       tag-sha: ${{ steps.meta.outputs.tag-sha }}
     steps:
       - name: Checkout
+        # Use the SHA that triggered CI (not the default-branch head) so we build
+        # exactly the code that passed tests.
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Compute image tag
         id: meta
-        run: echo "tag-sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+        run: |
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "tag-sha=${sha::12}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

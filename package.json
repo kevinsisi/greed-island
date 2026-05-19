@@ -1,18 +1,20 @@
 {
   "name": "greed-island",
-  "version": "0.27.0",
+  "version": "0.32.0",
   "private": true,
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @greed-island/server && npm run build -w @greed-island/web",
-    "build:server": "npm run build -w @greed-island/server",
+    "build": "node scripts/sync-version.mjs && npm run build -w @greed-island/server && npm run build -w @greed-island/web",
+    "build:server": "node scripts/sync-version.mjs && npm run build -w @greed-island/server",
     "build:web": "npm run build -w @greed-island/web",
     "dev:web": "npm run dev -w @greed-island/web",
     "test": "npm run test -w @greed-island/server && npm run test -w @greed-island/web",
-    "check": "npm run build && npm run test"
+    "check": "npm run build && npm run test",
+    "version:sync": "node scripts/sync-version.mjs",
+    "openspec:check": "node scripts/openspec-check.mjs"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
