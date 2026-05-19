@@ -119,6 +119,10 @@ export interface AreaSceneCallbacks {
   onNearbyBuildingChange?: (buildingId: string | null) => void
   /** 子地圖出口：回到上一層場景。 */
   onExit?: () => void
+  /** 玩家點擊了一個動物 dot/cluster → 送出獵捕動作。 */
+  onAnimalHunt?: (speciesId: string, animalId: string) => void
+  /** 玩家點擊了漁場 bar → 送出捕魚動作。 */
+  onFish?: () => void
 }
 
 export interface AreaMapBuilding {
@@ -674,6 +678,7 @@ export class AreaScene extends Phaser.Scene {
             pointer.event?.stopPropagation?.()
             this.suppressNextPointerTarget = true
             this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×1`, x, y)
+            this.callbacks.onAnimalHunt?.(row.speciesId, animalId)
           })
           layer.add(dot)
           const glyph = this.add.text(x, y - 1, visual.emoji, {
@@ -696,6 +701,10 @@ export class AreaScene extends Phaser.Scene {
           pointer.event?.stopPropagation?.()
           this.suppressNextPointerTarget = true
           this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×${row.count}`, x, y)
+          const firstId = row.animalIds[0]
+          if (firstId !== undefined) {
+            this.callbacks.onAnimalHunt?.(row.speciesId, firstId)
+          }
         })
         layer.add(bg)
         const glyph = this.add.text(x, y, visual.emoji, {
@@ -736,6 +745,16 @@ export class AreaScene extends Phaser.Scene {
       const fill = this.add.rectangle(40, barY, widthPx, 6, eco.fishery.collapsed ? 0xe04a3a : 0x4a9cd6, 0.9)
       fill.setOrigin(0, 0.5)
       layer.add(fill)
+      const fishHitArea = this.add.rectangle(40 + maxWidth / 2, barY, maxWidth, 36, 0xffffff, 0)
+      fishHitArea.setOrigin(0.5, 0.5)
+      fishHitArea.setInteractive()
+      fishHitArea.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        pointer.event?.stopPropagation?.()
+        this.suppressNextPointerTarget = true
+        this.flashInspectHint(this.fisheryLabel(eco.fishery!.density, eco.fishery!.collapsed), 40 + maxWidth / 2, barY - 20)
+        this.callbacks.onFish?.()
+      })
+      layer.add(fishHitArea)
       layer.add(
         this.createInspectZone(
           40 + maxWidth / 2,

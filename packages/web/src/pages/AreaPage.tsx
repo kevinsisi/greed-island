@@ -65,6 +65,7 @@ export function AreaPage() {
   const [drawerTab, setDrawerTab] = useState<DrawerTab | null>(null)
   const [nearbyNpcIds, setNearbyNpcIds] = useState<Set<string>>(new Set())
   const [tooFarFlash, setTooFarFlash] = useState<string | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
   const [areaState, setAreaState] = useState<ServerAreaState | null>(null)
   const [ambient, setAmbient] = useState<ServerAmbient | null>(null)
   const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
@@ -291,6 +292,30 @@ export function AreaPage() {
 
   const cardOverlay = useAreaCards(tileId)
 
+  const showFeedback = useCallback((ok: boolean, msg: string) => {
+    setActionFeedback({ ok, msg })
+    window.setTimeout(() => setActionFeedback(null), 2000)
+  }, [])
+
+  const handleAnimalHunt = useCallback(
+    (speciesId: string, animalId: string) => {
+      if (!token) return
+      api
+        .playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
+        .then((r) => showFeedback(r.accepted, r.accepted ? '獵捕成功' : (r.reason ?? '未能獵捕')))
+        .catch(() => showFeedback(false, '動作失敗'))
+    },
+    [token, tileId, showFeedback]
+  )
+
+  const handleFish = useCallback(() => {
+    if (!token) return
+    api
+      .playerAction(token, 'PLAYER_FISHED', { tileId, quantity: 1 })
+      .then((r) => showFeedback(r.accepted, r.accepted ? '捕魚成功' : (r.reason ?? '漁場無魚')))
+      .catch(() => showFeedback(false, '動作失敗'))
+  }, [token, tileId, showFeedback])
+
   const toggleTab = useCallback((tab: DrawerTab) => {
     setDrawerTab((prev) => (prev === tab ? null : tab))
   }, [])
@@ -344,6 +369,8 @@ export function AreaPage() {
           onExit={handleExit}
           onNearbyBuildingChange={handleNearbyBuildingChange}
           onPositionChange={(pos) => setPlayerPosition({ tileId, ...pos })}
+          onAnimalHunt={handleAnimalHunt}
+          onFish={handleFish}
           controlsEnabled={!!token}
         />
       </div>
@@ -573,6 +600,17 @@ export function AreaPage() {
       {tooFarFlash && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sharp bg-rust-900/95 border border-rust-600 text-rust-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-none">
           {t('npc.tooFarHint')}
+        </div>
+      )}
+
+      {actionFeedback && (
+        <div className={[
+          'fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sharp text-[12px] font-display tracking-tight shadow-lg pointer-events-none',
+          actionFeedback.ok
+            ? 'bg-ground-900/95 border border-ground-600 text-ground-100'
+            : 'bg-rust-900/95 border border-rust-600 text-rust-100'
+        ].join(' ')}>
+          {actionFeedback.msg}
         </div>
       )}
 

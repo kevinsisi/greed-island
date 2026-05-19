@@ -82,6 +82,8 @@ export interface AreaPhaserGameProps {
   onPositionChange?: (pos: AreaPosition) => void
   /** v0.15.2：玩家最近的可進入建築變動時 fire；React 渲染地圖外面的「進入 X」按鈕 */
   onNearbyBuildingChange?: (buildingId: string | null) => void
+  onAnimalHunt?: (speciesId: string, animalId: string) => void
+  onFish?: () => void
 }
 
 /**
@@ -109,7 +111,9 @@ export function AreaPhaserGame({
   onBuildingEnter,
   onExit,
   onPositionChange,
-  onNearbyBuildingChange
+  onNearbyBuildingChange,
+  onAnimalHunt,
+  onFish
 }: AreaPhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
@@ -123,7 +127,9 @@ export function AreaPhaserGame({
     onBuildingEnter,
     onExit,
     onPositionChange,
-    onNearbyBuildingChange
+    onNearbyBuildingChange,
+    onAnimalHunt,
+    onFish
   })
   callbacksRef.current.onNpcInteract = onNpcInteract
   callbacksRef.current.onDropPickup = onDropPickup
@@ -134,6 +140,8 @@ export function AreaPhaserGame({
   callbacksRef.current.onExit = onExit
   callbacksRef.current.onPositionChange = onPositionChange
   callbacksRef.current.onNearbyBuildingChange = onNearbyBuildingChange
+  callbacksRef.current.onAnimalHunt = onAnimalHunt
+  callbacksRef.current.onFish = onFish
 
   // tileId 變動 → 重建場景以套用新的 startPosition
   useEffect(() => {
@@ -182,7 +190,9 @@ export function AreaPhaserGame({
         onInteractTooFar: (id) => callbacksRef.current.onInteractTooFar?.(id),
         onBuildingEnter: (id) => callbacksRef.current.onBuildingEnter?.(id),
         onExit: () => callbacksRef.current.onExit?.(),
-        onNearbyBuildingChange: (id) => callbacksRef.current.onNearbyBuildingChange?.(id)
+        onNearbyBuildingChange: (id) => callbacksRef.current.onNearbyBuildingChange?.(id),
+        onAnimalHunt: (speciesId, animalId) => callbacksRef.current.onAnimalHunt?.(speciesId, animalId),
+        onFish: () => callbacksRef.current.onFish?.()
       },
       tileId: sceneTileId,
       npcs,
