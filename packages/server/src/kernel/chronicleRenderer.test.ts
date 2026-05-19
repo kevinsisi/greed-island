@@ -219,7 +219,7 @@ describe('chronicle AI rendering', () => {
     })
 
     expect(rendered.source).toBe('fallback')
-    expect(rendered.textZh).toContain('低聲交談')
+    expect(rendered.textZh).toContain('two lives crossed closely enough to leave a public trace')
     expect(rendered.textZh).not.toContain('第 2 tick')
     expect(rendered.textZh).not.toContain('\n')
   })

@@ -395,10 +395,11 @@ function renderFallbackChronicle(
     .filter((event) => event.eventType !== 'WORLD_TICK')
     .filter((event) => event.narration !== null || event.eventType !== 'NPC_ACTIVITY_CHANGE')
     .slice(-8)
+  const textEn = renderFallbackParagraphEn(storyEvents)
   return {
     source: 'fallback',
-    textZh: renderFallbackParagraphZh(storyEvents, context.memories),
-    textEn: renderFallbackParagraphEn(storyEvents),
+    textZh: textEn,
+    textEn,
     citedNames: context.allowedNames,
     aiError,
     aiMeta,
@@ -406,42 +407,11 @@ function renderFallbackChronicle(
   }
 }
 
-function renderFallbackParagraphZh(
-  events: readonly ChronicleEvent[],
-  memories: readonly ChronicleMemorySnippet[]
-): string {
-  if (events.length === 0) {
-    return '最近沒有足以寫入編年史的公開事件；城市仍在自行運轉，只是沒有留下醒目的痕跡。'
-  }
-  const sentences = dedupeSentences(events.map((event, index) => chronicleSentenceZh(event, index))).slice(-5)
-  const memoryTail = memoryHintZh(memories)
-  return `${sentences.join('')}${memoryTail ?? ''}`
-}
-
 function renderFallbackParagraphEn(events: readonly ChronicleEvent[]): string {
   if (events.length === 0) {
     return 'No public event was sharp enough to enter the chronicle, though the city kept moving on its own.'
   }
   return dedupeSentences(events.map((event, index) => chronicleSentenceEn(event, index))).slice(-5).join('')
-}
-
-function chronicleSentenceZh(event: ChronicleEvent, index: number): string {
-  const prefix = index === 0 ? '' : index % 3 === 1 ? '接著，' : index % 3 === 2 ? '稍晚，' : '同一段時間裡，'
-  if (event.narration) return `${prefix}${ensureZhSentence(event.narration.trim())}`
-  switch (event.eventType) {
-    case 'AREA_PRESSURE':
-      return `${prefix}某個街區的資源壓力改變了人群的步調。`
-    case 'WORLD_EVENT_SPAWN':
-      return `${prefix}一場新的異兆開始影響潮鳴市。`
-    case 'WORLD_EVENT_END':
-      return `${prefix}先前的異兆退去，街面重新回到日常的噪音裡。`
-    case 'WEATHER_CHANGE':
-      return `${prefix}天氣轉向，連街上的聲音也跟著換了質地。`
-    case 'SEASON_CHANGE':
-      return `${prefix}季節邊界滑過城市，舊氣味被慢慢推開。`
-    default:
-      return `${prefix}${event.actorId}留下了一件尚未被完整解讀的事。`
-  }
 }
 
 function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
@@ -470,10 +440,6 @@ function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
   }
 }
 
-function ensureZhSentence(text: string): string {
-  return /[。！？]$/.test(text) ? text : `${text}。`
-}
-
 function dedupeSentences(sentences: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
@@ -483,12 +449,6 @@ function dedupeSentences(sentences: readonly string[]): string[] {
     out.push(sentence)
   }
   return out
-}
-
-function memoryHintZh(memories: readonly ChronicleMemorySnippet[]): string | null {
-  const important = [...memories].sort((a, b) => b.importance - a.importance)[0]
-  if (!important) return null
-  return `這件事也讓 ${important.npcId} 的記憶被再次翻動。`
 }
 
 function chronicleSystemPrompt(): string {
