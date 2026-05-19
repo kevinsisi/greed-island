@@ -38,7 +38,10 @@ Phase E3 adds domestication, breeding, slaughter, and mount assignment to the li
 - TypeScript: clean (both packages)
 - Tests: 95 server files + 21 web files, 662 + 96 = 758 tests, all pass
 - Web build: clean (Vite + tsc)
-- Docker: rebuild pending (use `DOCKER_BUILDKIT=0 docker compose ...`)
+- Docker: rebuilt and verified 2026-05-19
+  - `healthz` → `{"ok":true,"version":"0.26.1","tick":22480}` ✓
+  - `/api/world` facts include `livestockRegistry` key ✓ (empty — no ranch built yet)
+  - All 21 fact keys present, no boot errors
 
 ### Remaining / Known
 
