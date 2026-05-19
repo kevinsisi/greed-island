@@ -3,6 +3,25 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Area Animal Hunt + Fish Interactions
+
+### Work Done
+
+Wired missing player interactions in AreaPage:
+
+- **AreaScene.ts**: `AreaSceneCallbacks` now has `onAnimalHunt(speciesId, animalId)` and `onFish()`. Animal single-dot + cluster `pointerdown` call `onAnimalHunt`; fishery bar gets a transparent hit-area that calls `onFish`.
+- **AreaPhaserGame.tsx**: Props + `callbacksRef` + `init.callbacks` wired for both new callbacks.
+- **AreaPage.tsx**: `handleAnimalHunt` → `api.playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })`; `handleFish` → `api.playerAction(token, 'PLAYER_FISHED', { tileId, quantity: 1 })`; 2s `actionFeedback` toast for both.
+
+Server-side: `playerCivilizationRouter` injects `playerAccountId` and `tick` server-side, so frontend only sends `tileId + speciesId + animalId` (or `tileId + quantity`).
+
+### Verification
+- `npm run build` — TypeScript clean
+- Docker rebuilt, stack running at tick ~26315
+- URL: http://127.0.0.1:8100
+
+---
+
 ## 2026-05-19 — NPC Mortality & Lineage (v0.32.0)
 
 ### Work Done
