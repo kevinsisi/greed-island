@@ -5,6 +5,7 @@ import { useWorldState } from '../state/WorldStateContext'
 import { useAuth } from '../state/AuthContext'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { SinceLastVisitPanel } from '../components/game/SinceLastVisitPanel'
+import { PlayerCivilizationPanel } from '../components/game/PlayerCivilizationPanel'
 import { PhaserGame } from '../game/PhaserGame'
 import { api, type ServerAreaState, type ServerNearbyPlayer } from '../api/client'
 import {
@@ -73,6 +74,7 @@ export function HubPage() {
   const [areaStates, setAreaStates] = useState<ServerAreaState[]>([])
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
+  const [showCivPanel, setShowCivPanel] = useState(false)
 
   // 每 30 秒拉一次 area state 用來上 tile 色（治安/經濟/派系外框）
   // 5 秒 tick + 區域狀態變化緩慢 → 30 秒 polling 足夠，不會把 server 打爆。
@@ -296,6 +298,25 @@ export function HubPage() {
             </span>
           </button>
         </div>
+      )}
+
+      {token && (
+        <div className="mt-2 mx-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowCivPanel((v) => !v)}
+            className="gi-touch px-3 py-1.5 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors"
+          >
+            ⚔ 文明面板
+          </button>
+        </div>
+      )}
+
+      {token && showCivPanel && (
+        <PlayerCivilizationPanel
+          tileId={currentDistrict as string | null}
+          onClose={() => setShowCivPanel(false)}
+        />
       )}
 
       {token && showSincePanel && (

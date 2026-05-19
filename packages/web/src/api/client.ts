@@ -1227,7 +1227,32 @@ export const api = {
       relationship: { trust: number; tier: 'low' | 'mid' | 'high'; interactionCount: number }
     }>(`/npc/${encodeURIComponent(npcId)}/greet`, {
       headers: authHeaders(token)
+    }),
+  // ── Phase 6 — Player Civilization ──
+  playerState: (token: string) =>
+    jsonFetch<PlayerCivilizationSnapshot>('/world/player-state', {
+      headers: authHeaders(token)
+    }),
+  playerAction: (token: string, type: string, payload: Record<string, unknown>) =>
+    jsonFetch<PlayerActionResult>('/world/player-action', {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, payload })
     })
+}
+
+export type PlayerCivilizationSnapshot = {
+  accountId: string
+  wallet: number
+  hiredNpcIds: readonly string[]
+  factionIds: readonly string[]
+  claimedTileIds: readonly string[]
+}
+
+export type PlayerActionResult = {
+  accepted: boolean
+  tick?: number
+  reason?: string
 }
 
 export type ServerCombatSession = {

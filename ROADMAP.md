@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.31.0 ✅ shipped — 2026-05-19
+
+**主題：Player Civilization UI**
+
+OpenSpec: `player-civilization-ui/` (all 20 implementation tasks complete)。
+
+- ✅ `api/client.ts`: `PlayerCivilizationSnapshot` + `PlayerActionResult` types; `api.playerState(token)` + `api.playerAction(token, type, payload)` methods.
+- ✅ New component: `PlayerCivilizationPanel.tsx` — collapsible side-panel in HubPage showing wallet, hired NPCs, faction memberships, claimed tiles.
+- ✅ 4 player actions wired: `PLAYER_CLAIMED_TERRITORY` (current district tileId), `PLAYER_HIRED_NPC` (nearby NPC dropdown), `PLAYER_JOINED/LEFT_FACTION` (faction list), `PLAYER_PLAYED_CARD` (held card dropdown).
+- ✅ Inline rejection/error display with 5-second auto-clear; state auto-refreshes after each accepted action.
+- ✅ i18n: 16 `playerCiv.*` keys in zh + en.
+- ✅ TypeScript clean; web build clean.
+
+---
+
 ## v0.30.0 ✅ shipped — 2026-05-19
 
 **主題：Phase 6 — Player Civilization Integration**

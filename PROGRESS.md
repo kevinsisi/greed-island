@@ -3,6 +3,43 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Player Civilization UI (v0.31.0)
+
+### Work Done
+
+Phase 6 backend APIs are now exposed in the game UI. A collapsible "文明面板" panel in HubPage lets authenticated players see their civilization state and perform actions.
+
+**New API client methods (`packages/web/src/api/client.ts`):**
+- `api.playerState(token)` → `GET /api/world/player-state` → `PlayerCivilizationSnapshot`
+- `api.playerAction(token, type, payload)` → `POST /api/world/player-action` → `PlayerActionResult`
+
+**New component: `packages/web/src/components/game/PlayerCivilizationPanel.tsx`:**
+- Wallet, hired NPC count, faction list, claimed tile count displayed
+- `PLAYER_CLAIMED_TERRITORY` — claim current district tile
+- `PLAYER_HIRED_NPC` — hire from nearby NPC dropdown (filtered: already-hired excluded)
+- `PLAYER_JOINED/LEFT_FACTION` — per-faction join/leave buttons (derived from `world.facts.factionDominance`)
+- `PLAYER_PLAYED_CARD` — held card dropdown → play with current tileId
+- Inline rejection reason display; auto-clears after 5s or on next submit
+
+**HubPage changes:**
+- Toggle button ("⚔ 文明面板") below map
+- `showCivPanel` state; `PlayerCivilizationPanel` mounts when toggled on
+
+**i18n:** 16 `playerCiv.*` keys in zh + en added to `types.ts`, `en.ts`, `zh.ts`.
+
+### Verification
+
+- TypeScript: clean (web + server, zero errors)
+- Web build: clean (`vite build` 104 modules)
+- Smoke tests: browser UI verification pending Docker rebuild with new web image
+
+### Remaining
+
+- Docker rebuild needed to see UI changes in browser (server container is already v0.30.0; web container needs rebuild with new panel)
+- OpenSpec change `player-civilization-ui` ready to archive after smoke-test
+
+---
+
 ## 2026-05-19 — Phase 6: Player Civilization Integration (v0.30.0)
 
 ### Work Done
