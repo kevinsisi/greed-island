@@ -30,9 +30,9 @@
 ## 5. Verification
 
 - [x] 5.1 `npm run build` — zero TypeScript errors in both packages
-- [ ] 5.2 Smoke-test in browser: open HubPage → toggle civ panel → panel shows player state
-- [ ] 5.3 Smoke-test: click "Claim This Tile" → `{ accepted: true }` → tile appears in claimed tiles list
-- [ ] 5.4 Smoke-test: hire an NPC from dropdown → NPC appears in hired list
-- [ ] 5.5 Smoke-test: join and leave a faction → faction appears / disappears from list
+- [x] 5.2 Smoke-test in browser: open HubPage → toggle civ panel → panel shows player state
+- [x] 5.3 Smoke-test: click "Claim This Tile" → `{ accepted: true }` → tile appears in claimed tiles list
+- [x] 5.4 Smoke-test: hire an NPC from dropdown → NPC appears in hired list
+- [x] 5.5 Smoke-test: join and leave a faction → faction appears / disappears from list
 - [x] 5.6 Update `PROGRESS.md` with v0.31.0 handoff entry
 - [x] 5.7 Update `ROADMAP.md` with v0.31.0 entry
