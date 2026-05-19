@@ -3,6 +3,57 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — NPC Mortality & Lineage (v0.32.0)
+
+### Work Done
+
+§43 acceptance gap #1: NPCs now age and die. Deterministic lifespan (FNV-1a hash), household succession, chronicle narration, and AI dialog memory grounding.
+
+**Event types (`livingWorldCommands.ts`):**
+- `NPC_DECEASED` (payload: `npcId`, `tileId`, `householdId`, `deceasedAtTick`, `narration`)
+- `NPC_HEIR_ASSIGNED` (payload: `householdId`, `deceasedNpcId`, `heirNpcId`, `assignedAtTick`, `narration`)
+
+**Config constants (`config/world.ts`):**
+- `NPC_BASE_LIFESPAN_TICKS = 120_960` (~1 real week)
+- `NPC_LIFESPAN_VARIANCE_TICKS = 60_480`
+- `MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR`
+- `npcLifespanTicks(npcId)` — FNV-1a hash, replay-safe
+
+**New projections:**
+- `projections/npcMortality.ts` — `NpcMortalityProjection`: tracks deceased NPCs; `isDeceased()`, `deceasedAtTick()`, `list()`, `deceasedIds`
+- `projections/npcLineage.ts` — `NpcLineageProjection`: household membership from `NpcProfile.personality.householdId`; `householdId()`, `membersOf()`, `heirHistory()`, `livingMembersOf()`
+
+**New planner:**
+- `sim/mortalityPlanner.ts` — `planMortality()`: pure function, cadence-gated, oldest-first heir selection by `bornAtTick`
+
+**Runtime integration (`sim/runtime.ts`):**
+- Both projections as private fields, initialized in constructor
+- `MORTALITY_BOOT_EVENT_TYPES` constant; both projections boot-hydrated in large-log else-branch
+- Both projections wired into both per-event fan-out loops
+- Mortality cadence block emits `NPC_DECEASED` + (when heir) `NPC_HEIR_ASSIGNED`
+- `getNpcs()` → `deceased: boolean` field added to `SimNpcState`
+
+**Chronicle & AI memory:**
+- Narration strings embedded directly in command payloads (Chinese)
+- `HOUSEHOLD_INHERITANCE_ASSIGNED` already suppressed in chronicleRenderer
+- `npcMemory.ts`: NPC_DECEASED → world-scoped memory row (importance 8); NPC_HEIR_ASSIGNED → heir-scoped memory row (importance 9)
+
+**Also shipped (§43 quick wins):**
+- `PlayerCivilizationPanel.tsx`: faction list now reads `factionEcologyStances` (was reading nonexistent `factionDominance` key)
+- `settlementEngine.ts`: `SETTLEMENT_DECLINED` event now emitted when stability first transitions to declining
+
+### Verification
+
+- `npm run build` — TypeScript clean (server + web)
+- `npm test` — 716/716 tests pass (104 test files)
+- `npcLifespanTicks` is deterministic: pure FNV-1a, no IO, no random
+
+### Remaining
+
+- None — all 34 tasks complete
+
+---
+
 ## 2026-05-19 — Player Civilization UI (v0.31.0)
 
 ### Work Done

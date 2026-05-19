@@ -237,6 +237,24 @@ export const SETTLEMENT_LOGISTICS_RECENT_LOSS_WINDOW_TICKS = TICKS_PER_HOUR
 export const SETTLEMENT_STABILITY_STRAINED_BELOW = 75
 export const SETTLEMENT_STABILITY_DECLINING_BELOW = 40
 
+// NPC Mortality & Lineage (v0.32.0)
+// Base lifespan: 1 real week (7 × 17,280 ticks). Variance: ±3.5 days.
+// All existing NPCs default to bornAtTick=0; at tick ~25,000 they are
+// ~21% through their lifespan — no mass die-off on first deploy.
+export const NPC_BASE_LIFESPAN_TICKS = 120_960
+export const NPC_LIFESPAN_VARIANCE_TICKS = 60_480
+export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
+
+/** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
+export function npcLifespanTicks(npcId: string): number {
+  let h = 2166136261
+  for (let i = 0; i < npcId.length; i++) {
+    h ^= npcId.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return NPC_BASE_LIFESPAN_TICKS + ((h >>> 0) % NPC_LIFESPAN_VARIANCE_TICKS)
+}
+
 export type WorldConfig = Readonly<{
   tickDurationMs: number
   ticksPerDay: number

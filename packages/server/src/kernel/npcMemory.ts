@@ -17,6 +17,8 @@ import type {
   BuildingEnterCmd,
   BuildingLeaveCmd,
   LivingWorldEventPayload,
+  NpcDeceasedCmd,
+  NpcHeirAssignedCmd,
   NpcInteractCmd,
   NpcMoveCmd,
   NpcProductiveActionCmd,
@@ -410,6 +412,28 @@ function deriveMemoryRows(
       return [
         { npcId: d.fromNpcId, memoryType: 'event', content, importance: 3 },
         { npcId: d.toNpcId, memoryType: 'event', content, importance: 3 },
+      ]
+    }
+    case 'NPC_DECEASED': {
+      const d = data as NpcDeceasedCmd
+      return [
+        {
+          npcId: 'world',
+          memoryType: 'event',
+          content: { kind: 'npc.deceased', npcId: d.npcId, householdId: d.householdId, tileId: d.tileId, narration, tick },
+          importance: 8
+        }
+      ]
+    }
+    case 'NPC_HEIR_ASSIGNED': {
+      const d = data as NpcHeirAssignedCmd
+      return [
+        {
+          npcId: d.heirNpcId,
+          memoryType: 'event',
+          content: { kind: 'npc.heir_assigned', householdId: d.householdId, deceasedNpcId: d.deceasedNpcId, narration, tick },
+          importance: 9
+        }
       ]
     }
     default:

@@ -69,6 +69,7 @@ import {
   LEGENDARY_SPAWN_CADENCE_TICKS,
   LEGENDARY_WORLD_EVENT_SEVERITY,
   FACTION_ECOLOGY_CADENCE_TICKS,
+  MORTALITY_CADENCE_TICKS,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -198,6 +199,9 @@ import { MarketPricesProjection, type MarketPriceRow } from '../projections/mark
 import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../projections/productionChains.js'
 import { HouseholdEconomyProjection, type HouseholdEconomyRow } from '../projections/householdEconomy.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
+import { NpcMortalityProjection } from '../projections/npcMortality.js'
+import { NpcLineageProjection } from '../projections/npcLineage.js'
+import { planMortality } from './mortalityPlanner.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -295,6 +299,11 @@ const GOODS_BOOT_EVENT_TYPES = [
   'GOODS_TRANSPORT_LOST',
   'MARKET_PRICE_DISCOVERED',
 ] as const
+// NPC mortality projection event types — read selectively during fast-boot.
+const MORTALITY_BOOT_EVENT_TYPES = [
+  'NPC_DECEASED',
+  'NPC_HEIR_ASSIGNED',
+] as const
 
 export type NarrativeEventPayload = Readonly<{
   eventType: string
@@ -342,6 +351,8 @@ export type SimNpcState = Readonly<{
   life: NpcLifeView
   /** Deterministic personal economic and skill state derived from productive actions. */
   civic: NpcCivicRecord | null
+  /** True when an NPC_DECEASED event has been recorded for this NPC. */
+  deceased: boolean
 }>
 
 export type TickCommandStats = Readonly<{
@@ -477,6 +488,9 @@ export class SimulationRuntime {
   private readonly marketPricesProjection = new MarketPricesProjection()
   private readonly householdEconomyProjection = new HouseholdEconomyProjection()
   private readonly productionChainsProjection = new ProductionChainsProjection()
+  private readonly npcMortalityProjection = new NpcMortalityProjection()
+  // NpcLineageProjection is initialized in the constructor once profiles are available.
+  private npcLineageProjection!: NpcLineageProjection
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -491,6 +505,7 @@ export class SimulationRuntime {
     this.areaEngine = new AreaStateEngine(MAP_TILES.map((t) => t.id))
     this.buildingRuntime = new BuildingRuntime()
     this.npcFactionLean = buildNpcFactionLean(profiles)
+    this.npcLineageProjection = new NpcLineageProjection(profiles)
     this.hydrateFromEventLog()
   }
 
@@ -1105,7 +1120,8 @@ export class SimulationRuntime {
           lifeExpansion: this.lifeExpansion,
           tick: this.currentTick
         }),
-        civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null
+        civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null,
+        deceased: this.npcMortalityProjection.isDeceased(profile.id),
       }
     })
   }
@@ -1421,6 +1437,8 @@ export class SimulationRuntime {
       this.householdEconomyProjection.project(ev)
       this.productionChainsProjection.project(ev)
       this.settlementsProjection.project(ev)
+      this.npcMortalityProjection.project(ev)
+      this.npcLineageProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -2890,6 +2908,52 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- NPC Mortality cadence (v0.32.0) ----
+    if (nextTick % MORTALITY_CADENCE_TICKS === 0) {
+      const mortalityIntents = planMortality({
+        currentTick: nextTick,
+        profiles: this.profiles,
+        mortalityProjection: this.npcMortalityProjection,
+        lineageProjection: this.npcLineageProjection,
+      })
+      for (const intent of mortalityIntents) {
+        const npcProfile = this.profiles.find((p) => p.id === intent.npcId)
+        const npcName = npcProfile?.name.zh ?? intent.npcId
+        commands.push(makeLivingWorldCommand(
+          'NPC_DECEASED',
+          intent.npcId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            npcId: intent.npcId,
+            tileId: intent.tileId,
+            householdId: intent.householdId,
+            deceasedAtTick: nextTick,
+            narration: `${npcName} 走完了他在潮鳴市的一生。`,
+          }
+        ))
+        if (intent.heirNpcId) {
+          const heirProfile = this.profiles.find((p) => p.id === intent.heirNpcId)
+          const heirName = heirProfile?.name.zh ?? intent.heirNpcId
+          commands.push(makeLivingWorldCommand(
+            'NPC_HEIR_ASSIGNED',
+            `household.${intent.householdId}`,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              householdId: intent.householdId,
+              deceasedNpcId: intent.npcId,
+              heirNpcId: intent.heirNpcId,
+              assignedAtTick: nextTick,
+              narration: `${heirName} 承繼了 ${npcName} 留下的位置。`,
+            }
+          ))
+        }
+      }
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -3727,6 +3791,8 @@ export class SimulationRuntime {
         this.householdEconomyProjection.project(ev)
         this.productionChainsProjection.project(ev)
         this.settlementsProjection.project(ev)
+        this.npcMortalityProjection.project(ev)
+        this.npcLineageProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -4363,6 +4429,10 @@ export class SimulationRuntime {
       this.logisticsProjection.rebuildFromEvents(goodsEvents)
       this.marketPricesProjection.rebuildFromEvents(goodsEvents)
       this.productionChainsProjection.rebuildFromEvents(goodsEvents)
+      // NPC mortality + lineage projections — rebuild from NPC death/heir events.
+      const mortalityEvents = this.store.readEventsByTypes(MORTALITY_BOOT_EVENT_TYPES)
+      this.npcMortalityProjection.rebuildFromEvents(mortalityEvents)
+      this.npcLineageProjection.rebuildFromEvents(mortalityEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state

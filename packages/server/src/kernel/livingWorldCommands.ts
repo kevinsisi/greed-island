@@ -181,6 +181,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'PLAYER_LEFT_FACTION',
   'PLAYER_LED_FACTION',
   'PLAYER_PLAYED_CARD',
+
+  // NPC Mortality & Lineage (v0.32.0)
+  'NPC_DECEASED',
+  'NPC_HEIR_ASSIGNED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -282,6 +286,23 @@ export type HouseholdInheritanceAssignedCmd = Readonly<{
   amount: number
   assignedAtTick: number
   motivation?: EventMotivation
+  narration: string
+}>
+
+// NPC Mortality & Lineage (v0.32.0)
+export type NpcDeceasedCmd = Readonly<{
+  npcId: string
+  tileId: string
+  householdId: string
+  deceasedAtTick: number
+  narration: string
+}>
+
+export type NpcHeirAssignedCmd = Readonly<{
+  householdId: string
+  deceasedNpcId: string
+  heirNpcId: string
+  assignedAtTick: number
   narration: string
 }>
 
@@ -1358,6 +1379,8 @@ export type LivingWorldCommandPayload =
   | PlayerLeftFactionCmd
   | PlayerLedFactionCmd
   | PlayerPlayedCardCmd
+  | NpcDeceasedCmd
+  | NpcHeirAssignedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2503,6 +2526,24 @@ const VALIDATORS: Readonly<
     if (typeof p.cardId !== 'string' || p.cardId.length === 0) return 'cardId required'
     if (typeof p.targetTileId !== 'string' || p.targetTileId.length === 0) return 'targetTileId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  NPC_DECEASED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (!isNonNegativeInteger(p.deceasedAtTick)) return 'deceasedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_HEIR_ASSIGNED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (typeof p.deceasedNpcId !== 'string' || p.deceasedNpcId.length === 0) return 'deceasedNpcId required'
+    if (typeof p.heirNpcId !== 'string' || p.heirNpcId.length === 0) return 'heirNpcId required'
+    if (!isNonNegativeInteger(p.assignedAtTick)) return 'assignedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
 }

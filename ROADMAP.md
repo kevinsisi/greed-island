@@ -5,6 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.32.0 ✅ shipped — 2026-05-19
+
+**主題：NPC Mortality & Lineage (§43 gap #1)**
+
+OpenSpec: `npc-mortality-lineage/` (all 34 implementation tasks complete)。
+
+- ✅ 2 new command types: `NPC_DECEASED`, `NPC_HEIR_ASSIGNED` — full payload types + validators.
+- ✅ Config: `NPC_BASE_LIFESPAN_TICKS = 120_960`, `NPC_LIFESPAN_VARIANCE_TICKS = 60_480`, `MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR`, `npcLifespanTicks(npcId)` FNV-1a hash.
+- ✅ New projections: `NpcMortalityProjection` (deceased tracking), `NpcLineageProjection` (household membership + heir history); both boot-hydrated from selective `MORTALITY_BOOT_EVENT_TYPES`.
+- ✅ New planner: `planMortality()` pure function — cadence-gated, oldest-first heir (by `bornAtTick`), solo-household gets `heirNpcId: null`.
+- ✅ Runtime: both projections in private fields + constructor init + both fan-out loops + mortality cadence block; `SimNpcState.deceased` boolean.
+- ✅ Chronicle: Chinese narration embedded in command payloads; `HOUSEHOLD_INHERITANCE_ASSIGNED` already suppressed.
+- ✅ AI memory: NPC_DECEASED → world-scoped row (importance 8); NPC_HEIR_ASSIGNED → heir-scoped row (importance 9).
+- ✅ Quick wins: `PlayerCivilizationPanel` faction list fix (reads `factionEcologyStances`); `settlementEngine` now emits `SETTLEMENT_DECLINED`.
+- ✅ 104 server test files, 716 tests pass; TypeScript clean.
+
+---
+
 ## v0.31.0 ✅ shipped — 2026-05-19
 
 **主題：Player Civilization UI**
