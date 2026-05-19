@@ -165,6 +165,22 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FISHING_QUOTA_ENFORCED',
   'INDUSTRIAL_SITE_SABOTAGED',
   'RITUAL_ECOSYSTEM_MANIPULATION',
+  // Phase 6 — Player Civilization
+  'PLAYER_PICKED_UP_GOODS',
+  'PLAYER_TRADED_GOODS',
+  'PLAYER_HUNTED_ANIMAL',
+  'PLAYER_FISHED',
+  'PLAYER_DOMESTICATED_ANIMAL',
+  'PLAYER_PROTECTED_REGION',
+  'PLAYER_HIRED_NPC',
+  'PLAYER_DISMISSED_NPC',
+  'PLAYER_SPONSORED_CONSTRUCTION',
+  'PLAYER_FOUNDED_SETTLEMENT',
+  'PLAYER_CLAIMED_TERRITORY',
+  'PLAYER_JOINED_FACTION',
+  'PLAYER_LEFT_FACTION',
+  'PLAYER_LED_FACTION',
+  'PLAYER_PLAYED_CARD',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -1117,6 +1133,112 @@ export type RitualEcosystemManipulationCmd = Readonly<{
   narration: string | null
 }>
 
+// Phase 6 — Player Civilization
+export type PlayerPickedUpGoodsCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  goodsId: string
+  quantity: number
+  tick: number
+}>
+
+export type PlayerTradedGoodsCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tileId: string
+  offeredGoods: ReadonlyArray<Readonly<{ goodsId: string; quantity: number }>>
+  requestedGoods: ReadonlyArray<Readonly<{ goodsId: string; quantity: number }>>
+  tick: number
+}>
+
+export type PlayerHuntedAnimalCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  animalId: string
+  speciesId: string
+  tick: number
+}>
+
+export type PlayerFishedCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  quantity: number
+  tick: number
+}>
+
+export type PlayerDomesticatedAnimalCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  animalId: string
+  speciesId: string
+  tick: number
+}>
+
+export type PlayerProtectedRegionCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  tick: number
+}>
+
+export type PlayerHiredNpcCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tileId: string
+  tick: number
+}>
+
+export type PlayerDismissedNpcCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tick: number
+}>
+
+export type PlayerSponsoredConstructionCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  buildingType: string
+  tick: number
+}>
+
+export type PlayerFoundedSettlementCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  settlementName: string
+  tick: number
+}>
+
+export type PlayerClaimedTerritoryCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  tick: number
+}>
+
+export type PlayerJoinedFactionCmd = Readonly<{
+  playerAccountId: string
+  factionId: string
+  tick: number
+}>
+
+export type PlayerLeftFactionCmd = Readonly<{
+  playerAccountId: string
+  factionId: string
+  tick: number
+}>
+
+export type PlayerLedFactionCmd = Readonly<{
+  playerAccountId: string
+  factionId: string
+  tick: number
+}>
+
+export type PlayerPlayedCardCmd = Readonly<{
+  playerAccountId: string
+  cardId: string
+  targetTileId: string
+  targetNpcId?: string
+  tick: number
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -1221,6 +1343,21 @@ export type LivingWorldCommandPayload =
   | FishingQuotaEnforcedCmd
   | IndustrialSiteSabotagedCmd
   | RitualEcosystemManipulationCmd
+  | PlayerPickedUpGoodsCmd
+  | PlayerTradedGoodsCmd
+  | PlayerHuntedAnimalCmd
+  | PlayerFishedCmd
+  | PlayerDomesticatedAnimalCmd
+  | PlayerProtectedRegionCmd
+  | PlayerHiredNpcCmd
+  | PlayerDismissedNpcCmd
+  | PlayerSponsoredConstructionCmd
+  | PlayerFoundedSettlementCmd
+  | PlayerClaimedTerritoryCmd
+  | PlayerJoinedFactionCmd
+  | PlayerLeftFactionCmd
+  | PlayerLedFactionCmd
+  | PlayerPlayedCardCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2245,6 +2382,126 @@ const VALIDATORS: Readonly<
   RITUAL_ECOSYSTEM_MANIPULATION: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  // Phase 6 — Player Civilization
+  PLAYER_PICKED_UP_GOODS: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity must be positive'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_TRADED_GOODS: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!Array.isArray(p.offeredGoods)) return 'offeredGoods must be array'
+    if (!Array.isArray(p.requestedGoods)) return 'requestedGoods must be array'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_HUNTED_ANIMAL: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_FISHED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity must be positive'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_DOMESTICATED_ANIMAL: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_PROTECTED_REGION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_HIRED_NPC: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_DISMISSED_NPC: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_SPONSORED_CONSTRUCTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.buildingType !== 'string' || p.buildingType.length === 0) return 'buildingType required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_FOUNDED_SETTLEMENT: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.settlementName !== 'string' || p.settlementName.length === 0) return 'settlementName required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_CLAIMED_TERRITORY: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_JOINED_FACTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_LEFT_FACTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_LED_FACTION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_PLAYED_CARD: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.cardId !== 'string' || p.cardId.length === 0) return 'cardId required'
+    if (typeof p.targetTileId !== 'string' || p.targetTileId.length === 0) return 'targetTileId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },

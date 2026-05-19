@@ -3,6 +3,53 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Phase 6: Player Civilization Integration (v0.30.0)
+
+### Work Done
+
+Phase 6 wires the player into the living world via a Command → Rule Engine → Event pipeline. Players can now claim territory, hire NPCs, join factions, hunt, fish, trade, and play world-layer cards — all recorded in the deterministic EventLog and reflected in a per-account projection.
+
+**New command types (14) in `livingWorldCommands.ts`:**
+- `PLAYER_PICKED_UP_GOODS`, `PLAYER_TRADED_GOODS`, `PLAYER_HUNTED_ANIMAL`, `PLAYER_FISHED`, `PLAYER_DOMESTICATED_ANIMAL`, `PLAYER_PROTECTED_REGION`
+- `PLAYER_HIRED_NPC`, `PLAYER_DISMISSED_NPC`
+- `PLAYER_SPONSORED_CONSTRUCTION`, `PLAYER_FOUNDED_SETTLEMENT`, `PLAYER_CLAIMED_TERRITORY`
+- `PLAYER_JOINED_FACTION`, `PLAYER_LEFT_FACTION`, `PLAYER_LED_FACTION`
+- `PLAYER_PLAYED_CARD`
+- Full payload types + validators for each
+
+**New projection:**
+- `packages/server/src/projections/playerCivilization.ts` — `PlayerCivilizationProjection`: `wallet`, `hiredNpcIds`, `factionIds`, `claimedTileIds` per account; boot-hydrated via selective `PLAYER_CIVILIZATION_BOOT_EVENT_TYPES` read on large-log path
+
+**New HTTP endpoints:**
+- `POST /api/world/player-action` — JWT-authenticated; validates type against allowlist; merges `playerAccountId` into payload; submits via `submitLivingWorldCommand`; returns `{ accepted, tick }` or `{ accepted: false, reason }`
+- `GET /api/world/player-state` — JWT-authenticated; returns `PlayerCivilizationProjection.snapshot(accountId)`
+- `packages/server/src/http/playerCivilizationRouter.ts` — router; registered in `server.ts`
+
+**Chronicle renderer cleanup (no more hardcoded Chinese):**
+- `chronicleRenderer.ts`: all 12 existing E2/E3/E4 Chinese narration strings replaced with machine-readable `[EVENT_TYPE] key=val` English fallbacks
+- New player event pass-through: all `PLAYER_*` events (except `PLAYER_INTERVENE`/`PLAYER_ENERGY_SET`) return a `ChronicleEvent` with English fallback so they flow into the Gemini AI narrative pipeline
+
+**Runtime wiring:**
+- `runtime.ts`: `playerCivilizationProjection` field; fan-out in publish loop; both boot branches hydrated
+
+**OpenSpec:** `phase-6-player-civilization` — all 26 tasks complete.
+
+### Verification
+
+- TypeScript: clean (`npm run build` — zero errors, both packages)
+- Tests: 101 server test files, 697 tests, all pass (includes 8 new `playerCivilization.test.ts` + 4 `playerCivilizationRouter.test.ts`)
+- Docker: rebuilt 2026-05-19 (1.1 GB event log, 683,366 events, large-log fast-boot)
+  - `healthz` → `{"ok":true,"version":"0.26.1","tick":24418}` ✓
+  - `POST /api/world/player-action` `PLAYER_CLAIMED_TERRITORY` → `{"accepted":true,"tick":24422}` ✓
+  - `GET /api/world/player-state` → `{"accountId":"4","wallet":0,"hiredNpcIds":[],"factionIds":[],"claimedTileIds":["t_salt_marsh"]}` ✓
+
+### Remaining / Known
+
+- Archive `phase-6-player-civilization` OpenSpec change after commit/push.
+- Package versions in `package.json` still show `0.26.1`/`0.27.0` — ROADMAP version numbering is semantic/release-level, not tied to npm package.json. Future: bump packages at release time.
+
+---
+
 ## 2026-05-19 — Phase E4: Mythic Ecology (v0.29.0)
 
 ### Work Done

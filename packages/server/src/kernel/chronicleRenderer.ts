@@ -300,69 +300,75 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : ''
     const settlementId = typeof p?.settlementId === 'string' ? p.settlementId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${settlementId}的牧場宰殺了一頭${speciesId}，獲得肉品與皮革。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[LIVESTOCK_SLAUGHTERED] settlement=${settlementId} species=${speciesId}` }
   }
   if (event.eventType === 'MOUNT_ASSIGNED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const npcId = typeof p?.npcId === 'string' ? p.npcId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${npcId}獲得了一頭坐騎，行進速度大幅提升。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[MOUNT_ASSIGNED] npc=${npcId}` }
   }
   if (event.eventType === 'SPECIES_EXTINCT') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : event.actorId
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${speciesId} 已在此區域絕種` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[SPECIES_EXTINCT] species=${speciesId}` }
   }
   if (event.eventType === 'SPECIES_RECOVERED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : event.actorId
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${speciesId} 族群恢復` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[SPECIES_RECOVERED] species=${speciesId}` }
   }
-  // Phase E4 — Mythic Ecology narrations
   if (event.eventType === 'LEGENDARY_WORLD_EVENT_SPAWNED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : '神秘生物'
-    const tileId = typeof p?.tileId === 'string' ? p.tileId : '未知之地'
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `傳說中的${speciesId}現身於${tileId}，恐懼籠罩四方。` }
+    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : ''
+    const tileId = typeof p?.tileId === 'string' ? p.tileId : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[LEGENDARY_WORLD_EVENT_SPAWNED] species=${speciesId} tile=${tileId}` }
   }
   if (event.eventType === 'LEGENDARY_WORLD_EVENT_RESOLVED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : '神秘生物'
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${speciesId}的威脅已告解除，地區恢復平靜。` }
+    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[LEGENDARY_WORLD_EVENT_RESOLVED] species=${speciesId}` }
   }
   if (event.eventType === 'LEGENDARY_HUNT_STARTED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const linkedAnimalId = typeof p?.linkedAnimalId === 'string' ? p.linkedAnimalId : ''
     const tileId = typeof p?.tileId === 'string' ? p.tileId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `獵人們聚集於${tileId}，傳奇獵殺${linkedAnimalId}正式展開。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[LEGENDARY_HUNT_STARTED] animal=${linkedAnimalId} tile=${tileId}` }
   }
   if (event.eventType === 'LEGENDARY_HUNT_CONCLUDED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const linkedAnimalId = typeof p?.linkedAnimalId === 'string' ? p.linkedAnimalId : ''
-    const outcome = p?.outcome === 'killed' ? '被獵殺' : p?.outcome === 'migrated' ? '遷徙離去' : '飢餓而死'
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `傳奇獵殺終結——${linkedAnimalId}${outcome}，事蹟將銘記史冊。` }
+    const outcome = typeof p?.outcome === 'string' ? p.outcome : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[LEGENDARY_HUNT_CONCLUDED] animal=${linkedAnimalId} outcome=${outcome}` }
   }
   if (event.eventType === 'FOREST_CLEARCUT_ORDERED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const factionId = typeof p?.factionId === 'string' ? p.factionId : '某派系'
+    const factionId = typeof p?.factionId === 'string' ? p.factionId : ''
     const tileId = typeof p?.tileId === 'string' ? p.tileId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${factionId}下令清伐${tileId}的森林，以舒緩生態壓力。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[FOREST_CLEARCUT_ORDERED] faction=${factionId} tile=${tileId}` }
   }
   if (event.eventType === 'FISHING_QUOTA_ENFORCED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const factionId = typeof p?.factionId === 'string' ? p.factionId : '某派系'
+    const factionId = typeof p?.factionId === 'string' ? p.factionId : ''
     const tileId = typeof p?.tileId === 'string' ? p.tileId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${factionId}在${tileId}頒布捕魚配額，漁業資源岌岌可危。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[FISHING_QUOTA_ENFORCED] faction=${factionId} tile=${tileId}` }
   }
   if (event.eventType === 'INDUSTRIAL_SITE_SABOTAGED') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const factionId = typeof p?.factionId === 'string' ? p.factionId : '某派系'
+    const factionId = typeof p?.factionId === 'string' ? p.factionId : ''
     const tileId = typeof p?.tileId === 'string' ? p.tileId : ''
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${factionId}破壞了${tileId}的牲畜設施，抗議工業化過度擴張。` }
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[INDUSTRIAL_SITE_SABOTAGED] faction=${factionId} tile=${tileId}` }
   }
   if (event.eventType === 'RITUAL_ECOSYSTEM_MANIPULATION') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
-    const factionId = typeof p?.factionId === 'string' ? p.factionId : '神秘組織'
-    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${factionId}在暗中施行儀式，悄悄干預生態的運行軌跡。` }
+    const factionId = typeof p?.factionId === 'string' ? p.factionId : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[RITUAL_ECOSYSTEM_MANIPULATION] faction=${factionId}` }
+  }
+  // Phase 6 — Player Civilization: pass through to AI pipeline
+  if (event.eventType.startsWith('PLAYER_') && event.eventType !== 'PLAYER_INTERVENE' && event.eventType !== 'PLAYER_ENERGY_SET') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const actor = typeof p?.playerAccountId === 'string' ? p.playerAccountId : event.actorId
+    const tileId = typeof p?.tileId === 'string' ? ` tile=${p.tileId}` : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: actor, narration: `[${event.eventType}] actor=${actor}${tileId}` }
   }
   if (event.eventType.startsWith('GOODS_')) return null
   if (event.eventType.startsWith('HOUSEHOLD_GOLD_')) return null

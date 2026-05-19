@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.30.0 ✅ shipped — 2026-05-19
+
+**主題：Phase 6 — Player Civilization Integration**
+
+OpenSpec: `phase-6-player-civilization/` (all 26 tasks complete)。
+
+- ✅ 14 new command types: `PLAYER_PICKED_UP_GOODS`, `PLAYER_TRADED_GOODS`, `PLAYER_HUNTED_ANIMAL`, `PLAYER_FISHED`, `PLAYER_DOMESTICATED_ANIMAL`, `PLAYER_PROTECTED_REGION`, `PLAYER_HIRED_NPC`, `PLAYER_DISMISSED_NPC`, `PLAYER_SPONSORED_CONSTRUCTION`, `PLAYER_FOUNDED_SETTLEMENT`, `PLAYER_CLAIMED_TERRITORY`, `PLAYER_JOINED_FACTION`, `PLAYER_LEFT_FACTION`, `PLAYER_LED_FACTION`, `PLAYER_PLAYED_CARD` — full payload types + validators.
+- ✅ New projection: `PlayerCivilizationProjection` — per-account `wallet`, `hiredNpcIds`, `factionIds`, `claimedTileIds`; boot-hydrated from selective event types on large-log path.
+- ✅ New HTTP: `POST /api/world/player-action` (JWT, all 14 types, Rule Engine pipeline); `GET /api/world/player-state` (snapshot).
+- ✅ Chronicle renderer: ALL hardcoded Chinese narrations replaced with machine-readable `[EVENT_TYPE] key=val` English fallbacks (12 existing E2/E3/E4 strings cleaned up). Player events pass through to Gemini AI pipeline.
+- ✅ Runtime wired: projection field + fan-out + both boot branches.
+- ✅ 101 server test files, 697 tests pass; TypeScript clean; Docker verified (683,366 events; `PLAYER_CLAIMED_TERRITORY` → `player-state` reflects tile ✓).
+
 ## v0.29.0 ✅ shipped — 2026-05-19
 
 **主題：Phase E4 — Mythic Ecology**

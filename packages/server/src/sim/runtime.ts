@@ -179,6 +179,7 @@ import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, 
 import { NpcStateProjection } from '../projections/npcState.js'
 import { AnimalPopulationProjection, filterWildPopulation, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { LivestockRegistryProjection } from '../projections/livestockRegistry.js'
+import { PlayerCivilizationProjection } from '../projections/playerCivilization.js'
 import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
 import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
 import { RumorProjection, type RumorRow } from '../projections/rumor.js'
@@ -269,6 +270,15 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'LEGENDARY_WORLD_EVENT_SPAWNED',
   'LEGENDARY_WORLD_EVENT_RESOLVED',
   'LEGENDARY_HUNT_STARTED',
+] as const
+// Player civilization projection event types — read selectively during fast-boot.
+const PLAYER_CIVILIZATION_BOOT_EVENT_TYPES = [
+  'PLAYER_HIRED_NPC',
+  'PLAYER_DISMISSED_NPC',
+  'PLAYER_JOINED_FACTION',
+  'PLAYER_LEFT_FACTION',
+  'PLAYER_LED_FACTION',
+  'PLAYER_CLAIMED_TERRITORY',
 ] as const
 // Goods projection event types — read selectively during fast-boot so
 // inventory/logistics/market/production projections survive restarts on large logs.
@@ -459,6 +469,7 @@ export class SimulationRuntime {
   private readonly livestockRegistryProjection = new LivestockRegistryProjection()
   private readonly worldEventProjection = new WorldEventProjection()
   private readonly legendaryHuntTracker = new LegendaryHuntTracker()
+  private readonly playerCivilizationProjection = new PlayerCivilizationProjection()
   // Per-tick NPC work action counts per tile for ecosystem pressure tracking
   private tileWorkActionCounts = new Map<string, number>()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
@@ -1144,6 +1155,10 @@ export class SimulationRuntime {
     return this.currentTick
   }
 
+  getPlayerCivilizationSnapshot(accountId: string) {
+    return this.playerCivilizationProjection.snapshot(accountId)
+  }
+
   holdNpcForPlayerDialog(
     playerAccountId: string,
     npcId: string
@@ -1399,6 +1414,7 @@ export class SimulationRuntime {
       this.ecosystemRegionProjection.project(ev)
       this.livestockRegistryProjection.project(ev)
       this.worldEventProjection.project(ev)
+      this.playerCivilizationProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
       this.marketPricesProjection.project(ev)
@@ -4317,6 +4333,7 @@ export class SimulationRuntime {
       this.ecosystemRegionProjection.rebuildFromEvents(allEvents)
       this.livestockRegistryProjection.rebuildFromEvents(allEvents)
       this.worldEventProjection.rebuildFromEvents(allEvents)
+      this.playerCivilizationProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
       this.marketPricesProjection.rebuildFromEvents(allEvents)
@@ -4337,6 +4354,8 @@ export class SimulationRuntime {
       this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
       this.livestockRegistryProjection.rebuildFromEvents(ecoEvents)
       this.worldEventProjection.rebuildFromEvents(ecoEvents)
+      const playerCivEvents = this.store.readEventsByTypes(PLAYER_CIVILIZATION_BOOT_EVENT_TYPES)
+      this.playerCivilizationProjection.rebuildFromEvents(playerCivEvents)
       // Goods projections — rebuild from goods event types so inventory/logistics/
       // market state survives server restarts on large event logs.
       const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)
