@@ -3,10 +3,10 @@
 ## Purpose
 Defines age-based NPC death: each NPC has a deterministic lifespan; when `currentTick - effectiveBornAtTick >= lifespanTicks(npcId)` the NPC dies and a `NPC_DECEASED` event enters the canonical EventLog.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Each NPC SHALL have a deterministic lifespan derived from their id
-`lifespanTicks(npcId) = NPC_BASE_LIFESPAN_TICKS + hashInt(npcId) % NPC_LIFESPAN_VARIANCE_TICKS`. The computation is pure and replay-safe. Constants: `NPC_BASE_LIFESPAN_TICKS = 120_960`, `NPC_LIFESPAN_VARIANCE_TICKS = 60_480`.
+`lifespanTicks(npcId) = NPC_BASE_LIFESPAN_TICKS + hashInt(npcId) % NPC_LIFESPAN_VARIANCE_TICKS`. The computation MUST be pure and replay-safe. Constants: `NPC_BASE_LIFESPAN_TICKS = 120_960`, `NPC_LIFESPAN_VARIANCE_TICKS = 60_480`.
 
 #### Scenario: Same NPC always gets same lifespan
 - **WHEN** `lifespanTicks('npc_guard_1')` is called twice
@@ -37,6 +37,11 @@ The planner runs every `MORTALITY_CADENCE_TICKS` ticks. For each NPC not in `Npc
 
 ### Requirement: NPC_DECEASED SHALL be wired into runtime boot hydration and per-event fan-out
 `NPC_DECEASED` MUST be added to `MORTALITY_BOOT_EVENT_TYPES` for selective large-log hydration. The per-event fan-out loop MUST call `mortalityProjection.project(ev)` for each `NPC_DECEASED` event.
+
+#### Scenario: Boot hydration restores deceased NPCs from EventLog
+- **GIVEN** the EventLog contains an `NPC_DECEASED` event
+- **WHEN** runtime boot hydration reads `MORTALITY_BOOT_EVENT_TYPES`
+- **THEN** `mortalityProjection.isDeceased(npcId)` MUST return `true`
 
 ### Requirement: The NPC state snapshot SHALL mark deceased NPCs
 When building `getSnapshot().npcs`, any NPC whose id appears in `NpcMortalityProjection.deceasedIds` MUST have `deceased: true` in their snapshot entry. The frontend SHALL filter deceased NPCs from interactive lists (hire, dialog) but they remain visible in chronicle.

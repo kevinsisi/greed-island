@@ -3,10 +3,10 @@
 ## Purpose
 Defines household membership and heir selection: on `NPC_DECEASED`, the system identifies the eldest surviving household member as heir and emits `HOUSEHOLD_INHERITANCE_ASSIGNED` + `NPC_HEIR_ASSIGNED`.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Each NPC SHALL belong to exactly one household
-`householdId` is an optional field on `NpcProfile`. If absent, the NPC's own `id` is used as their `householdId` (solo household). `NpcLineageProjection` builds household membership sets from profile data at boot.
+`householdId` is an optional field on `NpcProfile`. If absent, the NPC's own `id` MUST be used as their `householdId` (solo household). `NpcLineageProjection` MUST build household membership sets from profile data at boot.
 
 #### Scenario: Solo NPC has their own household id
 - **WHEN** an `NpcProfile` has no `householdId` field

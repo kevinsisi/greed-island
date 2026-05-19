@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines species extinction, ecosystem pressure, fishery recovery, and admin visibility behavior for ecological collapse and recovery.
+
+## Requirements
 
 ### Requirement: Species extinction warning emitted when population falls below threshold
 When a species population on any tile drops below `Species.extinctionThreshold`, the runtime SHALL emit `SPECIES_EXTINCTION_WARNING` via the Rule Engine on the next reproduction cadence tick.
