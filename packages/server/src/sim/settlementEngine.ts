@@ -133,6 +133,22 @@ export function planSettlementCommands(input: SettlementEngineInput): LivingWorl
           narration: `Settlement ${settlement.id} stability recalculated.`,
         }
       ))
+      if (status === 'declining' && settlement.status !== 'declining') {
+        commands.push(makeLivingWorldCommand(
+          'SETTLEMENT_DECLINED',
+          `settlement.${settlement.id}`,
+          'system',
+          input.currentTick,
+          submittedAt,
+          {
+            settlementId: settlement.id,
+            tileId: settlement.tileId,
+            stability,
+            declinedAtTick: input.currentTick,
+            narration: `${settlement.id} 的穩定度跌破閾值，聚落陷入衰退。`,
+          }
+        ))
+      }
     }
   }
 

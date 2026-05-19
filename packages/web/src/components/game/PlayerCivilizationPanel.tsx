@@ -90,9 +90,9 @@ export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationP
     }
   }, [token, refresh, showError, clearError])
 
-  const factionIds = Object.keys(
-    (world.facts?.factionDominance as Record<string, unknown> | undefined) ?? {}
-  )
+  const factionIds = (
+    (world.facts?.factionEcologyStances as Array<{ factionId: string }> | undefined) ?? []
+  ).map((s) => s.factionId)
 
   const nearbyNpcs = npcs.filter((n) => {
     const loc = n.location ?? n.targetTile
