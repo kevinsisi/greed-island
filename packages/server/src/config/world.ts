@@ -131,6 +131,18 @@ export const FISHERY_RECOVERY_RATE = 5
 // Hysteresis buffer above FISHERY_COLLAPSE_THRESHOLD before FISHERY_RECOVERED fires.
 export const FISHERY_RECOVERY_BUFFER = 10
 
+// Phase E3 — Domestication.
+// Minimum wild population on the same tile before a settlement can domesticate.
+export const DOMESTICATION_MIN_WILD_POP = 5
+// Ranch building default livestock capacity.
+export const RANCH_DEFAULT_CAPACITY = 8
+// Cadence for domestication + breeding + slaughter planners.
+export const DOMESTICATION_CADENCE_TICKS = 4 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+// Cadence for breeding planner (must be ≥ DOMESTICATION_CADENCE_TICKS).
+export const BREEDING_CADENCE_TICKS = 6 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+// Mount speed multiplier applied to NPC travel tick calculations.
+export const MOUNT_SPEED_MULTIPLIER = 1.5
+
 // Combat Phase C Slice 1 — sub-tick loop default rate. The runtime
 // spawns a setInterval per active combat at this rate. Range 5–20 Hz
 // (50 ms – 200 ms); default 10 Hz (100 ms). Configurable so future

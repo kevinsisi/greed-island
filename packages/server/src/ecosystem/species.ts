@@ -59,6 +59,7 @@ export type Species = Readonly<{
   climateTolerance: number
   civilizationTolerance: number
   extinctionThreshold: number
+  mountEligible?: boolean
 }>
 
 export type Animal = Readonly<{
@@ -88,6 +89,7 @@ const REGION_SPECIES = {
     species({ id: 'reed_eel', category: 'predator', biomeAffinity: ['salt_marsh'], dietType: 'carnivore', aggression: 45, fear: 30, intelligence: 18, packBehavior: 'solitary', activityWindow: 'night', migrationPattern: 'pressure', reproductionRate: 32, carryingCapacity: 30, predatorTargets: [], preyTargets: ['marsh_fish', 'salt_crab'], edibleYield: 1, byproducts: ['eel_skin'], rarity: 'uncommon', climateTolerance: 70, civilizationTolerance: 20, extinctionThreshold: 4 }),
     species({ id: 'marsh_heron', category: 'avian', biomeAffinity: ['salt_marsh'], dietType: 'carnivore', aggression: 10, fear: 65, intelligence: 28, packBehavior: 'pair', activityWindow: 'day', migrationPattern: 'seasonal', reproductionRate: 28, carryingCapacity: 30, predatorTargets: [], preyTargets: ['marsh_fish', 'salt_crab'], edibleYield: 1, byproducts: ['feathers'], rarity: 'rare', climateTolerance: 68, civilizationTolerance: 35, extinctionThreshold: 3 }),
     species({ id: 'white_marsh_leviathan', category: 'mythical', biomeAffinity: ['salt_marsh'], dietType: 'carnivore', aggression: 95, fear: 5, intelligence: 50, packBehavior: 'solitary', activityWindow: 'any', migrationPattern: 'event_driven', reproductionRate: 1, carryingCapacity: 1, predatorTargets: [], preyTargets: ['marsh_fish', 'salt_crab', 'reed_eel', 'marsh_heron'], edibleYield: 40, byproducts: ['leviathan_scale'], rarity: 'legendary', climateTolerance: 90, civilizationTolerance: 0, extinctionThreshold: 1 }),
+    species({ id: 'marsh_yak', category: 'livestock', biomeAffinity: ['salt_marsh'], dietType: 'herbivore', aggression: 8, fear: 55, intelligence: 14, packBehavior: 'herd', activityWindow: 'day', migrationPattern: 'pressure', reproductionRate: 38, carryingCapacity: 40, predatorTargets: ['reed_eel'], preyTargets: [], edibleYield: 6, byproducts: ['milk', 'hide'], rarity: 'common', climateTolerance: 78, civilizationTolerance: 80, extinctionThreshold: 5, mountEligible: true }),
   ],
   forest: [
     species({ id: 'forest_deer', category: 'herbivore', biomeAffinity: ['forest'], dietType: 'herbivore', aggression: 5, fear: 75, intelligence: 16, packBehavior: 'herd', activityWindow: 'day', migrationPattern: 'pressure', reproductionRate: 55, carryingCapacity: 90, predatorTargets: ['fog_wolf', 'mountain_bear'], preyTargets: [], edibleYield: 4, byproducts: ['hide', 'bone'], rarity: 'common', climateTolerance: 70, civilizationTolerance: 35, extinctionThreshold: 10 }),

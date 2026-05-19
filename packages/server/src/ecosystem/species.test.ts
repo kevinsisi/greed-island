@@ -9,9 +9,9 @@ import {
 } from './species.js'
 
 describe('ecosystem species catalog (Phase E0.1)', () => {
-  it('contains the documented 22 initial species in canonical order', () => {
+  it('contains the documented 23 initial species in canonical order', () => {
     const all = listSpecies()
-    expect(all).toHaveLength(22)
+    expect(all).toHaveLength(23)
     expect(all[0]?.id).toBe('marsh_fish')
     expect(all[all.length - 1]?.id).toBe('lantern_moth')
   })
@@ -24,7 +24,7 @@ describe('ecosystem species catalog (Phase E0.1)', () => {
 
   it('matches the expected per-region counts from WORLD_CAPABILITIES', () => {
     expect(ECOSYSTEM_REGION_IDS).toEqual(['salt_marsh', 'forest', 'mountain', 'desert', 'ruin'])
-    expect(listSpeciesByRegion('salt_marsh')).toHaveLength(5)
+    expect(listSpeciesByRegion('salt_marsh')).toHaveLength(6)
     expect(listSpeciesByRegion('forest')).toHaveLength(5)
     expect(listSpeciesByRegion('mountain')).toHaveLength(4)
     expect(listSpeciesByRegion('desert')).toHaveLength(4)

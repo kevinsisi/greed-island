@@ -61,6 +61,11 @@ import {
   ECOSYSTEM_PRESSURE_WORK_THRESHOLD,
   FISHERY_COLLAPSE_THRESHOLD,
   FISHERY_RECOVERY_BUFFER,
+  DOMESTICATION_CADENCE_TICKS,
+  BREEDING_CADENCE_TICKS,
+  DOMESTICATION_MIN_WILD_POP,
+  RANCH_DEFAULT_CAPACITY,
+  MOUNT_SPEED_MULTIPLIER,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -107,6 +112,10 @@ import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planSpeciesExtinctionCheck } from '../ecosystem/extinctionPlanner.js'
 import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fishery.js'
 import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
+import { planDomestication } from '../ecosystem/domesticationPlanner.js'
+import { planBreeding } from '../ecosystem/breedingPlanner.js'
+import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
+import { planMountAssignment } from '../ecosystem/mountPlanner.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
@@ -161,7 +170,8 @@ import {
 } from './cityLife.js'
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { NpcStateProjection } from '../projections/npcState.js'
-import { AnimalPopulationProjection, type AnimalPopulationRow } from '../projections/animalPopulation.js'
+import { AnimalPopulationProjection, filterWildPopulation, type AnimalPopulationRow } from '../projections/animalPopulation.js'
+import { LivestockRegistryProjection } from '../projections/livestockRegistry.js'
 import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
 import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
 import { RumorProjection, type RumorRow } from '../projections/rumor.js'
@@ -244,6 +254,10 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'SPECIES_RECOVERED',
   'ECOSYSTEM_PRESSURE_RAISED',
   'ECOSYSTEM_PRESSURE_RECOVERED',
+  'ANIMAL_DOMESTICATED',
+  'LIVESTOCK_BRED',
+  'LIVESTOCK_SLAUGHTERED',
+  'MOUNT_ASSIGNED',
 ] as const
 // Goods projection event types — read selectively during fast-boot so
 // inventory/logistics/market/production projections survive restarts on large logs.
@@ -431,6 +445,7 @@ export class SimulationRuntime {
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly speciesExtinctionProjection = new SpeciesExtinctionProjection()
   private readonly ecosystemRegionProjection = new EcosystemRegionProjection()
+  private readonly livestockRegistryProjection = new LivestockRegistryProjection()
   // Per-tick NPC work action counts per tile for ecosystem pressure tracking
   private tileWorkActionCounts = new Map<string, number>()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
@@ -720,6 +735,7 @@ export class SimulationRuntime {
         fisheryDensity: this.fisheryDensityProjection.list(),
         extinctionWarnings: this.speciesExtinctionProjection.list(),
         ecosystemRegions: this.ecosystemRegionProjection.list(),
+        livestockRegistry: this.livestockRegistryProjection.list(),
         settlements: this.getSettlements(),
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
@@ -1361,6 +1377,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.project(ev)
       this.speciesExtinctionProjection.project(ev)
       this.ecosystemRegionProjection.project(ev)
+      this.livestockRegistryProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
       this.marketPricesProjection.project(ev)
@@ -2633,6 +2650,127 @@ export class SimulationRuntime {
     }
     this.tileWorkActionCounts = new Map()
 
+    // ---- Phase E3: Domestication (domestication / breeding / slaughter / mount) ----
+    if (nextTick % DOMESTICATION_CADENCE_TICKS === 0) {
+      const settlements = this.settlementsProjection.getAll()
+      const domesticatedIds = settlements.length > 0 ? this.livestockRegistryProjection.getDomesticatedAnimalIdSet() : new Set<string>()
+      const wildPop = settlements.length > 0 ? filterWildPopulation(this.animalPopulationProjection.list(), domesticatedIds) : []
+      for (const settlement of settlements) {
+        const buildings = listBuildingsForTile(settlement.tileId, this.lifeExpansion.unlockedBuildingIds)
+        const ranchCapacity = buildings
+          .filter((b) => b.type === 'ranch')
+          .reduce((sum, b) => sum + (b.livestockCapacity ?? RANCH_DEFAULT_CAPACITY), 0)
+
+        for (const sp of ['marsh_yak'] as const) {
+          const wildRow = wildPop.find((r) => r.speciesId === sp && r.tileId === settlement.tileId)
+          const wildCount = wildRow?.count ?? 0
+          const wildIds = wildRow?.animalIds ?? []
+          const currentCount = this.livestockRegistryProjection.getLivestockCount(settlement.id, sp)
+
+          const domestication = planDomestication({
+            tick: nextTick,
+            settlementId: settlement.id,
+            settlementTileId: settlement.tileId,
+            speciesId: sp,
+            wildPopOnTile: wildCount,
+            currentLivestockCount: currentCount,
+            ranchCapacity,
+            wildAnimalIds: wildIds as string[],
+          })
+          if (domestication) {
+            commands.push(makeLivingWorldCommand('ANIMAL_DOMESTICATED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+              animalId: domestication.animalId,
+              settlementId: domestication.settlementId,
+              speciesId: domestication.speciesId,
+              tick: nextTick,
+              narration: null,
+            }))
+          }
+
+          if (nextTick % BREEDING_CADENCE_TICKS === 0) {
+            const breedingLivestock = this.livestockRegistryProjection.getBySettlement(settlement.id)
+              .filter((r) => r.speciesId === sp && r.role === 'livestock')
+            const breeding = planBreeding({
+              tick: nextTick,
+              settlementId: settlement.id,
+              speciesId: sp,
+              livestockCount: breedingLivestock.length,
+              ranchCapacity,
+            }, settlement.id)
+            if (breeding) {
+              commands.push(makeLivingWorldCommand('LIVESTOCK_BRED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                settlementId: breeding.settlementId,
+                speciesId: breeding.speciesId,
+                newAnimalId: breeding.newAnimalId,
+                tick: nextTick,
+                narration: null,
+              }))
+            }
+          }
+
+          const slaughterLivestock = this.livestockRegistryProjection.getBySettlement(settlement.id)
+            .filter((r) => r.speciesId === sp)
+            .map((r) => ({ animalId: r.animalId, speciesId: r.speciesId, acquiredAtTick: r.acquiredAtTick }))
+          const species = getSpecies(sp)
+          const slaughter = planSlaughter({
+            tick: nextTick,
+            settlementId: settlement.id,
+            livestock: slaughterLivestock,
+            ranchCapacity,
+            byproducts: species?.byproducts ?? [],
+            edibleYield: species?.edibleYield ?? 0,
+          })
+          if (slaughter) {
+            commands.push(makeLivingWorldCommand('LIVESTOCK_SLAUGHTERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+              animalId: slaughter.animalId,
+              settlementId: slaughter.settlementId,
+              speciesId: slaughter.speciesId,
+              goods: slaughter.goods,
+              tick: nextTick,
+              narration: `${settlement.id}的牧場宰殺了一頭${sp === 'marsh_yak' ? '沼澤耆牛' : sp}，獲得肉品與皮革。`,
+            }))
+            for (const g of slaughter.goods) {
+              commands.push(makeLivingWorldCommand('GOODS_EXTRACTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                goodsId: g.goodsId,
+                quantity: g.amount,
+                sourceEventType: 'LIVESTOCK_SLAUGHTERED',
+                sourceId: slaughter.animalId,
+                sourceTileId: settlement.tileId,
+                extractedByNpcId: SIM_ACTOR_WORLD,
+                extractedAtTick: nextTick,
+                narration: `屠宰${slaughter.speciesId}，獲得${g.goodsId}×${g.amount}。`,
+              }))
+            }
+          }
+        }
+
+        // Mount assignment
+        const unmountedNpcs = this.profiles
+          .filter((p) => {
+            const state = this.npcEngine.getState(p.id)
+            return state?.tile === settlement.tileId && this.livestockRegistryProjection.getMountedAnimalIdForNpc(p.id) === null
+          })
+          .map((p) => ({ npcId: p.id, mountedAnimalId: null as string | null }))
+        const mountableLivestock = this.livestockRegistryProjection.getBySettlement(settlement.id)
+          .map((r) => ({
+            animalId: r.animalId,
+            speciesId: r.speciesId,
+            mountEligible: getSpecies(r.speciesId)?.mountEligible ?? false,
+            mountedBy: r.mountedBy,
+            role: r.role,
+          }))
+        for (const intent of planMountAssignment({ tick: nextTick, settlementId: settlement.id, livestock: mountableLivestock, npcs: unmountedNpcs })) {
+          commands.push(makeLivingWorldCommand('MOUNT_ASSIGNED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            animalId: intent.animalId,
+            npcId: intent.npcId,
+            settlementId: intent.settlementId,
+            tick: nextTick,
+            narration: `${intent.npcId}獲得了一頭坐騎，行進速度大幅提升。`,
+          }))
+        }
+      }
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -3406,6 +3544,7 @@ export class SimulationRuntime {
         this.fisheryDensityProjection.project(ev)
         this.speciesExtinctionProjection.project(ev)
         this.ecosystemRegionProjection.project(ev)
+        this.livestockRegistryProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
         this.marketPricesProjection.project(ev)
@@ -4016,6 +4155,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.speciesExtinctionProjection.rebuildFromEvents(allEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(allEvents)
+      this.livestockRegistryProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
       this.marketPricesProjection.rebuildFromEvents(allEvents)
@@ -4034,6 +4174,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
       this.speciesExtinctionProjection.rebuildFromEvents(ecoEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
+      this.livestockRegistryProjection.rebuildFromEvents(ecoEvents)
       // Goods projections — rebuild from goods event types so inventory/logistics/
       // market state survives server restarts on large event logs.
       const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)

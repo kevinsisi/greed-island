@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AnimalPopulationProjection } from './animalPopulation.js'
+import { AnimalPopulationProjection, filterWildPopulation } from './animalPopulation.js'
 import type { Animal } from '../ecosystem/species.js'
 import type { Event } from '../kernel/types.js'
 
@@ -276,3 +276,33 @@ function animal(id: string, speciesId: string, tileId: string, biomeRegion: Anim
     domesticatedBy: null,
   }
 }
+
+describe('filterWildPopulation', () => {
+  const row = {
+    speciesId: 'marsh_yak',
+    tileId: 't_salt_marsh',
+    biomeRegion: 'salt_marsh' as const,
+    count: 3,
+    animalIds: ['a1', 'a2', 'a3'],
+    lastSpawnedAtTick: 10,
+    lastKilledAtTick: null,
+    lastSequence: 10,
+  }
+
+  it('returns all rows unchanged when no domesticated ids', () => {
+    const result = filterWildPopulation([row], new Set())
+    expect(result).toHaveLength(1)
+    expect(result[0]!.count).toBe(3)
+  })
+
+  it('excludes domesticated animal ids from count', () => {
+    const result = filterWildPopulation([row], new Set(['a1']))
+    expect(result[0]!.count).toBe(2)
+    expect(result[0]!.animalIds).toEqual(['a2', 'a3'])
+  })
+
+  it('removes row entirely when all animals are domesticated', () => {
+    const result = filterWildPopulation([row], new Set(['a1', 'a2', 'a3']))
+    expect(result).toHaveLength(0)
+  })
+})

@@ -162,6 +162,7 @@ export function AdminWorldPage() {
   const totalAnimals = animalPopulationRows.reduce((sum, r) => sum + r.count, 0)
   const extinctionWarnings = readExtinctionWarnings(world.facts)
   const ecosystemRegions = readEcosystemRegions(world.facts)
+  const livestockRows = readLivestockRegistry(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -730,6 +731,47 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+
+      {/* Phase E3 — 馴養登記 */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-ground-100">馴養登記 Livestock Registry</h2>
+          <div className="flex gap-2">
+            <Badge label="total" value={livestockRows.length} />
+            <Badge label="mounts" value={livestockRows.filter((r) => r.role === 'mount').length} />
+          </div>
+        </div>
+        {livestockRows.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-ground-400 border-b border-ground-700">
+                <th className="pb-2 pr-4">Settlement</th>
+                <th className="pb-2 pr-4">Animal ID</th>
+                <th className="pb-2 pr-4">Species</th>
+                <th className="pb-2 pr-4">Role</th>
+                <th className="pb-2">Mounted By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {livestockRows.map((row) => (
+                <tr key={row.animalId} className="border-t border-ground-800/50">
+                  <td className="py-2 pr-4 text-ground-300">{row.settlementId}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-ground-400">{row.animalId.slice(0, 16)}</td>
+                  <td className="py-2 pr-4 text-ground-200">{row.speciesId}</td>
+                  <td className="py-2 pr-4">
+                    <span className={row.role === 'mount' ? 'text-amber-400' : 'text-green-400'}>{row.role}</span>
+                  </td>
+                  <td className="py-2 text-ground-400">{row.mountedBy ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400">
+            ✅ No domesticated animals yet.
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -1257,4 +1299,23 @@ function readEcosystemRegions(facts: Record<string, unknown>): EcosystemRegionRo
     const r = v as Partial<EcosystemRegionRow>
     return typeof r.tileId === 'string' && typeof r.pressureLevel === 'number'
   }).sort((a, b) => b.pressureLevel - a.pressureLevel || a.tileId.localeCompare(b.tileId))
+}
+
+type LivestockRegistryRow = Readonly<{
+  animalId: string
+  speciesId: string
+  role: 'livestock' | 'mount'
+  mountedBy: string | null
+  settlementId: string
+  acquiredAtTick: number
+}>
+
+function readLivestockRegistry(facts: Record<string, unknown>): LivestockRegistryRow[] {
+  const raw = facts.livestockRegistry
+  if (!Array.isArray(raw)) return []
+  return raw.filter((v): v is LivestockRegistryRow => {
+    if (!v || typeof v !== 'object') return false
+    const r = v as Record<string, unknown>
+    return typeof r.animalId === 'string' && typeof r.speciesId === 'string' && (r.role === 'livestock' || r.role === 'mount')
+  }).sort((a, b) => a.settlementId.localeCompare(b.settlementId) || a.speciesId.localeCompare(b.speciesId))
 }

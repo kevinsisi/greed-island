@@ -11,6 +11,7 @@ export type BuildingType =
   | 'temple'
   | 'landmark'
   | 'construction'
+  | 'ranch'
 
 export type Shift = 'morning' | 'afternoon' | 'night'
 
@@ -57,6 +58,7 @@ export type BuildingDef = Readonly<{
   enterable: boolean
   restorative: boolean
   tags?: readonly string[]
+  livestockCapacity?: number
 }>
 
 export type BuildingOccupant = Readonly<{

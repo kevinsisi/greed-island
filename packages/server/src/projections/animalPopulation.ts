@@ -213,6 +213,20 @@ function populationKey(speciesId: string, tileId: string): string {
   return `${speciesId}@${tileId}`
 }
 
+export function filterWildPopulation(
+  rows: readonly AnimalPopulationRow[],
+  domesticatedIds: ReadonlySet<string>
+): AnimalPopulationRow[] {
+  if (domesticatedIds.size === 0) return rows as AnimalPopulationRow[]
+  return rows
+    .map((row) => {
+      const wildIds = row.animalIds.filter((id) => !domesticatedIds.has(id))
+      if (wildIds.length === row.animalIds.length) return row
+      return { ...row, animalIds: wildIds, count: wildIds.length }
+    })
+    .filter((row) => row.count > 0)
+}
+
 function isEcosystemRegionId(value: unknown): value is EcosystemRegionId {
   return value === 'salt_marsh' || value === 'forest' || value === 'mountain' || value === 'desert' || value === 'ruin'
 }

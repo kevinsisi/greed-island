@@ -3,6 +3,51 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Phase E3: Ecosystem Domestication (v0.28.0)
+
+### Work Done
+
+Phase E3 adds domestication, breeding, slaughter, and mount assignment to the living world.
+
+**New planners (all pure functions):**
+- `packages/server/src/ecosystem/domesticationPlanner.ts` — `planDomestication`: wild pop ≥ 5, ranch present, capacity not full → ANIMAL_DOMESTICATED
+- `packages/server/src/ecosystem/breedingPlanner.ts` — `planBreeding`: ≥ 2 livestock, cadence gate, capacity check → LIVESTOCK_BRED
+- `packages/server/src/ecosystem/slaughterPlanner.ts` — `planSlaughter`: overflow → slaughter oldest-first, produce goods from byproducts
+- `packages/server/src/ecosystem/mountPlanner.ts` — `planMountAssignment`: pair unassigned mount-eligible livestock with unmounted carrier NPCs
+
+**New projection:**
+- `packages/server/src/projections/livestockRegistry.ts` — `LivestockRegistryProjection` tracking per-settlement domesticated animals; role: `'livestock' | 'mount'`; helpers: `getBySettlement`, `getLivestockCount`, `getDomesticatedAnimalIdSet`, `getMountedAnimalIdForNpc`
+
+**Wild population filter:**
+- `projections/animalPopulation.ts` — `filterWildPopulation()` export: excludes domesticated animal IDs from wild pop rows used by spawning/predation/extinction planners
+
+**Updated:**
+- `ecosystem/species.ts` — `marsh_yak` added to `salt_marsh` region with `category: 'livestock'`, `mountEligible: true`, byproducts `['milk', 'hide']`; `mountEligible?: boolean` added to `Species` type
+- `livingWorldCommands.ts` — 4 new command types: `ANIMAL_DOMESTICATED`, `LIVESTOCK_BRED`, `LIVESTOCK_SLAUGHTERED`, `MOUNT_ASSIGNED`
+- `buildings/types.ts` — `'ranch'` building type; `livestockCapacity?: number` on `BuildingDef`
+- `buildings/catalog.ts` — `b_salt_marsh_ranch` added to `EXPANSION_BUILDINGS`
+- `config/world.ts` — `DOMESTICATION_MIN_WILD_POP`, `RANCH_DEFAULT_CAPACITY`, `DOMESTICATION_CADENCE_TICKS`, `BREEDING_CADENCE_TICKS`, `MOUNT_SPEED_MULTIPLIER`
+- `sim/runtime.ts` — `LivestockRegistryProjection` field, boot hydration (both branches), event fan-out, E3 cadence block (domestication + breeding + slaughter + GOODS_EXTRACTED + mount assignment), `livestockRegistry` in `getSnapshot()` facts
+- `kernel/chronicleRenderer.ts` — ANIMAL_DOMESTICATED/LIVESTOCK_BRED suppressed; LIVESTOCK_SLAUGHTERED + MOUNT_ASSIGNED have Chinese narration
+- `web/src/pages/AdminWorldPage.tsx` — "馴養登記 Livestock Registry" section with per-settlement table
+
+**OpenSpec:** `ecosystem-domestication` — tasks 1–9 and 10.1–10.6, 10.8, 11.1–11.3, 12.1–12.2 complete. Task 10.7 (mount speed multiplier in NpcEngine) deferred — requires NpcEngine refactor.
+
+### Verification
+
+- TypeScript: clean (both packages)
+- Tests: 95 server files + 21 web files, 662 + 96 = 758 tests, all pass
+- Web build: clean (Vite + tsc)
+- Docker: rebuild pending (use `DOCKER_BUILDKIT=0 docker compose ...`)
+
+### Remaining / Known
+
+- Task 10.7 deferred: `mountSpeedMultiplier` in NpcEngine (`decideNextState` would need a speed input). Mount events are stored correctly; speed effect not yet applied.
+- Task 13.3: `listSpeciesByCategory('livestock')` now returns `marsh_yak` (verified via updated species test).
+- `openspec validate --all --strict` should be run before next release.
+
+---
+
 ## 2026-05-18 — Phase E2: Ecosystem Pressure & Collapse (v0.27.0)
 
 ### Work Done

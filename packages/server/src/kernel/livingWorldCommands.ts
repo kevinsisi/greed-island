@@ -151,6 +151,11 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FISHERY_RECOVERED',
   'ECOSYSTEM_PRESSURE_RAISED',
   'ECOSYSTEM_PRESSURE_RECOVERED',
+  // Phase E3 — Domestication
+  'ANIMAL_DOMESTICATED',
+  'LIVESTOCK_BRED',
+  'LIVESTOCK_SLAUGHTERED',
+  'MOUNT_ASSIGNED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -790,6 +795,40 @@ export type EcosystemPressureRecoveredCmd = Readonly<{
   narration: string | null
 }>
 
+// Phase E3 — Domestication
+export type AnimalDomesticatedCmd = Readonly<{
+  animalId: string
+  settlementId: string
+  speciesId: string
+  tick: number
+  narration: string | null
+}>
+
+export type LivestockBredCmd = Readonly<{
+  settlementId: string
+  speciesId: string
+  newAnimalId: string
+  tick: number
+  narration: string | null
+}>
+
+export type LivestockSlaughteredCmd = Readonly<{
+  animalId: string
+  settlementId: string
+  speciesId: string
+  goods: readonly Readonly<{ goodsId: string; amount: number }>[]
+  tick: number
+  narration: string | null
+}>
+
+export type MountAssignedCmd = Readonly<{
+  animalId: string
+  npcId: string
+  settlementId: string
+  tick: number
+  narration: string | null
+}>
+
 export const GOODS_HOLDER_TYPES = ['npc', 'building', 'settlement'] as const
 export type GoodsHolderType = (typeof GOODS_HOLDER_TYPES)[number]
 
@@ -1094,6 +1133,10 @@ export type LivingWorldCommandPayload =
   | AnimalFledCmd
   | AnimalRetaliatedCmd
   | NpcDefensePartyFormedCmd
+  | AnimalDomesticatedCmd
+  | LivestockBredCmd
+  | LivestockSlaughteredCmd
+  | MountAssignedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2013,6 +2056,44 @@ const VALIDATORS: Readonly<
   ECOSYSTEM_PRESSURE_RECOVERED: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  ANIMAL_DOMESTICATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  LIVESTOCK_BRED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.newAnimalId !== 'string' || p.newAnimalId.length === 0) return 'newAnimalId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  LIVESTOCK_SLAUGHTERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!Array.isArray(p.goods)) return 'goods must be array'
+    for (const g of p.goods) {
+      if (!isRecord(g)) return 'goods items must be objects'
+      if (typeof g.goodsId !== 'string' || g.goodsId.length === 0) return 'goods[].goodsId required'
+      if (typeof g.amount !== 'number' || !Number.isFinite(g.amount) || g.amount <= 0) return 'goods[].amount must be positive number'
+    }
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  MOUNT_ASSIGNED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },

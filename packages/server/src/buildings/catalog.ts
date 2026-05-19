@@ -447,6 +447,33 @@ const ALL_BUILDINGS: BuildingDef[] = [
 
 export const EXPANSION_BUILDINGS: ReadonlyArray<BuildingDef> = [
   {
+    id: 'b_salt_marsh_ranch',
+    tileId: 't_salt_marsh',
+    nameZh: '鹽沼牧場',
+    nameEn: 'Salt-Marsh Ranch',
+    descriptionZh: '沼澤耆牛的牧養圍欄，提供飼料架與擠乳台，可飼養最多 8 頭牲畜。',
+    type: 'ranch',
+    placement: { col: 5, row: 6, glyph: '🐄', size: 24 },
+    interior: {
+      cols: 10,
+      rows: 6,
+      props: [
+        { col: 1, row: 1, glyph: '🌾', label: '飼料架' },
+        { col: 3, row: 2, glyph: '🪣', label: '擠乳台' },
+        { col: 6, row: 3, glyph: '🐄', label: '畜欄' },
+        { col: 8, row: 4, glyph: '📦', label: '產品倉' }
+      ]
+    },
+    ownerNpcId: null,
+    hiring: [
+      { shift: 'morning', capacity: 2, wage: 14, taskZh: '飼養牲畜' },
+      { shift: 'afternoon', capacity: 1, wage: 12, taskZh: '收集乳製品' }
+    ],
+    enterable: true,
+    restorative: false,
+    livestockCapacity: 8,
+  },
+  {
     id: 'b_salt_marsh_field_station',
     tileId: 't_salt_marsh',
     nameZh: '鹽沼拓荒站',

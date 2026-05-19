@@ -294,6 +294,19 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (event.eventType === 'FISHERY_RECOVERED') return null
   if (event.eventType === 'ECOSYSTEM_PRESSURE_RAISED') return null
   if (event.eventType === 'ECOSYSTEM_PRESSURE_RECOVERED') return null
+  if (event.eventType === 'ANIMAL_DOMESTICATED') return null
+  if (event.eventType === 'LIVESTOCK_BRED') return null
+  if (event.eventType === 'LIVESTOCK_SLAUGHTERED') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : ''
+    const settlementId = typeof p?.settlementId === 'string' ? p.settlementId : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${settlementId}的牧場宰殺了一頭${speciesId}，獲得肉品與皮革。` }
+  }
+  if (event.eventType === 'MOUNT_ASSIGNED') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const npcId = typeof p?.npcId === 'string' ? p.npcId : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `${npcId}獲得了一頭坐騎，行進速度大幅提升。` }
+  }
   if (event.eventType === 'SPECIES_EXTINCT') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const speciesId = typeof p?.speciesId === 'string' ? p.speciesId : event.actorId

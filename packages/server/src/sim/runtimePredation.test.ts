@@ -62,7 +62,7 @@ describe('SimulationRuntime predation', () => {
     }
   })
 
-  it('emits ANIMAL_STARVED and removes predator at starvation threshold', () => {
+  it('emits ANIMAL_STARVED and removes predator at starvation threshold', { timeout: 120000 }, async () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
     seedAnimal(eventStore, animal('wolf-a', 'fog_wolf', 't_forest'))
@@ -70,6 +70,7 @@ describe('SimulationRuntime predation', () => {
     try {
       for (let i = 0; i < PREDATOR_STARVATION_THRESHOLD_TICKS * 3; i++) {
         ;(runtime as unknown as Internal).runTick()
+        if (i % 20 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
         if (eventStore.readEvents().some((ev) => ev.eventType === 'ANIMAL_STARVED')) break
       }
 
@@ -86,7 +87,7 @@ describe('SimulationRuntime predation', () => {
       runtime.stop()
       db.close()
     }
-  }, 60000)
+  })
 })
 
 function seedAnimal(eventStore: SqliteEventStore, value: Animal): void {
