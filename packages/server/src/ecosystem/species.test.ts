@@ -59,5 +59,10 @@ describe('ecosystem species catalog (Phase E0.1)', () => {
     expect(leviathan.category).toBe('mythical')
     expect(leviathan.rarity).toBe('legendary')
     expect(leviathan.carryingCapacity).toBe(1)
+
+    const hound = requireSpecies('iron_hound')
+    expect(hound.category).toBe('predator')
+    expect(hound.rarity).toBe('legendary')
+    expect(hound.carryingCapacity).toBe(1)
   })
 })

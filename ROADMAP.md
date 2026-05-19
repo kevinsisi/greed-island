@@ -5,6 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.29.0 ✅ shipped — 2026-05-19
+
+**主題：Phase E4 — Mythic Ecology**
+
+OpenSpec: `ecosystem-mythic-ecology/` (archived 2026-05-19)。
+
+- ✅ `iron_hound` updated to `rarity: 'legendary'`, `carryingCapacity: 1` (singleton); `white_marsh_leviathan` already legendary.
+- ✅ 8 new command types: `LEGENDARY_WORLD_EVENT_SPAWNED/RESOLVED`, `LEGENDARY_HUNT_STARTED/CONCLUDED`, `FOREST_CLEARCUT_ORDERED`, `FISHING_QUOTA_ENFORCED`, `INDUSTRIAL_SITE_SABOTAGED`, `RITUAL_ECOSYSTEM_MANIPULATION`.
+- ✅ New projection: `WorldEventProjection` — per-tile legendary world event tracking; `huntStartedEmitted` flag; boot-hydrated from EventLog.
+- ✅ New planners: `legendarySpawnPlanner` (singleton + prey + pressure + deterministic hash), `legendaryHuntPlanner` (LegendaryHuntTracker — hunter clustering arc), `factionEcologyPlanner` (4-stance static faction ideology).
+- ✅ `runtime.ts`: areaSafety patch subtracts world event severity from tile safety before NPC tick; E4 cadence blocks (spawn + faction ecology); per-tick hunt detection; fan-out on ANIMAL_SPAWNED/KILLED/STARVED/MIGRATED for legendary animals.
+- ✅ `chronicleRenderer.ts`: 8 Chinese narrations for all E4 event types.
+- ✅ Admin UI "神話生態 Mythic Ecology" section: active world events table + faction ecology stance table.
+- ✅ 9 new config constants; `activeWorldEvents` + `factionEcologyStances` in snapshot facts.
+- ✅ 99 server test files, 685 tests pass; TypeScript clean; Docker verified.
+
 ## v0.28.0 ✅ shipped — 2026-05-19
 
 **主題：Phase E3 — Ecosystem Domestication**

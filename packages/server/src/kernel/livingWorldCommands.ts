@@ -156,6 +156,15 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
   'MOUNT_ASSIGNED',
+  // Phase E4 — Mythic Ecology
+  'LEGENDARY_WORLD_EVENT_SPAWNED',
+  'LEGENDARY_WORLD_EVENT_RESOLVED',
+  'LEGENDARY_HUNT_STARTED',
+  'LEGENDARY_HUNT_CONCLUDED',
+  'FOREST_CLEARCUT_ORDERED',
+  'FISHING_QUOTA_ENFORCED',
+  'INDUSTRIAL_SITE_SABOTAGED',
+  'RITUAL_ECOSYSTEM_MANIPULATION',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -1041,6 +1050,73 @@ export type CulturalNormEstablishedCmd = Readonly<{
   narration: string
 }>
 
+// Phase E4 — Mythic Ecology
+export type LegendaryWorldEventSpawnedCmd = Readonly<{
+  eventKind: string
+  tileId: string
+  linkedAnimalId: string
+  speciesId: string
+  severity: number
+  tick: number
+  narration: string | null
+}>
+
+export type LegendaryWorldEventResolvedCmd = Readonly<{
+  linkedAnimalId: string
+  tileId: string
+  speciesId: string
+  resolutionTick: number
+  narration: string | null
+}>
+
+export type LegendaryHuntStartedCmd = Readonly<{
+  worldEventId: string
+  linkedAnimalId: string
+  tileId: string
+  hunterNpcIds: readonly string[]
+  startedAtTick: number
+  narration: string | null
+}>
+
+export type LegendaryHuntConcludedCmd = Readonly<{
+  worldEventId: string
+  linkedAnimalId: string
+  tileId: string
+  concludedAtTick: number
+  outcome: 'killed' | 'migrated' | 'starved'
+  narration: string | null
+}>
+
+export type ForestClearcutOrderedCmd = Readonly<{
+  factionId: string
+  tileId: string
+  pressureLevel: number
+  tick: number
+  narration: string | null
+}>
+
+export type FishingQuotaEnforcedCmd = Readonly<{
+  factionId: string
+  tileId: string
+  fisheryDensity: number
+  tick: number
+  narration: string | null
+}>
+
+export type IndustrialSiteSabotagedCmd = Readonly<{
+  factionId: string
+  tileId: string
+  livestockCount: number
+  tick: number
+  narration: string | null
+}>
+
+export type RitualEcosystemManipulationCmd = Readonly<{
+  factionId: string
+  tick: number
+  narration: string | null
+}>
+
 export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
@@ -1137,6 +1213,14 @@ export type LivingWorldCommandPayload =
   | LivestockBredCmd
   | LivestockSlaughteredCmd
   | MountAssignedCmd
+  | LegendaryWorldEventSpawnedCmd
+  | LegendaryWorldEventResolvedCmd
+  | LegendaryHuntStartedCmd
+  | LegendaryHuntConcludedCmd
+  | ForestClearcutOrderedCmd
+  | FishingQuotaEnforcedCmd
+  | IndustrialSiteSabotagedCmd
+  | RitualEcosystemManipulationCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2094,6 +2178,73 @@ const VALIDATORS: Readonly<
     if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required'
     if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
     if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  // Phase E4 — Mythic Ecology
+  LEGENDARY_WORLD_EVENT_SPAWNED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.eventKind !== 'string' || p.eventKind.length === 0) return 'eventKind required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.linkedAnimalId !== 'string' || p.linkedAnimalId.length === 0) return 'linkedAnimalId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.severity !== 'number' || !Number.isFinite(p.severity)) return 'severity required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  LEGENDARY_WORLD_EVENT_RESOLVED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.linkedAnimalId !== 'string' || p.linkedAnimalId.length === 0) return 'linkedAnimalId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.resolutionTick)) return 'resolutionTick must be non-negative integer'
+    return null
+  },
+  LEGENDARY_HUNT_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.worldEventId !== 'string' || p.worldEventId.length === 0) return 'worldEventId required'
+    if (typeof p.linkedAnimalId !== 'string' || p.linkedAnimalId.length === 0) return 'linkedAnimalId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!Array.isArray(p.hunterNpcIds) || p.hunterNpcIds.length === 0) return 'hunterNpcIds required'
+    if (!isNonNegativeInteger(p.startedAtTick)) return 'startedAtTick must be non-negative integer'
+    return null
+  },
+  LEGENDARY_HUNT_CONCLUDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.worldEventId !== 'string' || p.worldEventId.length === 0) return 'worldEventId required'
+    if (typeof p.linkedAnimalId !== 'string' || p.linkedAnimalId.length === 0) return 'linkedAnimalId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.concludedAtTick)) return 'concludedAtTick must be non-negative integer'
+    if (p.outcome !== 'killed' && p.outcome !== 'migrated' && p.outcome !== 'starved') return 'invalid outcome'
+    return null
+  },
+  FOREST_CLEARCUT_ORDERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.pressureLevel !== 'number' || !Number.isFinite(p.pressureLevel)) return 'pressureLevel required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  FISHING_QUOTA_ENFORCED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.fisheryDensity !== 'number' || !Number.isFinite(p.fisheryDensity)) return 'fisheryDensity required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  INDUSTRIAL_SITE_SABOTAGED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.livestockCount !== 'number' || !Number.isFinite(p.livestockCount)) return 'livestockCount required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  RITUAL_ECOSYSTEM_MANIPULATION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },

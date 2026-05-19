@@ -3,6 +3,47 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Phase E4: Mythic Ecology (v0.29.0)
+
+### Work Done
+
+Phase E4 adds legendary species world events, hunt arcs, faction ecology ideology, and admin UI.
+
+**New planners (all pure functions):**
+- `packages/server/src/ecosystem/legendarySpawnPlanner.ts` — `planLegendarySpawns`: singleton constraint, prey threshold, pressure ceiling, deterministic hash probability → `ANIMAL_SPAWNED` intent
+- `packages/server/src/ecosystem/legendaryHuntPlanner.ts` — `LegendaryHuntTracker` (in-memory): per-tick hunter clustering → `LEGENDARY_HUNT_STARTED` / `LEGENDARY_HUNT_CONCLUDED`
+- `packages/server/src/ecosystem/factionEcologyPlanner.ts` — `planFactionEcology`: 4 static faction stances (clearcut/quota/sabotage/ritual) → faction ecology commands
+
+**New projection:**
+- `packages/server/src/projections/worldEvent.ts` — `WorldEventProjection` tracking per-tile legendary world events; `getActiveByTile`, `getActiveByAnimalId`, `list`, `snapshot`; `huntStartedEmitted` flag prevents duplicate HUNT_STARTED
+
+**Updated:**
+- `ecosystem/species.ts` — `iron_hound` updated to `rarity: 'legendary'`, `carryingCapacity: 1`, `packBehavior: 'solitary'` (singleton constraint)
+- `livingWorldCommands.ts` — 8 new E4 command types: `LEGENDARY_WORLD_EVENT_SPAWNED`, `LEGENDARY_WORLD_EVENT_RESOLVED`, `LEGENDARY_HUNT_STARTED`, `LEGENDARY_HUNT_CONCLUDED`, `FOREST_CLEARCUT_ORDERED`, `FISHING_QUOTA_ENFORCED`, `INDUSTRIAL_SITE_SABOTAGED`, `RITUAL_ECOSYSTEM_MANIPULATION`
+- `config/world.ts` — 9 new E4 constants: `LEGENDARY_SPAWN_CADENCE_TICKS`, `LEGENDARY_SPAWN_PROBABILITY`, `LEGENDARY_MAX_PRESSURE`, `LEGENDARY_SPAWN_MIN_PREY`, `LEGENDARY_WORLD_EVENT_SEVERITY`, `LEGENDARY_HUNT_MIN_HUNTERS`, `LEGENDARY_HUNT_THRESHOLD_TICKS`, `FACTION_ECOLOGY_CADENCE_TICKS`, + 3 faction thresholds
+- `sim/runtime.ts` — `WorldEventProjection` + `LegendaryHuntTracker` fields; boot hydration (both branches); E4 cadence blocks (legendary spawn + faction ecology); per-tick hunt detection; areaSafety patch (subtract severity from tile safety before npcEngine.tick()); E4 fan-out (ANIMAL_SPAWNED for legendary → WORLD_EVENT_SPAWNED; ANIMAL_KILLED/STARVED/MIGRATED for tracked → WORLD_EVENT_RESOLVED + optional HUNT_CONCLUDED); `activeWorldEvents` + `factionEcologyStances` in snapshot facts
+- `kernel/chronicleRenderer.ts` — 8 new Chinese narration blocks for all E4 event types
+- `web/src/pages/AdminWorldPage.tsx` — "神話生態 Mythic Ecology" section: active world events table + faction ecology stance table
+
+**OpenSpec:** `ecosystem-mythic-ecology` — all 38 tasks complete (12.3 Docker verified below).
+
+### Verification
+
+- TypeScript: clean (`npm run build` — zero errors, both packages)
+- Tests: 99 server test files, 685 tests, all pass
+- Docker: rebuilt and verified 2026-05-19
+  - `healthz` → `{"ok":true,"version":"0.26.1","tick":22918}` ✓ (version field reflects persisted EventLog — consistent with prior releases)
+  - `/api/world` facts include `activeWorldEvents: []` ✓ (empty — no legendary spawn yet; correct)
+  - `factionEcologyStances` → 4 factions (guild/clearcut, tide_hunters/quota, free_runners/sabotage, hidden_overseer/ritual) ✓
+  - All 23 fact keys present, no boot errors
+
+### Remaining / Known
+
+- Task 12.3 Docker smoke test: see above.
+- `openspec-archive-change` for `ecosystem-mythic-ecology` to be run after this commit.
+
+---
+
 ## 2026-05-19 — Phase E3: Ecosystem Domestication (v0.28.0)
 
 ### Work Done

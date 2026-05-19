@@ -143,6 +143,30 @@ export const BREEDING_CADENCE_TICKS = 6 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
 // Mount speed multiplier applied to NPC travel tick calculations.
 export const MOUNT_SPEED_MULTIPLIER = 1.5
 
+// Phase E4 — Mythic Ecology.
+// Legendary spawn runs every LEGENDARY_SPAWN_CADENCE_TICKS (10× reproduction cadence).
+export const LEGENDARY_SPAWN_CADENCE_TICKS = 10 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+// 0.5% probability: hash(tick + speciesId) % 1000 < 5 passes.
+export const LEGENDARY_SPAWN_PROBABILITY = 5
+// Legendary spawn is blocked when tile pressure exceeds this level.
+export const LEGENDARY_MAX_PRESSURE = 50
+// Minimum prey population on the target tile before legendary spawn is allowed.
+export const LEGENDARY_SPAWN_MIN_PREY = 10
+// Severity subtracted from areaSafety for tiles with an active legendary world event.
+export const LEGENDARY_WORLD_EVENT_SEVERITY = 30
+// Hunt arc: minimum hunter-role NPCs on the tile to start the hunt arc counter.
+export const LEGENDARY_HUNT_MIN_HUNTERS = 3
+// Hunt arc: consecutive ticks with ≥ MIN_HUNTERS required to emit LEGENDARY_HUNT_STARTED.
+export const LEGENDARY_HUNT_THRESHOLD_TICKS = 5 * TICKS_PER_MINUTE
+// Faction ecology planner cadence (8× reproduction cadence).
+export const FACTION_ECOLOGY_CADENCE_TICKS = 8 * ECOSYSTEM_REPRODUCTION_CADENCE_TICKS
+// Ecosystem pressure threshold above which guild faction emits FOREST_CLEARCUT_ORDERED.
+export const GUILD_CLEARCUT_PRESSURE_THRESHOLD = 60
+// Fishery density threshold below which tide_hunters faction emits FISHING_QUOTA_ENFORCED.
+export const TIDE_HUNTERS_QUOTA_DENSITY_THRESHOLD = 20
+// Settlement livestock count threshold above which free_runners faction emits INDUSTRIAL_SITE_SABOTAGED.
+export const FREE_RUNNERS_LIVESTOCK_THRESHOLD = 12
+
 // Combat Phase C Slice 1 — sub-tick loop default rate. The runtime
 // spawns a setInterval per active combat at this rate. Range 5–20 Hz
 // (50 ms – 200 ms); default 10 Hz (100 ms). Configurable so future

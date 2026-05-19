@@ -163,6 +163,8 @@ export function AdminWorldPage() {
   const extinctionWarnings = readExtinctionWarnings(world.facts)
   const ecosystemRegions = readEcosystemRegions(world.facts)
   const livestockRows = readLivestockRegistry(world.facts)
+  const activeWorldEvents = readActiveWorldEvents(world.facts)
+  const factionEcologyStances = readFactionEcologyStances(world.facts)
   const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
@@ -772,6 +774,63 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+
+      {/* Phase E4 — 神話生態 Mythic Ecology */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-ground-100">神話生態 Mythic Ecology</h2>
+          <Badge label="active events" value={activeWorldEvents.length} />
+        </div>
+        {activeWorldEvents.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-ground-400 border-b border-ground-700">
+                <th className="pb-2 pr-4">Species</th>
+                <th className="pb-2 pr-4">Tile</th>
+                <th className="pb-2 pr-4">Kind</th>
+                <th className="pb-2 pr-4">Severity</th>
+                <th className="pb-2 pr-4">Hunt</th>
+                <th className="pb-2">Tick</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeWorldEvents.map((ev) => (
+                <tr key={ev.linkedAnimalId} className="border-t border-ground-800/50">
+                  <td className="py-2 pr-4 text-amber-400 font-semibold">{ev.speciesId}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-ground-300">{ev.tileId}</td>
+                  <td className="py-2 pr-4 text-ground-200">{ev.eventKind}</td>
+                  <td className="py-2 pr-4 text-rust-400">{ev.severity}</td>
+                  <td className="py-2 pr-4">
+                    {ev.huntStartedEmitted ? <span className="text-amber-300">Hunt Active</span> : <span className="text-ground-500">—</span>}
+                  </td>
+                  <td className="py-2 font-mono text-xs text-ground-400">{ev.spawnedAtTick}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400">
+            ✅ No active mythic events.
+          </div>
+        )}
+        <h3 className="text-sm font-semibold text-ground-200 pt-2">Faction Ecology Stances</h3>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-ground-400 border-b border-ground-700">
+              <th className="pb-2 pr-4">Faction</th>
+              <th className="pb-2">Ecology Stance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {factionEcologyStances.map((f) => (
+              <tr key={f.factionId} className="border-t border-ground-800/50">
+                <td className="py-2 pr-4 text-ground-200">{f.factionId}</td>
+                <td className="py-2 text-cyan-400">{f.ecologyStance}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   )
 }
@@ -1318,4 +1377,40 @@ function readLivestockRegistry(facts: Record<string, unknown>): LivestockRegistr
     const r = v as Record<string, unknown>
     return typeof r.animalId === 'string' && typeof r.speciesId === 'string' && (r.role === 'livestock' || r.role === 'mount')
   }).sort((a, b) => a.settlementId.localeCompare(b.settlementId) || a.speciesId.localeCompare(b.speciesId))
+}
+
+type ActiveWorldEventRow = Readonly<{
+  worldEventId: string
+  eventKind: string
+  tileId: string
+  linkedAnimalId: string
+  speciesId: string
+  severity: number
+  spawnedAtTick: number
+  huntStartedEmitted: boolean
+}>
+
+type FactionEcologyStanceRow = Readonly<{
+  factionId: string
+  ecologyStance: string
+}>
+
+function readActiveWorldEvents(facts: Record<string, unknown>): ActiveWorldEventRow[] {
+  const raw = facts.activeWorldEvents
+  if (!Array.isArray(raw)) return []
+  return raw.filter((v): v is ActiveWorldEventRow => {
+    if (!v || typeof v !== 'object') return false
+    const r = v as Record<string, unknown>
+    return typeof r.linkedAnimalId === 'string' && typeof r.speciesId === 'string' && typeof r.tileId === 'string'
+  })
+}
+
+function readFactionEcologyStances(facts: Record<string, unknown>): FactionEcologyStanceRow[] {
+  const raw = facts.factionEcologyStances
+  if (!Array.isArray(raw)) return []
+  return raw.filter((v): v is FactionEcologyStanceRow => {
+    if (!v || typeof v !== 'object') return false
+    const r = v as Record<string, unknown>
+    return typeof r.factionId === 'string' && typeof r.ecologyStance === 'string'
+  })
 }

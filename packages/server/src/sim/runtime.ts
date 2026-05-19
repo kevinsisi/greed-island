@@ -66,6 +66,9 @@ import {
   DOMESTICATION_MIN_WILD_POP,
   RANCH_DEFAULT_CAPACITY,
   MOUNT_SPEED_MULTIPLIER,
+  LEGENDARY_SPAWN_CADENCE_TICKS,
+  LEGENDARY_WORLD_EVENT_SEVERITY,
+  FACTION_ECOLOGY_CADENCE_TICKS,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -117,6 +120,10 @@ import { planBreeding } from '../ecosystem/breedingPlanner.js'
 import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
 import { planMountAssignment } from '../ecosystem/mountPlanner.js'
 import { planSimpleHunt } from '../ecosystem/hunting.js'
+import { planLegendarySpawns } from '../ecosystem/legendarySpawnPlanner.js'
+import { LegendaryHuntTracker } from '../ecosystem/legendaryHuntPlanner.js'
+import { planFactionEcology } from '../ecosystem/factionEcologyPlanner.js'
+import { WorldEventProjection } from '../projections/worldEvent.js'
 import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
 import { planAnimalReproduction } from '../ecosystem/reproduction.js'
@@ -258,6 +265,10 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
   'MOUNT_ASSIGNED',
+  // Phase E4 — Mythic Ecology
+  'LEGENDARY_WORLD_EVENT_SPAWNED',
+  'LEGENDARY_WORLD_EVENT_RESOLVED',
+  'LEGENDARY_HUNT_STARTED',
 ] as const
 // Goods projection event types — read selectively during fast-boot so
 // inventory/logistics/market/production projections survive restarts on large logs.
@@ -446,6 +457,8 @@ export class SimulationRuntime {
   private readonly speciesExtinctionProjection = new SpeciesExtinctionProjection()
   private readonly ecosystemRegionProjection = new EcosystemRegionProjection()
   private readonly livestockRegistryProjection = new LivestockRegistryProjection()
+  private readonly worldEventProjection = new WorldEventProjection()
+  private readonly legendaryHuntTracker = new LegendaryHuntTracker()
   // Per-tick NPC work action counts per tile for ecosystem pressure tracking
   private tileWorkActionCounts = new Map<string, number>()
   private readonly goodsInventoryProjection = new GoodsInventoryProjection()
@@ -736,6 +749,13 @@ export class SimulationRuntime {
         extinctionWarnings: this.speciesExtinctionProjection.list(),
         ecosystemRegions: this.ecosystemRegionProjection.list(),
         livestockRegistry: this.livestockRegistryProjection.list(),
+        activeWorldEvents: this.worldEventProjection.snapshot(),
+        factionEcologyStances: [
+          { factionId: 'guild', ecologyStance: 'clearcut' },
+          { factionId: 'tide_hunters', ecologyStance: 'quota' },
+          { factionId: 'free_runners', ecologyStance: 'sabotage' },
+          { factionId: 'hidden_overseer', ecologyStance: 'ritual' },
+        ],
         settlements: this.getSettlements(),
         goodsInventory: this.goodsInventoryProjection.list(),
         logistics: this.logisticsProjection.snapshot(),
@@ -1378,6 +1398,7 @@ export class SimulationRuntime {
       this.speciesExtinctionProjection.project(ev)
       this.ecosystemRegionProjection.project(ev)
       this.livestockRegistryProjection.project(ev)
+      this.worldEventProjection.project(ev)
       this.goodsInventoryProjection.project(ev)
       this.logisticsProjection.project(ev)
       this.marketPricesProjection.project(ev)
@@ -1475,6 +1496,11 @@ export class SimulationRuntime {
         npcsInsideBuildings.add(occupant.npcId)
       }
     }
+    // Phase E4: patch areaSafety for tiles with active legendary world events
+    for (const worldEvent of this.worldEventProjection.list()) {
+      const base = areaSafety.get(worldEvent.tileId) ?? 50
+      areaSafety.set(worldEvent.tileId, Math.max(0, base - LEGENDARY_WORLD_EVENT_SEVERITY))
+    }
     const mountedNpcIds = this.livestockRegistryProjection.getMountedNpcIdSet()
     const npcResult = this.npcEngine.tick(nextTick, {
       areaSafety,
@@ -1485,6 +1511,29 @@ export class SimulationRuntime {
       npcsInsideBuildings,
       mountedNpcIds
     })
+    // Phase E4: legendary hunt detection (per-tick, O(active world events))
+    const activeWorldEvents = this.worldEventProjection.list()
+    if (activeWorldEvents.length > 0) {
+      const npcInfoForHunt = this.getNpcs().map((n) => {
+        const rawRole = this.profiles.find((p) => p.id === n.id)?.role ?? ''
+        const role = typeof rawRole === 'string' ? rawRole : Object.values(rawRole)[0] ?? ''
+        return { npcId: n.id, tileId: n.location ?? '', role }
+      })
+      const huntIntents = this.legendaryHuntTracker.planHuntEvents(nextTick, activeWorldEvents, npcInfoForHunt, [])
+      for (const intent of huntIntents) {
+        if (intent.type === 'LEGENDARY_HUNT_STARTED') {
+          commands.push(makeLivingWorldCommand('LEGENDARY_HUNT_STARTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            worldEventId: intent.worldEventId,
+            linkedAnimalId: intent.linkedAnimalId,
+            tileId: intent.tileId,
+            hunterNpcIds: intent.hunterNpcIds,
+            startedAtTick: intent.startedAtTick,
+            narration: null,
+          }))
+        }
+      }
+    }
+
     const saltMarshProject = this.lifeExpansion.constructionProjects[SALT_MARSH_PROJECT_ID]
     let plannedSaltMarshProgress = saltMarshProject?.progress ?? 0
     let plannedSaltMarshCompleted =
@@ -2773,6 +2822,58 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Phase E4: Mythic Ecology ----
+    // Legendary spawn cadence
+    if (nextTick % LEGENDARY_SPAWN_CADENCE_TICKS === 0) {
+      const legendarySpawns = planLegendarySpawns({
+        tick: nextTick,
+        tiles: MAP_TILES,
+        getPopulation: (speciesId, tileId) => this.animalPopulationProjection.getBySpeciesAndTile(speciesId, tileId)?.count ?? 0,
+        getPreyCount: (preyTargetIds, tileId) => preyTargetIds.reduce((sum, id) => sum + (this.animalPopulationProjection.getBySpeciesAndTile(id, tileId)?.count ?? 0), 0),
+        getPressureLevel: (tileId) => this.ecosystemRegionProjection.getForTile(tileId).pressureLevel,
+      })
+      for (const intent of legendarySpawns) {
+        commands.push(makeLivingWorldCommand('ANIMAL_SPAWNED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          animal: intent.animal,
+          spawnedAtTick: intent.spawnedAtTick,
+          narration: null,
+        }))
+      }
+    }
+
+    // Faction ecology cadence
+    if (nextTick % FACTION_ECOLOGY_CADENCE_TICKS === 0) {
+      const factionStances = [
+        { id: 'guild', ecologyStance: 'clearcut' as const },
+        { id: 'tide_hunters', ecologyStance: 'quota' as const },
+        { id: 'free_runners', ecologyStance: 'sabotage' as const },
+        { id: 'hidden_overseer', ecologyStance: 'ritual' as const },
+      ]
+      const allTileIds = MAP_TILES.map((t) => t.id)
+      const factionIntents = planFactionEcology({
+        tick: nextTick,
+        factions: factionStances,
+        getPressureLevel: (tileId) => this.ecosystemRegionProjection.getForTile(tileId).pressureLevel,
+        getFisheryDensity: (tileId) => this.fisheryDensityProjection.getByTile(tileId)?.density ?? 0,
+        getLivestockCount: (tileId) => {
+          const settlement = this.settlementsProjection.getAll().find((s) => s.tileId === tileId)
+          return settlement ? this.livestockRegistryProjection.getBySettlement(settlement.id).length : 0
+        },
+        tileIds: allTileIds,
+      })
+      for (const intent of factionIntents) {
+        if (intent.type === 'FOREST_CLEARCUT_ORDERED') {
+          commands.push(makeLivingWorldCommand('FOREST_CLEARCUT_ORDERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, { ...intent, narration: null }))
+        } else if (intent.type === 'FISHING_QUOTA_ENFORCED') {
+          commands.push(makeLivingWorldCommand('FISHING_QUOTA_ENFORCED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, { ...intent, narration: null }))
+        } else if (intent.type === 'INDUSTRIAL_SITE_SABOTAGED') {
+          commands.push(makeLivingWorldCommand('INDUSTRIAL_SITE_SABOTAGED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, { ...intent, narration: null }))
+        } else if (intent.type === 'RITUAL_ECOSYSTEM_MANIPULATION') {
+          commands.push(makeLivingWorldCommand('RITUAL_ECOSYSTEM_MANIPULATION', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, { ...intent, narration: null }))
+        }
+      }
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -3405,6 +3506,63 @@ export class SimulationRuntime {
             if (rumorSpread) postAcceptedCommands.push(rumorSpread)
           }
         }
+        // Phase E4: legendary world event spawn/resolve fan-out
+        if (cmd.commandType === 'ANIMAL_SPAWNED') {
+          const spawnPayload = cmd.payload as { animal: { id: string; speciesId: string; tileId: string } }
+          const species = getSpecies(spawnPayload.animal.speciesId)
+          if (species?.rarity === 'legendary') {
+            postAcceptedCommands.push(
+              makeLivingWorldCommand('LEGENDARY_WORLD_EVENT_SPAWNED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                eventKind: 'legendary_creature',
+                tileId: spawnPayload.animal.tileId,
+                linkedAnimalId: spawnPayload.animal.id,
+                speciesId: spawnPayload.animal.speciesId,
+                severity: LEGENDARY_WORLD_EVENT_SEVERITY,
+                tick: nextTick,
+                narration: null,
+              })
+            )
+          }
+        }
+        if (
+          cmd.commandType === 'ANIMAL_KILLED' ||
+          cmd.commandType === 'ANIMAL_STARVED' ||
+          cmd.commandType === 'ANIMAL_MIGRATED'
+        ) {
+          const deathPayload = cmd.payload as { animalId?: string; predatorAnimalId?: string; tileId: string }
+          const animalId = deathPayload.animalId ?? deathPayload.predatorAnimalId
+          if (animalId) {
+            const activeEvent = this.worldEventProjection.getActiveByAnimalId(animalId)
+            if (activeEvent) {
+              const outcome: 'killed' | 'migrated' | 'starved' =
+                cmd.commandType === 'ANIMAL_KILLED' ? 'killed'
+                : cmd.commandType === 'ANIMAL_MIGRATED' ? 'migrated'
+                : 'starved'
+              postAcceptedCommands.push(
+                makeLivingWorldCommand('LEGENDARY_WORLD_EVENT_RESOLVED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                  linkedAnimalId: animalId,
+                  tileId: activeEvent.tileId,
+                  speciesId: activeEvent.speciesId,
+                  resolutionTick: nextTick,
+                  narration: null,
+                })
+              )
+              if (activeEvent.huntStartedEmitted) {
+                postAcceptedCommands.push(
+                  makeLivingWorldCommand('LEGENDARY_HUNT_CONCLUDED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                    worldEventId: activeEvent.worldEventId,
+                    linkedAnimalId: animalId,
+                    tileId: activeEvent.tileId,
+                    concludedAtTick: nextTick,
+                    outcome,
+                    narration: null,
+                  })
+                )
+              }
+            }
+          }
+        }
+
         if (cmd.commandType === 'ANIMAL_STARVED' || cmd.commandType === 'BUILDING_CONSTRUCTED') {
           // Phase 3 Slice 1 — seed rumors onto NPCs present on the event tile.
           const tileId = readEventTileId(cmd.payload)
@@ -4158,6 +4316,7 @@ export class SimulationRuntime {
       this.speciesExtinctionProjection.rebuildFromEvents(allEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(allEvents)
       this.livestockRegistryProjection.rebuildFromEvents(allEvents)
+      this.worldEventProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
       this.marketPricesProjection.rebuildFromEvents(allEvents)
@@ -4177,6 +4336,7 @@ export class SimulationRuntime {
       this.speciesExtinctionProjection.rebuildFromEvents(ecoEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
       this.livestockRegistryProjection.rebuildFromEvents(ecoEvents)
+      this.worldEventProjection.rebuildFromEvents(ecoEvents)
       // Goods projections — rebuild from goods event types so inventory/logistics/
       // market state survives server restarts on large event logs.
       const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)
