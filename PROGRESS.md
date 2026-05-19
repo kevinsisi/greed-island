@@ -3,6 +3,29 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-19 — Engineering Cleanup + Interaction Fixes (v0.32.0)
+
+### Work Done
+
+**工程清理：**
+
+1. **Deploy gate** — `.github/workflows/deploy-dev.yml` 改為 `workflow_run` 觸發，CI 沒過不跑 deploy；`workflow_dispatch` 保留。Checkout 固定用 `workflow_run.head_sha`。
+2. **版本統一** — 唯一來源：根目錄 `package.json`（`0.32.0`）。`scripts/sync-version.mjs` 同步 `version.ts` + workspace package.json。`build:server` 自動執行同步。`npm run version:sync` 手動觸發。
+3. **OpenSpec 格式檢查** — `npm run openspec:check` 本地跑 `openspec validate --strict`，與 CI openspec job 完全一致。
+
+**互動修復：**
+
+4. **Animal hunt** — `AnimalPopulationProjection.project()` 新增 `PLAYER_HUNTED_ANIMAL` 處理，點擊動物後從投影移除（`readHuntPayload` reads `payload.data.animalId/speciesId/tileId/tick`）。前端在成功後立即重新 fetch ecology 更新畫面。
+5. **Fishery** — `FisheryDensityProjection.project()` 新增 `PLAYER_FISHED` 處理，每次捕魚扣 `FISHERY_HARVEST_DELTA × quantity` 密度（`readPlayerFishPayload` reads `payload.data`）。前端同樣在成功後 refresh ecology。
+
+### Verification
+- `npm run build` — TypeScript clean，version synced to 0.32.0
+- `npm test` — all tests pass
+- git push — commit `4f56dcb`
+- Docker rebuild in progress
+
+---
+
 ## 2026-05-19 — Area Animal Hunt + Fish Interactions
 
 ### Work Done
