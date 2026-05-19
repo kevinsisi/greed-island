@@ -222,6 +222,23 @@ density, harvested total, collapse/stress/stable status, and last updated tick.
   than requiring the GM to inspect raw JSON
 
 
+### Requirement: Wild population counts SHALL exclude domesticated animals
+Spawning planners and predation planners MUST filter animal rows by `ownerSettlementId === null` before computing effective wild population for any decision (spawn budget, extinction threshold, predation target selection).
+
+#### Scenario: Domesticated animals not counted in wild population
+- **WHEN** a spawn planner evaluates the wild count for a tile
+- **AND** some animals on that tile have `ownerSettlementId` set
+- **THEN** those animals MUST NOT be included in the wild population count used for spawn decisions
+
+#### Scenario: Extinction warning not triggered by domesticated-only survivors
+- **WHEN** a species has zero wild animals (`ownerSettlementId === null`) on all tiles
+- **AND** domesticated individuals of that species exist at settlements
+- **THEN** the extinction planner MUST evaluate the species as extinct in the wild (zero wild count), not as recovered
+
+#### Scenario: Predators do not target domesticated animals in wild predation
+- **WHEN** the predation planner selects prey for a predator
+- **THEN** animals with `ownerSettlementId !== null` MUST NOT be considered valid prey targets in the wild predation pass
+
 ### Requirement: MEAT_HARVESTED and FISHERY_HARVESTED events SHALL promote to GOODS_EXTRACTED
 
 When the runtime commits a `MEAT_HARVESTED` ecosystem event, it MUST enqueue a `GOODS_EXTRACTED { goodsSpeciesId: "meat", quantity: 1 }` Command keyed to the harvesting NPC. When the runtime commits a `FISHERY_HARVESTED` ecosystem event, it MUST enqueue `GOODS_EXTRACTED { goodsSpeciesId: "fish", quantity: 1 }`. These follow-on commands MUST be submitted within the same world tick. This requirement extends the ecosystem layer's output contract without changing any existing ecosystem event shapes.
