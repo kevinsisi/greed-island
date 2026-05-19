@@ -5,6 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.28.0 ✅ shipped — 2026-05-19
+
+**主題：Phase E3 — Ecosystem Domestication**
+
+OpenSpec: `ecosystem-domestication/` (archived 2026-05-19)。
+
+- ✅ `marsh_yak` livestock species: `category: 'livestock'`, `salt_marsh` biome, `mountEligible: true`, byproducts `['milk', 'hide']`.
+- ✅ 4 new command types: `ANIMAL_DOMESTICATED`, `LIVESTOCK_BRED`, `LIVESTOCK_SLAUGHTERED`, `MOUNT_ASSIGNED`.
+- ✅ New projection: `LivestockRegistryProjection` — per-settlement livestock tracking; role `livestock | mount`; `getDomesticatedAnimalIdSet()`, `getMountedNpcIdSet()`.
+- ✅ New planners: `domesticationPlanner` (wild pop ≥ 5 + ranch), `breedingPlanner` (cadence gate), `slaughterPlanner` (oldest-first overflow), `mountPlanner` (unmounted NPC + eligible livestock pairing).
+- ✅ `filterWildPopulation()`: domesticated animals excluded from wild-pop counts in spawning / predation / extinction.
+- ✅ Ranch building type (`b_salt_marsh_ranch`, `livestockCapacity: 8`) added to catalog.
+- ✅ Runtime E3 cadence block wired end-to-end; `livestockRegistry` exposed in snapshot facts.
+- ✅ Mount speed: `crossTileRouteTicks = ceil(4 / 1.5) = 3` for mounted NPCs via `NpcTickContext.mountedNpcIds`.
+- ✅ `chronicleRenderer`: LIVESTOCK_SLAUGHTERED + MOUNT_ASSIGNED Chinese narration.
+- ✅ Admin UI "馴養登記" section.
+- ✅ 95 server + 21 web test files (662 + 96 = 758 tests) all pass; TypeScript clean; web build clean; Docker verified.
+
 ## v0.27.0 ✅ shipped — 2026-05-18
 
 **主題：Phase E2 — Ecosystem Pressure & Collapse**
