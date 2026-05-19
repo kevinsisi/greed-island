@@ -105,6 +105,14 @@ export class LivestockRegistryProjection {
     return new Set(this.rows.keys())
   }
 
+  getMountedNpcIdSet(): ReadonlySet<string> {
+    const result = new Set<string>()
+    for (const row of this.rows.values()) {
+      if (row.role === 'mount' && row.mountedBy !== null) result.add(row.mountedBy)
+    }
+    return result
+  }
+
   canonicalHash(): string {
     return hashCanonicalJson(this.list())
   }

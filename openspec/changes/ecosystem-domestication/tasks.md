@@ -65,7 +65,7 @@
 - [x] 10.4 Wire projection fan-out for the four new event types in both per-event loops
 - [x] 10.5 Add E3 cadence block calling `DomesticationPlanner`, `BreedingPlanner`, `SlaughterPlanner`, `MountPlanner` and submitting resulting intents as commands
 - [x] 10.6 Add `DOMESTICATION_CADENCE_TICKS` constant and wire into the E3 cadence block
-- [ ] 10.7 Add `mountSpeedMultiplier` lookup: when NPC has `mountedAnimalId`, apply multiplier (1.5×) to travel tick calculations
+- [x] 10.7 Add `mountSpeedMultiplier` lookup: when NPC has `mountedAnimalId`, apply multiplier (1.5×) to travel tick calculations
 - [x] 10.8 Expose `livestockRegistry` in `getSnapshot()` facts
 
 ## 11. Chronicle Narration

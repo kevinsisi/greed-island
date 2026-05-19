@@ -1475,13 +1475,15 @@ export class SimulationRuntime {
         npcsInsideBuildings.add(occupant.npcId)
       }
     }
+    const mountedNpcIds = this.livestockRegistryProjection.getMountedNpcIdSet()
     const npcResult = this.npcEngine.tick(nextTick, {
       areaSafety,
       areaEconomy,
       weather: this.weather,
       rareWindowOpen: this.rareWindowOpen,
       activeNpcSet: npcPartition.active,
-      npcsInsideBuildings
+      npcsInsideBuildings,
+      mountedNpcIds
     })
     const saltMarshProject = this.lifeExpansion.constructionProjects[SALT_MARSH_PROJECT_ID]
     let plannedSaltMarshProgress = saltMarshProject?.progress ?? 0

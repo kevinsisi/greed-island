@@ -42,7 +42,7 @@ Phase E3 adds domestication, breeding, slaughter, and mount assignment to the li
 
 ### Remaining / Known
 
-- Task 10.7 deferred: `mountSpeedMultiplier` in NpcEngine (`decideNextState` would need a speed input). Mount events are stored correctly; speed effect not yet applied.
+- All 49 tasks complete. Ready to archive.
 - Task 13.3: `listSpeciesByCategory('livestock')` now returns `marsh_yak` (verified via updated species test).
 - `openspec validate --all --strict` should be run before next release.
 

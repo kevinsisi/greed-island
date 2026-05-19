@@ -18,7 +18,7 @@
 // 透過 hydrate() 餵回。
 
 import type { NpcProfile } from '../npcs/types.js'
-import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE } from '../config/world.js'
+import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 
 export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
@@ -222,6 +222,8 @@ export type NpcTickContext = Readonly<{
    * 的兩位 NPC 其實都在某棟建築內、AreaPage 地圖上根本看不到。
    */
   npcsInsideBuildings?: ReadonlySet<string>
+  /** v0.28.0：持有坐騎的 NPC ids；travel tick 減少為 ceil(base / MOUNT_SPEED_MULTIPLIER)。 */
+  mountedNpcIds?: ReadonlySet<string>
 }>
 
 // schedule slot：profile 沒給 schedule 就從 routine 推導
@@ -723,9 +725,14 @@ function decideNextState(
     }
   }
 
+  const isMounted = context?.mountedNpcIds?.has(profile.id) ?? false
+  const crossTileRouteTicks = isMounted
+    ? Math.ceil(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS / MOUNT_SPEED_MULTIPLIER)
+    : NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS
+
   if (before.activity === 'move' && before.travelRoute) {
     const routeAge = currentTick - before.travelRoute.startedAtTick
-    if (routeAge > 0 && routeAge < NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS) {
+    if (routeAge > 0 && routeAge < crossTileRouteTicks) {
       return finish(before.tile, 'move', before.travelRoute, before.travelRoute.targetTile)
     }
     const arrivedTile = before.travelRoute.toTile
