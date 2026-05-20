@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { getGoodsSpecies, listGoodsSpecies } from './catalog.js'
 
 describe('goods catalog', () => {
-  it('contains exactly 10 species', () => {
-    expect(listGoodsSpecies()).toHaveLength(10)
+  it('contains exactly 13 species', () => {
+    expect(listGoodsSpecies()).toHaveLength(13)
   })
 
   it('is frozen (cannot be mutated)', () => {

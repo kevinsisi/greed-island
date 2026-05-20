@@ -3,6 +3,42 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — BioNode / Forest Regrowth Engine Phase E5 (v0.39.0)
+
+### Work Done
+
+- 新模組 `packages/server/src/ecosystem/plantSpecies.ts` — 5 種植物 species 的 catalog（橡樹、松木、蘆葦、野草藥、洞穴菌）
+- 新 projection `BioNodeProjection`（檔案：`packages/server/src/projections/bioNode.ts`）— 處理 SEEDED/REGREW/HARVESTED 三事件
+- 新 engine `planPlantRegrowth`（純函式）— 每小時 cadence 推進未滿 capacity 的節點
+- 3 個新 command type 加進 `livingWorldCommands.ts`（validator + payload union）
+- Goods catalog 新增 `fiber`、`wild_herb`、`fungi`（lumber 已存在）
+- Runtime 接入：私有 field、自動 seeding（首 tick）、每小時 regrowth、兩處 fan-out、small/large log boot hydration、`plantsSeeded` 冪等旗標
+- HTTP router `bioNodesRouter.ts`：`GET /api/world/bio-nodes` + `/api/world/bio-nodes/:tileId`，伺友善 `nameZh` / `saturationPct`
+- 14 個新單元測試（BioNodeProjection 8 + plantRegrowth 6）
+
+### Verification
+- `npm run build:server` — TypeScript 乾淨，版本 0.39.0
+- `npx vitest run packages/server` — 767 tests pass（1 pre-existing famine timeout）
+- catalog.test.ts 預期計數從 10 改 13（新增 3 個 raw goods）
+
+### 植物 / 森林層覆蓋率
+
+| Tile/Biome | 適配物種 | 載量總和 |
+|------------|---------|----------|
+| t_forest (forest) | oak + pine + wild_herb | ~240 |
+| t_mountain (mountain) | pine | 80 |
+| t_desert (desert) | wild_herb | 60 |
+| t_ruin / t_dimai (ruin) | cave_fungus | 50 |
+| t_salt_marsh (salt_marsh) | reed | 120 |
+| t_central / t_dock / t_temple | 無（grass / water 不在 region 範圍）| 0 |
+
+### Next
+- Phase E5 follow-up：harvest mechanic — NPC 砍樹/採藥動作鏈，連到 `GOODS_EXTRACTED`
+- §11.5 剩餘 FACT_SET（building occupants / weather / season / rare window / active events）
+- §11.9 household state + alias memory 進 dialog context
+
+---
+
 ## 2026-05-20 — Area State Typed Projection §11.5 (v0.38.0)
 
 ### Work Done

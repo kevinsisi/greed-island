@@ -5,6 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.39.0 ✅ shipped — 2026-05-20
+
+**主題：BioNode / Forest Regrowth Engine (Phase E5 — plant ecology substrate)**
+
+- ✅ 植物層完全從 0% → 上線：5 種植物 species（橡樹、松木、蘆葦、野草藥、洞穴菌），各有 biome 親和度、carrying capacity、regrowth rate、harvest goods 對映
+- ✅ 3 個新 command type：`BIO_NODE_SEEDED`/`REGREW`/`HARVESTED`（with full validators）
+- ✅ 新 projection：`BioNodeProjection` — 追蹤每個 (tileId, speciesId) 的密度，支援 seed/regrow/harvest 三種事件 reduce
+- ✅ 新引擎：`planPlantRegrowth` — 純函式，每 `TICKS_PER_HOUR` 對未滿 capacity 的節點推進 `regrowthPerHour`
+- ✅ Runtime 自動 seeding：boot 後第一個 tick 對每個 biome-適配的 (tile, species) 發 `BIO_NODE_SEEDED`；`plantsSeeded` flag 保持冪等
+- ✅ Goods catalog 擴展：新增 `fiber`/`wild_herb`/`fungi`（lumber 已存在，現在真有來源）
+- ✅ HTTP endpoint：`GET /api/world/bio-nodes` + `/api/world/bio-nodes/:tileId`，含 `nameZh`/`saturationPct` 友善欄位
+- ✅ 14 個新單元測試（projection 8 + regrowth 6）；767 server 測試通過
+- ✅ 第一次世界有了會生長、會復原的植被層；lumber/fiber/herbs/fungi 從此都有可追溯來源
+
+---
+
 ## v0.38.0 ✅ shipped — 2026-05-20
 
 **主題：Area State Typed Projection (§11.5 closed for area domain)**

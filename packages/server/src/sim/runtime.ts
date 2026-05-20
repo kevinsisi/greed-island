@@ -208,6 +208,10 @@ import { planMortality } from './mortalityPlanner.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
 import { AreaStateProjection } from '../projections/areaState.js'
+import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
+import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
+import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
+import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
 import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
@@ -510,6 +514,9 @@ export class SimulationRuntime {
   private readonly factionControlProjection = new FactionControlProjection()
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
+  private readonly bioNodeProjection = new BioNodeProjection()
+  /** Track whether plant seeding has been emitted at least once (idempotent). */
+  private plantsSeeded = false
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1091,6 +1098,16 @@ export class SimulationRuntime {
     return this.historyChronicleProjection.list()
   }
 
+  /** Phase E5 — BioNode plant ecology (all tiles, all species). */
+  getBioNodes(): readonly BioNodeRow[] {
+    return this.bioNodeProjection.list()
+  }
+
+  /** Phase E5 — BioNode plant ecology rows for a specific tile. */
+  getBioNodesOnTile(tileId: string): readonly BioNodeRow[] {
+    return this.bioNodeProjection.listOnTile(tileId)
+  }
+
   /** Phase 5 §30.9 — recent history arcs relevant to a tile, capped for dialog context. */
   getHistoryArcsOnTile(tileId: string, limit = 5): readonly HistoryArc[] {
     return this.historyChronicleProjection
@@ -1491,6 +1508,7 @@ export class SimulationRuntime {
       this.factionControlProjection.project(ev)
       this.historyChronicleProjection.project(ev)
       this.areaStateProjection.project(ev)
+      this.bioNodeProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -2787,6 +2805,71 @@ export class SimulationRuntime {
     }
     this.tileWorkActionCounts = new Map()
 
+    // ---- Phase E5: BioNode plant ecology (seeding + regrowth) ----
+    // One-time seeding: walk every map tile and emit BIO_NODE_SEEDED for each
+    // plant species that has biome affinity to that tile. Runs once per world
+    // (gated by `plantsSeeded`, which is set true after the projection contains
+    // any seeded rows on boot, or after we emit seeds here).
+    if (!this.plantsSeeded) {
+      for (const tile of MAP_TILES) {
+        const region = ecosystemRegionForTile(tile)
+        if (!region) continue
+        const speciesIds = plantSpeciesForBiome(region)
+        for (const speciesId of speciesIds) {
+          // Skip if a seed for this (tile, species) already exists, e.g. from
+          // a partial pre-existing log replay.
+          if (this.bioNodeProjection.hasSeed(tile.id, speciesId)) continue
+          const species = getPlantSpecies(speciesId)
+          if (!species) continue
+          commands.push(
+            makeLivingWorldCommand(
+              'BIO_NODE_SEEDED',
+              SIM_ACTOR_WORLD,
+              'system',
+              nextTick,
+              submittedAt,
+              {
+                tileId: tile.id,
+                speciesId,
+                density: species.carryingCapacity,
+                capacity: species.carryingCapacity,
+                seededAtTick: nextTick,
+                narration: null,
+              }
+            )
+          )
+        }
+      }
+      this.plantsSeeded = true
+    }
+    // Hourly regrowth: nodes below capacity gain regrowthPerHour density.
+    if (nextTick % TICKS_PER_HOUR === 0) {
+      const regrowths = planPlantRegrowth({
+        nodes: this.bioNodeProjection.list(),
+        tick: nextTick,
+      })
+      for (const intent of regrowths) {
+        commands.push(
+          makeLivingWorldCommand(
+            'BIO_NODE_REGREW',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              tileId: intent.tileId,
+              speciesId: intent.speciesId,
+              densityBefore: intent.densityBefore,
+              densityAfter: intent.densityAfter,
+              capacity: intent.capacity,
+              tick: intent.tick,
+              narration: null,
+            }
+          )
+        )
+      }
+    }
+
     // ---- Phase E3: Domestication (domestication / breeding / slaughter / mount) ----
     if (nextTick % DOMESTICATION_CADENCE_TICKS === 0) {
       const settlements = this.settlementsProjection.getAll()
@@ -3951,6 +4034,7 @@ export class SimulationRuntime {
         this.factionControlProjection.project(ev)
         this.historyChronicleProjection.project(ev)
         this.areaStateProjection.project(ev)
+        this.bioNodeProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -4566,6 +4650,7 @@ export class SimulationRuntime {
       this.settlementsProjection.rebuildFromEvents(allEvents)
       this.historyChronicleProjection.rebuildFromEvents(allEvents)
       this.areaStateProjection.rebuildFromEvents(allEvents)
+      this.bioNodeProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
       // Ecosystem projections are small relative to the full event log —
@@ -4603,7 +4688,14 @@ export class SimulationRuntime {
       // FACT_SET area.state.<tileId> remains the boot fallback for older logs.
       const areaStateEvents = this.store.readEventsByTypes(AREA_STATE_BOOT_EVENT_TYPES)
       this.areaStateProjection.rebuildFromEvents(areaStateEvents)
+      // BioNode projection — rebuild plant ecology substrate from typed
+      // BIO_NODE_SEEDED / REGREW / HARVESTED events.
+      const bioNodeEvents = this.store.readEventsByTypes(BIO_NODE_BOOT_EVENT_TYPES)
+      this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
     }
+    // After hydration, decide if plant seeding has already happened. If any
+    // BIO_NODE_SEEDED event exists in the rebuilt projection, mark as seeded.
+    this.plantsSeeded = this.bioNodeProjection.list().length > 0
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
     // projection. Legacy npc.state.<id> FACT_SET values remain fallback for

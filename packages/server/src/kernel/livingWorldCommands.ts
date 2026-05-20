@@ -42,6 +42,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_ACTIVITY_CHANGE',
   'NPC_STATE_RECORDED',
   'AREA_STATE_RECORDED',
+  'BIO_NODE_SEEDED',
+  'BIO_NODE_REGREW',
+  'BIO_NODE_HARVESTED',
   'NPC_LIFE_GOAL_SET',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
@@ -226,6 +229,37 @@ export type AreaStateRecordedCmd = Readonly<{
   tileId: string
   state: Readonly<Record<string, unknown>>
   narration: string | null
+}>
+
+export type BioNodeSeededCmd = Readonly<{
+  tileId: string
+  speciesId: string
+  density: number
+  capacity: number
+  seededAtTick: number
+  narration?: string | null
+}>
+
+export type BioNodeRegrewCmd = Readonly<{
+  tileId: string
+  speciesId: string
+  densityBefore: number
+  densityAfter: number
+  capacity: number
+  tick: number
+  narration?: string | null
+}>
+
+export type BioNodeHarvestedCmd = Readonly<{
+  tileId: string
+  speciesId: string
+  densityConsumed: number
+  densityAfter: number
+  harvesterId: string
+  harvestGoodsId: string
+  goodsQuantity: number
+  tick: number
+  narration?: string | null
 }>
 
 export type NpcLifeGoalSetCmd = Readonly<{
@@ -1293,6 +1327,9 @@ export type LivingWorldCommandPayload =
   | NpcActivityChangeCmd
   | NpcStateRecordedCmd
   | AreaStateRecordedCmd
+  | BioNodeSeededCmd
+  | BioNodeRegrewCmd
+  | BioNodeHarvestedCmd
   | NpcLifeGoalSetCmd
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
@@ -1470,6 +1507,37 @@ const VALIDATORS: Readonly<
     if (!isRecord((p.state as Record<string, unknown>).resources)) return 'state.resources required'
     if (typeof (p.state as Record<string, unknown>).lastUpdatedTick !== 'number') return 'state.lastUpdatedTick required'
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  BIO_NODE_SEEDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.density !== 'number' || !Number.isFinite(p.density) || p.density < 0) return 'density required (>=0)'
+    if (typeof p.capacity !== 'number' || !Number.isFinite(p.capacity) || p.capacity <= 0) return 'capacity required (>0)'
+    if (typeof p.seededAtTick !== 'number' || !Number.isInteger(p.seededAtTick) || p.seededAtTick < 0) return 'seededAtTick required'
+    return null
+  },
+  BIO_NODE_REGREW: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.densityBefore !== 'number' || !Number.isFinite(p.densityBefore)) return 'densityBefore required'
+    if (typeof p.densityAfter !== 'number' || !Number.isFinite(p.densityAfter)) return 'densityAfter required'
+    if (typeof p.capacity !== 'number' || !Number.isFinite(p.capacity) || p.capacity <= 0) return 'capacity required (>0)'
+    if (typeof p.tick !== 'number' || !Number.isInteger(p.tick) || p.tick < 0) return 'tick required'
+    return null
+  },
+  BIO_NODE_HARVESTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.densityConsumed !== 'number' || !Number.isFinite(p.densityConsumed) || p.densityConsumed <= 0) return 'densityConsumed required (>0)'
+    if (typeof p.densityAfter !== 'number' || !Number.isFinite(p.densityAfter)) return 'densityAfter required'
+    if (typeof p.harvesterId !== 'string' || p.harvesterId.length === 0) return 'harvesterId required'
+    if (typeof p.harvestGoodsId !== 'string' || p.harvestGoodsId.length === 0) return 'harvestGoodsId required'
+    if (typeof p.goodsQuantity !== 'number' || !Number.isFinite(p.goodsQuantity) || p.goodsQuantity <= 0) return 'goodsQuantity required (>0)'
+    if (typeof p.tick !== 'number' || !Number.isInteger(p.tick) || p.tick < 0) return 'tick required'
     return null
   },
   NPC_LIFE_GOAL_SET: (p) => {
