@@ -3,6 +3,34 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — History Chronicle Projection (v0.36.0)
+
+### Work Done
+
+- Created `packages/server/src/projections/historyChronicle.ts` — `HistoryChronicleProjection` with 8 arc types; deterministic arc detection from 13 event types; `HISTORY_CHRONICLE_BOOT_EVENT_TYPES` for selective fast-boot.
+- Wired into `runtime.ts`: private field, both fan-out loops, small-log + large-log boot hydration paths, `getHistoryArcs()` public getter.
+- New HTTP router `historyRouter.ts`: `GET /api/world/history-arcs` + `GET /api/world/history-arcs/:arcType`; registered in `server.ts`.
+- 12 unit tests in `historyChronicle.test.ts` — all arc state machines, hash equality, `getByType`.
+
+### Verification
+- `npm run build` — TypeScript clean, web bundle clean
+- `npx vitest run packages/server` — 109 test files, 748 tests pass (1 pre-existing famine timeout under load)
+- `historyChronicle.test.ts` — 12/12 pass
+
+### §43 Status After v0.36.0
+- Criterion 1 (NPC mortality + lineage) ✅ v0.32.0
+- Criterion 2 (faction seizure + loyalty) ✅ v0.33.0
+- Criterion 3 (settlement famine) ✅ v0.34.0
+- Criterion 4 (arc history while player away) ✅ v0.36.0 — `HistoryChronicleProjection` now detects + persists all 8 narrative arc types
+
+### Next
+- AI dialog grounding (§11.9) — wire ecosystem projection data into NPC dialog prompts
+- `ARCHITECTURE.md §11.5` — area state still uses FACT_SET (NPC state is typed; area state not yet)
+- `ARCHITECTURE.md §11.6` — simulation budget gate not enforced
+- BioNode / Forest Regrowth Engine (plant/fungal nodes)
+
+---
+
 ## 2026-05-20 — Market Prices API + brine naming fix (v0.35.0)
 
 ### Work Done

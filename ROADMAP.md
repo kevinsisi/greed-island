@@ -5,6 +5,32 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.36.0 ✅ shipped — 2026-05-20
+
+**主題：History Chronicle Projection (§30.9 / Layer 5 Perception Runtime)**
+
+- ✅ New projection: `HistoryChronicleProjection` — 8 arc types (`settlement_formation`, `settlement_decline`, `faction_seizure`, `npc_mortality_lineage`, `ecological_collapse`, `species_extinction`, `great_migration`, `legendary_hunt`); deterministic arc detection from EventLog; no AI generation at projection layer.
+- ✅ `HISTORY_CHRONICLE_BOOT_EVENT_TYPES` (13 event types) — selective fast-boot constant follows established pattern.
+- ✅ Runtime wired: private field + both fan-out loops + small-log + large-log else-branch boot hydration; `getHistoryArcs()` public getter.
+- ✅ HTTP: `GET /api/world/history-arcs` (all arcs) + `GET /api/world/history-arcs/:arcType` (filtered); `historyRouter.ts` registered in `server.ts`.
+- ✅ 12 unit tests: all arc state machines (single-event + multi-event arcs), `getByType`, `rebuildFromEvents` hash equality.
+- ✅ §43 criterion 4 now verifiable: arc history persists across server restarts via selective boot hydration.
+- ✅ 109 server test files, 748 tests pass (1 pre-existing famine timeout under load — not introduced); TypeScript clean.
+
+---
+
+## v0.35.0 ✅ shipped — 2026-05-20
+
+**主題：Goods / Market Observability — brine naming fix + market prices API**
+
+- ✅ Bug fix: `marketPricing.ts` + `productionChains.ts` renamed `salt_marsh_brine` → `brine` (matching goods catalog); market supply was always 0 before this fix.
+- ✅ New endpoint: `GET /api/goods/market-prices` — returns `MarketPriceEntry[]` with `nameZh` from goods catalog; full chain observable (fishery → harvest → supply → price → API).
+- ✅ `goodsRouter.test.ts` updated with market-prices endpoint test.
+- ✅ `productionChains.test.ts` + `runtimeProductionChains.test.ts` updated to use `brine` + `recipe.brine_to_refined_salt`.
+- ✅ `WORLD_CAPABILITIES.md` Part II fully resynced: v0.15.47 → v0.34.0 baseline (23 species, ~121 commands, 23 projections).
+
+---
+
 ## v0.34.0 ✅ shipped — 2026-05-20
 
 **主題：Goods Primitives — Settlement Food Consumption Cadence (§43 gap #3)**

@@ -28,6 +28,7 @@ import { createBuildingsRouter } from './buildingsRouter.js'
 import { createSettlementsRouter } from './settlementsRouter.js'
 import { createAreaEcologyRouter } from './areaEcologyRouter.js'
 import { createGoodsRouter } from './goodsRouter.js'
+import { createHistoryRouter } from './historyRouter.js'
 import { createCombatRouter } from './combatRouter.js'
 import { createTechniqueShopRouter } from './techniqueShopRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -227,6 +228,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
   app.use('/api', createSettlementsRouter({ runtime: options.runtime }))
   app.use('/api', createAreaEcologyRouter({ runtime: options.runtime }))
   app.use('/api', createGoodsRouter({ runtime: options.runtime }))
+  app.use('/api', createHistoryRouter({ runtime: options.runtime }))
   app.use('/api', createPlayerCivilizationRouter({ runtime: options.runtime, authConfig: options.auth }))
   app.use(
     '/api',

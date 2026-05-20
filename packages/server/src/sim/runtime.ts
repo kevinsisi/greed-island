@@ -206,6 +206,7 @@ import { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
+import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
 import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
@@ -503,6 +504,7 @@ export class SimulationRuntime {
   // NpcLineageProjection is initialized in the constructor once profiles are available.
   private npcLineageProjection!: NpcLineageProjection
   private readonly factionControlProjection = new FactionControlProjection()
+  private readonly historyChronicleProjection = new HistoryChronicleProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1079,6 +1081,11 @@ export class SimulationRuntime {
     return this.marketPricesProjection.list()
   }
 
+  /** Phase 5 §30.9 — history arcs (Layer 5 Perception Runtime). */
+  getHistoryArcs(): readonly HistoryArc[] {
+    return this.historyChronicleProjection.list()
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
@@ -1456,6 +1463,7 @@ export class SimulationRuntime {
       this.npcMortalityProjection.project(ev)
       this.npcLineageProjection.project(ev)
       this.factionControlProjection.project(ev)
+      this.historyChronicleProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -3896,6 +3904,7 @@ export class SimulationRuntime {
         this.npcMortalityProjection.project(ev)
         this.npcLineageProjection.project(ev)
         this.factionControlProjection.project(ev)
+        this.historyChronicleProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -4509,6 +4518,7 @@ export class SimulationRuntime {
       this.householdEconomyProjection.rebuildFromEvents(allEvents)
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
+      this.historyChronicleProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
       // Ecosystem projections are small relative to the full event log —
@@ -4539,6 +4549,9 @@ export class SimulationRuntime {
       // Faction control projection — rebuild from faction seizure/loyalty events.
       const factionEvents = this.store.readEventsByTypes(FACTION_BOOT_EVENT_TYPES)
       this.factionControlProjection.rebuildFromEvents(factionEvents)
+      // History chronicle projection — rebuild from narrative arc event types.
+      const historyEvents = this.store.readEventsByTypes(HISTORY_CHRONICLE_BOOT_EVENT_TYPES)
+      this.historyChronicleProjection.rebuildFromEvents(historyEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
