@@ -5,6 +5,23 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.34.0 ✅ shipped — 2026-05-20
+
+**主題：Goods Primitives — Settlement Food Consumption Cadence (§43 gap #3)**
+
+OpenSpec: `goods-primitives/` (all tasks complete)。
+
+- ✅ Config: `SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS = TICKS_PER_HOUR` — periodic food drain constant.
+- ✅ Runtime cadence block: `GOODS_CONSUMED` emitted from settlement storage every hour; uses `populationNpcIds.length`; skips empty-population settlements; consumes `min(held, pop × SETTLEMENT_FOOD_UNITS_PER_NPC)` from highest-quantity food row.
+- ✅ `SETTLEMENT_DECLINED` narration verified correct Chinese (no change needed).
+- ✅ `GET /api/goods/inventory/:ownerId` verified returns only non-zero quantity items.
+- ✅ Integration test: `runtimeSettlementFamine.test.ts` — 750-tick run verifies GOODS_CONSUMED + food pressure rise.
+- ✅ Unit test: `settlementEngine.test.ts` — SETTLEMENT_DECLINED with zero food + collapsed fishery + predators.
+- ✅ Extended `runtimeGoodsInventory.test.ts` — added GOODS_EXTRACTED assertion for FISHERY_HARVESTED path.
+- ✅ 108 server test files, 736 tests pass; TypeScript clean.
+
+---
+
 ## v0.33.0 ✅ shipped — 2026-05-20
 
 **主題：Faction Conflict Consequences (§43 gap #2)**

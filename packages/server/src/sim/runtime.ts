@@ -70,6 +70,9 @@ import {
   LEGENDARY_WORLD_EVENT_SEVERITY,
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
+  SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS,
+  SETTLEMENT_FOOD_GOODS,
+  SETTLEMENT_FOOD_UNITS_PER_NPC,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -3348,6 +3351,43 @@ export class SimulationRuntime {
       currentTick: nextTick,
       submittedAt,
     }))
+
+    // ---- Settlement food consumption cadence (v0.34.0) ----
+    // Depletes settlement food storage each hour so that when ecosystem collapse
+    // stops food supply, stored food drains and food pressure rises, eventually
+    // triggering SETTLEMENT_DECLINED.
+    if (nextTick % SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS === 0) {
+      for (const settlement of this.settlementsProjection.getAll()) {
+        const population = settlement.populationNpcIds.length
+        if (population === 0) continue
+        const holderIds = new Set([settlement.id, `settlement.${settlement.tileId}`])
+        const foodRows = this.goodsInventoryProjection.list()
+          .filter((row) => row.holderType === 'settlement' && holderIds.has(row.holderId))
+          .filter((row) => (SETTLEMENT_FOOD_GOODS as readonly string[]).includes(row.goodsId))
+          .filter((row) => row.quantity > 0)
+          .sort((a, b) => b.quantity - a.quantity)
+        const heldFood = foodRows.reduce((sum, row) => sum + row.quantity, 0)
+        if (heldFood === 0) continue
+        const quantity = Math.min(heldFood, population * SETTLEMENT_FOOD_UNITS_PER_NPC)
+        const primaryRow = foodRows[0]!
+        commands.push(makeLivingWorldCommand(
+          'GOODS_CONSUMED',
+          `settlement.${settlement.id}`,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            goodsId: primaryRow.goodsId,
+            quantity,
+            holderType: 'settlement',
+            holderId: primaryRow.holderId,
+            tileId: settlement.tileId,
+            consumedAtTick: nextTick,
+            narration: `${settlement.id} 的居民消耗了 ${quantity} 份食物。`
+          }
+        ))
+      }
+    }
 
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,

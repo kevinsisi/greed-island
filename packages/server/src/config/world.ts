@@ -236,6 +236,8 @@ export const SETTLEMENT_LOGISTICS_MISSING_FOOD_ROUTE_PRESSURE = 25
 export const SETTLEMENT_LOGISTICS_RECENT_LOSS_WINDOW_TICKS = TICKS_PER_HOUR
 export const SETTLEMENT_STABILITY_STRAINED_BELOW = 75
 export const SETTLEMENT_STABILITY_DECLINING_BELOW = 40
+// Goods Primitives (v0.34.0) — periodic food consumption from settlement storage
+export const SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS = TICKS_PER_HOUR
 
 // NPC Mortality & Lineage (v0.32.0)
 // Base lifespan: 1 real week (7 × 17,280 ticks). Variance: ±3.5 days.

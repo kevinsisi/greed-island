@@ -164,6 +164,32 @@ describe('planSettlementCommands', () => {
     expect(commands.some((command) => command.commandType === 'SETTLEMENT_STORAGE_UPDATED')).toBe(true)
     expect(commands.find((command) => command.commandType === 'SETTLEMENT_PRESSURE_UPDATED')).toBeUndefined()
   })
+
+  it('emits SETTLEMENT_DECLINED when stability drops below SETTLEMENT_STABILITY_DECLINING_BELOW due to sustained food pressure', () => {
+    // Setup: 2 NPCs, zero food, collapsed fishery, 10 predators on the tile.
+    // food pressure = clamp(shortage=85 + fishery_collapse=30) = 100
+    // safety pressure = clamp(10 wolves × 12 + round(80×0.4)) = clamp(152) = 100
+    // logistics pressure = 25 (missing food route, because food > 0 and no open routes)
+    // weighted = 100×0.35 + 100×0.25 + 0×0.2 + 25×0.2 = 65 → stability = 35 < 40 → DECLINING
+    const commands = planSettlementCommands(input({
+      settlements: [settlement({ populationNpcIds: [] })],
+      npcPresence: presence('npc-a', 'npc-b'),
+      goodsInventory: [],
+      fisheryDensity: [fishery({ collapsed: true, density: 0 })],
+      animalPopulation: [{
+        speciesId: 'fog_wolf',
+        tileId: 't_test',
+        biomeRegion: 'forest' as const,
+        count: 10,
+        animalIds: Array.from({ length: 10 }, (_, i) => `wolf-${i}`),
+        lastSpawnedAtTick: 1,
+        lastKilledAtTick: null,
+        lastSequence: 1,
+      }],
+    }))
+
+    expect(commands.some((command) => command.commandType === 'SETTLEMENT_DECLINED')).toBe(true)
+  })
 })
 
 function input(overrides: Partial<SettlementEngineInput>): SettlementEngineInput {

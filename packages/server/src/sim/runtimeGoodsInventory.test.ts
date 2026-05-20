@@ -23,6 +23,12 @@ describe('SimulationRuntime goods inventory', () => {
         return event.eventType === 'GOODS_STORED' && data?.goodsId === 'fish'
       })
       expect(storedFish.length).toBeGreaterThan(0)
+      // FISHERY_HARVESTED → GOODS_EXTRACTED is always emitted before GOODS_STORED in the same pipeline
+      const extractedFish = events.some((event) => {
+        const data = (event.payload as { data?: { goodsId?: string } } | undefined)?.data
+        return event.eventType === 'GOODS_EXTRACTED' && data?.goodsId === 'fish'
+      })
+      expect(extractedFish).toBe(true)
       expect(runtime.getGoodsInventory().some((row) => row.goodsId === 'fish' && row.quantity > 0)).toBe(true)
       expect(runtime.getLogistics().routes.some((row) => row.goodsId === 'fish' && row.toTileId === 't_central')).toBe(true)
       expect(runtime.getLogistics().transports.some((row) => row.goodsId === 'fish' && row.toTileId === 't_central')).toBe(true)

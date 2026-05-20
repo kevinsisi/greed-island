@@ -3,6 +3,43 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — Goods Primitives: Settlement Food Consumption Cadence (v0.34.0)
+
+### Work Done
+
+§43 acceptance gap #3 (famine): settlement food consumption cadence is now wired, closing the missing link in the goods-to-pressure-to-decline chain.
+
+**Config (`config/world.ts`):**
+- `SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS = TICKS_PER_HOUR` — periodic food drain constant
+
+**Runtime (`sim/runtime.ts`):**
+- Added cadence block after `planSettlementCommands`: fires `GOODS_CONSUMED` from settlement storage every `SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS`
+- Uses `settlement.populationNpcIds.length` for population count; skips empty-population settlements
+- Consumes `min(heldFood, population × SETTLEMENT_FOOD_UNITS_PER_NPC)` from highest-quantity food goods row
+- Chinese narration: `"{settlementId} 的居民消耗了 {quantity} 份食物。"`
+
+**Chronicle (`sim/settlementEngine.ts`):**
+- `SETTLEMENT_DECLINED` narration confirmed correct Chinese: `"${settlement.id} 的穩定度跌破閾值，聚落陷入衰退。"` (no change needed)
+
+**Endpoint (`http/goodsRouter.ts`):**
+- `GET /api/goods/inventory/:ownerId` — verified returns only `quantity > 0` items (spec-compliant)
+
+**Tests:**
+- New integration test: `sim/runtimeSettlementFamine.test.ts` — pre-loads fish, runs 750 ticks through first cadence, asserts `GOODS_CONSUMED` and food pressure rise
+- New unit test in `sim/settlementEngine.test.ts` — "emits SETTLEMENT_DECLINED when stability drops below threshold due to sustained food pressure" (zero food + collapsed fishery + 10 fog_wolves → stability = 35)
+- Extended `sim/runtimeGoodsInventory.test.ts` — added `GOODS_EXTRACTED` assertion for FISHERY_HARVESTED path
+
+### Verification
+- `npm run build` — TypeScript clean
+- `npm test` — 108 server test files (736 tests), 21 web test files (96 tests) — all pass
+- OpenSpec: `goods-primitives/` all tasks complete
+
+### Next
+- Archive `goods-primitives` change
+- Remaining §43 gaps or next Phase plan
+
+---
+
 ## 2026-05-20 — Faction Conflict Consequences (v0.33.0)
 
 ### Work Done
