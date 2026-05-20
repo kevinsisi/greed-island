@@ -1056,6 +1056,7 @@ export class SimulationRuntime {
       fishery: this.fisheryDensityProjection.getByTile(tileId),
       migrationWaves: this.animalMigrationProjection.list(),
       predatorHunger: this.predatorHungerProjection.list(),
+      plants: this.bioNodeProjection.list(),
     })
   }
 
@@ -1730,6 +1731,64 @@ export class SimulationRuntime {
         // Track build/service work actions per tile for ecosystem pressure
         if (event.domain === 'build' || event.domain === 'service') {
           this.tileWorkActionCounts.set(event.tile, (this.tileWorkActionCounts.get(event.tile) ?? 0) + 1)
+        }
+        // v0.41.0 — NPC actually does the work: when a productive action fires
+        // on a tile that has BioNode plants with density > 0, harvest the
+        // highest-density plant and emit BIO_NODE_HARVESTED + GOODS_EXTRACTED.
+        // This is what makes the forest visibly shrink — without this the
+        // simulation runs forever and the player sees zero output.
+        const bioNodes = this.bioNodeProjection.listOnTile(event.tile).filter((n) => n.density >= 1)
+        if (bioNodes.length > 0) {
+          const target = [...bioNodes].sort(
+            (a, b) => b.density - a.density || a.speciesId.localeCompare(b.speciesId)
+          )[0]!
+          const species = getPlantSpecies(target.speciesId)
+          if (species) {
+            // Consume a small amount of density per productive action (1.5 units),
+            // capped at current density so we never go negative.
+            const consumed = Math.min(target.density, 1.5)
+            const densityAfter = Math.max(0, target.density - consumed)
+            const goodsQty = Math.max(1, Math.round(consumed * species.harvestUnitsPerDensity))
+            commands.push(
+              makeLivingWorldCommand(
+                'BIO_NODE_HARVESTED',
+                event.npcId,
+                'npc',
+                nextTick,
+                submittedAt,
+                {
+                  tileId: event.tile,
+                  speciesId: target.speciesId,
+                  densityConsumed: consumed,
+                  densityAfter,
+                  harvesterId: event.npcId,
+                  harvestGoodsId: species.harvestGoodsId,
+                  goodsQuantity: goodsQty,
+                  tick: nextTick,
+                  narration: `${event.npcId} 在 ${event.tile} 採集 ${species.nameZh}，獲得 ${species.harvestGoodsId} ×${goodsQty}。`,
+                }
+              )
+            )
+            commands.push(
+              makeLivingWorldCommand(
+                'GOODS_EXTRACTED',
+                event.npcId,
+                'npc',
+                nextTick,
+                submittedAt,
+                {
+                  goodsId: species.harvestGoodsId,
+                  quantity: goodsQty,
+                  sourceEventType: 'BIO_NODE_HARVESTED',
+                  sourceId: `${event.tile}::${target.speciesId}`,
+                  sourceTileId: event.tile,
+                  extractedByNpcId: event.npcId,
+                  extractedAtTick: nextTick,
+                  narration: `${event.npcId} 採集 ${species.nameZh}，獲得 ${species.harvestGoodsId}×${goodsQty}。`,
+                }
+              )
+            )
+          }
         }
         const lifeForHunt = profile ? deriveNpcLifeView({
           profile,

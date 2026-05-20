@@ -39,6 +39,13 @@ export type PredatorWarningRow = Readonly<{
   lastKillAtTick: number
 }>
 
+export type PlantNodeRow = Readonly<{
+  speciesId: string
+  density: number
+  capacity: number
+  saturationPct: number
+}>
+
 export type AreaEcologyView = Readonly<{
   tileId: string
   animals: readonly AnimalGroupRow[]
@@ -46,6 +53,7 @@ export type AreaEcologyView = Readonly<{
   migrationsArriving: readonly MigrationRow[]
   migrationsDeparting: readonly MigrationRow[]
   predatorWarnings: readonly PredatorWarningRow[]
+  plants: readonly PlantNodeRow[]
 }>
 
 export type AreaEcologyInput = Readonly<{
@@ -77,6 +85,12 @@ export type AreaEcologyInput = Readonly<{
     predatorSpeciesId: string
     tileId: string
     lastKillAtTick: number
+  }>
+  plants: ReadonlyArray<{
+    tileId: string
+    speciesId: string
+    density: number
+    capacity: number
   }>
 }>
 
@@ -128,6 +142,16 @@ export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
         }
       : null
 
+  const plants: PlantNodeRow[] = input.plants
+    .filter((p) => p.tileId === input.tileId)
+    .map((p) => ({
+      speciesId: p.speciesId,
+      density: p.density,
+      capacity: p.capacity,
+      saturationPct: p.capacity > 0 ? Math.round((p.density / p.capacity) * 100) : 0,
+    }))
+    .sort((a, b) => b.density - a.density || a.speciesId.localeCompare(b.speciesId))
+
   return {
     tileId: input.tileId,
     animals,
@@ -135,6 +159,7 @@ export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
     migrationsArriving,
     migrationsDeparting,
     predatorWarnings,
+    plants,
   }
 }
 

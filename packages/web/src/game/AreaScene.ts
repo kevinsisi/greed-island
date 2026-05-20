@@ -666,6 +666,56 @@ export class AreaScene extends Phaser.Scene {
     layer.setDepth(44)
     this.ecologyLayer = layer
 
+    // v0.41.0 — plant sprites: trees / reeds / herbs / fungi visibly placed on
+    // the area canvas with a density-driven size + saturation bar. When NPCs
+    // chop trees the density drops, the tree shrinks, and the bar empties.
+    const plantGlyph: Record<string, string> = {
+      oak: '🌳', pine: '🌲', reed: '🌾', wild_herb: '🌿', cave_fungus: '🍄',
+    }
+    const plantNameZh: Record<string, string> = {
+      oak: '橡樹', pine: '松木', reed: '蘆葦', wild_herb: '野草藥', cave_fungus: '洞穴菌',
+    }
+    eco.plants.forEach((plant, plantIdx) => {
+      // Spread plant nodes deterministically across the inner canvas.
+      const slots = eco.plants.length
+      const colStep = (AREA_CANVAS_WIDTH - 80) / Math.max(1, slots)
+      const px = 40 + colStep * (plantIdx + 0.5)
+      const py = 40
+      const glyph = plantGlyph[plant.speciesId] ?? '🌱'
+      const nameZh = plantNameZh[plant.speciesId] ?? plant.speciesId
+      // Size scales with saturation: 14px when depleted, 26px when full.
+      const sizePx = 14 + Math.round((plant.saturationPct / 100) * 12)
+      const tree = this.add.text(px, py, glyph, {
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+        fontSize: `${sizePx}px`,
+        color: '#ffffff',
+      })
+      tree.setOrigin(0.5, 0.5)
+      layer.add(tree)
+      // Density bar under the plant glyph: width scales 0..32 px.
+      const barWidth = 32
+      const fillWidth = Math.max(1, Math.round((plant.density / Math.max(1, plant.capacity)) * barWidth))
+      const barBg = this.add.rectangle(px, py + 18, barWidth, 3, 0x0a0a0a, 0.6)
+      barBg.setOrigin(0.5, 0.5)
+      layer.add(barBg)
+      const barColor = plant.saturationPct < 30 ? 0xe04a3a : plant.saturationPct < 70 ? 0xd6a04a : 0x4ad682
+      const fill = this.add.rectangle(px - barWidth / 2, py + 18, fillWidth, 3, barColor, 0.95)
+      fill.setOrigin(0, 0.5)
+      layer.add(fill)
+      // Always-visible label so the player knows what it is + density %.
+      const label = this.add.text(px, py + 24, `${nameZh} ${plant.saturationPct}%`, {
+        fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
+        fontSize: '9px',
+        color: '#c8d4a6',
+        stroke: '#0a0a0a',
+        strokeThickness: 2,
+      })
+      label.setOrigin(0.5, 0)
+      layer.add(label)
+      layer.add(this.createInspectZone(px, py, 36, 40, `${nameZh} ${plant.density.toFixed(0)}/${plant.capacity}`))
+    })
+
     for (const row of eco.animals) {
       const visual = visualForSpecies(row.speciesId)
       if (row.animalIds.length <= 5) {

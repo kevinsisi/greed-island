@@ -48,6 +48,13 @@ export type PredatorWarningRow = {
   lastKillAtTick: number
 }
 
+export type PlantNodeRow = {
+  speciesId: string
+  density: number
+  capacity: number
+  saturationPct: number
+}
+
 export type AreaEcologyView = {
   tileId: string
   animals: readonly AnimalGroupRow[]
@@ -55,6 +62,7 @@ export type AreaEcologyView = {
   migrationsArriving: readonly MigrationRow[]
   migrationsDeparting: readonly MigrationRow[]
   predatorWarnings: readonly PredatorWarningRow[]
+  plants: readonly PlantNodeRow[]
 }
 
 export type ServerSettlement = {

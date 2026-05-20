@@ -8,7 +8,7 @@ describe('areaEcology.buildAreaEcology', () => {
       animals: [],
       fishery: null,
       migrationWaves: [],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     expect(view.tileId).toBe('t_central')
     expect(view.animals).toEqual([])
@@ -46,7 +46,7 @@ describe('areaEcology.buildAreaEcology', () => {
       ],
       fishery: null,
       migrationWaves: [],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     expect(view.animals).toHaveLength(1)
     expect(view.animals[0]!.speciesId).toBe('forest_deer')
@@ -82,7 +82,7 @@ describe('areaEcology.buildAreaEcology', () => {
       ],
       fishery: null,
       migrationWaves: [],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     // count desc, then speciesId ascending lex; 'fog_wolf' < 'forest_deer'
     expect(view.animals.map((r) => r.speciesId)).toEqual(['fog_wolf', 'forest_deer', 'marsh_heron'])
@@ -122,7 +122,7 @@ describe('areaEcology.buildAreaEcology', () => {
           count: 3,
         },
       ],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     expect(view.migrationsArriving).toHaveLength(1)
     expect(view.migrationsArriving[0]!.waveId).toBe('w_in')
@@ -142,7 +142,7 @@ describe('areaEcology.buildAreaEcology', () => {
         lastUpdatedTick: 200,
       },
       migrationWaves: [],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     expect(matching.fishery).not.toBeNull()
     expect(matching.fishery!.density).toBe(64)
@@ -158,7 +158,7 @@ describe('areaEcology.buildAreaEcology', () => {
         lastUpdatedTick: 200,
       },
       migrationWaves: [],
-      predatorHunger: [],
+      predatorHunger: [], plants: [],
     })
     expect(mismatch.fishery).toBeNull()
   })
@@ -173,6 +173,7 @@ describe('areaEcology.buildAreaEcology', () => {
         { predatorSpeciesId: 'fog_wolf', tileId: 't_forest', lastKillAtTick: 50 },
         { predatorSpeciesId: 'mountain_lynx', tileId: 't_mountain', lastKillAtTick: 30 },
       ],
+      plants: [],
     })
     expect(view.predatorWarnings).toHaveLength(1)
     expect(view.predatorWarnings[0]!.predatorSpeciesId).toBe('fog_wolf')

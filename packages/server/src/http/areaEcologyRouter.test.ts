@@ -41,7 +41,7 @@ describe('areaEcology router', () => {
       fishery: null,
       migrationsArriving: [],
       migrationsDeparting: [],
-      predatorWarnings: [],
+      predatorWarnings: [], plants: [],
     }
     const app = makeApp(() => view)
     const server = await listen(app)
@@ -80,7 +80,7 @@ describe('areaEcology router', () => {
       fishery: null,
       migrationsArriving: [],
       migrationsDeparting: [],
-      predatorWarnings: [],
+      predatorWarnings: [], plants: [],
     }
     const app = makeApp(() => empty)
     const server = await listen(app)
