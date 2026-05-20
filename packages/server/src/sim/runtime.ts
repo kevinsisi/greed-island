@@ -89,7 +89,7 @@ import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles } from './mapGraph.js'
+import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles, EXPANSION_TILES } from './mapGraph.js'
 import { buildAreaEcology, type AreaEcologyView } from './areaEcology.js'
 import { planAnimalAggression, planAnimalRetaliation } from '../ecosystem/aggression.js'
 import {
@@ -515,8 +515,6 @@ export class SimulationRuntime {
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
-  /** Track whether plant seeding has been emitted at least once (idempotent). */
-  private plantsSeeded = false
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -2806,41 +2804,36 @@ export class SimulationRuntime {
     this.tileWorkActionCounts = new Map()
 
     // ---- Phase E5: BioNode plant ecology (seeding + regrowth) ----
-    // One-time seeding: walk every map tile and emit BIO_NODE_SEEDED for each
-    // plant species that has biome affinity to that tile. Runs once per world
-    // (gated by `plantsSeeded`, which is set true after the projection contains
-    // any seeded rows on boot, or after we emit seeds here).
-    if (!this.plantsSeeded) {
-      for (const tile of MAP_TILES) {
-        const region = ecosystemRegionForTile(tile)
-        if (!region) continue
-        const speciesIds = plantSpeciesForBiome(region)
-        for (const speciesId of speciesIds) {
-          // Skip if a seed for this (tile, species) already exists, e.g. from
-          // a partial pre-existing log replay.
-          if (this.bioNodeProjection.hasSeed(tile.id, speciesId)) continue
-          const species = getPlantSpecies(speciesId)
-          if (!species) continue
-          commands.push(
-            makeLivingWorldCommand(
-              'BIO_NODE_SEEDED',
-              SIM_ACTOR_WORLD,
-              'system',
-              nextTick,
-              submittedAt,
-              {
-                tileId: tile.id,
-                speciesId,
-                density: species.carryingCapacity,
-                capacity: species.carryingCapacity,
-                seededAtTick: nextTick,
-                narration: null,
-              }
-            )
+    // Idempotent seeding: walk every known tile and emit BIO_NODE_SEEDED for
+    // every plant species with biome affinity that has NOT been seeded yet
+    // (hasSeed() guards). This naturally handles new tiles getting unlocked
+    // or new plant species being added to the catalog — no global flag needed.
+    for (const tile of [...MAP_TILES, ...EXPANSION_TILES]) {
+      const region = ecosystemRegionForTile(tile)
+      if (!region) continue
+      const speciesIds = plantSpeciesForBiome(region)
+      for (const speciesId of speciesIds) {
+        if (this.bioNodeProjection.hasSeed(tile.id, speciesId)) continue
+        const species = getPlantSpecies(speciesId)
+        if (!species) continue
+        commands.push(
+          makeLivingWorldCommand(
+            'BIO_NODE_SEEDED',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              tileId: tile.id,
+              speciesId,
+              density: species.carryingCapacity,
+              capacity: species.carryingCapacity,
+              seededAtTick: nextTick,
+              narration: null,
+            }
           )
-        }
+        )
       }
-      this.plantsSeeded = true
     }
     // Hourly regrowth: nodes below capacity gain regrowthPerHour density.
     if (nextTick % TICKS_PER_HOUR === 0) {
@@ -4693,9 +4686,6 @@ export class SimulationRuntime {
       const bioNodeEvents = this.store.readEventsByTypes(BIO_NODE_BOOT_EVENT_TYPES)
       this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
     }
-    // After hydration, decide if plant seeding has already happened. If any
-    // BIO_NODE_SEEDED event exists in the rebuilt projection, mark as seeded.
-    this.plantsSeeded = this.bioNodeProjection.list().length > 0
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
     // projection. Legacy npc.state.<id> FACT_SET values remain fallback for

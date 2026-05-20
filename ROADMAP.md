@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.39.1 ✅ shipped — 2026-05-20
+
+**BioNode 種植循環邏輯 fix**
+
+- ✅ 移除 `plantsSeeded` flag — 改用純 `hasSeed()` 檢查，seeding loop 自然冪等
+- ✅ Seeding 範圍納入 `EXPANSION_TILES`（鹽沼蘆葦 reed 之前漏掉了）
+- ✅ 未來新解鎖的 tile / 新加入的 species 都會被自動補種，不需手動 reset
+
+---
+
 ## v0.39.0 ✅ shipped — 2026-05-20
 
 **主題：BioNode / Forest Regrowth Engine (Phase E5 — plant ecology substrate)**
