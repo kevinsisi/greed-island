@@ -189,6 +189,19 @@ export function createNpcRouter(input: {
         // ecology context
         const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
         const fisheryRow = input.runtime.getFisheryDensityOnTile(npcTile)
+        const extinctionWarnings = input.runtime.getExtinctionWarningsOnTile(npcTile)
+
+        // faction + history grounding (§11.9)
+        const dominantFaction = input.runtime.getDominantFactionOnTile(npcTile)
+        const rawHistoryArcs = input.runtime.getHistoryArcsOnTile(npcTile)
+        const tileHistoryArcs = rawHistoryArcs.length > 0
+          ? rawHistoryArcs.map((a) => ({
+              arcType: a.arcType,
+              narrationZh: a.narrationZh,
+              startTick: a.startTick,
+              status: a.status,
+            }))
+          : undefined
 
         // recent local events (last 20 events, filter by tile, take 5)
         const localEventLines = input.runtime
@@ -220,6 +233,9 @@ export function createNpcRouter(input: {
           ...(knownPersonNames ? { knownPersonNames } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
+          ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),
+          ...(dominantFaction ? { dominantFaction } : {}),
+          ...(tileHistoryArcs ? { tileHistoryArcs } : {}),
           ...(recentLocalEvents ? { recentLocalEvents } : {}),
           ...(skillLevels ? { skillLevels } : {}),
         }

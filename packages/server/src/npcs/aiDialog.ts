@@ -36,6 +36,13 @@ export type ActiveRumorContext = Readonly<{
   accuracy: number
 }>
 
+export type TileHistoryArcContext = Readonly<{
+  arcType: string
+  narrationZh: string
+  startTick: number
+  status: string
+}>
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -53,8 +60,11 @@ export type AiDialogContext = Readonly<{
   knownPersonNames?: readonly string[]
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
+  extinctionWarnings?: readonly string[]
   recentLocalEvents?: readonly string[]
   skillLevels?: readonly { skillId: string; level: number }[]
+  dominantFaction?: string | null
+  tileHistoryArcs?: readonly TileHistoryArcContext[]
 }>
 
 export class AiDialogError extends Error {
@@ -166,7 +176,9 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     historyBlock,
     '',
     ...buildRumorsBlock(ctx.activeRumors),
-    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext),
+    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings),
+    ...buildFactionBlock(ctx.dominantFaction),
+    ...buildTileHistoryBlock(ctx.tileHistoryArcs),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
     ...buildSkillBlock(ctx.skillLevels),
     `### 回應規則`,
@@ -417,15 +429,14 @@ export function buildAntiHallucinationBlock(knownNames: readonly string[], known
 export function buildEcologyBlock(
   ecology: readonly { speciesId: string; count: number }[] | undefined,
   fishery: { density: string; collapsed: boolean } | null | undefined,
+  extinctionWarnings?: readonly string[],
 ): string[] {
   const hasEcology = ecology && ecology.length > 0
   const hasFishery = fishery != null
-  if (!hasEcology && !hasFishery) return []
+  const hasWarnings = extinctionWarnings && extinctionWarnings.length > 0
+  if (!hasEcology && !hasFishery && !hasWarnings) return []
   const lines: string[] = []
   if (hasEcology) {
-    // Sprint 2A — count desc, speciesId ascending lex tiebreak, so the
-    // most-present species lead the block and order is deterministic
-    // regardless of input ordering.
     const sorted = [...ecology].sort(
       (a, b) => b.count - a.count || a.speciesId.localeCompare(b.speciesId)
     )
@@ -437,8 +448,41 @@ export function buildEcologyBlock(
     const label = fishery.collapsed ? `魚場已崩潰` : `漁場豐度：${fishery.density}`
     lines.push(`  · ${label}`)
   }
+  if (hasWarnings) {
+    lines.push(`  · ⚠️ 瀕危物種警告：${extinctionWarnings!.join('、')} 數量極低，面臨滅絕`)
+  }
   return [
     `### 你所在地區的生態現況（依據世界資料，可自然融入對話）`,
+    ...lines,
+    '',
+  ]
+}
+
+export function buildFactionBlock(dominantFaction: string | null | undefined): string[] {
+  if (!dominantFaction) return []
+  const labelMap: Record<string, string> = {
+    guild: '商業公會',
+    militia: '民兵派',
+    council: '議會派',
+    outlander: '外來勢力',
+  }
+  const label = labelMap[dominantFaction] ?? dominantFaction
+  return [
+    `### 你所在地區的當前勢力（依據世界資料）`,
+    `  · 此地目前由「${label}」（${dominantFaction}）主導`,
+    `  · 如果玩家問到此地的勢力或派系情況，你可以依照你的立場和派系傾向回應`,
+    '',
+  ]
+}
+
+export function buildTileHistoryBlock(arcs: readonly TileHistoryArcContext[] | undefined): string[] {
+  if (!arcs || arcs.length === 0) return []
+  const lines = arcs.map((a) => {
+    const statusLabel = a.status === 'active' ? '（進行中）' : '（已完結）'
+    return `  · [第 ${a.startTick} 刻] ${a.narrationZh} ${statusLabel}`
+  })
+  return [
+    `### 此地最近發生的歷史事件（世界弧線紀錄，可作為對話背景自然帶出）`,
     ...lines,
     '',
   ]

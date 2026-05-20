@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.37.0 ✅ shipped — 2026-05-20
+
+**主題：AI Dialog Grounding §11.9 — faction control + extinction warnings + history arcs**
+
+- ✅ `AiDialogContext` 新增 3 個欄位：`extinctionWarnings`、`dominantFaction`、`tileHistoryArcs`
+- ✅ `buildEcologyBlock` 擴展：瀕危物種警告 (`extinctionWarnings`) 進入生態區塊
+- ✅ 新增 `buildFactionBlock`：當前派系主導者進入 system prompt（可依立場回應）
+- ✅ 新增 `buildTileHistoryBlock`：近期弧線事件（派系奪權、傳奇獵殺、聚落成立等）進入 dialog context
+- ✅ `runtime.ts` 新增 3 個 getter：`getHistoryArcsOnTile`、`getDominantFactionOnTile`、`getExtinctionWarningsOnTile`
+- ✅ `npc.ts` dialog context 建構時同步填入這三個欄位
+- ✅ 修正 `sync-version.mjs` 版本管理：根目錄 `package.json` 為 canonical source，`build:server` 自動同步 `version.ts`；v0.35.0/v0.36.0 直接寫 `version.ts` 的做法已不再適用
+- ✅ 748 server 測試通過；TypeScript 乾淨
+
+---
+
 ## v0.36.0 ✅ shipped — 2026-05-20
 
 **主題：History Chronicle Projection (§30.9 / Layer 5 Perception Runtime)**

@@ -3,6 +3,41 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — AI Dialog Grounding §11.9 (v0.37.0)
+
+### Work Done
+
+- `AiDialogContext` 擴展：`extinctionWarnings`、`dominantFaction`、`tileHistoryArcs` 三個新欄位
+- `buildEcologyBlock` 加入瀕危物種警告；新增 `buildFactionBlock`（派系主導）+ `buildTileHistoryBlock`（弧線歷史）
+- `runtime.ts` 新增 `getHistoryArcsOnTile`、`getDominantFactionOnTile`、`getExtinctionWarningsOnTile`
+- `npc.ts` 在 dialog context 建構時同步填入三欄
+- `package.json` 版本設為 0.37.0（canonical source），`build:server` 透過 `sync-version.mjs` 同步
+
+### Verification
+- `npm run build:server` — TypeScript 乾淨，版本 0.37.0
+- `npx vitest run packages/server` — 748 tests pass
+
+### §11.9 Dialog Grounding 狀態
+
+| 資料 | 狀態 |
+|------|------|
+| 生態（動物族群 + 漁場）| ✅ 已接 |
+| 謠言（activeRumors）| ✅ 已接 |
+| NPC 技能等級 | ✅ 已接 |
+| 已知人物圖 | ✅ 已接 |
+| **瀕危物種警告** | ✅ v0.37.0 |
+| **派系主導者** | ✅ v0.37.0 |
+| **歷史弧線（遷徙 / 奪權 / 獵殺）** | ✅ v0.37.0 |
+| 住戶 / 家族狀態 | ❌ 仍缺 |
+| 長期社交記憶 alias | ❌ 仍缺 |
+
+### Next
+- §11.5: area state 仍使用 FACT_SET（NPC state 已 typed；area state 未）
+- §11.6: simulation budget gate 未實作
+- BioNode / Forest Regrowth Engine
+
+---
+
 ## 2026-05-20 — History Chronicle Projection (v0.36.0)
 
 ### Work Done

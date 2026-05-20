@@ -1086,6 +1086,27 @@ export class SimulationRuntime {
     return this.historyChronicleProjection.list()
   }
 
+  /** Phase 5 §30.9 — recent history arcs relevant to a tile, capped for dialog context. */
+  getHistoryArcsOnTile(tileId: string, limit = 5): readonly HistoryArc[] {
+    return this.historyChronicleProjection
+      .list()
+      .filter((a) => a.tileId === tileId || a.involvedEntityIds.includes(tileId))
+      .slice(0, limit)
+  }
+
+  /** Phase 5 §11.9 — dominant faction on a tile for dialog grounding. */
+  getDominantFactionOnTile(tileId: string): string | null {
+    return this.factionControlProjection.dominantFactionOf(tileId)
+  }
+
+  /** Phase 5 §11.9 — species with extinction warning whose warningTileIds include tileId. */
+  getExtinctionWarningsOnTile(tileId: string): readonly string[] {
+    return this.speciesExtinctionProjection
+      .list()
+      .filter((row) => row.status === 'warning' && row.warningTileIds.includes(tileId))
+      .map((row) => row.speciesId)
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
