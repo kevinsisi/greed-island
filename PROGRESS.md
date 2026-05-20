@@ -3,6 +3,37 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — WORLD_CAPABILITIES.md Part II baseline sync (v0.34.0 doc)
+
+### Work Done
+
+Updated `docs/WORLD_CAPABILITIES.md` Part II baseline from v0.15.47 → v0.34.0. All ✅/❌ entries now reflect the actual codebase.
+
+**Major corrections:**
+- §13 Headline Numbers: species 0→23, commands 26→~121, projections 0→23
+- §14 Kernel Guarantees: NpcStateProjection as typed replacement for FACT_SET (partial §11.5 closure) noted
+- §15 Command Catalog: complete rewrite grouping ~121 commands by subsystem
+- §16 World Physics: resource transport / production chains / market / ecological substrate all now ✅
+- §17 Map & Districts: biome-driven species spawn now ✅
+- §18 NPC Population: hunter/fisher substrate now exists
+- §19 NPC Inner State: deceased/heirOf/rumor/mentorship fields added
+- §20 NPC Autonomous Behavior: hunting/fishing/settlement/faction/rumor/mentorship/mortality all ✅; remaining gaps: NPC-to-NPC trade, household migration
+- §22 Combat: Phase C + wildlife combat ✅; §11.4 still 🟡
+- §24 Player: full Phase 6 command list
+- §25 AI: ecological perception gap noted
+- §27 Ecosystem: was "0% implemented" → now fully implemented across E0–E4; BioNode/ForestRegrowth gaps noted
+- §28 Persistence: 23 projections listed; `history_chronicle` ❌ noted
+- §29 Layer-by-Layer Status: updated from "placeholder/0%" to current state
+
+### Verification
+- `npm run build:server` — TypeScript clean
+
+### Next
+- Phase 2 completion: carrier NPC autonomous logistics routing so §43 criterion 2 ("settlement famine → neighbouring price rise") is verifiable end-to-end
+- OR: `history_chronicle` projection (§30.9) to close §43 criterion 4 ("player away → world continues in arcs")
+
+---
+
 ## 2026-05-20 — Goods Primitives: Settlement Food Consumption Cadence (v0.34.0)
 
 ### Work Done
