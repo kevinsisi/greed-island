@@ -70,7 +70,7 @@ jobs:
               continue
             fi
             echo "::group::validate $name"
-            if ! openspec validate "$name" --strict; then
+            if ! openspec validate --changes "$name" --strict; then
               fail=1
             fi
             echo "::endgroup::"
