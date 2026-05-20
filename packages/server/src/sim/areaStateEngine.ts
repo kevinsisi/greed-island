@@ -103,9 +103,17 @@ export type AreaStateTickFacts = Readonly<{
   npcFactionLean: ReadonlyMap<string, FactionId>
 }>
 
+export type FactionSeizureIntent = Readonly<{
+  tileId: string
+  factionId: FactionId
+  previousFactionId: FactionId | null
+  tick: number
+}>
+
 export type AreaStateTickResult = Readonly<{
   changed: ReadonlyArray<AreaState>
   pressureEvents: ReadonlyArray<AreaStatePressureEvent>
+  seizureIntents: ReadonlyArray<FactionSeizureIntent>
 }>
 
 const INITIAL_RESOURCES: ResourceMap = { food: 70, safety: 70, economy: 65 }
@@ -246,6 +254,7 @@ export class AreaStateEngine {
   tick(currentTick: number, facts: AreaStateTickFacts): AreaStateTickResult {
     const changed: AreaState[] = []
     const pressureEvents: AreaStatePressureEvent[] = []
+    const seizureIntents: FactionSeizureIntent[] = []
 
     const npcsByTile = new Map<string, Array<{ npcId: string; faction: FactionId; activity: NpcActivity }>>()
     for (const [npcId, state] of facts.npcStates) {
@@ -339,6 +348,11 @@ export class AreaStateEngine {
             narration,
             detail: { faction: dominantFaction }
           })
+          // Emit seizure intent with hysteresis: new dominant must lead all rivals by ≥ 5.
+          const rivalMax = Math.max(...FACTIONS.filter((f) => f !== dominantFaction).map((f) => factionControl[f]))
+          if (factionControl[dominantFaction] - rivalMax >= 5) {
+            seizureIntents.push({ tileId, factionId: dominantFaction, previousFactionId: before.dominantFaction, tick: currentTick })
+          }
         } else if (before.dominantFaction !== null) {
           const factionName = FACTION_LABEL_ZH[before.dominantFaction]
           const narration = `${tileName}脫離${factionName}的掌控，影響力重新流動。`
@@ -481,7 +495,7 @@ export class AreaStateEngine {
       changed.push(cloneState(next))
     }
 
-    return { changed, pressureEvents }
+    return { changed, pressureEvents, seizureIntents }
   }
 }
 

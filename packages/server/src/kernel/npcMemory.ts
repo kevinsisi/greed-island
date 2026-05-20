@@ -16,6 +16,7 @@ import type {
   AreaPressureCmd,
   BuildingEnterCmd,
   BuildingLeaveCmd,
+  FactionNpcLoyaltyShiftedCmd,
   LivingWorldEventPayload,
   NpcDeceasedCmd,
   NpcHeirAssignedCmd,
@@ -433,6 +434,17 @@ function deriveMemoryRows(
           memoryType: 'event',
           content: { kind: 'npc.heir_assigned', householdId: d.householdId, deceasedNpcId: d.deceasedNpcId, narration, tick },
           importance: 9
+        }
+      ]
+    }
+    case 'FACTION_NPC_LOYALTY_SHIFTED': {
+      const d = data as FactionNpcLoyaltyShiftedCmd
+      return [
+        {
+          npcId: d.npcId,
+          memoryType: 'event',
+          content: { kind: 'faction.loyalty_shifted', tileId: d.tileId, fromFaction: d.fromFaction, toFaction: d.toFaction, narration, tick },
+          importance: 8
         }
       ]
     }

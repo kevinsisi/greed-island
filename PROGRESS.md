@@ -3,6 +3,48 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — Faction Conflict Consequences (v0.33.0)
+
+### Work Done
+
+§43 acceptance gap #2: Faction seizure events + NPC loyalty shifts now propagate into EventLog, projections, chronicle, and AI memory.
+
+**Event types (`livingWorldCommands.ts`):**
+- `FACTION_TILE_SEIZED` (payload: `tileId`, `factionId`, `previousFactionId: string | null`, `seizedAtTick`, `narration`)
+- `FACTION_NPC_LOYALTY_SHIFTED` (payload: `npcId`, `tileId`, `fromFaction`, `toFaction`, `shiftedAtTick`, `narration`)
+
+**New projection (`projections/factionControl.ts`):**
+- `FactionControlProjection` — per-tile dominant faction map; `dominantFactionOf(tileId)`, `dominantTilesOf(factionId)`, `list()`
+- Boot-hydrated via `FACTION_BOOT_EVENT_TYPES` constant in large-log else-branch
+
+**Seizure detection (`sim/areaStateEngine.ts`):**
+- `AreaStateEngine.tick()` returns `seizureIntents: FactionSeizureIntent[]`
+- `previousDominantFaction` tracked in area state; hysteresis ≥5 pts lead required
+
+**Loyalty planner (`sim/factionLoyaltyPlanner.ts`):**
+- `planLoyaltyShifts()` pure function — maps seizure intents + NPC presence + faction lean to shift intents
+- Skips civilian new-dominant; skips already-aligned NPCs; skips off-tile NPCs
+
+**Runtime integration (`sim/runtime.ts`):**
+- `FactionControlProjection` field + fan-out in both event loops + boot hydration
+- `computeNextTick`: seizure → loyalty pipeline; Chinese narration in both command types
+- `getPlayerCivilizationSnapshot()`: `playerFactionTerritories: string[]` via projection
+
+**AI memory (`kernel/npcMemory.ts`):**
+- `FACTION_NPC_LOYALTY_SHIFTED` case added → NPC-scoped memory row (importance 8, kind `faction.loyalty_shifted`)
+
+### Verification
+- `npm run build` — TypeScript clean, version 0.32.0
+- `npm test` — 107 server test files (734 tests), 21 web test files (96 tests) — all pass
+- OpenSpec: `faction-conflict-consequences/` all 29 tasks complete
+
+### Next
+- Archive `faction-conflict-consequences` change
+- §43 gap #3: Settlement famine (needs Phase 2 Goods first)
+- Bump package.json to 0.33.0 before Docker rebuild
+
+---
+
 ## 2026-05-19 — Engineering Cleanup + Interaction Fixes (v0.32.0)
 
 ### Work Done

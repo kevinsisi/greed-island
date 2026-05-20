@@ -185,6 +185,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // NPC Mortality & Lineage (v0.32.0)
   'NPC_DECEASED',
   'NPC_HEIR_ASSIGNED',
+  // Faction Conflict Consequences (v0.33.0)
+  'FACTION_TILE_SEIZED',
+  'FACTION_NPC_LOYALTY_SHIFTED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -303,6 +306,24 @@ export type NpcHeirAssignedCmd = Readonly<{
   deceasedNpcId: string
   heirNpcId: string
   assignedAtTick: number
+  narration: string
+}>
+
+// Faction Conflict Consequences (v0.33.0)
+export type FactionTileSeizedCmd = Readonly<{
+  tileId: string
+  factionId: string
+  previousFactionId: string | null
+  seizedAtTick: number
+  narration: string
+}>
+
+export type FactionNpcLoyaltyShiftedCmd = Readonly<{
+  npcId: string
+  tileId: string
+  fromFaction: string
+  toFaction: string
+  shiftedAtTick: number
   narration: string
 }>
 
@@ -1381,6 +1402,8 @@ export type LivingWorldCommandPayload =
   | PlayerPlayedCardCmd
   | NpcDeceasedCmd
   | NpcHeirAssignedCmd
+  | FactionTileSeizedCmd
+  | FactionNpcLoyaltyShiftedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2543,6 +2566,25 @@ const VALIDATORS: Readonly<
     if (typeof p.deceasedNpcId !== 'string' || p.deceasedNpcId.length === 0) return 'deceasedNpcId required'
     if (typeof p.heirNpcId !== 'string' || p.heirNpcId.length === 0) return 'heirNpcId required'
     if (!isNonNegativeInteger(p.assignedAtTick)) return 'assignedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FACTION_TILE_SEIZED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
+    if (p.previousFactionId !== null && typeof p.previousFactionId !== 'string') return 'previousFactionId must be string or null'
+    if (!isNonNegativeInteger(p.seizedAtTick)) return 'seizedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FACTION_NPC_LOYALTY_SHIFTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.fromFaction !== 'string' || p.fromFaction.length === 0) return 'fromFaction required'
+    if (typeof p.toFaction !== 'string' || p.toFaction.length === 0) return 'toFaction required'
+    if (!isNonNegativeInteger(p.shiftedAtTick)) return 'shiftedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

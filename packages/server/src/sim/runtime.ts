@@ -202,6 +202,9 @@ import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirec
 import { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
+import { FactionControlProjection } from '../projections/factionControl.js'
+import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
+import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
@@ -303,6 +306,11 @@ const GOODS_BOOT_EVENT_TYPES = [
 const MORTALITY_BOOT_EVENT_TYPES = [
   'NPC_DECEASED',
   'NPC_HEIR_ASSIGNED',
+] as const
+// Faction control projection event types — read selectively during fast-boot.
+const FACTION_BOOT_EVENT_TYPES = [
+  'FACTION_TILE_SEIZED',
+  'FACTION_NPC_LOYALTY_SHIFTED',
 ] as const
 
 export type NarrativeEventPayload = Readonly<{
@@ -491,6 +499,7 @@ export class SimulationRuntime {
   private readonly npcMortalityProjection = new NpcMortalityProjection()
   // NpcLineageProjection is initialized in the constructor once profiles are available.
   private npcLineageProjection!: NpcLineageProjection
+  private readonly factionControlProjection = new FactionControlProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1172,7 +1181,11 @@ export class SimulationRuntime {
   }
 
   getPlayerCivilizationSnapshot(accountId: string) {
-    return this.playerCivilizationProjection.snapshot(accountId)
+    const row = this.playerCivilizationProjection.snapshot(accountId)
+    const playerFactionTerritories = row.factionIds.flatMap((fid) =>
+      this.factionControlProjection.dominantTilesOf(fid as any)
+    )
+    return { ...row, playerFactionTerritories }
   }
 
   holdNpcForPlayerDialog(
@@ -1439,6 +1452,7 @@ export class SimulationRuntime {
       this.settlementsProjection.project(ev)
       this.npcMortalityProjection.project(ev)
       this.npcLineageProjection.project(ev)
+      this.factionControlProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -2985,6 +2999,54 @@ export class SimulationRuntime {
       )
     }
 
+    // ---- Faction seizure + NPC loyalty shifts (v0.33.0) ----
+    for (const seizure of areaResult.seizureIntents) {
+      const tileName = TILE_NAME_BY_ID[seizure.tileId] ?? seizure.tileId
+      const factionLabel = FACTION_LABEL_ZH[seizure.factionId] ?? seizure.factionId
+      commands.push(makeLivingWorldCommand(
+        'FACTION_TILE_SEIZED',
+        `faction.${seizure.factionId}`,
+        'system',
+        nextTick,
+        submittedAt,
+        {
+          tileId: seizure.tileId,
+          factionId: seizure.factionId,
+          previousFactionId: seizure.previousFactionId,
+          seizedAtTick: nextTick,
+          narration: `${factionLabel}奪取了${tileName}的主導權。`,
+        }
+      ))
+    }
+    if (areaResult.seizureIntents.length > 0) {
+      const loyaltyShifts = planLoyaltyShifts({
+        seizureIntents: areaResult.seizureIntents,
+        npcStates: npcSnapshot,
+        npcFactionLean: this.npcFactionLean,
+        tick: nextTick,
+      })
+      for (const shift of loyaltyShifts) {
+        const npcProfile = this.profiles.find((p) => p.id === shift.npcId)
+        const npcName = npcProfile?.name.zh ?? shift.npcId
+        const factionLabel = FACTION_LABEL_ZH[shift.toFaction] ?? shift.toFaction
+        commands.push(makeLivingWorldCommand(
+          'FACTION_NPC_LOYALTY_SHIFTED',
+          shift.npcId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            npcId: shift.npcId,
+            tileId: shift.tileId,
+            fromFaction: shift.fromFaction,
+            toFaction: shift.toFaction,
+            shiftedAtTick: nextTick,
+            narration: `${npcName}轉向支持${factionLabel}。`,
+          }
+        ))
+      }
+    }
+
     // ---- 天氣 / 季節 / 稀有窗口 / 世界事件 ----
     if (nextTick % WEATHER_CADENCE_TICKS === 0) {
       const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
@@ -3793,6 +3855,7 @@ export class SimulationRuntime {
         this.settlementsProjection.project(ev)
         this.npcMortalityProjection.project(ev)
         this.npcLineageProjection.project(ev)
+        this.factionControlProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -4433,6 +4496,9 @@ export class SimulationRuntime {
       const mortalityEvents = this.store.readEventsByTypes(MORTALITY_BOOT_EVENT_TYPES)
       this.npcMortalityProjection.rebuildFromEvents(mortalityEvents)
       this.npcLineageProjection.rebuildFromEvents(mortalityEvents)
+      // Faction control projection — rebuild from faction seizure/loyalty events.
+      const factionEvents = this.store.readEventsByTypes(FACTION_BOOT_EVENT_TYPES)
+      this.factionControlProjection.rebuildFromEvents(factionEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state

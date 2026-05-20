@@ -5,6 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.33.0 ✅ shipped — 2026-05-20
+
+**主題：Faction Conflict Consequences (§43 gap #2)**
+
+OpenSpec: `faction-conflict-consequences/` (all 29 implementation tasks complete)。
+
+- ✅ 2 new command types: `FACTION_TILE_SEIZED`, `FACTION_NPC_LOYALTY_SHIFTED` — full payload types + validators.
+- ✅ New projection: `FactionControlProjection` — per-tile dominant faction map; boot-hydrated from `FACTION_BOOT_EVENT_TYPES`; `dominantFactionOf()` / `dominantTilesOf()` / `list()`.
+- ✅ Seizure detection: `AreaStateEngine.tick()` emits `FactionSeizureIntent` when dominant faction changes with hysteresis ≥5 pts lead over all rivals; `previousFactionId` tracked in area state.
+- ✅ Loyalty shift planner: `planLoyaltyShifts()` pure function — for each seizure, fans out to all NPCs on tile whose lean differs from new dominant (skips civilian new-dominant; skips already-aligned NPCs).
+- ✅ Runtime: `FactionControlProjection` field + fan-out + boot hydration; `computeNextTick` wires seizure→loyalty pipeline; Chinese narration embedded in payloads.
+- ✅ Snapshot: `playerFactionTerritories: string[]` added to `getPlayerCivilizationSnapshot()`.
+- ✅ Chronicle narration: "{factionLabel} 奪取了 {tileName} 的主導權。" / "{npcName} 轉向支持 {factionLabel}。"
+- ✅ AI memory: `FACTION_NPC_LOYALTY_SHIFTED` → NPC-scoped row (importance 8) in `npcMemory.ts`.
+- ✅ 107 server test files, 734 tests pass; TypeScript clean.
+
+---
+
 ## v0.32.0 ✅ shipped — 2026-05-19
 
 **主題：NPC Mortality & Lineage (§43 gap #1)**
