@@ -1,6 +1,7 @@
 // Phase 2 §35.1 — read-only goods inventory endpoint.
-// Serves per-holder inventory from GoodsInventoryProjection joined with the
-// goods catalog for display metadata. No auth required (world state is public).
+// Phase 2 §35.4 — market prices endpoint.
+// Serves per-holder inventory from GoodsInventoryProjection and current
+// market prices from MarketPricesProjection. No auth required (world state is public).
 
 import { Router, type Request, type Response } from 'express'
 import { getGoodsSpecies } from '../goods/catalog.js'
@@ -11,6 +12,16 @@ export type GoodsInventoryEntry = Readonly<{
   quantity: number
   nameZh: string
   unit: string
+}>
+
+export type MarketPriceEntry = Readonly<{
+  marketId: string
+  settlementId: string
+  goodsId: string
+  nameZh: string
+  supplyQuantity: number
+  demandQuantity: number
+  priceGold: number
 }>
 
 export function createGoodsRouter(input: { runtime: SimulationRuntime }): Router {
@@ -32,6 +43,23 @@ export function createGoodsRouter(input: { runtime: SimulationRuntime }): Router
         quantity: row.quantity,
         nameZh: meta?.nameZh ?? row.goodsId,
         unit: meta?.unit ?? 'piece',
+      }
+    })
+    res.json(entries)
+  })
+
+  router.get('/goods/market-prices', (_req: Request, res: Response) => {
+    const rows = input.runtime.getMarketPrices()
+    const entries: MarketPriceEntry[] = rows.map((row) => {
+      const meta = getGoodsSpecies(row.goodsId)
+      return {
+        marketId: row.marketId,
+        settlementId: row.settlementId,
+        goodsId: row.goodsId,
+        nameZh: meta?.nameZh ?? row.goodsId,
+        supplyQuantity: row.supplyQuantity,
+        demandQuantity: row.demandQuantity,
+        priceGold: row.priceGold,
       }
     })
     res.json(entries)

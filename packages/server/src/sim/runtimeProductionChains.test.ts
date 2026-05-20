@@ -21,8 +21,8 @@ describe('SimulationRuntime production chains', () => {
       expect(processed).toHaveLength(1)
       expect(processed[0]?.payload).toMatchObject({
         data: {
-          recipeId: 'recipe.salt_marsh_brine.refined_salt',
-          inputGoodsId: 'salt_marsh_brine',
+          recipeId: 'recipe.brine_to_refined_salt',
+          inputGoodsId: 'brine',
           inputQuantity: 10,
           outputGoodsId: 'refined_salt',
           outputQuantity: 4,
@@ -55,7 +55,7 @@ describe('SimulationRuntime production chains', () => {
 function seedStoredBrine(eventStore: SqliteEventStore, quantity: number): void {
   const result = new LivingWorldRuleEngine().evaluate(
     makeLivingWorldCommand('GOODS_STORED', 'settlement.t_central', 'system', 1, 1, {
-      goodsId: 'salt_marsh_brine',
+      goodsId: 'brine',
       quantity,
       holderType: 'settlement',
       holderId: 'settlement.t_central',

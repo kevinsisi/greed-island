@@ -21,7 +21,7 @@ export const CENTRAL_SETTLEMENT_ID = 'settlement.t_central'
 const MARKET_GOODS: readonly MarketGoodsMetadata[] = Object.freeze([
   { goodsId: 'fish', baseDemand: 24, basePriceGold: 6 },
   { goodsId: 'meat', baseDemand: 16, basePriceGold: 9 },
-  { goodsId: 'salt_marsh_brine', baseDemand: 10, basePriceGold: 4 },
+  { goodsId: 'brine', baseDemand: 10, basePriceGold: 4 },
   { goodsId: 'refined_salt', baseDemand: 12, basePriceGold: 14 },
 ])
 

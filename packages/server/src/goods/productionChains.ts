@@ -17,8 +17,8 @@ export type PlannedProduction = Readonly<{
 }>
 
 export const SALT_REFINING_RECIPE: ProductionRecipe = Object.freeze({
-  recipeId: 'recipe.salt_marsh_brine.refined_salt',
-  inputGoodsId: 'salt_marsh_brine',
+  recipeId: 'recipe.brine_to_refined_salt',
+  inputGoodsId: 'brine',
   inputQuantity: 10,
   outputGoodsId: 'refined_salt',
   outputQuantity: 4,

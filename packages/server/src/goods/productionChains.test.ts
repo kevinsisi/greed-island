@@ -5,8 +5,8 @@ import type { GoodsInventoryRow } from '../projections/goodsInventory.js'
 describe('production chains', () => {
   it('exposes the deterministic salt refining recipe', () => {
     expect(listProductionRecipes()).toContainEqual({
-      recipeId: 'recipe.salt_marsh_brine.refined_salt',
-      inputGoodsId: 'salt_marsh_brine',
+      recipeId: 'recipe.brine_to_refined_salt',
+      inputGoodsId: 'brine',
       inputQuantity: 10,
       outputGoodsId: 'refined_salt',
       outputQuantity: 4,
@@ -25,7 +25,7 @@ describe('production chains', () => {
 
 function inventoryRow(quantity: number): GoodsInventoryRow {
   return {
-    goodsId: 'salt_marsh_brine',
+    goodsId: 'brine',
     holderType: 'settlement',
     holderId: 'settlement.t_central',
     tileId: 't_central',

@@ -3,6 +3,27 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — Market Prices API + brine naming fix (v0.35.0)
+
+### Work Done
+
+- Fixed `salt_marsh_brine` → `brine` naming mismatch in `marketPricing.ts` and `productionChains.ts` (goodsId now matches the goods catalog spec)
+- Added `GET /api/goods/market-prices` endpoint — serves current `MarketPriceRow` list from `MarketPricesProjection` with `nameZh` from catalog
+- Updated `goodsRouter.test.ts` to stub `getMarketPrices()` and test the new endpoint
+- All `productionChains.test.ts` and `runtimeProductionChains.test.ts` references updated to use `brine`
+- Updated `recipeId` from `recipe.salt_marsh_brine.refined_salt` → `recipe.brine_to_refined_salt`
+
+### Verification
+- `npm run build:server` — TypeScript clean
+- `npm test` — 108 server test files (737 tests), 21 web test files (96 tests) — all pass
+
+### Next
+- §43 criterion 2 ("settlement famine → neighbouring price rise") is now mechanically wired and observable via `GET /api/goods/market-prices`
+- Consider: `history_chronicle` projection (§30.9) to close §43 criterion 4 ("player away → world continues with arc history")
+- Consider: AI dialog grounding — wire ecosystem projection data into NPC dialog prompts (ARCHITECTURE.md §11.9)
+
+---
+
 ## 2026-05-20 — WORLD_CAPABILITIES.md Part II baseline sync (v0.34.0 doc)
 
 ### Work Done
