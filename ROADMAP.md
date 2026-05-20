@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.38.0 ✅ shipped — 2026-05-20
+
+**主題：Area State Typed Projection (§11.5 closed for area domain)**
+
+- ✅ 新 command type：`AREA_STATE_RECORDED` — `AreaStateRecordedCmd` 加入 `LivingWorldCommandPayload` union；validator 檢查 `tileId`/`state`/`factionControl`/`resources`/`lastUpdatedTick`
+- ✅ 新 projection：`AreaStateProjection` — `getByTileId`/`getAll`/`canonicalHash`，行為與 `NpcStateProjection` 一致（latest by sequence）
+- ✅ Runtime：area engine tick 變化時同步 push `AREA_STATE_RECORDED` 與 `factSetDraft`（雙寫過渡期）；兩個 fan-out 迴圈 + small/large-log boot hydration 都接好
+- ✅ Boot：`AREA_STATE_BOOT_EVENT_TYPES = ['AREA_STATE_RECORDED']`；`hydrateFromEventLog` 優先 typed projection，舊 `area.state.<tileId>` FACT_SET 保留為 fallback
+- ✅ 6 個 projection 單元測試；TypeScript 乾淨；754 server 測試通過
+- ✅ §11.5 NPC + area 兩個 domain 都已 typed；剩下 building occupants / weather / season / rare window / active events 仍走 FACT_SET（未來再分批 typed-migrate）
+
+---
+
 ## v0.37.0 ✅ shipped — 2026-05-20
 
 **主題：AI Dialog Grounding §11.9 — faction control + extinction warnings + history arcs**

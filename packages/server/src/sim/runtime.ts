@@ -207,6 +207,7 @@ import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
+import { AreaStateProjection } from '../projections/areaState.js'
 import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
@@ -311,6 +312,9 @@ const MORTALITY_BOOT_EVENT_TYPES = [
   'NPC_DECEASED',
   'NPC_HEIR_ASSIGNED',
 ] as const
+// Area state projection event types — read selectively during fast-boot
+// so per-tile faction/resource snapshots survive restarts on large logs.
+const AREA_STATE_BOOT_EVENT_TYPES = ['AREA_STATE_RECORDED'] as const
 // Faction control projection event types — read selectively during fast-boot.
 const FACTION_BOOT_EVENT_TYPES = [
   'FACTION_TILE_SEIZED',
@@ -505,6 +509,7 @@ export class SimulationRuntime {
   private npcLineageProjection!: NpcLineageProjection
   private readonly factionControlProjection = new FactionControlProjection()
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
+  private readonly areaStateProjection = new AreaStateProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1485,6 +1490,7 @@ export class SimulationRuntime {
       this.npcLineageProjection.project(ev)
       this.factionControlProjection.project(ev)
       this.historyChronicleProjection.project(ev)
+      this.areaStateProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -3007,8 +3013,26 @@ export class SimulationRuntime {
       npcFactionLean: this.npcFactionLean
     })
     for (const next of areaResult.changed) {
+      // Legacy FACT_SET snapshot — kept as boot fallback for older event logs
+      // that predate AreaStateProjection (§11.5 transitional pattern, mirrors
+      // the NPC_STATE_RECORDED migration).
       stateDrafts.push(
         this.factSetDraft(`${AREA_STATE_PREFIX}${next.tileId}`, next, SIM_ACTOR_WORLD, nextTick)
+      )
+      // Typed event for the projection path.
+      commands.push(
+        makeLivingWorldCommand(
+          'AREA_STATE_RECORDED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            tileId: next.tileId,
+            state: next,
+            narration: 'internal area state projection',
+          }
+        )
       )
     }
     for (const pe of areaResult.pressureEvents) {
@@ -3926,6 +3950,7 @@ export class SimulationRuntime {
         this.npcLineageProjection.project(ev)
         this.factionControlProjection.project(ev)
         this.historyChronicleProjection.project(ev)
+        this.areaStateProjection.project(ev)
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)
@@ -4540,6 +4565,7 @@ export class SimulationRuntime {
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
       this.historyChronicleProjection.rebuildFromEvents(allEvents)
+      this.areaStateProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
       // Ecosystem projections are small relative to the full event log —
@@ -4573,6 +4599,10 @@ export class SimulationRuntime {
       // History chronicle projection — rebuild from narrative arc event types.
       const historyEvents = this.store.readEventsByTypes(HISTORY_CHRONICLE_BOOT_EVENT_TYPES)
       this.historyChronicleProjection.rebuildFromEvents(historyEvents)
+      // Area state projection — rebuild from typed AREA_STATE_RECORDED events.
+      // FACT_SET area.state.<tileId> remains the boot fallback for older logs.
+      const areaStateEvents = this.store.readEventsByTypes(AREA_STATE_BOOT_EVENT_TYPES)
+      this.areaStateProjection.rebuildFromEvents(areaStateEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
@@ -4597,7 +4627,15 @@ export class SimulationRuntime {
       }
     }
     // hydrate area states
+    // §11.5 — prefer the typed AreaStateProjection snapshot; fall back to
+    // the legacy `area.state.<tileId>` FACT_SET for older event logs that
+    // predate AREA_STATE_RECORDED.
     for (const tile of MAP_TILES) {
+      const typed = this.areaStateProjection.getByTileId(tile.id)
+      if (typed) {
+        this.areaEngine.hydrate(tile.id, typed.state)
+        continue
+      }
       const raw = facts[`${AREA_STATE_PREFIX}${tile.id}`]
       if (raw) this.areaEngine.hydrate(tile.id, raw)
     }

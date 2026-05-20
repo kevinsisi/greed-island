@@ -41,6 +41,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MOVE',
   'NPC_ACTIVITY_CHANGE',
   'NPC_STATE_RECORDED',
+  'AREA_STATE_RECORDED',
   'NPC_LIFE_GOAL_SET',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
@@ -217,6 +218,12 @@ export type NpcActivityChangeCmd = Readonly<{
 
 export type NpcStateRecordedCmd = Readonly<{
   npcId: string
+  state: Readonly<Record<string, unknown>>
+  narration: string | null
+}>
+
+export type AreaStateRecordedCmd = Readonly<{
+  tileId: string
   state: Readonly<Record<string, unknown>>
   narration: string | null
 }>
@@ -1285,6 +1292,7 @@ export type LivingWorldCommandPayload =
   | NpcMoveCmd
   | NpcActivityChangeCmd
   | NpcStateRecordedCmd
+  | AreaStateRecordedCmd
   | NpcLifeGoalSetCmd
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
@@ -1450,6 +1458,17 @@ const VALIDATORS: Readonly<
     if (!isRecord(p.state)) return 'state required'
     const err = validateNpcStateSnapshot(p.state)
     if (err) return err
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  AREA_STATE_RECORDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isRecord(p.state)) return 'state required'
+    if (typeof (p.state as Record<string, unknown>).tileId !== 'string') return 'state.tileId required'
+    if (!isRecord((p.state as Record<string, unknown>).factionControl)) return 'state.factionControl required'
+    if (!isRecord((p.state as Record<string, unknown>).resources)) return 'state.resources required'
+    if (typeof (p.state as Record<string, unknown>).lastUpdatedTick !== 'number') return 'state.lastUpdatedTick required'
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },

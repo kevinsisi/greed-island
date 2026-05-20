@@ -3,6 +3,38 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+## 2026-05-20 — Area State Typed Projection §11.5 (v0.38.0)
+
+### Work Done
+
+- 新 command type `AREA_STATE_RECORDED` + `AreaStateRecordedCmd` payload union 加進 `livingWorldCommands.ts`；validator 檢查必要欄位
+- 新 projection `AreaStateProjection`（檔案：`packages/server/src/projections/areaState.ts`）— latest by sequence per tile
+- `runtime.ts` 雙寫：area engine 變化時同時 emit FACT_SET（向後相容）+ `AREA_STATE_RECORDED` 命令；fan-out 兩處 + small/large log boot hydration 都接好
+- `hydrateFromEventLog` 改為優先讀 typed projection，舊 log 仍可 fallback 到 FACT_SET
+- 6 個單元測試（sequence 排序、不同 tile 隔離、忽略非相關事件、canonical hash 確定性）
+
+### Verification
+- `npm run build:server` — TypeScript 乾淨，版本 0.38.0
+- `npx vitest run packages/server` — 754 tests pass（1 pre-existing famine timeout）
+
+### §11.5 FACT_SET Migration 狀態
+
+| Domain | 狀態 |
+|--------|------|
+| NPC state | ✅ typed (NpcStateProjection) |
+| **Area state** | ✅ v0.38.0 (AreaStateProjection) |
+| Building occupants | ❌ 仍 FACT_SET |
+| Weather / Season | ❌ 仍 FACT_SET |
+| Rare window | ❌ 仍 FACT_SET |
+| Active world events | ❌ 仍 FACT_SET |
+
+### Next
+- 剩餘 FACT_SET domain（建築佔用、天氣、季節、稀有窗口、世界事件）的 typed migration
+- BioNode / Forest Regrowth Engine
+- 道路/橋樑作為可建造地圖特徵
+
+---
+
 ## 2026-05-20 — AI Dialog Grounding §11.9 (v0.37.0)
 
 ### Work Done
