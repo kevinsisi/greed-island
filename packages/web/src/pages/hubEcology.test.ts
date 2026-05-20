@@ -42,14 +42,28 @@ describe('hubEcology.buildHubEcologySummaries', () => {
     expect(s.badges[1]!.speciesId).toBe('forest_deer')
   })
 
-  it('flags predator warning when projection has a row for that tile', () => {
+  it('flags predator warning with species ids when projection has rows for that tile', () => {
     const summaries = buildHubEcologySummaries({
       animals: [row('forest_deer', 't_forest', 3)],
       migrations: [],
-      predatorHunger: [{ predatorSpeciesId: 'fog_wolf', tileId: 't_forest', lastKillAtTick: 10 }],
+      predatorHunger: [
+        { predatorSpeciesId: 'fog_wolf', tileId: 't_forest', lastKillAtTick: 10 },
+        { predatorSpeciesId: 'shadow_lynx', tileId: 't_forest', lastKillAtTick: 12 },
+        { predatorSpeciesId: 'fog_wolf', tileId: 't_forest', lastKillAtTick: 15 }, // duplicate dedupes
+      ],
     })
     const t_forest = summaries.find((s) => s.tileId === 't_forest')!
-    expect(t_forest.predatorWarning).toBe(true)
+    expect(t_forest.predatorWarningSpecies).toEqual(['fog_wolf', 'shadow_lynx'])
+  })
+
+  it('returns empty predatorWarningSpecies when no hunger rows match', () => {
+    const summaries = buildHubEcologySummaries({
+      animals: [row('forest_deer', 't_forest', 3)],
+      migrations: [],
+      predatorHunger: [],
+    })
+    const t_forest = summaries.find((s) => s.tileId === 't_forest')!
+    expect(t_forest.predatorWarningSpecies).toEqual([])
   })
 
   it('records migrationsArriving and migrationsDeparting per tile', () => {

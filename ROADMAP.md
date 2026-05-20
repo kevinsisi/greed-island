@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.40.0 ✅ shipped — 2026-05-20
+
+**UX 兩個真實 bug 修正：玩家點不到動物 + 掠食者警告看不出是哪種**
+
+- ✅ **Hub map**：掠食者警告現在會顯示物種名稱（之前只顯示「掠食者飢餓」沒說是哪一隻）。`HubEcologySummary.predatorWarning: boolean` → `predatorWarningSpecies: readonly string[]`；label 變成「霧狼、影貓 飢餓」這種具體寫法。
+- ✅ **AreaScene 動物 hit area**：單隻動物從 radius 15 → 26，群聚從 24 → 32；更可靠的點擊命中。
+- ✅ **AreaScene 物種 inline label**：每隻動物 sprite 下方直接寫 nameZh（「鹿」「狼」「馬」），群聚也是 `nameZh ×count` 而不是只有 `×N`。
+- ✅ **AreaPage 點擊回饋**：成功 / 失敗 / 未登入都有明確 toast；錯誤也 console.warn 方便除錯。
+
+---
+
 ## v0.39.1 ✅ shipped — 2026-05-20
 
 **BioNode 種植循環邏輯 fix**

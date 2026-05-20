@@ -303,14 +303,20 @@ export function AreaPage() {
 
   const handleAnimalHunt = useCallback(
     (speciesId: string, animalId: string) => {
-      if (!token) return
+      if (!token) {
+        showFeedback(false, '請先登入再狩獵')
+        return
+      }
       api
         .playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
         .then((r) => {
-          showFeedback(r.accepted, r.accepted ? '獵捕成功' : (r.reason ?? '未能獵捕'))
+          showFeedback(r.accepted, r.accepted ? `獵捕成功：${speciesId}` : (r.reason ?? `未能獵捕：${speciesId}`))
           if (r.accepted) refreshEcology()
         })
-        .catch(() => showFeedback(false, '動作失敗'))
+        .catch((err) => {
+          console.warn('[area] hunt failed', err)
+          showFeedback(false, `動作失敗：${err?.message ?? '未知錯誤'}`)
+        })
     },
     [token, tileId, showFeedback, refreshEcology]
   )

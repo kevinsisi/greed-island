@@ -26,7 +26,7 @@ import {
 } from './hubCharacterVisualState'
 import type { CharacterFacing, CharacterPoint } from './characterVisualState'
 import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
-import { visualForSpecies } from './speciesPalette'
+import { visualForSpecies, labelForSpecies } from './speciesPalette'
 import type { NpcActivity } from '../state/types'
 import type { HubEcologySummary } from '../pages/hubEcology'
 
@@ -847,10 +847,10 @@ export class MapScene extends Phaser.Scene {
         layer.add(count)
       })
 
-      if (summary.predatorWarning) {
-        // v0.24.2 bugfix: the bare red ring was unreadable. Pair it
-        // with a small ⚠️ glyph + zh label so players can tell at a
-        // glance what's wrong on this tile.
+      if (summary.predatorWarningSpecies.length > 0) {
+        // v0.24.2 bugfix: bare red ring was unreadable.
+        // v0.40.0: include actual species names so the player knows WHICH
+        // predator is hungry, not just "something dangerous nearby".
         const ring = this.add.circle(anchorX, anchorY, TILE_SIZE * 0.55, 0xff5050, 0)
         ring.setStrokeStyle(2, 0xff5050, 0.55)
         layer.add(ring)
@@ -862,9 +862,12 @@ export class MapScene extends Phaser.Scene {
         })
         warnIcon.setOrigin(0.5, 0.5)
         layer.add(warnIcon)
-        const warnLabel = this.add.text(anchorX, anchorY + TILE_SIZE * 0.55 + 4, '掠食者飢餓', {
+        const speciesLabel = summary.predatorWarningSpecies
+          .map((id) => labelForSpecies(id))
+          .join('、')
+        const warnLabel = this.add.text(anchorX, anchorY + TILE_SIZE * 0.55 + 4, `${speciesLabel} 飢餓`, {
           fontFamily: '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
-          fontSize: '9px',
+          fontSize: '10px',
           color: '#ff8a8a',
           stroke: '#0a0a0a',
           strokeThickness: 2,

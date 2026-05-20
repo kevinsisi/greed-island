@@ -671,36 +671,50 @@ export class AreaScene extends Phaser.Scene {
       if (row.animalIds.length <= 5) {
         for (const animalId of row.animalIds) {
           const { x, y } = areaSubcellFromHash(animalId, eco.tileId, 'ecology-placement')
-          const dot = this.add.circle(x, y, 7, visual.color, 0.9)
-          dot.setStrokeStyle(1, 0x0a0a0a, 0.7)
-          dot.setInteractive(new Phaser.Geom.Circle(0, 0, 15), Phaser.Geom.Circle.Contains)
+          const dot = this.add.circle(x, y, 9, visual.color, 0.9)
+          dot.setStrokeStyle(1.5, 0x0a0a0a, 0.8)
+          // v0.40.0: bigger hit radius (was 15) — small ecology dots were
+          // unreliably tappable on touch + mouse alike. 26px is the same
+          // ratio as the cluster bg, which works well in playtests.
+          dot.setInteractive(new Phaser.Geom.Circle(0, 0, 26), Phaser.Geom.Circle.Contains)
           dot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             pointer.event?.stopPropagation?.()
             this.suppressNextPointerTarget = true
-            this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×1`, x, y)
+            this.flashInspectHint(`獵 ${labelForSpecies(row.speciesId)}`, x, y)
             this.callbacks.onAnimalHunt?.(row.speciesId, animalId)
           })
           layer.add(dot)
           const glyph = this.add.text(x, y - 1, visual.emoji, {
             fontFamily:
               '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
-            fontSize: '11px',
+            fontSize: '12px',
             color: '#ffffff',
           })
           glyph.setOrigin(0.5, 0.5)
           layer.add(glyph)
-          layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE, AREA_TILE_SIZE, `${labelForSpecies(row.speciesId)} ×1`))
+          // v0.40.0: always show species nameZh under each animal so the
+          // user knows WHAT they're about to hunt before clicking.
+          const nameLabel = this.add.text(x, y + 11, labelForSpecies(row.speciesId), {
+            fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
+            fontSize: '9px',
+            color: '#fff5b8',
+            stroke: '#0a0a0a',
+            strokeThickness: 2,
+          })
+          nameLabel.setOrigin(0.5, 0)
+          layer.add(nameLabel)
+          layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE, AREA_TILE_SIZE, `獵 ${labelForSpecies(row.speciesId)}`))
         }
       } else {
         // Cluster at a deterministic spot derived from speciesId + tileId.
         const { x, y } = areaSubcellFromHash(row.speciesId, eco.tileId, 'ecology-cluster')
-        const bg = this.add.circle(x, y, 14, 0x141820, 0.85)
+        const bg = this.add.circle(x, y, 16, 0x141820, 0.85)
         bg.setStrokeStyle(2, visual.color, 0.95)
-        bg.setInteractive(new Phaser.Geom.Circle(0, 0, 24), Phaser.Geom.Circle.Contains)
+        bg.setInteractive(new Phaser.Geom.Circle(0, 0, 32), Phaser.Geom.Circle.Contains)
         bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
           pointer.event?.stopPropagation?.()
           this.suppressNextPointerTarget = true
-          this.flashInspectHint(`${labelForSpecies(row.speciesId)} ×${row.count}`, x, y)
+          this.flashInspectHint(`獵 ${labelForSpecies(row.speciesId)} ×${row.count}`, x, y)
           const firstId = row.animalIds[0]
           if (firstId !== undefined) {
             this.callbacks.onAnimalHunt?.(row.speciesId, firstId)
@@ -710,21 +724,23 @@ export class AreaScene extends Phaser.Scene {
         const glyph = this.add.text(x, y, visual.emoji, {
           fontFamily:
             '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
-          fontSize: '18px',
+          fontSize: '20px',
           color: '#ffffff',
         })
         glyph.setOrigin(0.5, 0.5)
         layer.add(glyph)
-        const count = this.add.text(x + 14, y + 8, `×${row.count}`, {
-          fontFamily: 'Inter, "Noto Sans TC", system-ui, sans-serif',
-          fontSize: '11px',
+        // v0.40.0: species name + count, both visible. The old "x8" alone
+        // gave no clue what the cluster actually was.
+        const speciesLabel = this.add.text(x, y + 19, `${labelForSpecies(row.speciesId)} ×${row.count}`, {
+          fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
+          fontSize: '10px',
           color: '#fff5b8',
           stroke: '#0a0a0a',
           strokeThickness: 2,
         })
-        count.setOrigin(0, 0.5)
-        layer.add(count)
-        layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE * 1.4, AREA_TILE_SIZE * 1.2, `${labelForSpecies(row.speciesId)} ×${row.count}`))
+        speciesLabel.setOrigin(0.5, 0)
+        layer.add(speciesLabel)
+        layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE * 1.4, AREA_TILE_SIZE * 1.4, `獵 ${labelForSpecies(row.speciesId)} ×${row.count}`))
       }
     }
 

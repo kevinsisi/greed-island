@@ -24,7 +24,8 @@ export type HubEcologySummary = Readonly<{
   tileId: string
   /** Top 2 species by count desc, lex tiebreak. Length 0–2. */
   badges: readonly EcologyBadge[]
-  predatorWarning: boolean
+  /** Hungry predator species ids on this tile (empty array = no warning). */
+  predatorWarningSpecies: readonly string[]
   /** Migration waves arriving at this tile (to draw an incoming arrow). */
   migrationsArriving: readonly MigrationDirection[]
   /** Migration waves leaving this tile. */
@@ -56,7 +57,11 @@ export function buildHubEcologySummaries(input: {
       (a, b) => b.count - a.count || a.speciesId.localeCompare(b.speciesId)
     )
     const badges = rows.slice(0, 2).map((r) => ({ speciesId: r.speciesId, count: r.count }))
-    const predatorWarning = input.predatorHunger.some((p) => p.tileId === tileId)
+    const predatorWarningSpecies = input.predatorHunger
+      .filter((p) => p.tileId === tileId)
+      .map((p) => p.predatorSpeciesId)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx)
+      .sort()
     const migrationsArriving = input.migrations
       .filter((m) => m.toTileId === tileId)
       .map((m) => ({ fromTileId: m.fromTileId, toTileId: m.toTileId, speciesId: m.speciesId }))
@@ -66,7 +71,7 @@ export function buildHubEcologySummaries(input: {
     summaries.push({
       tileId,
       badges,
-      predatorWarning,
+      predatorWarningSpecies,
       migrationsArriving,
       migrationsDeparting,
     })
