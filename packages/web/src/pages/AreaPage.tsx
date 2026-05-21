@@ -398,7 +398,10 @@ export function AreaPage() {
       )}
 
       {/* 下方：建築物進入按鈕 + tab 區 */}
-      <div className="mt-2 px-2 pb-3 flex flex-col gap-2">
+      {/* flex-col-reverse: mobile — panel appears above sticky tab bar; lg:flex-col: desktop normal order */}
+      <div className="mt-2 px-2 flex flex-col-reverse lg:flex-col gap-2">
+        {/* sticky tab bar wrapper — sticks just above MobileTabBar on mobile */}
+        <div className="sticky bottom-[56px] z-[25] lg:static lg:z-auto pb-3 lg:pb-0 -mx-2 px-2 lg:mx-0 lg:px-0 bg-ground-900/98 lg:bg-transparent backdrop-blur lg:backdrop-blur-none border-t lg:border-0 border-ground-800/50 pt-2 lg:pt-0">
         <div className="min-h-[44px]">
           <button
             type="button"
@@ -447,6 +450,7 @@ export function AreaPage() {
             onClick={() => toggleTab('players')}
           />
         </div>
+        </div>{/* end sticky tab bar wrapper */}
 
         {drawerTab && (
           <div className="bg-ground-900/95 border border-ground-700 rounded-sharp p-3 max-h-[44vh] overflow-y-auto flex flex-col gap-2">

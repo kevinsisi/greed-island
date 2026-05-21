@@ -256,7 +256,7 @@ export function AreaPhaserGame({
   return (
     <div
       ref={containerRef}
-      className="w-full max-w-[600px] mx-auto aspect-[3/2] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
+      className="w-full max-w-[600px] mx-auto aspect-[4/3] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
       style={{ touchAction: 'none' }}
     />
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../state/AuthContext'
 import { useI18n, type TranslationKey } from '../../i18n'
 import { AtmosphereBar } from '../game/AtmosphereBar'
@@ -71,6 +71,9 @@ function visibleNavItems(account: ServerAccount | null): NavItem[] {
 }
 
 export function GameShell({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const isAreaRoute = location.pathname.startsWith('/area/')
+
   return (
     <div className="min-h-full flex flex-col bg-ground-900 text-ground-100">
       <Brandbar />
@@ -94,7 +97,7 @@ export function GameShell({ children }: { children: ReactNode }) {
         <EventTicker />
       </div>
 
-      <EventTickerStrip />
+      {!isAreaRoute && <EventTickerStrip />}
       <MobileTabBar />
       <DesktopFooter />
     </div>
