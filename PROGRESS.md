@@ -3,6 +3,94 @@
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
 
+---
+
+## 2026-05-21 — Handoff Snapshot @ v0.44.0
+
+### Current Version
+`package.json` root is `0.44.0`. Build is clean. No CI blocker.
+
+### What Was Shipped This Session (v0.41.0 → v0.44.0)
+
+**v0.41.0 — NPC work actually harvests + visible plant sprites + density bars**
+- `runtime.ts` productive-event handler now emits `BIO_NODE_HARVESTED` + `GOODS_EXTRACTED` when plants are on tile
+- `AreaScene.ts` `drawEcologyOverlay()` draws plant sprites (leaf icon) with density bar below each tile's plant layer
+- Confirmed in-world: forest oak density 100 → 80.5 within hours of boot
+
+**v0.41.1 — Animal click inspection zone root-cause fix**
+- Root cause: `createInspectZone` was intercepting pointer events but never calling `onAnimalHunt`
+- Fix: added optional `onPointerDown` callback param to `createInspectZone(x,y,w,h,msg,depth?,onPointerDown?)`
+- Animal inspect zones now wire through to `onAnimalHunt`, solving "動物點不到"
+
+**v0.42.0 — OpenCode as primary AI provider + Gemini 429 cooldown**
+- New `openCodeClient.ts`: session-lifecycle client for self-hosted OpenCode server (POST /session → message → DELETE)
+- New `aiProvider.ts`: provider router — tries `[opencode, gemini]` by priority order, throws `AiUnavailableError` if all fail
+- `geminiClient.ts`: quota (429) errors now set `disabled_until = now + 30min` instead of permanent disable; `listActiveKeys()` auto-promotes expired keys
+- `kv_settings` table added to SQLite for `opencode_base_url`, `opencode_model`, `provider_priority`
+- `settingsRouter.ts`: `GET/PUT /api/settings/providers` — read/write all three config values
+- `server.ts`: seeds OpenCode config from env vars `OPENCODE_BASE_URL` / `OPENCODE_MODEL` on first boot
+- `SettingsPage.tsx`: "AI Provider" section with 3 inputs + save button
+- `AreaPage.tsx` AI gate: `countActive() > 0 || isOpenCodeConfigured(settings)` (no longer blocked when only OpenCode configured)
+
+**v0.43.0 — NPC sub-grid dispersal (no more clumping)**
+- `npcEngine.ts` Phase 1.5 in `tick()`: groups NPCs by `(tile, activity)`, skips movers + indoor NPCs, sorts deterministically by npcId, assigns grid positions via `dispersedSubAnchor(rank, total)`
+- `dispersedSubAnchor`: near-square grid across the SUB_INNER range (13×8), pure function, positions step toward target 1 unit/tick
+- Result: 5 NPCs in same tile spread across the sub-grid rather than all stacking at column 8 row 4
+
+**v0.44.0 — NPC opportunistic animal hunting (food chain runs)**
+- `runtime.ts` productive event handler: 1-in-8 deterministic gate (hash-based), picks highest-count herbivore/fish species on tile
+- Emits `ANIMAL_KILLED` (count=1) + `GOODS_EXTRACTED` (meat/fish goods from species.harvestGoodsId)
+- Food chain is now active: ecosystem pressure visible within hours of NPC work sessions
+
+### Active Blockers / Known Issues
+- None blocking CI or build.
+- OpenCode service: user must configure URL in /settings after Docker rebuild. OpenCode runs at port 4096 via `home-basic` project (`http://host.docker.internal:4096`).
+- FACT_SET migration for building occupants / weather / season / rare window / active events still pending (lower priority than UI and combat work).
+
+### Next Two Milestones
+
+**v0.45.0 / v0.45.1 — UI Mobile Refactor (planned, not started)**
+
+Phase 1 (v0.45.0, ~2hr, low risk — CSS/layout only):
+- Brandbar split into 2 layers: row-1 (logo + ping + 48px tall), row-2 (area name + clock + 36px tall); sm+ collapses back to 1 row 56px
+- MobileTabBar: 5 visible primary tabs + "⋯ More" popover for Settings/Account/Admin; min-height 56px; icons ≥44px tap target
+- `AreaPage` max-width 600px on sm+, full-bleed on xs
+- All `createInspectZone` hit areas ≥44px (current smallest is ~26px for animals)
+- EventTickerStrip simplified to 3-line rotating strip; no scroll needed
+
+Phase 2 (v0.45.1, ~4hr, medium risk — canvas + drawer):
+- `AreaScene` canvas size: `window.innerWidth - 16` wide, `4:3` aspect ratio; recalculate on resize via `window.innerWidth` tracking
+- Drawer replaced with BottomSheet: fixed bottom, 50vh height, slides up over canvas on "inspect" or "interact" actions
+- EventTickerStrip merged into BottomSheet "events" tab
+
+**v0.46.0 — Wildlife Combat (planned, not started)**
+
+Full design in session transcript. Summary:
+- `COMBAT_INITIATE` schema extended: `npcActorId` → `enemyActorId + enemyType: 'npc'|'animal'`
+- Animal combat stats derived from `species.aggression` (≥0.5 = fight-capable)
+- Weak animals (aggression < 0.5): instant hunt → `PLAYER_HUNTED_ANIMAL` event
+- Strong animals: confirm dialog → Phase C sub-tick combat loop; animal AI = fixed damage per round, flee at low HP
+- Extinction protection: cannot initiate combat when species count ≤ 3
+- `CombatHud` adapted to show animal portrait + estimated difficulty
+
+### Docker Rebuild Reminder (MUST READ)
+```bash
+# Always prefix with DOCKER_BUILDKIT=0 on this machine
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml down
+DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml up -d --build
+curl -s http://127.0.0.1:8100/healthz
+```
+- `deploy/.env` must keep `JWT_SECRET=local-development-secret-0-15-24` — changing it invalidates all browser JWT cookies
+- `docker compose down` preserves `deploy/data/` (SQLite EventLog). `down -v` destroys it — only use for fresh world
+
+### Verification Evidence (v0.44.0)
+- `npm run build:server` — TypeScript clean
+- `npm run build:web` — TypeScript clean, Vite chunk-size warning only (pre-existing)
+- `npx vitest run packages/server` — all server tests pass
+- Deployed to local Docker; forest oak density confirmed declining (harvesting working); animal counts fluctuating (food chain active)
+
+---
+
 ## 2026-05-20 — BioNode / Forest Regrowth Engine Phase E5 (v0.39.0)
 
 ### Work Done

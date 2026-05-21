@@ -5,6 +5,96 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.46.0 🔜 planned — Wildlife Combat
+
+**主題：玩家與野生動物的真實戰鬥**
+
+- [ ] `COMBAT_INITIATE` schema 擴展：`npcActorId` → `enemyActorId + enemyType: 'npc'|'animal'`
+- [ ] 動物戰鬥數值：`species.aggression` ≥ 0.5 = 可戰鬥；< 0.5 = 即時狩獵（PLAYER_HUNTED_ANIMAL）
+- [ ] 弱小動物：直接獵殺路徑，跳過 Phase C sub-tick
+- [ ] 強大動物：confirm dialog → Phase C 戰鬥迴圈；動物 AI = 固定傷害/回合，HP 低時逃跑
+- [ ] 滅絕保護：物種數量 ≤ 3 時無法發起戰鬥
+- [ ] `CombatHud` 適配動物敵人（動物肖像 + 預估難度）
+
+---
+
+## v0.45.1 🔜 planned — UI Refactor Phase 2 (canvas + drawer)
+
+**主題：AreaScene 響應式畫布 + BottomSheet 替換 Drawer（中風險）**
+
+- [ ] `AreaScene` canvas 尺寸：`window.innerWidth - 16` 寬，4:3 比例；resize 事件重算
+- [ ] Drawer → `BottomSheet` component：fixed bottom，50vh，從底部滑入
+- [ ] EventTickerStrip 合併進 BottomSheet "events" tab
+
+---
+
+## v0.45.0 🔜 planned — UI Refactor Phase 1 (CSS/layout, low risk)
+
+**主題：行動端操作性重構 Phase 1**
+
+- [ ] Brandbar 拆成 2 層：row-1（logo + ping + 48px）、row-2（區域名稱 + 時鐘 + 36px）；sm+ 折回 1 列 56px
+- [ ] MobileTabBar：5 個主要 tab + "⋯ More" popover（設定 / 帳號 / 管理員）；最小高度 56px；圖示觸控區 ≥ 44px
+- [ ] `AreaPage` max-width 600px (sm+)，xs 全寬
+- [ ] 所有 `createInspectZone` 觸控區 ≥ 44px
+- [ ] EventTickerStrip 簡化為 3 行輪播，不需滾動
+
+---
+
+## v0.44.0 ✅ shipped — 2026-05-21
+
+**主題：NPC 機會性動物狩獵 — 食物鏈啟動**
+
+- ✅ `runtime.ts` productive event handler：1/8 機率的確定性閘（hash-based roll）
+- ✅ 選擇 tile 上數量最多的草食性/魚類 species；emit `ANIMAL_KILLED` (count=1) + `GOODS_EXTRACTED`（肉/魚 goods）
+- ✅ 食物鏈現在真的在跑：NPC 工作數小時後動物族群可見波動
+
+---
+
+## v0.43.0 ✅ shipped — 2026-05-21
+
+**主題：NPC 次格位分散 — 不再疊在同一點**
+
+- ✅ `npcEngine.ts` Phase 1.5 dispersal loop：按 `(tile, activity)` 分組，排除移動中與室內 NPC
+- ✅ 純函式 `dispersedSubAnchor(rank, total)`：在 13×8 SUB_INNER 範圍內算近似正方形格位
+- ✅ 每 tick 步進 1 單位趨向目標格位（不瞬移）
+- ✅ 5 個 NPC 同 tile 現在平均分散在次格位，而非全部疊在 col8 row4
+
+---
+
+## v0.42.0 ✅ shipped — 2026-05-21
+
+**主題：AI Provider 路由 — OpenCode 主 + Gemini fallback + 429 自動恢復**
+
+- ✅ 新模組 `openCodeClient.ts`：session 生命週期 client（POST /session → message → DELETE）；SESSION_TIMEOUT 60s
+- ✅ 新模組 `aiProvider.ts`：provider 路由器，按優先級清單（預設 `opencode,gemini`）依序嘗試；全部失敗丟 `AiUnavailableError`
+- ✅ `geminiClient.ts`：quota(429) 改為 `disabled_until = now + 30min`；`listActiveKeys()` 自動升級過期 cooldown key
+- ✅ SQLite 新增 `kv_settings` table；`opencode_base_url` / `opencode_model` / `provider_priority` 三個設定值
+- ✅ `settingsRouter.ts`：`GET/PUT /api/settings/providers` endpoint
+- ✅ `server.ts`：從 env `OPENCODE_BASE_URL`/`OPENCODE_MODEL` 初始化 kv_settings（首次啟動）
+- ✅ `SettingsPage.tsx`：新增「AI Provider」section，三個輸入欄位 + 儲存按鈕
+- ✅ `AreaPage.tsx` AI gate 更新：`countActive() > 0 || isOpenCodeConfigured(settings)`
+
+---
+
+## v0.41.1 ✅ shipped — 2026-05-21
+
+**動物點擊根本原因修正**
+
+- ✅ 根本原因：`createInspectZone` 攔截了 pointer 事件但從未呼叫 `onAnimalHunt`
+- ✅ 修正：`createInspectZone(x,y,w,h,msg,depth?,onPointerDown?)` 加入可選回呼；動物 zone 接入 `onAnimalHunt`
+
+---
+
+## v0.41.0 ✅ shipped — 2026-05-21
+
+**主題：NPC 工作真的收穫 + 植物 sprite 可見 + 密度條**
+
+- ✅ `runtime.ts` productive event handler：emit `BIO_NODE_HARVESTED` + `GOODS_EXTRACTED`（當 tile 有植物時）
+- ✅ `AreaScene.ts` `drawEcologyOverlay()`：植物 sprite（葉片圖示）+ 密度條，疊加在各 tile 上
+- ✅ 實測：橡樹密度 100 → 80.5（NPC 工作數小時後）
+
+---
+
 ## v0.40.0 ✅ shipped — 2026-05-20
 
 **UX 兩個真實 bug 修正：玩家點不到動物 + 掠食者警告看不出是哪種**
