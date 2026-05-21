@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
 import { isChronicleSurfaceEvent } from '../../state/eventVisibility'
@@ -48,20 +48,35 @@ export function EventTicker() {
   )
 }
 
-// 行動裝置上，EventTickerStrip 必須浮在 MobileTabBar (fixed bottom-0, ~56px 高)
-// 之上，否則會被 nav bar 遮住。改用 fixed 定位 + 對齊 nav 高度。
-// MobileTabBar：py-2.5 + 內含 18px glyph + 2px gap + 12px text-[10px] ≈ 56px。
-// 留一點容差用 bottom-[60px]。z-20 比 main 高、比 nav (z-30) 低，方便 tap nav。
+// 行動裝置上，EventTickerStrip 浮在 MobileTabBar (min-h-[56px]) 之上。
+// 使用 fixed bottom-[60px] + z-20（低於 nav z-30，高於 main）。
+// 顯示最近 3 個事件，每 5s 自動輪替，並顯示 1/3、2/3 等計數。
 export function EventTickerStrip() {
   const { events } = useWorldState()
   const { t } = useI18n()
-  const head = events.find(isChronicleSurfaceEvent)
+  const [idx, setIdx] = useState(0)
+
+  const visible = events.filter(isChronicleSurfaceEvent).slice(0, 3)
+
+  useEffect(() => {
+    if (visible.length <= 1) return
+    const id = window.setInterval(() => {
+      setIdx((prev) => (prev + 1) % visible.length)
+    }, 5000)
+    return () => window.clearInterval(id)
+  }, [visible.length])
+
+  const current = visible[Math.min(idx, visible.length - 1)] ?? null
+
   return (
     <div className="lg:hidden fixed bottom-[60px] inset-x-0 z-20 border-t border-b border-ground-800 bg-ground-900/95 backdrop-blur px-4 py-2 text-[12px] font-display tracking-tight text-ground-300">
       <div className="flex items-baseline gap-2">
         <span className="text-[10px] uppercase text-ember-500 shrink-0">{t('ticker.heading')}</span>
-        {head ? (
-          <span className="truncate">{head.narration}</span>
+        {visible.length > 1 && (
+          <span className="text-[10px] text-ground-600 shrink-0">{idx + 1}/{visible.length}</span>
+        )}
+        {current ? (
+          <span className="truncate">{current.narration}</span>
         ) : (
           <span className="italic text-ground-500">{t('ticker.empty')}</span>
         )}

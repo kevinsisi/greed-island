@@ -1,18 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildChronicleContext, renderChronicle, type ChronicleContext } from './chronicleRenderer.js'
-import { generateWithKeyPool } from '../npcs/geminiClient.js'
+import { generateWithProviders } from '../npcs/aiProvider.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
 import type { Event } from './types.js'
 
-vi.mock('../npcs/geminiClient.js', () => ({
-  generateWithKeyPool: vi.fn()
+vi.mock('../npcs/aiProvider.js', () => ({
+  generateWithProviders: vi.fn()
 }))
 
-const mockedGenerate = vi.mocked(generateWithKeyPool)
+const mockedGenerate = vi.mocked(generateWithProviders)
 
 function makeSettings(activeKeys = 1): SettingsStore {
-  return { countActive: () => activeKeys } as unknown as SettingsStore
+  return {
+    countActive: () => activeKeys,
+    getSetting: () => null,
+  } as unknown as SettingsStore
 }
 
 function makeContext(): ChronicleContext {
@@ -42,11 +45,14 @@ describe('chronicle AI rendering', () => {
   })
 
   it('uses grounded AI JSON when cited names are allowed', async () => {
-    mockedGenerate.mockResolvedValue(JSON.stringify({
-      zh: 'npc-a 和 npc-b 的交談被記入編年史。',
-      en: 'npc-a and npc-b were recorded in the chronicle.',
-      citedNames: ['npc-a', 'npc-b']
-    }))
+    mockedGenerate.mockResolvedValue({
+      text: JSON.stringify({
+        zh: 'npc-a 和 npc-b 的交談被記入編年史。',
+        en: 'npc-a and npc-b were recorded in the chronicle.',
+        citedNames: ['npc-a', 'npc-b']
+      }),
+      provider: 'gemini'
+    })
 
     const rendered = await renderChronicle({
       context: makeContext(),
@@ -66,11 +72,14 @@ describe('chronicle AI rendering', () => {
   it('retries transient chronicle AI failures with observable metadata', async () => {
     mockedGenerate
       .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))
-      .mockResolvedValueOnce(JSON.stringify({
-        zh: 'npc-a 和 npc-b 的事件在重試後被寫成編年史。',
-        en: 'npc-a and npc-b were chronicled after retry.',
-        citedNames: ['npc-a', 'npc-b']
-      }))
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          zh: 'npc-a 和 npc-b 的事件在重試後被寫成編年史。',
+          en: 'npc-a and npc-b were chronicled after retry.',
+          citedNames: ['npc-a', 'npc-b']
+        }),
+        provider: 'gemini'
+      })
 
     const rendered = await renderChronicle({
       context: makeContext(),
@@ -167,11 +176,14 @@ describe('chronicle AI rendering', () => {
   })
 
   it('falls back when AI cites names outside the grounded context', async () => {
-    mockedGenerate.mockResolvedValue(JSON.stringify({
-      zh: 'npc-a、npc-b 和不存在的人一起密談。',
-      en: 'npc-a, npc-b, and a stranger met.',
-      citedNames: ['npc-a', 'npc-b', 'stranger']
-    }))
+    mockedGenerate.mockResolvedValue({
+      text: JSON.stringify({
+        zh: 'npc-a、npc-b 和不存在的人一起密談。',
+        en: 'npc-a, npc-b, and a stranger met.',
+        citedNames: ['npc-a', 'npc-b', 'stranger']
+      }),
+      provider: 'gemini'
+    })
 
     const rendered = await renderChronicle({
       context: makeContext(),

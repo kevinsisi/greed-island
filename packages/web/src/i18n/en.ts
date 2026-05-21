@@ -22,6 +22,7 @@ export const en: Translations = {
   'nav.admin': 'Admin',
   'nav.settings': 'API keys',
   'nav.gmWorld': 'GM world',
+  'nav.more': 'More',
 
   'hub.eyebrow': 'Tideway · districts',
   'hub.title': 'Tideway today',

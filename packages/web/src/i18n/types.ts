@@ -37,6 +37,7 @@ export type TranslationKey =
   | 'nav.admin'
   | 'nav.settings'
   | 'nav.gmWorld'
+  | 'nav.more'
   // hub (city map of areas)
   | 'hub.eyebrow'
   | 'hub.title'

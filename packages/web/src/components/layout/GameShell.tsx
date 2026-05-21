@@ -106,17 +106,19 @@ function Brandbar() {
   const { account } = useAuth()
   return (
     <header className="sticky top-0 z-20 border-b border-ground-800 bg-ground-900/95 backdrop-blur supports-[backdrop-filter]:bg-ground-900/70">
-      <div className="px-4 sm:px-6 lg:px-10 h-14 flex items-center gap-3">
+      {/* Row 1: always visible — h-12 on xs, h-14 on sm+ */}
+      <div className="px-4 sm:px-6 lg:px-10 h-12 sm:h-14 flex items-center gap-3">
         <BrandMark />
         <VersionTag />
         <div className="flex-1" />
-        {account && <PlayerResources />}
+        {/* Resources visible in Row 1 on sm+; xs uses Row 2 */}
+        {account && <div className="hidden sm:flex"><PlayerResources /></div>}
         <LanguageToggle />
         <NavLink
           to={account ? '/profile' : '/account'}
           className={({ isActive }) =>
             [
-              'gi-touch px-3 hidden sm:inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
+              'gi-touch px-2 sm:px-3 inline-flex items-center gap-1 sm:gap-2 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
               isActive
                 ? 'border-ember-600 text-ember-400 bg-ember-500/5'
                 : account
@@ -128,13 +130,22 @@ function Brandbar() {
           {account ? (
             <>
               <Avatar avatar={account.avatar} size="sm" />
-              <span className="truncate max-w-[8rem]">{account.displayName}</span>
+              <span className="hidden sm:inline truncate max-w-[8rem]">{account.displayName}</span>
             </>
           ) : (
-            t('account.signin')
+            <>
+              <span className="sm:hidden">◐</span>
+              <span className="hidden sm:inline">{t('account.signin')}</span>
+            </>
           )}
         </NavLink>
       </div>
+      {/* Row 2: xs only (sm:hidden) — player resources visible on mobile */}
+      {account && (
+        <div className="sm:hidden border-t border-ground-800/40 px-4 h-9 flex items-center bg-ground-950/40">
+          <PlayerResources />
+        </div>
+      )}
     </header>
   )
 }
@@ -174,7 +185,7 @@ function PlayerResources() {
   if (!resources) return null
 
   return (
-    <div className="hidden md:inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest">
+    <div className="inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest">
       <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
         <span className="text-ember-400">{resources.gold.toLocaleString()}</span> 潮幣
       </span>
@@ -226,7 +237,7 @@ function LanguageToggle() {
   const { locale, setLocale, supportedLocales, localeLabel, t } = useI18n()
   return (
     <div
-      className="hidden sm:inline-flex items-center border border-ground-700 rounded-sharp overflow-hidden"
+      className="inline-flex items-center border border-ground-700 rounded-sharp overflow-hidden"
       role="group"
       aria-label={t('language.label')}
     >
@@ -319,40 +330,108 @@ function DesktopRail() {
   )
 }
 
+// Primary 4 tabs always pinned; auth + admin items go into "⋯ More" when overflow exists.
+const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/social']
+
 function MobileTabBar() {
   const { t } = useI18n()
   const { account } = useAuth()
+  const [moreOpen, setMoreOpen] = useState(false)
+
   const items = visibleNavItems(account ?? null)
-  // Cap mobile nav at 5 columns to keep tap targets large enough; admin
-  // users see /admin and /settings via the profile/account page when the
-  // list overflows.
-  const visible = items.slice(0, 5)
-  const colsClass =
-    visible.length === 4 ? 'grid-cols-4' : visible.length === 5 ? 'grid-cols-5' : 'grid-cols-6'
+  const primaryItems = items.filter((item) => PRIMARY_PATHS.includes(item.to))
+  const profileItem = items.find((item) => item.to === '/profile' || item.to === '/account')
+  const overflowItems = items.filter(
+    (item) => !PRIMARY_PATHS.includes(item.to) && item.to !== '/profile' && item.to !== '/account'
+  )
+  const hasOverflow = overflowItems.length > 0
+  const moreItems: NavItem[] = hasOverflow
+    ? ([profileItem, ...overflowItems].filter(Boolean) as NavItem[])
+    : []
+
+  const tabClass = (isActive: boolean) =>
+    [
+      'gi-touch flex flex-col items-center justify-center gap-0.5 w-full min-h-[56px] transition-colors',
+      isActive ? 'text-ember-400' : 'text-ground-400 hover:text-ground-100',
+    ].join(' ')
+
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ground-800 bg-ground-900/95 backdrop-blur">
-      <ul className={`grid ${colsClass}`}>
-        {visible.map((item) => (
-          <li key={item.to}>
-            <NavLink
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                [
-                  'gi-touch flex flex-col items-center justify-center gap-0.5 py-2.5 transition-colors',
-                  isActive ? 'text-ember-400' : 'text-ground-400 hover:text-ground-100'
-                ].join(' ')
-              }
-            >
-              <span className="font-display text-lg leading-none">{item.glyph}</span>
-              <span className="text-[10px] font-display uppercase tracking-tightest">
-                {t(item.labelKey)}
-              </span>
-            </NavLink>
+    <>
+      {/* backdrop — closes the More popover when tapping outside */}
+      {moreOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-20"
+          onClick={() => setMoreOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ground-800 bg-ground-900/95 backdrop-blur">
+        {/* More popover */}
+        {moreOpen && (
+          <div className="absolute bottom-full inset-x-0 border-t border-ground-800 bg-ground-900/98 backdrop-blur px-4 py-3 flex flex-col gap-1 shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
+            {moreItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                onClick={() => setMoreOpen(false)}
+                className={({ isActive }) =>
+                  [
+                    'gi-touch flex items-center gap-3 px-3 py-2.5 rounded-sharp transition-colors',
+                    isActive
+                      ? 'text-ember-400 bg-ember-500/5'
+                      : 'text-ground-300 hover:text-ground-100 hover:bg-ground-800',
+                  ].join(' ')
+                }
+              >
+                <span className="font-display text-lg leading-none w-5 text-center">{item.glyph}</span>
+                <span className="text-[12px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
+              </NavLink>
+            ))}
+          </div>
+        )}
+        {/* Always 5 columns */}
+        <ul className="grid grid-cols-5">
+          {primaryItems.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.to === '/'}
+                onClick={() => setMoreOpen(false)}
+                className={({ isActive }) => tabClass(isActive)}
+              >
+                <span className="font-display text-lg leading-none">{item.glyph}</span>
+                <span className="text-[10px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
+              </NavLink>
+            </li>
+          ))}
+          {/* 5th slot: direct profile/account link when no overflow, else ⋯ More */}
+          <li>
+            {!hasOverflow && profileItem ? (
+              <NavLink
+                to={profileItem.to}
+                end={profileItem.to === '/'}
+                className={({ isActive }) => tabClass(isActive)}
+              >
+                <span className="font-display text-lg leading-none">{profileItem.glyph}</span>
+                <span className="text-[10px] font-display uppercase tracking-tightest">{t(profileItem.labelKey)}</span>
+              </NavLink>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-expanded={moreOpen}
+                aria-label={t('nav.more')}
+                className={tabClass(moreOpen)}
+              >
+                <span className="font-display text-lg leading-none">⋯</span>
+                <span className="text-[10px] font-display uppercase tracking-tightest">{t('nav.more')}</span>
+              </button>
+            )}
           </li>
-        ))}
-      </ul>
-    </nav>
+        </ul>
+      </nav>
+    </>
   )
 }
 

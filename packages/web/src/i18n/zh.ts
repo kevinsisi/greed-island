@@ -22,6 +22,7 @@ export const zh: Translations = {
   'nav.admin': '管理員',
   'nav.settings': 'API 金鑰',
   'nav.gmWorld': 'GM 世界',
+  'nav.more': '更多',
 
   'hub.eyebrow': '潮鳴市 · 八方街區',
   'hub.title': '今日潮鳴市',

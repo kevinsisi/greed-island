@@ -475,7 +475,7 @@ export class AreaScene extends Phaser.Scene {
       })
       text.setOrigin(0.5, 0.5)
       text.setDepth(40)
-      this.createInspectZone(cx, cy, AREA_TILE_SIZE, AREA_TILE_SIZE, this.labelForDecoration(deco.glyph), 41)
+      this.createInspectZone(cx, cy, 44, 44, this.labelForDecoration(deco.glyph), 41)
       this.attachEnvAnimation(text, deco.glyph, cx, cy, deco.col, deco.row)
     }
   }
@@ -715,7 +715,7 @@ export class AreaScene extends Phaser.Scene {
       })
       label.setOrigin(0.5, 0)
       layer.add(label)
-      layer.add(this.createInspectZone(px, py, 36, 40, `${nameZh} ${plant.density.toFixed(0)}/${plant.capacity}`))
+      layer.add(this.createInspectZone(px, py, 44, 44, `${nameZh} ${plant.density.toFixed(0)}/${plant.capacity}`))
     })
 
     for (const row of eco.animals) {
@@ -762,7 +762,7 @@ export class AreaScene extends Phaser.Scene {
           const _animalId = animalId
           layer.add(
             this.createInspectZone(
-              x, y, AREA_TILE_SIZE, AREA_TILE_SIZE,
+              x, y, 44, 44,
               `獵 ${labelForSpecies(row.speciesId)}`,
               undefined,
               () => {
@@ -843,7 +843,7 @@ export class AreaScene extends Phaser.Scene {
       const fill = this.add.rectangle(40, barY, widthPx, 6, eco.fishery.collapsed ? 0xe04a3a : 0x4a9cd6, 0.9)
       fill.setOrigin(0, 0.5)
       layer.add(fill)
-      const fishHitArea = this.add.rectangle(40 + maxWidth / 2, barY, maxWidth, 36, 0xffffff, 0)
+      const fishHitArea = this.add.rectangle(40 + maxWidth / 2, barY, maxWidth, 44, 0xffffff, 0)
       fishHitArea.setOrigin(0.5, 0.5)
       fishHitArea.setInteractive()
       fishHitArea.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -858,7 +858,7 @@ export class AreaScene extends Phaser.Scene {
           40 + maxWidth / 2,
           barY,
           maxWidth,
-          36,
+          44,
           this.fisheryLabel(eco.fishery.density, eco.fishery.collapsed)
         )
       )
