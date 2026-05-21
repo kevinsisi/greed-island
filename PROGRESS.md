@@ -8,26 +8,57 @@ developer. Keep latest status at the top.
 ## 2026-05-21 — Handoff Snapshot @ v0.48.0
 
 ### Current Version
-`package.json` server is `0.48.0`. Build is clean. 782 tests pass across 113 test files.
+All three `package.json` (root, server, web) bumped to `0.48.0`. TypeScript build clean. 782 tests pass across 113 test files. Commit `012d12e` pushed to `main`.
 
 ### What Was Shipped This Session (v0.47.0 → v0.48.0)
 
 **v0.48.0 — NPC Autonomous Carrier Trade System**
-- New `sim/carrierPlanner.ts`: `planCarrierDispatches` + `planCarrierArrivals`
-  - `planCarrierDispatches`: BFS hop count; picks settlement with max surplus as source, settlement with min goods of that type as dest; skips active/moving carriers; emits `TRADE_ROUTE_OPENED?` → `GOODS_CONSUMED` → `GOODS_TRANSPORT_STARTED`
-  - `planCarrierArrivals`: resolves when `tick >= startedAtTick + hops × TICKS_PER_HOUR`; storm → `GOODS_TRANSPORT_LOST`, otherwise `GOODS_TRANSPORT_ARRIVED` + `GOODS_STORED`
-  - `CARRIER_HAUL_MIN=5`, `CARRIER_HAUL_MAX=20`, `CARRIER_TRAVEL_TICKS_PER_HOP=TICKS_PER_HOUR`
-- `LogisticsProjection.getStartedTransports()` added
-- `port.merchant.anton.json` + `central.broker.gui.json`: `traderRole: "carrier"` added to personality
-- `runtime.ts`: carrier planner wired into main sim loop (arrivals → dispatches order); uses `isStormActive(this.getActiveWorldEvents())` for storm check
-- 11 unit tests in `sim/carrierPlanner.test.ts`; all 782 tests pass
+
+**新增檔案：**
+- `packages/server/src/sim/carrierPlanner.ts` — 核心貨運規劃器
+  - `planCarrierDispatches()`: 掃描 carrier NPC → 找有 surplus 的據點 → BFS 找最缺貨目的地 → emit `TRADE_ROUTE_OPENED?` + `GOODS_CONSUMED` + `GOODS_TRANSPORT_STARTED`
+  - `planCarrierArrivals()`: `tick >= startedAtTick + hops × TICKS_PER_HOUR` 時解算；暴風雨 → `GOODS_TRANSPORT_LOST`；正常 → `GOODS_TRANSPORT_ARRIVED` + `GOODS_STORED`
+  - 常數：`CARRIER_HAUL_MIN=5`、`CARRIER_HAUL_MAX=20`、`CARRIER_TRAVEL_TICKS_PER_HOP=TICKS_PER_HOUR`
+- `packages/server/src/sim/carrierPlanner.test.ts` — 11 個單元測試（dispatch / arrival / storm / skip-in-transit / skip-moving / surplus-threshold / haul-cap）
+
+**修改檔案：**
+- `packages/server/src/projections/logistics.ts`：新增 `getStartedTransports()` 方法
+- `packages/server/src/npcs/profiles/port.merchant.anton.json`：`personality.traderRole = "carrier"`
+- `packages/server/src/npcs/profiles/central.broker.gui.json`：`personality.traderRole = "carrier"`
+- `packages/server/src/sim/runtime.ts`：主循環掛入 carrier planner（先跑 arrivals 再跑 dispatches）；storm 檢查改用 `isStormActive(this.getActiveWorldEvents())`
+
+**重要陷阱記錄（下個 session 務必讀）：**
+- `SIM_ACTOR_WORLD` 在 `runtime.ts` 是 local const（line 219），**沒有**從 `livingWorldCommands.ts` 匯出；新模組需自行定義
+- `SettlementStatus` = `'stable'|'strained'|'declining'|'recovering'`，**沒有** `'active'`
+- `worldEventProjection.list()` 回傳傳奇事件（`WorldEventRow[]`），不是氣象/暴風雨事件；storm 檢查必須用 `this.getActiveWorldEvents()` → `this.eventEngine.getActive()`
+
+### Local Verification
+```
+npx tsc --noEmit   → clean (0 errors)
+npx vitest run     → 782/782 pass, 113 files
+git push           → main @ 012d12e
+```
+
+### CI/CD Status
+Push 已推上 `main`。CI/CD pipeline 觸發中（GitHub Actions）。尚未在本機 docker 環境做 E2E smoke test。
 
 ### Active Blockers
-None. Build clean, all tests green.
+無程式阻塞。下一步需要本機 docker 重建（見下）。
 
-### Next Steps
-- Rebuild docker stack and smoke-test carrier NPC behavior
-- Next feature: history chronicle feed (narrated event log for players) or district sub-tile terrain improvements
+### Next Steps（優先順序）
+
+1. **本機 docker smoke test**（必做，確認 carrier trade 在容器環境跑通）
+   ```bash
+   DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml down
+   DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml up -d --build
+   curl -s http://127.0.0.1:8100/healthz
+   ```
+   重建後觀察 sim log，確認有 `GOODS_TRANSPORT_STARTED` 事件出現。
+
+2. **下個功能候選（任選一）：**
+   - **History Chronicle Feed**：把戰鬥、貿易、生態事件彙整成可讀事件記錄顯示給玩家
+   - **District Sub-tile Terrain 改進**：地形細節與子格互動
+   - **NPC Faction Reputation**：carrier NPC 依派系調整貿易偏好（貨運系統的自然延伸）
 
 ---
 
