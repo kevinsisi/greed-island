@@ -109,6 +109,20 @@ export function createHttpApp(options: HttpAppOptions): Express {
     }
   }
 
+  // v0.42.0 — seed OpenCode base URL + model from env on first boot. The
+  // admin can override at any time via the Settings page; we only seed
+  // when the kv row is empty so we don't clobber a manual change.
+  const envOpenCodeUrl = process.env.OPENCODE_BASE_URL?.trim()
+  if (envOpenCodeUrl && !settingsStore.getSetting('opencode_base_url')) {
+    settingsStore.setSetting('opencode_base_url', envOpenCodeUrl)
+    console.log(`[boot] seeded OpenCode base URL from env: ${envOpenCodeUrl}`)
+  }
+  const envOpenCodeModel = process.env.OPENCODE_MODEL?.trim()
+  if (envOpenCodeModel && !settingsStore.getSetting('opencode_model')) {
+    settingsStore.setSetting('opencode_model', envOpenCodeModel)
+    console.log(`[boot] seeded OpenCode model from env: ${envOpenCodeModel}`)
+  }
+
   // Living World v0.11.0：NPC memory + relationship projections.
   // Tables are created lazily by the constructors. The runtime
   // rebuilds projections from the existing EventLog the first time
@@ -119,8 +133,9 @@ export function createHttpApp(options: HttpAppOptions): Express {
     memory: npcMemoryStore,
     relationships: npcRelationshipsStore,
   })
+  const openCodeConfigured = Boolean(settingsStore.getSetting('opencode_base_url'))
   console.log(
-    `[boot] ambient narrator attached (${settingsStore.listActiveKeys().length} active key(s))`
+    `[boot] ambient narrator attached — gemini=${settingsStore.listActiveKeys().length} active key(s), opencode=${openCodeConfigured ? 'configured' : 'not configured'}`
   )
 
   // Merge the hardcoded owner allow-list with any env-supplied emails.

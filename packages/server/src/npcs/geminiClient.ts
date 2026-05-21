@@ -13,7 +13,7 @@
 // throws GeminiUnavailableError and the caller falls back to the
 // static dialog library.
 
-import type { SettingsStore } from '../http/settings.js'
+import { QUOTA_COOLDOWN_MS, type SettingsStore } from '../http/settings.js'
 
 export const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash'
 export const GEMINI_REQUEST_TIMEOUT_MS = 15_000
@@ -80,7 +80,11 @@ export async function generateWithKeyPool(
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       const disable = err instanceof KeyAuthError || err instanceof KeyQuotaError
-      store.markFailure(record.id, detail, disable)
+      // v0.42.0 — quota errors (429) get a finite cooldown so the key auto-
+      // recovers after ~30 minutes. Auth errors (401/403) stay disabled
+      // until an admin reactivates.
+      const cooldownMs = err instanceof KeyQuotaError ? QUOTA_COOLDOWN_MS : undefined
+      store.markFailure(record.id, detail, disable, cooldownMs)
       errors.push(`key#${record.id}: ${detail}`)
       // Continue to next key.
     }

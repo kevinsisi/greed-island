@@ -93,5 +93,44 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     res.json({ reactivated, keys: input.store.listKeys().map(summarize) })
   })
 
+  // v0.42.0 — OpenCode provider settings + priority ordering. KV table.
+  router.get('/settings/providers', requireGm, (_req, res) => {
+    res.json({
+      openCodeBaseUrl: input.store.getSetting('opencode_base_url'),
+      openCodeModel: input.store.getSetting('opencode_model'),
+      providerPriority: input.store.getSetting('provider_priority') ?? 'opencode,gemini',
+    })
+  })
+
+  router.put('/settings/providers', requireGm, (req, res) => {
+    const body = req.body as {
+      openCodeBaseUrl?: unknown
+      openCodeModel?: unknown
+      providerPriority?: unknown
+    }
+    if (body.openCodeBaseUrl !== undefined) {
+      const v = typeof body.openCodeBaseUrl === 'string' ? body.openCodeBaseUrl : ''
+      input.store.setSetting('opencode_base_url', v || null)
+    }
+    if (body.openCodeModel !== undefined) {
+      const v = typeof body.openCodeModel === 'string' ? body.openCodeModel : ''
+      input.store.setSetting('opencode_model', v || null)
+    }
+    if (body.providerPriority !== undefined) {
+      const v = typeof body.providerPriority === 'string' ? body.providerPriority : ''
+      const cleaned = v
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => s === 'opencode' || s === 'gemini')
+        .join(',')
+      input.store.setSetting('provider_priority', cleaned || null)
+    }
+    res.json({
+      openCodeBaseUrl: input.store.getSetting('opencode_base_url'),
+      openCodeModel: input.store.getSetting('opencode_model'),
+      providerPriority: input.store.getSetting('provider_priority') ?? 'opencode,gemini',
+    })
+  })
+
   return router
 }

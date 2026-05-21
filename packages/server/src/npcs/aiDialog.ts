@@ -10,10 +10,8 @@
 import type { NpcProfile } from './types.js'
 import type { PersonalEventRecord } from '../http/playerState.js'
 import type { SettingsStore } from '../http/settings.js'
-import {
-  generateWithKeyPool,
-  GeminiUnavailableError,
-} from './geminiClient.js'
+import { GeminiUnavailableError } from './geminiClient.js'
+import { generateWithProviders, AiUnavailableError } from './aiProvider.js'
 import {
   INTERACT_INTENTS,
   isInteractIntent,
@@ -82,7 +80,7 @@ export async function generateAiReply(
   const userPrompt = buildUserPrompt(ctx)
   let raw: string
   try {
-    raw = await generateWithKeyPool(store, {
+    const result = await generateWithProviders(store, {
       systemPrompt,
       userPrompt,
       temperature: 0.9,
@@ -101,12 +99,13 @@ export async function generateAiReply(
       // fallback。把 thinking budget 設成 0 → 全部 budget 留給輸出。
       thinkingBudget: 0,
     })
+    raw = result.text
   } catch (err) {
-    if (err instanceof GeminiUnavailableError) {
+    if (err instanceof AiUnavailableError || err instanceof GeminiUnavailableError) {
       throw new AiDialogError(err.message, err)
     }
     throw new AiDialogError(
-      err instanceof Error ? err.message : 'Unknown Gemini error',
+      err instanceof Error ? err.message : 'Unknown AI provider error',
       err
     )
   }

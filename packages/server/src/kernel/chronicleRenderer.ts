@@ -2,7 +2,7 @@
 // EventLog rows and NPC memory projection rows. AI can render text, but cannot
 // create facts; invalid or ungrounded AI output falls back to deterministic text.
 
-import { generateWithKeyPool } from '../npcs/geminiClient.js'
+import { generateWithProviders } from '../npcs/aiProvider.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { Event } from './types.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
@@ -201,7 +201,7 @@ async function generateChronicleJsonWithRetry(
   let lastError: unknown = null
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
     try {
-      const raw = await withTimeout(generateWithKeyPool(settings, {
+      const providerResult = await withTimeout(generateWithProviders(settings, {
         systemPrompt: chronicleSystemPrompt(),
         userPrompt: chronicleUserPrompt(context),
         temperature: 0.35,
@@ -210,7 +210,7 @@ async function generateChronicleJsonWithRetry(
         thinkingBudget: 0
       }), options.timeoutMs)
       options.attempts.push(makeAttempt(attempt, options.timeoutMs, options.backoffMs, true, null))
-      return raw
+      return providerResult.text
     } catch (err) {
       lastError = err
       const error = err instanceof Error ? err.message : String(err)

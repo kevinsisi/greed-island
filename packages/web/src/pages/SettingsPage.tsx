@@ -108,6 +108,45 @@ export function SettingsPage() {
     }
   }, [token, refresh, t])
 
+  // v0.42.0 — provider settings state (OpenCode URL/model + priority).
+  const [openCodeBaseUrl, setOpenCodeBaseUrl] = useState('')
+  const [openCodeModel, setOpenCodeModel] = useState('')
+  const [providerPriority, setProviderPriority] = useState('opencode,gemini')
+  const [providerLoading, setProviderLoading] = useState(false)
+
+  useEffect(() => {
+    if (!token) return
+    api.settingsGetProviders(token)
+      .then((p) => {
+        setOpenCodeBaseUrl(p.openCodeBaseUrl ?? '')
+        setOpenCodeModel(p.openCodeModel ?? '')
+        setProviderPriority(p.providerPriority ?? 'opencode,gemini')
+      })
+      .catch(() => {})
+  }, [token])
+
+  const handleSaveProviders = useCallback(async () => {
+    if (!token) return
+    setProviderLoading(true)
+    setError(null)
+    setFlash(null)
+    try {
+      const updated = await api.settingsUpdateProviders(token, {
+        openCodeBaseUrl: openCodeBaseUrl.trim() || null,
+        openCodeModel: openCodeModel.trim() || null,
+        providerPriority: providerPriority.trim() || 'opencode,gemini',
+      })
+      setOpenCodeBaseUrl(updated.openCodeBaseUrl ?? '')
+      setOpenCodeModel(updated.openCodeModel ?? '')
+      setProviderPriority(updated.providerPriority ?? 'opencode,gemini')
+      setFlash('Provider 設定已儲存')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Provider 儲存失敗')
+    } finally {
+      setProviderLoading(false)
+    }
+  }, [token, openCodeBaseUrl, openCodeModel, providerPriority])
+
   if (!account) {
     return (
       <div className="flex flex-col gap-6">
@@ -166,6 +205,62 @@ export function SettingsPage() {
             />
           </ul>
         )}
+      </section>
+
+      {/* v0.42.0 — AI provider routing (OpenCode primary, Gemini fallback). */}
+      <section className="gi-panel p-5 flex flex-col gap-3">
+        <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
+          AI Provider
+        </div>
+        <p className="text-[12px] text-ground-400 leading-relaxed">
+          OpenCode 為自架服務，優先使用；OpenCode 不可用或未設定時自動 fallback 到 Gemini key pool。
+        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">OpenCode Base URL</span>
+          <input
+            type="text"
+            value={openCodeBaseUrl}
+            onChange={(e) => setOpenCodeBaseUrl(e.target.value)}
+            placeholder="http://host.docker.internal:4096"
+            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">OpenCode Model</span>
+          <input
+            type="text"
+            value={openCodeModel}
+            onChange={(e) => setOpenCodeModel(e.target.value)}
+            placeholder="opencode/deepseek-v4-flash-free"
+            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
+          />
+          <span className="text-[10px] text-ground-500">
+            格式：{'<'}providerID{'>'}/{'<'}modelID{'>'}，例如 opencode/deepseek-v4-flash-free 或 openai/gpt-4o-mini
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">Provider Priority</span>
+          <input
+            type="text"
+            value={providerPriority}
+            onChange={(e) => setProviderPriority(e.target.value)}
+            placeholder="opencode,gemini"
+            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
+          />
+          <span className="text-[10px] text-ground-500">
+            逗號分隔，由左至右為嘗試順序。允許值：opencode, gemini
+          </span>
+        </label>
+        <div>
+          <button
+            type="button"
+            onClick={handleSaveProviders}
+            disabled={providerLoading}
+            className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest border border-ember-600 text-ember-300 hover:bg-ember-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {providerLoading ? '儲存中…' : '儲存 Provider 設定'}
+          </button>
+        </div>
       </section>
 
       <section className="gi-panel p-5 flex flex-col gap-3">

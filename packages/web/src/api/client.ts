@@ -858,6 +858,30 @@ export const api = {
         headers: authHeaders(token)
       }
     ),
+  // v0.42.0 — provider configuration (OpenCode URL/model + priority order).
+  settingsGetProviders: (token: string) =>
+    jsonFetch<{
+      openCodeBaseUrl: string | null
+      openCodeModel: string | null
+      providerPriority: string
+    }>('/settings/providers', { headers: authHeaders(token) }),
+  settingsUpdateProviders: (
+    token: string,
+    body: {
+      openCodeBaseUrl?: string | null
+      openCodeModel?: string | null
+      providerPriority?: string
+    }
+  ) =>
+    jsonFetch<{
+      openCodeBaseUrl: string | null
+      openCodeModel: string | null
+      providerPriority: string
+    }>('/settings/providers', {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify(body)
+    }),
   // -- version --------------------------------------------------------
   version: () => jsonFetch<ServerVersion>('/version'),
   // -- social: friends -----------------------------------------------

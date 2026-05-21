@@ -58,8 +58,25 @@ export function initializeSettingsSchema(db: DatabaseConnection): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_api_keys_status ON api_keys(status);
+
+    -- v0.42.0: KV settings for provider URLs, model selection, priorities.
+    CREATE TABLE IF NOT EXISTS kv_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at INTEGER NOT NULL
+    );
   `)
+  // v0.42.0: add disabled_until column to api_keys if missing — used for
+  // 429 quota cooldown so keys auto-recover instead of staying dead forever.
+  const cols = db.prepare("PRAGMA table_info(api_keys)").all() as Array<{ name: string }>
+  if (!cols.some((c) => c.name === 'disabled_until')) {
+    db.exec("ALTER TABLE api_keys ADD COLUMN disabled_until INTEGER")
+  }
 }
+
+// v0.42.0 — Quota cooldown. After a 429, the key is disabled for this long
+// then automatically retried. Auth errors (401/403) remain permanent.
+export const QUOTA_COOLDOWN_MS = 30 * 60 * 1000 // 30 minutes
 
 export class SettingsStore {
   constructor(private readonly db: DatabaseConnection) {
@@ -93,8 +110,20 @@ export class SettingsStore {
     return rows.map(toRecord)
   }
 
-  /** Active keys, oldest used first (so rotation spreads load). */
+  /** Active keys, oldest used first (so rotation spreads load).
+   *  v0.42.0: also auto-reactivates keys whose `disabled_until` has elapsed
+   *  (transient 429 quota cooldown — without this, yesterday's quota error
+   *  leaves a perfectly good key dead forever). */
   listActiveKeys(): ApiKeyRecord[] {
+    const now = Date.now()
+    // Promote any cooldown-expired keys back to 'active' before listing.
+    this.db
+      .prepare(
+        `UPDATE api_keys
+         SET status = 'active', disabled_until = NULL
+         WHERE status = 'disabled' AND disabled_until IS NOT NULL AND disabled_until < ?`
+      )
+      .run(now)
     const rows = this.db
       .prepare(
         `SELECT * FROM api_keys
@@ -128,15 +157,30 @@ export class SettingsStore {
       .run(Date.now(), id)
   }
 
-  markFailure(id: number, error: string, disable: boolean): void {
+  /** Record a failure on a key. v0.42.0: optionally set a cooldown so quota
+   *  (429) errors don't permanently kill the key — pass `cooldownMs` for a
+   *  timed disable (auto-recover), omit it for a permanent disable (auth). */
+  markFailure(
+    id: number,
+    error: string,
+    disable: boolean,
+    cooldownMs?: number,
+  ): void {
+    const errSlice = error.slice(0, 500)
     if (disable) {
+      const disabledUntil = typeof cooldownMs === 'number' && cooldownMs > 0
+        ? Date.now() + cooldownMs
+        : null
       this.db
         .prepare(
           `UPDATE api_keys
-           SET status = 'disabled', last_error = ?, failure_count = failure_count + 1
+           SET status = 'disabled',
+               disabled_until = ?,
+               last_error = ?,
+               failure_count = failure_count + 1
            WHERE id = ?`
         )
-        .run(error.slice(0, 500), id)
+        .run(disabledUntil, errSlice, id)
     } else {
       this.db
         .prepare(
@@ -144,8 +188,41 @@ export class SettingsStore {
            SET last_error = ?, failure_count = failure_count + 1
            WHERE id = ?`
         )
-        .run(error.slice(0, 500), id)
+        .run(errSlice, id)
     }
+  }
+
+  // ---- v0.42.0 — generic KV settings (opencode base URL, model, priority) ----
+
+  getSetting(key: string): string | null {
+    const row = this.db
+      .prepare('SELECT value FROM kv_settings WHERE key = ?')
+      .get(key) as { value?: string } | undefined
+    const v = row?.value
+    return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
+  }
+
+  setSetting(key: string, value: string | null): void {
+    const now = Date.now()
+    if (value === null || value.trim().length === 0) {
+      this.db.prepare('DELETE FROM kv_settings WHERE key = ?').run(key)
+      return
+    }
+    this.db
+      .prepare(
+        `INSERT INTO kv_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(key, value.trim(), now)
+  }
+
+  listSettings(): Record<string, string> {
+    const rows = this.db
+      .prepare('SELECT key, value FROM kv_settings')
+      .all() as Array<{ key: string; value: string }>
+    const out: Record<string, string> = {}
+    for (const r of rows) out[r.key] = r.value
+    return out
   }
 
   countActive(): number {

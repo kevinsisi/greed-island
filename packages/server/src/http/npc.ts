@@ -38,7 +38,9 @@ import {
   type RelationshipTier,
 } from '../npcs/dialog.js'
 import { generateAiReply, AiDialogError, type AiDialogContext } from '../npcs/aiDialog.js'
-import { generateWithKeyPool, GeminiUnavailableError } from '../npcs/geminiClient.js'
+import { GeminiUnavailableError } from '../npcs/geminiClient.js'
+import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
+import { generateWithProviders, AiUnavailableError } from '../npcs/aiProvider.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import {
   deriveDynamicGreetLine,
@@ -151,7 +153,7 @@ export function createNpcRouter(input: {
     let aiError: string | null = null
 
     const identityLine = identityReplyFor(profile, playerMessage, player.displayName)
-    const hasKeys = input.settings.countActive() > 0
+    const hasKeys = input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings)
     if (identityLine) {
       replyZh = identityLine.zh
       replyEn = identityLine.en
@@ -428,7 +430,7 @@ export function createNpcRouter(input: {
     // message 存在 → 用 AI 分類；沒 message → 直接吃 explicitMode
     let intentClass: 'mediate' | 'provoke' | 'watch' | 'threaten' = explicitMode ?? 'watch'
     let aiClassifyError: string | null = null
-    if (message.length > 0 && input.settings.countActive() > 0) {
+    if (message.length > 0 && (input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings))) {
       try {
         intentClass = await classifyInterventionIntent(input.settings, {
           message,
@@ -563,7 +565,7 @@ export function createNpcRouter(input: {
       tile,
       eventId: event.eventId,
       sequence: event.sequence,
-      classifiedByAi: message.length > 0 && aiClassifyError === null && input.settings.countActive() > 0,
+      classifiedByAi: message.length > 0 && aiClassifyError === null && (input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings)),
       aiClassifyError,
       narration,
       effects: {
@@ -893,7 +895,7 @@ async function classifyInterventionIntent(
 
   let raw: string
   try {
-    raw = await generateWithKeyPool(store, {
+    const result = await generateWithProviders(store, {
       systemPrompt,
       userPrompt,
       temperature: 0.2,
@@ -901,8 +903,9 @@ async function classifyInterventionIntent(
       // 純分類任務：關 thinking、關 JSON mode
       thinkingBudget: 0,
     })
+    raw = result.text
   } catch (err) {
-    if (err instanceof GeminiUnavailableError) {
+    if (err instanceof GeminiUnavailableError || err instanceof AiUnavailableError) {
       throw new Error(`AI 不可用：${err.message}`)
     }
     throw err

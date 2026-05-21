@@ -8,7 +8,9 @@
 
 import type { SettingsStore } from '../http/settings.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { generateWithKeyPool, GeminiUnavailableError } from '../npcs/geminiClient.js'
+import { GeminiUnavailableError } from '../npcs/geminiClient.js'
+import { generateWithProviders, AiUnavailableError } from '../npcs/aiProvider.js'
+import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
 import { TILE_NAME_BY_ID } from './mapGraph.js'
 import type { AreaState } from './areaStateEngine.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
@@ -116,11 +118,11 @@ export class AmbientNarrator {
     event: ActiveWorldEvent
   ): Promise<{ text: string; source: 'ai' | 'fallback'; aiError: string | null }> {
     const fallback = event.text.zh
-    if (this.settings.listActiveKeys().length === 0) {
-      return { text: fallback, source: 'fallback', aiError: 'no-key' }
+    if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) {
+      return { text: fallback, source: 'fallback', aiError: 'no-provider' }
     }
     try {
-      const raw = await generateWithKeyPool(this.settings, {
+      const result = await generateWithProviders(this.settings, {
         systemPrompt: [
           '你是《貪婪之島 / Tideway》世界的氛圍敘事員。世界觀：潮鳴市是被脈網覆蓋的港都。',
           '你只負責把一段世界事件的模板敘述改寫成更有故事感、更口語、不重複模板字的繁體中文。',
@@ -135,13 +137,13 @@ export class AmbientNarrator {
         temperature: 0.85,
         maxOutputTokens: 200
       })
-      const trimmed = sanitizeOutput(raw)
+      const trimmed = sanitizeOutput(result.text)
       if (!trimmed) return { text: fallback, source: 'fallback', aiError: 'empty' }
-      console.log(`[ambient] worldEvent ${event.id} AI ok`)
+      console.log(`[ambient] worldEvent ${event.id} AI ok via ${result.provider}`)
       return { text: trimmed, source: 'ai', aiError: null }
     } catch (err) {
       const aiError =
-        err instanceof GeminiUnavailableError
+        err instanceof AiUnavailableError || err instanceof GeminiUnavailableError
           ? err.message
           : err instanceof Error
             ? err.message
@@ -152,19 +154,20 @@ export class AmbientNarrator {
   }
 
   private async runRefresh(ctx: AmbientContext, currentTick: number): Promise<AmbientResult> {
-    if (this.settings.listActiveKeys().length === 0) {
+    if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) {
       const result = this.fallbackOf(ctx, currentTick)
       this.cache.set(ctx.tileId, result)
       return result
     }
     try {
       console.log(`[ambient] generating for ${ctx.tileId} (tick ${currentTick})`)
-      const raw = await generateWithKeyPool(this.settings, {
+      const providerResult = await generateWithProviders(this.settings, {
         systemPrompt: buildSystemPrompt(),
         userPrompt: buildUserPrompt(ctx),
         temperature: 0.9,
         maxOutputTokens: 200
       })
+      const raw = providerResult.text
       const trimmed = sanitizeOutput(raw)
       if (!trimmed) {
         const result = this.fallbackOf(ctx, currentTick)
@@ -184,7 +187,7 @@ export class AmbientNarrator {
       return result
     } catch (err) {
       const aiError =
-        err instanceof GeminiUnavailableError
+        err instanceof AiUnavailableError || err instanceof GeminiUnavailableError
           ? err.message
           : err instanceof Error
             ? err.message
