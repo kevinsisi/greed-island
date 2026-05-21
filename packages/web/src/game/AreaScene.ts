@@ -486,7 +486,8 @@ export class AreaScene extends Phaser.Scene {
     width: number,
     height: number,
     message: string,
-    depth?: number
+    depth?: number,
+    onPointerDown?: () => void,
   ): Phaser.GameObjects.Zone {
     const zone = this.add.zone(x, y, width, height)
     if (depth !== undefined) zone.setDepth(depth)
@@ -495,6 +496,7 @@ export class AreaScene extends Phaser.Scene {
       pointer.event?.stopPropagation?.()
       this.suppressNextPointerTarget = true
       this.flashInspectHint(message, x, y)
+      onPointerDown?.()
     })
     return zone
   }
@@ -753,7 +755,21 @@ export class AreaScene extends Phaser.Scene {
           })
           nameLabel.setOrigin(0.5, 0)
           layer.add(nameLabel)
-          layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE, AREA_TILE_SIZE, `獵 ${labelForSpecies(row.speciesId)}`))
+          // v0.41.1 — inspect zone now actually triggers the hunt (used to
+          // only show the hint label; the underlying dot's 26px hit area was
+          // shadowed by this larger zone). Closing over animalId so each
+          // zone hunts the specific animal it covers.
+          const _animalId = animalId
+          layer.add(
+            this.createInspectZone(
+              x, y, AREA_TILE_SIZE, AREA_TILE_SIZE,
+              `獵 ${labelForSpecies(row.speciesId)}`,
+              undefined,
+              () => {
+                this.callbacks.onAnimalHunt?.(row.speciesId, _animalId)
+              }
+            )
+          )
         }
       } else {
         // Cluster at a deterministic spot derived from speciesId + tileId.
@@ -790,7 +806,23 @@ export class AreaScene extends Phaser.Scene {
         })
         speciesLabel.setOrigin(0.5, 0)
         layer.add(speciesLabel)
-        layer.add(this.createInspectZone(x, y, AREA_TILE_SIZE * 1.4, AREA_TILE_SIZE * 1.4, `獵 ${labelForSpecies(row.speciesId)} ×${row.count}`))
+        // v0.41.1 — inspect zone fires the hunt for the cluster's first
+        // animal, mirroring the bg circle's pointerdown behaviour. Without
+        // this, players who clicked outside the 32px circle but inside the
+        // 1.4-tile zone saw the hint but no action.
+        const _firstAnimalId = row.animalIds[0]
+        layer.add(
+          this.createInspectZone(
+            x, y, AREA_TILE_SIZE * 1.4, AREA_TILE_SIZE * 1.4,
+            `獵 ${labelForSpecies(row.speciesId)} ×${row.count}`,
+            undefined,
+            () => {
+              if (_firstAnimalId !== undefined) {
+                this.callbacks.onAnimalHunt?.(row.speciesId, _firstAnimalId)
+              }
+            }
+          )
+        )
       }
     }
 
