@@ -419,6 +419,38 @@ export class NpcEngine {
       }
     }
 
+    // ---- Phase 1.5: collision-free dispersal of NPCs sharing (tile, activity) ----
+    // v0.43.0 fix: the hash-based `subAnchor` collides when many NPCs work on the
+    // same tile (13×8 inner grid, ~10 NPCs in 'work' → visible pairs/triples).
+    // Re-target everyone via a deterministic scatter grid (ranked by npcId asc).
+    // Skip 'move' (their position is route-edge-driven) and indoor NPCs.
+    const groups = new Map<string, string[]>()
+    const indoorSet15 = context?.npcsInsideBuildings ?? null
+    for (const [npcId, s] of this.state) {
+      if (s.activity === 'move') continue
+      if (indoorSet15 && indoorSet15.has(npcId)) continue
+      const k = `${s.tile}::${s.activity}`
+      const arr = groups.get(k) ?? []
+      arr.push(npcId)
+      groups.set(k, arr)
+    }
+    for (const [, ids] of groups) {
+      ids.sort()
+      const total = ids.length
+      for (let rank = 0; rank < total; rank++) {
+        const id = ids[rank]!
+        const s = this.state.get(id)
+        if (!s) continue
+        const target = dispersedSubAnchor(rank, total)
+        const subCol = stepToward(s.subCol, target.col)
+        const subRow = stepToward(s.subRow, target.row)
+        if (subCol !== s.subCol || subRow !== s.subRow) {
+          this.state.set(id, { ...s, subCol, subRow, lastActedTick: currentTick })
+          dirty.add(id)
+        }
+      }
+    }
+
     // ---- Phase 2: productive city actions ----
     // These are the city's forward motion: repair, trade, study, service.
     // They are deterministic domain events, not AI narration and not renderer-only flavor.
@@ -1156,6 +1188,25 @@ function initialSubTile(npcId: string, tile: string): { col: number; row: number
     col: SUB_INNER_MIN_COL + (h % innerColRange),
     row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange)
   }
+}
+
+/** v0.43.0 — collision-free sub-cell assignment for NPCs sharing (tile, activity).
+ *  Lays out NPCs as a near-square grid spread across the inner 13×8 area cells.
+ *  Pure function of (rank, total) so two NPCs at the same rank+total always
+ *  land on the same cell (deterministic replay-safe). */
+function dispersedSubAnchor(rank: number, total: number): { col: number; row: number } {
+  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1 // 13
+  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1 // 8
+  // Pick a row count that roughly matches sqrt(total) but never exceeds innerRowRange.
+  const perRow = Math.max(1, Math.min(innerColRange, Math.ceil(Math.sqrt(total))))
+  const usedRows = Math.max(1, Math.min(innerRowRange, Math.ceil(total / perRow)))
+  const colStep = perRow > 1 ? Math.floor((innerColRange - 1) / (perRow - 1)) : 0
+  const rowStep = usedRows > 1 ? Math.floor((innerRowRange - 1) / (usedRows - 1)) : 0
+  const r = Math.floor(rank / perRow)
+  const c = rank % perRow
+  const col = SUB_INNER_MIN_COL + Math.min(innerColRange - 1, c * Math.max(1, colStep))
+  const row = SUB_INNER_MIN_ROW + Math.min(innerRowRange - 1, r * Math.max(1, rowStep))
+  return { col, row }
 }
 
 function hashStr(s: string): number {
