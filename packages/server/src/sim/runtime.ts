@@ -1790,6 +1790,76 @@ export class SimulationRuntime {
             )
           }
         }
+        // v0.43.0 — opportunistic NPC hunt: every productive action has a
+        // 1-in-8 chance (deterministic by npcId+tile+tick hash) to also kill
+        // one huntable animal on the tile. Without this, animal populations
+        // only deplete through dedicated 'hunter' role NPCs in starvation,
+        // which almost never fires — the user sees rabbits/moths at fixed
+        // counts for hours. With this, food chain visibly runs.
+        const huntableAnimals = this.animalPopulationProjection
+          .list()
+          .filter((row) => row.tileId === event.tile && row.count > 0)
+          .filter((row) => {
+            const sp = getSpecies(row.speciesId)
+            return sp != null && sp.edibleYield > 0 && (sp.category === 'herbivore' || sp.category === 'fish')
+          })
+        if (huntableAnimals.length > 0) {
+          const huntRoll = Number.parseInt(
+            hashCanonicalJson({ scheme: 'npc-prod-hunt.v1', npcId: event.npcId, tile: event.tile, tick: nextTick }).slice(0, 8),
+            16,
+          ) % 8
+          if (huntRoll === 0) {
+            // Pick the species with highest count to avoid extincting rare ones.
+            const targetRow = [...huntableAnimals].sort(
+              (a, b) => b.count - a.count || a.speciesId.localeCompare(b.speciesId),
+            )[0]!
+            const animalIds = [...targetRow.animalIds].sort()
+            const animalId = animalIds[0]
+            const species = getSpecies(targetRow.speciesId)
+            if (animalId && species) {
+              const quantity = Math.max(1, Math.floor(species.edibleYield))
+              const huntHash = hashCanonicalJson({ scheme: 'npc-prod-hunt-id.v1', npcId: event.npcId, tile: event.tile, tick: nextTick, animalId })
+              const huntId = `hunt.npc.${event.tile}.${huntHash.slice(0, 16)}`
+              commands.push(
+                makeLivingWorldCommand(
+                  'ANIMAL_KILLED',
+                  event.npcId,
+                  'npc',
+                  nextTick,
+                  submittedAt,
+                  {
+                    huntId,
+                    animalId,
+                    speciesId: targetRow.speciesId,
+                    tileId: event.tile,
+                    killedByNpcId: event.npcId,
+                    killedAtTick: nextTick,
+                    narration: `${event.npcId} 在 ${event.tile} 獵到一隻 ${species.id}。`,
+                  },
+                ),
+              )
+              commands.push(
+                makeLivingWorldCommand(
+                  'GOODS_EXTRACTED',
+                  event.npcId,
+                  'npc',
+                  nextTick,
+                  submittedAt,
+                  {
+                    goodsId: 'meat',
+                    quantity,
+                    sourceEventType: 'ANIMAL_KILLED',
+                    sourceId: animalId,
+                    sourceTileId: event.tile,
+                    extractedByNpcId: event.npcId,
+                    extractedAtTick: nextTick,
+                    narration: `${event.npcId} 取得肉品 ×${quantity}。`,
+                  },
+                ),
+              )
+            }
+          }
+        }
         const lifeForHunt = profile ? deriveNpcLifeView({
           profile,
           state: this.npcEngine.getState(event.npcId) ?? makeFallbackNpcState(event.tile, nextTick),
