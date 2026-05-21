@@ -5,7 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-05-21 — Handoff Snapshot @ v0.44.0
+## 2026-05-21 — Handoff Snapshot @ v0.45.1
+
+### Current Version
+`package.json` root is `0.45.1`. Build is clean. CI green (pushed 7d3755c).
+
+### What Was Shipped This Session (v0.45.0 → v0.45.1)
+
+**v0.45.0 — UI Mobile Refactor Phase 1**
+- `Brandbar`: 2-row on mobile (Row 1: brand + lang + account; Row 2 xs-only: PlayerResources)
+- `MobileTabBar`: 5-slot grid with `⋯ More` popover — 4 PRIMARY_PATHS direct tabs + 5th slot either profile link or More button with overflow items + profile
+- `EventTickerStrip`: rotates through top 3 events every 5 s with "1/3" counter
+- `AreaScene.ts`: all inspect/hunt hit zones bumped to ≥44px (was 36–40px)
+- `chronicleRenderer.test.ts`: fixed 6 failing tests — test was mocking `geminiClient.generateWithKeyPool` (removed in v0.42.0); rewrote to mock `aiProvider.generateWithProviders`, updated mock return shape to `{ text, provider }`, added `getSetting: () => null` to mock SettingsStore
+
+**v0.45.1 — Canvas 4:3 + sticky BottomSheet tab bar on mobile**
+- `AreaPhaserGame.tsx`: `aspect-[3/2]` → `aspect-[4/3]` — taller canvas on portrait mobile
+- `AreaPage.tsx`: bottom section now `flex-col-reverse lg:flex-col`; drawer tab bar wrapped in `sticky bottom-[56px] z-[25]` div so it pins just above MobileTabBar when user scrolls; panel content sits above the tab bar visually on mobile via reversed flex order (CSS-only, no JSX duplication)
+- `GameShell.tsx`: EventTickerStrip suppressed on `/area/*` routes via `useLocation()` (avoids z-index conflict with sticky BottomSheet)
 
 ### Current Version
 `package.json` root is `0.44.0`. Build is clean. No CI blocker.
