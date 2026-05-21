@@ -669,21 +669,35 @@ export class SimulationRuntime {
     const session = combatStore.getSession(input.combatId)
     if (!session || session.player_account_id !== input.accountId || session.state !== 'active') return null
 
-    const profile = this.findProfile(session.npc_id)
-    const npcSummary = this.getNpcs().find((npc) => npc.id === session.npc_id)
-    if (!profile || !npcSummary) return null
+    const isAnimalCombat = session.enemy_type === 'animal'
+
+    let npcTraits: CombatActorTraits & { actorId: string }
+    if (isAnimalCombat) {
+      const species = getSpecies(session.species_id ?? '')
+      if (!species) return null
+      npcTraits = {
+        actorId: session.npc_id,
+        greed: species.aggression / 100,
+        patience: Math.max(0, 1 - species.fear / 100),
+        health: 80,
+      }
+    } else {
+      const profile = this.findProfile(session.npc_id)
+      const npcSummary = this.getNpcs().find((npc) => npc.id === session.npc_id)
+      if (!profile || !npcSummary) return null
+      npcTraits = {
+        actorId: session.npc_id,
+        patience: parseCombatTrait(profile.personality.patience),
+        greed: parseCombatTrait(profile.personality.greed),
+        health: Math.max(20, Math.min(100, npcSummary.health ?? 80)),
+      }
+    }
 
     const playerTraits: CombatActorTraits & { actorId: string } = {
       actorId: String(input.accountId),
       patience: 0.5,
       greed: 0.5,
       health: 80,
-    }
-    const npcTraits: CombatActorTraits & { actorId: string } = {
-      actorId: session.npc_id,
-      patience: parseCombatTrait(profile.personality.patience),
-      greed: parseCombatTrait(profile.personality.greed),
-      health: Math.max(20, Math.min(100, npcSummary.health ?? 80)),
     }
 
     const currentTick = this.getCurrentTick()
@@ -736,11 +750,29 @@ export class SimulationRuntime {
           finalPlayerHp: result.playerHpAfter,
           finalNpcHp: result.npcHpAfter,
           playerEnergyToZero: result.resolved.playerEnergyToZero,
-          npcIncapacitatedTicks: result.resolved.npcIncapacitatedTicks,
+          npcIncapacitatedTicks: isAnimalCombat ? 0 : result.resolved.npcIncapacitatedTicks,
           narration: `戰鬥結束：${result.resolved.outcome}（${nextRound} 回合）。`,
         }
       ))
       if (!resolveEvent) return null
+
+      // Animal death: mark in ecosystem population projection.
+      if (isAnimalCombat && result.resolved.outcome === 'player_victory') {
+        this.commitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_HUNTED_ANIMAL',
+          String(input.accountId),
+          'player',
+          currentTick,
+          Date.now(),
+          {
+            playerAccountId: String(input.accountId),
+            tileId: session.tile_id,
+            animalId: session.npc_id,
+            speciesId: session.species_id ?? '',
+            tick: currentTick,
+          }
+        ))
+      }
 
       if (result.resolved.playerEnergyToZero) {
         const energyEvent = this.commitLivingWorldCommand(makeLivingWorldCommand(

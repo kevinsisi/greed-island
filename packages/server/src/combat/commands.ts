@@ -27,16 +27,25 @@ export type CombatInitiatePayload = Readonly<{
   combatId: string
   /** account id 字串化 */
   playerActorId: string
-  /** NPC id (deterministic) */
-  npcActorId: string
+  /** 'npc' (default) or 'animal' */
+  enemyType?: 'npc' | 'animal'
+  /** NPC id (deterministic) — when enemyType === 'npc' */
+  npcActorId?: string
+  /** Animal actor id — when enemyType === 'animal' */
+  animalId?: string
+  /** Species id — when enemyType === 'animal' */
+  speciesId?: string
   /** 同 tile 才能戰鬥 — Phase B 強制要求 */
   tile: string
-  /** 戰鬥開始時 player + NPC 的 combatHp 起始值 */
+  /** 戰鬥開始時 player + enemy 的 combatHp 起始值 */
   playerCombatHp: number
   npcCombatHp: number
   reason: 'player_challenge' | 'npc_aggression'
   narration: string
 }>
+
+/** Species aggression threshold (0–100 scale) above which combat is required. */
+export const ANIMAL_COMBAT_AGGRESSION_THRESHOLD = 50
 
 export type CombatPlayerActionPayload = Readonly<{
   combatId: string

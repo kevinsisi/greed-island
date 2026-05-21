@@ -26,9 +26,10 @@ interface CombatHudProps {
   npcName: string
   initialSession: ServerCombatSession
   onClose: () => void
+  enemyType?: 'npc' | 'animal'
 }
 
-export function CombatHud({ npcName, initialSession, onClose }: CombatHudProps) {
+export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' }: CombatHudProps) {
   const { token } = useAuth()
   const [session, setSession] = useState<ServerCombatSession>(initialSession)
   const [busy, setBusy] = useState(false)
@@ -143,7 +144,7 @@ export function CombatHud({ npcName, initialSession, onClose }: CombatHudProps) 
           </div>
         ) : (
           <div className="text-[12px] text-ground-300 leading-relaxed">
-            {session.outcome === 'player_victory' && '你贏了。NPC 倒地，5 秒後甦醒。'}
+            {session.outcome === 'player_victory' && (enemyType === 'animal' ? `你獵殺了 ${npcName}。` : '你贏了。NPC 倒地，5 秒後甦醒。')}
             {session.outcome === 'npc_victory' && '你輸了。energy 歸零；找個地方休息。'}
             {session.outcome === 'fled' && '你成功逃脫。'}
           </div>

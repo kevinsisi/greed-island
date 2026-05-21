@@ -612,7 +612,10 @@ export type NpcDialogHoldCmd = Readonly<{
 export type CombatInitiateCmd = Readonly<{
   combatId: string
   playerAccountId: string
-  npcId: string
+  npcId?: string
+  enemyType?: 'npc' | 'animal'
+  animalId?: string
+  speciesId?: string
   tile: string
   playerCombatHp: number
   npcCombatHp: number
@@ -1750,7 +1753,12 @@ const VALIDATORS: Readonly<
     if (typeof p.combatId !== 'string' || p.combatId.length === 0) return 'combatId required'
     if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0)
       return 'playerAccountId required'
-    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (p.enemyType === 'animal') {
+      if (typeof p.animalId !== 'string' || p.animalId.length === 0) return 'animalId required for animal combat'
+      if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required for animal combat'
+    } else {
+      if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    }
     if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
     if (typeof p.playerCombatHp !== 'number' || p.playerCombatHp <= 0) return 'playerCombatHp required'
     if (typeof p.npcCombatHp !== 'number' || p.npcCombatHp <= 0) return 'npcCombatHp required'

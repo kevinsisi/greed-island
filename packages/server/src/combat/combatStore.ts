@@ -44,6 +44,7 @@ export type CombatOutcome = 'player_victory' | 'npc_victory' | 'fled'
 export type CombatSessionRow = Readonly<{
   combat_id: string
   player_account_id: number
+  /** NPC id for NPC combat, animal actor id for animal combat */
   npc_id: string
   tile_id: string
   started_tick: number
@@ -53,6 +54,8 @@ export type CombatSessionRow = Readonly<{
   state: CombatState
   outcome: CombatOutcome | null
   resolved_tick: number | null
+  enemy_type: 'npc' | 'animal'
+  species_id: string | null
 }>
 
 export type CombatLogRow = Readonly<{
@@ -87,6 +90,8 @@ export function initializeCombatSchema(db: DatabaseConnection): void {
       state TEXT NOT NULL DEFAULT 'active',
       outcome TEXT,
       resolved_tick INTEGER,
+      enemy_type TEXT NOT NULL DEFAULT 'npc',
+      species_id TEXT,
       FOREIGN KEY (player_account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_combat_sessions_player
@@ -111,6 +116,13 @@ export function initializeCombatSchema(db: DatabaseConnection): void {
     CREATE INDEX IF NOT EXISTS idx_combat_log_deterministic_key
       ON combat_log(deterministic_key);
   `)
+  // Migrate existing databases that predate the animal-combat columns.
+  for (const stmt of [
+    `ALTER TABLE combat_sessions ADD COLUMN enemy_type TEXT NOT NULL DEFAULT 'npc'`,
+    `ALTER TABLE combat_sessions ADD COLUMN species_id TEXT`,
+  ]) {
+    try { db.exec(stmt) } catch { /* column already exists */ }
+  }
 }
 
 export class CombatStore {
@@ -268,7 +280,11 @@ export class CombatStore {
     payload: Readonly<Record<string, unknown>>,
   ): void {
     const playerAccountId = readAccountId(payload, 'playerAccountId') ?? readAccountId(payload, 'playerActorId')
-    const npcId = readString(payload, 'npcId') ?? readString(payload, 'npcActorId')
+    const enemyType = (payload.enemyType === 'animal' ? 'animal' : 'npc') as 'npc' | 'animal'
+    const npcId = (enemyType === 'animal'
+      ? readString(payload, 'animalId')
+      : readString(payload, 'npcId') ?? readString(payload, 'npcActorId'))
+    const speciesId = enemyType === 'animal' ? readString(payload, 'speciesId') : null
     const tileId = readString(payload, 'tile') ?? readString(payload, 'tileId')
     const playerHp = readNumber(payload, 'playerCombatHp') ?? readNumber(payload, 'playerHp')
     const npcHp = readNumber(payload, 'npcCombatHp') ?? readNumber(payload, 'npcHp')
@@ -278,8 +294,8 @@ export class CombatStore {
       .prepare(
         `INSERT OR IGNORE INTO combat_sessions
            (combat_id, player_account_id, npc_id, tile_id, started_tick,
-            player_hp, npc_hp, combat_round, state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active')`
+            player_hp, npc_hp, combat_round, state, enemy_type, species_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`
       )
       .run(
         combatId,
@@ -288,7 +304,9 @@ export class CombatStore {
         tileId,
         event.tick ?? 0,
         Math.max(0, Math.floor(playerHp)),
-        Math.max(0, Math.floor(npcHp))
+        Math.max(0, Math.floor(npcHp)),
+        enemyType,
+        speciesId,
       )
     this.appendProjectedLog(event, combatId, 'COMBAT_INITIATE', payload, 0)
   }

@@ -1183,6 +1183,15 @@ export const api = {
         body: JSON.stringify({ targetNpcId })
       }
     ),
+  combatInitiateAnimal: (token: string, targetAnimalId: string, speciesId: string) =>
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+      '/combat/initiate-animal',
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ targetAnimalId, speciesId })
+      }
+    ),
   combatAction: (
     token: string,
     combatId: string,
@@ -1301,6 +1310,8 @@ export type ServerCombatSession = {
   resolvedTick: number | null
   initialHp: number
   npcIncapTicks: number
+  enemyType?: 'npc' | 'animal'
+  speciesId?: string | null
 }
 
 export type ServerCombatLogRow = {

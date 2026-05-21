@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-21 — Handoff Snapshot @ v0.46.0
+
+### Current Version
+`package.json` root is `0.46.0`. Build is clean.
+
+### What Was Shipped This Session (v0.45.1 → v0.46.0)
+
+**v0.46.0 — Wildlife Combat for Aggressive Animals**
+- `ANIMAL_COMBAT_AGGRESSION_THRESHOLD = 50` constant in `combat/commands.ts`; aggressive species: `moss_boar` (55), `fog_wolf` (80), `ash_serpent` (85), `mountain_bear` (90), `iron_hound` (92), `white_marsh_leviathan` (95)
+- `CombatInitiatePayload` + `CombatInitiateCmd` extended with optional `enemyType?`, `animalId?`, `speciesId?` fields
+- `combat_sessions` table migration: `enemy_type TEXT NOT NULL DEFAULT 'npc'` + `species_id TEXT` columns (ALTER TABLE try-catch for existing DBs)
+- `combatStore.ts` `projectInitiate`: reads `enemyType`/`animalId`/`speciesId` from payload
+- `runtime.ts` `submitCombatRoundAction`: branches on `session.enemy_type === 'animal'` — builds `npcTraits` from species aggression/fear instead of NPC profile; `npcIncapacitatedTicks = 0` (animals die); after animal player_victory emits `PLAYER_HUNTED_ANIMAL` to update `AnimalPopulationProjection`
+- `combatRouter.ts`: new `POST /api/combat/initiate-animal` endpoint (validates species aggression ≥ 50, count > 3 extinction guard); action/Phase-B endpoints skip NPC lookup for animal combats; `toClientSession` exposes `enemyType` + `speciesId`
+- `api/client.ts`: `ServerCombatSession` extended; new `combatInitiateAnimal()` method
+- `CombatHud.tsx`: `enemyType` prop; victory text differs for animals vs NPCs
+- `AreaPage.tsx`: `AGGRESSIVE_SPECIES_IDS` Set; `handleAnimalHunt` → confirm dialog for aggressive species → `handleAnimalCombatConfirm` → Phase B `CombatHud`; weak animals keep existing `PLAYER_HUNTED_ANIMAL` instant flow
+
+### Active Blockers
+None. Both builds clean. Ready to deploy.
+
+### Next Steps
+- Rebuild docker stack and smoke-test wildlife combat in-world
+- Phase E6 or next roadmap item per ROADMAP.md
+
+---
+
 ## 2026-05-21 — Handoff Snapshot @ v0.45.1
 
 ### Current Version

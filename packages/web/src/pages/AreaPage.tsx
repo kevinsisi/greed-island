@@ -5,6 +5,7 @@ import { useWorldState } from '../state/WorldStateContext'
 import { useAuth } from '../state/AuthContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
+import { CombatHud } from '../components/game/CombatHud'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaPhaserGame } from '../game/AreaPhaserGame'
@@ -24,8 +25,14 @@ import {
   type ServerAmbient,
   type ServerAreaState,
   type ServerBuildingView,
+  type ServerCombatSession,
   type ServerNearbyPlayer
 } from '../api/client'
+
+/** Species that require Phase B combat instead of instant hunt (aggression ≥ 50). */
+const AGGRESSIVE_SPECIES_IDS = new Set([
+  'moss_boar', 'fog_wolf', 'ash_serpent', 'mountain_bear', 'iron_hound', 'white_marsh_leviathan'
+])
 import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 
@@ -73,6 +80,8 @@ export function AreaPage() {
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const [playerPosition, setPlayerPosition] = useState<{ tileId: string; x: number; y: number; z: number } | null>(null)
   const [ecology, setEcology] = useState<AreaEcologyView | null>(null)
+  const [animalCombatConfirm, setAnimalCombatConfirm] = useState<{ speciesId: string; animalId: string } | null>(null)
+  const [animalCombatSession, setAnimalCombatSession] = useState<ServerCombatSession | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -307,6 +316,11 @@ export function AreaPage() {
         showFeedback(false, '請先登入再狩獵')
         return
       }
+      if (AGGRESSIVE_SPECIES_IDS.has(speciesId)) {
+        // Strong animal — show combat confirm dialog
+        setAnimalCombatConfirm({ speciesId, animalId })
+        return
+      }
       api
         .playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
         .then((r) => {
@@ -320,6 +334,17 @@ export function AreaPage() {
     },
     [token, tileId, showFeedback, refreshEcology]
   )
+
+  const handleAnimalCombatConfirm = useCallback(async () => {
+    if (!token || !animalCombatConfirm) return
+    setAnimalCombatConfirm(null)
+    try {
+      const r = await api.combatInitiateAnimal(token, animalCombatConfirm.animalId, animalCombatConfirm.speciesId)
+      setAnimalCombatSession(r.session)
+    } catch (err) {
+      showFeedback(false, `無法發起戰鬥：${err instanceof Error ? err.message : '未知錯誤'}`)
+    }
+  }, [token, animalCombatConfirm, showFeedback])
 
   const handleFish = useCallback(() => {
     if (!token) return
@@ -635,6 +660,58 @@ export function AreaPage() {
       )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
+
+      {/* Animal combat confirm dialog */}
+      {animalCombatConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ground-900/85 backdrop-blur-sm px-3 pb-3 sm:p-6"
+          onClick={() => setAnimalCombatConfirm(null)}
+        >
+          <div
+            onClick={(ev) => ev.stopPropagation()}
+            className="w-full max-w-sm gi-panel border-ember-700/60 p-5 flex flex-col gap-4"
+          >
+            <div>
+              <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">危險 / Danger</div>
+              <h2 className="font-display font-extrabold text-xl text-ground-100 mt-1">
+                對 {animalCombatConfirm.speciesId} 發起戰鬥？
+              </h2>
+              <p className="text-[12px] text-ground-400 mt-1">此物種具有攻擊性，需透過戰鬥擊殺。</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void handleAnimalCombatConfirm()}
+                className="gi-touch px-4 py-2 text-[12px] font-display uppercase tracking-tightest border border-ember-600 text-ember-300 hover:bg-ember-500/10 rounded-sharp"
+              >
+                開戰
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnimalCombatConfirm(null)}
+                className="gi-touch px-4 py-2 text-[12px] font-display uppercase tracking-tightest border border-ground-600 text-ground-300 hover:bg-ground-700/30 rounded-sharp"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Animal combat HUD */}
+      {animalCombatSession && animalCombatSession.state === 'active' && (
+        <CombatHud
+          npcName={animalCombatSession.speciesId ?? '野生動物'}
+          initialSession={animalCombatSession}
+          enemyType="animal"
+          onClose={() => {
+            setAnimalCombatSession(null)
+            refreshEcology()
+          }}
+        />
+      )}
     </div>
   )
 }

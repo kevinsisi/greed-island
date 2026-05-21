@@ -22,7 +22,8 @@ import type { SimulationRuntime } from '../sim/runtime.js'
 import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import type { SocialStore } from './socialStore.js'
 import { CombatStore } from '../combat/combatStore.js'
-import { COMBAT_INITIAL_HP, COMBAT_NPC_INCAP_TICKS } from '../combat/commands.js'
+import { ANIMAL_COMBAT_AGGRESSION_THRESHOLD, COMBAT_INITIAL_HP, COMBAT_NPC_INCAP_TICKS } from '../combat/commands.js'
+import { getSpecies } from '../ecosystem/species.js'
 import {
   makeLivingWorldCommand,
   type LivingWorldActorType,
@@ -134,6 +135,98 @@ export function createCombatRouter(input: {
         combatId,
         playerAccountId: String(accountId),
         npcId: targetNpcId,
+        tile: playerLoc.tile_id,
+        playerCombatHp: COMBAT_INITIAL_HP,
+        npcCombatHp: COMBAT_INITIAL_HP,
+        reason: 'player_challenge',
+        narration,
+      }
+    )
+
+    const committed = input.runtime.submitLivingWorldCommand(command)
+    if (!committed) {
+      res.status(500).json({ error: 'COMBAT_INITIATE_REJECTED' })
+      return
+    }
+
+    const session = store.getSession(combatId)
+    if (!session) {
+      res.status(500).json({ error: 'COMBAT_PROJECTION_MISSING' })
+      return
+    }
+
+    res.json({ session: toClientSession(session), log: store.listLog(combatId) })
+  })
+
+  router.post('/combat/initiate-animal', auth, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const body = (req.body ?? {}) as { targetAnimalId?: unknown; speciesId?: unknown }
+    const targetAnimalId = typeof body.targetAnimalId === 'string' ? body.targetAnimalId : null
+    const speciesId = typeof body.speciesId === 'string' ? body.speciesId : null
+    if (!targetAnimalId || !speciesId) {
+      res.status(400).json({ error: 'TARGET_ANIMAL_AND_SPECIES_REQUIRED' })
+      return
+    }
+
+    const species = getSpecies(speciesId)
+    if (!species) {
+      res.status(404).json({ error: 'SPECIES_NOT_FOUND' })
+      return
+    }
+    if (species.aggression < ANIMAL_COMBAT_AGGRESSION_THRESHOLD) {
+      res.status(409).json({ error: 'ANIMAL_NOT_AGGRESSIVE', aggression: species.aggression })
+      return
+    }
+
+    const existingActive = store.getActiveSessionForPlayer(accountId)
+    if (existingActive) {
+      res.status(409).json({ error: 'ALREADY_IN_COMBAT', combatId: existingActive.combat_id })
+      return
+    }
+
+    const playerLoc = input.social.getPlayerLocation(accountId)
+    if (!playerLoc) {
+      res.status(409).json({ error: 'PLAYER_LOCATION_UNKNOWN' })
+      return
+    }
+
+    // Verify the animal exists on the player's tile.
+    const population = input.runtime.getAnimalPopulation()
+    const animalRow = population.find(
+      (r) => r.speciesId === speciesId && r.tileId === playerLoc.tile_id && r.animalIds.includes(targetAnimalId)
+    )
+    if (!animalRow) {
+      res.status(404).json({ error: 'ANIMAL_NOT_FOUND_ON_TILE' })
+      return
+    }
+
+    // Extinction protection: block combat if species count on tile ≤ 3.
+    if (animalRow.count <= 3) {
+      res.status(409).json({ error: 'SPECIES_NEAR_EXTINCTION', count: animalRow.count })
+      return
+    }
+
+    const wallet = input.jobs.getWallet(accountId)
+    if (wallet.energy <= 0) {
+      res.status(409).json({ error: 'ENERGY_DEPLETED' })
+      return
+    }
+
+    const currentTick = input.runtime.getCurrentTick()
+    const combatId = `combat_${currentTick}_${accountId}_${targetAnimalId}_${hashCanonicalJson({ accountId, targetAnimalId, currentTick }).slice(0, 8)}`
+    const narration = `玩家 #${accountId} 對 ${speciesId} 發起戰鬥。`
+    const command = makeLivingWorldCommand(
+      'COMBAT_INITIATE',
+      String(accountId),
+      'player' as LivingWorldActorType,
+      currentTick,
+      Date.now(),
+      {
+        combatId,
+        playerAccountId: String(accountId),
+        enemyType: 'animal',
+        animalId: targetAnimalId,
+        speciesId,
         tile: playerLoc.tile_id,
         playerCombatHp: COMBAT_INITIAL_HP,
         npcCombatHp: COMBAT_INITIAL_HP,
@@ -305,16 +398,14 @@ export function createCombatRouter(input: {
       return
     }
 
-    const profile = input.runtime.findProfile(session.npc_id)
-    if (!profile) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND' })
-      return
-    }
-    const npcs = input.runtime.getNpcs()
-    const npcSummary = npcs.find((n) => n.id === session.npc_id)
-    if (!npcSummary) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND' })
-      return
+    // For NPC combats, verify the NPC still exists. Animal combats skip this check.
+    if (session.enemy_type !== 'animal') {
+      const profile = input.runtime.findProfile(session.npc_id)
+      const npcSummary = input.runtime.getNpcs().find((n) => n.id === session.npc_id)
+      if (!profile || !npcSummary) {
+        res.status(404).json({ error: 'NPC_NOT_FOUND' })
+        return
+      }
     }
 
     const cardIdInput = typeof body.cardId === 'number' ? body.cardId : undefined
@@ -363,5 +454,7 @@ function toClientSession(s: import('../combat/combatStore.js').CombatSessionRow)
     resolvedTick: s.resolved_tick,
     initialHp: COMBAT_INITIAL_HP,
     npcIncapTicks: COMBAT_NPC_INCAP_TICKS,
+    enemyType: s.enemy_type,
+    speciesId: s.species_id,
   }
 }
