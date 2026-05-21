@@ -31,6 +31,7 @@
     "patience": 0.7,
     "greed": 0.4,
     "trustBase": 50,
-    "preferredTradeBiome": "water"
+    "preferredTradeBiome": "water",
+    "traderRole": "carrier"
   }
 }

@@ -33,6 +33,7 @@
     "greed": 0.85,
     "trustBase": 15,
     "slipperiness": 0.9,
-    "factionLean": "underground"
+    "factionLean": "underground",
+    "traderRole": "carrier"
   }
 }

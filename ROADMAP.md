@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.48.0 ✅ shipped — 2026-05-21
+
+**主題：NPC 自主貨運系統（Carrier Trade）**
+
+- ✅ `carrierPlanner.ts`：`planCarrierDispatches` + `planCarrierArrivals`；BFS hop 計算；surplus→deficiency 最佳路由選擇
+- ✅ `CARRIER_HAUL_MIN=5`、`CARRIER_HAUL_MAX=20`；旅程 = `hopCount × TICKS_PER_HOUR`
+- ✅ 指令管線：`TRADE_ROUTE_OPENED?` → `GOODS_CONSUMED` → `GOODS_TRANSPORT_STARTED` → `GOODS_TRANSPORT_ARRIVED` + `GOODS_STORED`（暴風雨 → `GOODS_TRANSPORT_LOST`）
+- ✅ `LogisticsProjection.getStartedTransports()` 新增
+- ✅ `port.merchant.anton.json` + `central.broker.gui.json`：`traderRole: carrier` 標記
+- ✅ `runtime.ts`：carrier planner 掛入模擬主循環（抵達先解算、再派送新任務）
+- ✅ 11 個 `carrierPlanner.test.ts` 測試；全 782 個測試通過
+
+---
+
 ## v0.47.0 ✅ shipped — 2026-05-21
 
 **主題：植物生態進入 NPC 對話（生態感知 §11.9 閉合）**

@@ -134,6 +134,7 @@ import { planAnimalReproduction } from '../ecosystem/reproduction.js'
 import { getSpecies, requireSpecies } from '../ecosystem/species.js'
 import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
+import { planCarrierDispatches, planCarrierArrivals } from './carrierPlanner.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -3677,6 +3678,40 @@ export class SimulationRuntime {
           }
         ))
       }
+    }
+
+    // ---- v0.48.0: Carrier NPC goods transport planner ----
+    {
+      const stormActive = isStormActive(this.getActiveWorldEvents())
+      const startedTransports = this.logisticsProjection.getStartedTransports()
+      const plannedTransportResolutions = new Set<string>()
+
+      // Phase A: resolve in-flight transports that have reached their destination
+      commands.push(...planCarrierArrivals({
+        tick: nextTick,
+        submittedAt,
+        startedTransports,
+        stormActive,
+        unlockedTileIds: this.lifeExpansion.unlockedTileIds,
+        plannedTransportResolutions,
+      }))
+
+      // Phase B: dispatch idle carrier NPCs from settlements with surplus goods
+      const carrierPlannedRouteIds = new Set<string>()
+      const carrierPlannedTransportIds = new Set<string>()
+      commands.push(...planCarrierDispatches({
+        tick: nextTick,
+        submittedAt,
+        profiles: this.profiles,
+        npcStates: this.getNpcs(),
+        settlementsProjection: this.settlementsProjection,
+        goodsInventoryProjection: this.goodsInventoryProjection,
+        logisticsProjection: this.logisticsProjection,
+        stormActive,
+        unlockedTileIds: this.lifeExpansion.unlockedTileIds,
+        plannedRouteIds: carrierPlannedRouteIds,
+        plannedTransportIds: carrierPlannedTransportIds,
+      }))
     }
 
     // ---- Phase 1 budget gate ----

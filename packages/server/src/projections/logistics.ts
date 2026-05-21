@@ -129,6 +129,10 @@ export class LogisticsProjection {
     return hashCanonicalJson(this.snapshot())
   }
 
+  getStartedTransports(): readonly GoodsTransportRow[] {
+    return [...this.transports.values()].filter((t) => t.status === 'started')
+  }
+
   private resolveTransport(
     transportId: string,
     status: GoodsTransportStatus,
