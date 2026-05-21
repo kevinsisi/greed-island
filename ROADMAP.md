@@ -5,38 +5,54 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.46.0 🔜 planned — Wildlife Combat
+## v0.47.0 ✅ shipped — 2026-05-21
+
+**主題：植物生態進入 NPC 對話（生態感知 §11.9 閉合）**
+
+- ✅ `PlantContextRow` type + `plantContext` 欄位加入 `AiDialogContext`
+- ✅ `buildEcologyBlock()` 擴展第 4 個可選參數 `plants?`；按飽和度排序，顯示 繁盛/適中/稀疏/極稀 標籤
+- ✅ 反幻覺 block 現在同時包含動物與植物物種 ID（AI 不可虛構物種名）
+- ✅ `npc.ts` 對話 handler：`getBioNodesOnTile()` → `plantContext`（density > 0 過濾，nameZh 來自 `getPlantSpecies()`）
+- ✅ 3 個新測試；全 36 個 aiDialog 測試通過
+- ✅ 森林 NPC 可自然提及橡樹/松木稀疏、鹽沼 NPC 可談蘆葦繁盛、廢墟 NPC 可聊洞穴菌
+
+---
+
+## v0.46.0 ✅ shipped — 2026-05-21
 
 **主題：玩家與野生動物的真實戰鬥**
 
-- [ ] `COMBAT_INITIATE` schema 擴展：`npcActorId` → `enemyActorId + enemyType: 'npc'|'animal'`
-- [ ] 動物戰鬥數值：`species.aggression` ≥ 0.5 = 可戰鬥；< 0.5 = 即時狩獵（PLAYER_HUNTED_ANIMAL）
-- [ ] 弱小動物：直接獵殺路徑，跳過 Phase C sub-tick
-- [ ] 強大動物：confirm dialog → Phase C 戰鬥迴圈；動物 AI = 固定傷害/回合，HP 低時逃跑
-- [ ] 滅絕保護：物種數量 ≤ 3 時無法發起戰鬥
-- [ ] `CombatHud` 適配動物敵人（動物肖像 + 預估難度）
+- ✅ `COMBAT_INITIATE` schema 擴展：`enemyType: 'npc'|'animal'`、`animalId`、`speciesId`（`CombatInitiateCmd` + `CombatInitiatePayload` 同步）
+- ✅ 動物戰鬥數值：aggression ≥ 50 = Phase B 戰鬥；< 50 = 即時狩獵（`PLAYER_HUNTED_ANIMAL`）
+- ✅ 弱小動物：直接獵殺路徑（不變）
+- ✅ 強大動物：confirm dialog → Phase B `CombatHud`；動物 traits 來自 species aggression/fear；animal player_victory 後 emit `PLAYER_HUNTED_ANIMAL`
+- ✅ 滅絕保護：物種數量 ≤ 3 時無法發起戰鬥
+- ✅ `combat_sessions` table migration：`enemy_type`、`species_id` 兩欄（ALTER TABLE try-catch）
+- ✅ `POST /api/combat/initiate-animal`；Phase B action/resolve endpoints 對 animal combat 跳過 NPC lookup
+- ✅ `CombatHud` 適配動物敵人（victory text 因敵人類型而異）
+- ✅ `AreaPage` `AGGRESSIVE_SPECIES_IDS` Set；handleAnimalHunt → confirm dialog → CombatHud
 
 ---
 
-## v0.45.1 🔜 planned — UI Refactor Phase 2 (canvas + drawer)
+## v0.45.1 ✅ shipped — 2026-05-21
 
-**主題：AreaScene 響應式畫布 + BottomSheet 替換 Drawer（中風險）**
+**主題：AreaScene 4:3 canvas + BottomSheet sticky tab bar on mobile**
 
-- [ ] `AreaScene` canvas 尺寸：`window.innerWidth - 16` 寬，4:3 比例；resize 事件重算
-- [ ] Drawer → `BottomSheet` component：fixed bottom，50vh，從底部滑入
-- [ ] EventTickerStrip 合併進 BottomSheet "events" tab
+- ✅ `AreaPhaserGame.tsx`：`aspect-[3/2]` → `aspect-[4/3]`
+- ✅ `AreaPage.tsx`：bottom section `flex-col-reverse lg:flex-col`；BottomSheet tab bar `sticky bottom-[56px] z-[25]`
+- ✅ `GameShell.tsx`：EventTickerStrip 在 `/area/*` 路由下抑制（避免 z-index 衝突）
 
 ---
 
-## v0.45.0 🔜 planned — UI Refactor Phase 1 (CSS/layout, low risk)
+## v0.45.0 ✅ shipped — 2026-05-21
 
 **主題：行動端操作性重構 Phase 1**
 
-- [ ] Brandbar 拆成 2 層：row-1（logo + ping + 48px）、row-2（區域名稱 + 時鐘 + 36px）；sm+ 折回 1 列 56px
-- [ ] MobileTabBar：5 個主要 tab + "⋯ More" popover（設定 / 帳號 / 管理員）；最小高度 56px；圖示觸控區 ≥ 44px
-- [ ] `AreaPage` max-width 600px (sm+)，xs 全寬
-- [ ] 所有 `createInspectZone` 觸控區 ≥ 44px
-- [ ] EventTickerStrip 簡化為 3 行輪播，不需滾動
+- ✅ Brandbar 拆成 2 層（Row 1: brand + lang + account；Row 2 xs-only: PlayerResources）
+- ✅ MobileTabBar：5-slot grid + `⋯ More` popover
+- ✅ `EventTickerStrip`：3 行輪播 + "1/3" counter（不需滾動）
+- ✅ `AreaScene.ts`：所有 inspect/hunt hit zones ≥ 44px
+- ✅ `chronicleRenderer.test.ts`：6 個 failing tests 修正（aiProvider mock 重寫）
 
 ---
 

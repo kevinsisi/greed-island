@@ -37,7 +37,8 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, type AiDialogContext } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow } from '../npcs/aiDialog.js'
+import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
 import { generateWithProviders, AiUnavailableError } from '../npcs/aiProvider.js'
@@ -191,6 +192,14 @@ export function createNpcRouter(input: {
         // ecology context
         const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
         const fisheryRow = input.runtime.getFisheryDensityOnTile(npcTile)
+        const rawPlantNodes = input.runtime.getBioNodesOnTile(npcTile)
+        const plantContext: readonly PlantContextRow[] = rawPlantNodes
+          .filter((n) => n.density > 0 && n.capacity > 0)
+          .map((n) => ({
+            speciesId: n.speciesId,
+            nameZh: getPlantSpecies(n.speciesId)?.nameZh ?? n.speciesId,
+            saturationPct: Math.min(100, (n.density / n.capacity) * 100),
+          }))
         const extinctionWarnings = input.runtime.getExtinctionWarningsOnTile(npcTile)
 
         // faction + history grounding (§11.9)
@@ -236,6 +245,7 @@ export function createNpcRouter(input: {
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),
+          ...(plantContext.length > 0 ? { plantContext } : {}),
           ...(dominantFaction ? { dominantFaction } : {}),
           ...(tileHistoryArcs ? { tileHistoryArcs } : {}),
           ...(recentLocalEvents ? { recentLocalEvents } : {}),

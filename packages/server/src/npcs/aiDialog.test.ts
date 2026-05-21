@@ -222,6 +222,26 @@ describe('buildEcologyBlock', () => {
     expect(animalLines[1]).toContain('forest_deer')
     expect(animalLines[2]).toContain('marsh_heron')
   })
+
+  it('includes plant rows sorted by saturation desc', () => {
+    const lines = buildEcologyBlock(undefined, null, undefined, [
+      { speciesId: 'oak', nameZh: '橡樹', saturationPct: 45 },
+      { speciesId: 'pine', nameZh: '松木', saturationPct: 85 },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('橡樹')
+    expect(joined).toContain('松木')
+    expect(joined).toContain('稀疏')   // 45% → 稀疏
+    expect(joined).toContain('繁盛')   // 85% → 繁盛
+    const plantLines = lines.filter((l) => l.includes('植物'))
+    // pine (85%) should appear before oak (45%)
+    expect(plantLines[0]).toContain('松木')
+    expect(plantLines[1]).toContain('橡樹')
+  })
+
+  it('returns empty when only plants array is empty', () => {
+    expect(buildEcologyBlock(undefined, null, undefined, [])).toEqual([])
+  })
 })
 
 describe('buildRecentEventsBlock', () => {

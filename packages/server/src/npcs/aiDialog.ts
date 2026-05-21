@@ -41,6 +41,12 @@ export type TileHistoryArcContext = Readonly<{
   status: string
 }>
 
+export type PlantContextRow = Readonly<{
+  speciesId: string
+  nameZh: string
+  saturationPct: number  // 0–100, density/capacity * 100
+}>
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -59,6 +65,7 @@ export type AiDialogContext = Readonly<{
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
   extinctionWarnings?: readonly string[]
+  plantContext?: readonly PlantContextRow[]
   recentLocalEvents?: readonly string[]
   skillLevels?: readonly { skillId: string; level: number }[]
   dominantFaction?: string | null
@@ -169,13 +176,16 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildKnownPersonBlock(ctx.knownPersonNames),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
-      (ctx.ecologyContext ?? []).map((r) => r.speciesId),
+      [
+        ...(ctx.ecologyContext ?? []).map((r) => r.speciesId),
+        ...(ctx.plantContext ?? []).map((r) => r.speciesId),
+      ],
     ),
     `### 最近的對話紀錄（你之前回覆過的內容，僅供參考，不要重複）`,
     historyBlock,
     '',
     ...buildRumorsBlock(ctx.activeRumors),
-    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings),
+    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings, ctx.plantContext),
     ...buildFactionBlock(ctx.dominantFaction),
     ...buildTileHistoryBlock(ctx.tileHistoryArcs),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
@@ -425,15 +435,24 @@ export function buildAntiHallucinationBlock(knownNames: readonly string[], known
   ]
 }
 
+function plantSaturationLabel(pct: number): string {
+  if (pct >= 80) return '繁盛'
+  if (pct >= 50) return '適中'
+  if (pct >= 20) return '稀疏'
+  return '極稀'
+}
+
 export function buildEcologyBlock(
   ecology: readonly { speciesId: string; count: number }[] | undefined,
   fishery: { density: string; collapsed: boolean } | null | undefined,
   extinctionWarnings?: readonly string[],
+  plants?: readonly PlantContextRow[],
 ): string[] {
   const hasEcology = ecology && ecology.length > 0
   const hasFishery = fishery != null
   const hasWarnings = extinctionWarnings && extinctionWarnings.length > 0
-  if (!hasEcology && !hasFishery && !hasWarnings) return []
+  const hasPlants = plants && plants.length > 0
+  if (!hasEcology && !hasFishery && !hasWarnings && !hasPlants) return []
   const lines: string[] = []
   if (hasEcology) {
     const sorted = [...ecology].sort(
@@ -449,6 +468,12 @@ export function buildEcologyBlock(
   }
   if (hasWarnings) {
     lines.push(`  · ⚠️ 瀕危物種警告：${extinctionWarnings!.join('、')} 數量極低，面臨滅絕`)
+  }
+  if (hasPlants) {
+    const sorted = [...plants].sort((a, b) => b.saturationPct - a.saturationPct)
+    for (const row of sorted) {
+      lines.push(`  · 植物｜${row.nameZh}（${row.speciesId}）：${plantSaturationLabel(row.saturationPct)}（${Math.round(row.saturationPct)}%）`)
+    }
   }
   return [
     `### 你所在地區的生態現況（依據世界資料，可自然融入對話）`,

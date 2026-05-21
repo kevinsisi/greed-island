@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-21 — Handoff Snapshot @ v0.47.0
+
+### Current Version
+`package.json` root is `0.47.0`. Build is clean. 36 aiDialog tests pass.
+
+### What Was Shipped This Session (v0.46.0 → v0.47.0)
+
+**v0.47.0 — Plant Ecology in NPC Dialog (Ecological Perception §11.9 closure)**
+- `PlantContextRow` type added to `aiDialog.ts`: `{ speciesId, nameZh, saturationPct }`
+- `plantContext?: readonly PlantContextRow[]` field added to `AiDialogContext`
+- `buildEcologyBlock()` extended with optional 4th arg `plants?`; renders plant rows sorted by saturation desc with labels 繁盛/適中/稀疏/極稀
+- Anti-hallucination block now includes plant species IDs alongside animal species IDs
+- `npc.ts` handler: imports `getPlantSpecies`; computes `plantContext` from `runtime.getBioNodesOnTile(npcTile)` (filters density > 0, maps to `{speciesId, nameZh, saturationPct}`); adds to `dialogCtx` spread
+- 3 new unit tests in `aiDialog.test.ts`; all 36 pass
+- NPCs in forest (橡樹/松木/野草藥), salt_marsh (蘆葦), ruin (洞穴菌), mountain (松木) biomes can now reference local plant density naturally in dialog
+
+### Active Blockers
+None. Both builds clean.
+
+### Next Steps
+- Rebuild docker stack and smoke-test NPC dialog with plant context
+- Next feature: TBD per ROADMAP.md (history chronicle feed for combat outcomes, or NPC carrier trade)
+
+---
+
 ## 2026-05-21 — Handoff Snapshot @ v0.46.0
 
 ### Current Version
