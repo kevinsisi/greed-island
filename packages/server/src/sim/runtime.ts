@@ -3291,8 +3291,8 @@ export class SimulationRuntime {
       this.beliefProjection.tick(nextTick)
     }
 
-    // Ecosystem health beliefs — every 48 ticks (≈ 2 in-game days)
-    if (nextTick % 48 === 0) {
+    // Ecosystem health beliefs — every 2 in-game days
+    if (nextTick % (2 * TICKS_PER_DAY) === 0) {
       const npcLocs = new Map(this.getNpcs().map(n => [n.id, n.location]))
       for (const region of this.ecosystemRegionProjection.list()) {
         const densityPct = 1 - (region.pressureLevel / 100)

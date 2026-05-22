@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { BeliefProjection, formatBeliefContext } from './beliefProjection.js'
 import type { BeliefRow } from './beliefProjection.js'
 import type { Event } from '../kernel/types.js'
+import { TICKS_PER_DAY } from '../config/world.js'
 
 function ev(tick: number, eventType: string, data: unknown): Event {
   return {
@@ -158,15 +159,15 @@ describe('BeliefProjection', () => {
     expect(scarcity.confidence).toBe(35)
   })
 
-  it('tick() decays confidence by decayRatePerDay per 24 ticks', () => {
+  it('tick() decays confidence by decayRatePerDay per in-game day', () => {
     const proj = new BeliefProjection()
     const locs = new Map([['npc-a', 't_dock']])
-    proj.apply(ev(100, 'FACTION_TILE_SEIZED', {
+    proj.apply(ev(0, 'FACTION_TILE_SEIZED', {
       tileId: 't_dock', factionId: 'guild', previousFactionId: null,
-      seizedAtTick: 100, narration: 'x'
+      seizedAtTick: 0, narration: 'x'
     }), locs)
-    // tile_safety: decayRatePerDay=2 → after 1 day (24 ticks) confidence drops by 2
-    proj.tick(124) // 24 ticks later (observedAtTick=100, so daysPassed=1)
+    // tile_safety: decayRatePerDay=2 → after 1 in-game day confidence drops by 2
+    proj.tick(TICKS_PER_DAY)
     const safety = proj.getBeliefs('npc-a').find(b => b.subject === 'tile_safety')!
     expect(safety.confidence).toBe(88) // 90 - 2
   })
@@ -179,7 +180,7 @@ describe('BeliefProjection', () => {
       seizedAtTick: 0, narration: 'x'
     }), locs)
     // tile_safety: confidence=90, decayRatePerDay=2 → 45 days × 2 = 90 → hits 0
-    proj.tick(45 * 24)
+    proj.tick(45 * TICKS_PER_DAY)
     expect(proj.getBeliefs('npc-a').find(b => b.subject === 'tile_safety')).toBeUndefined()
   })
 

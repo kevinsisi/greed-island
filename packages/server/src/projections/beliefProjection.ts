@@ -1,4 +1,5 @@
 import type { Event } from '../kernel/types.js'
+import { TICKS_PER_DAY } from '../config/world.js'
 
 const FOOD_GOODS_IDS = new Set(['fish', 'meat', 'grain'])
 
@@ -128,10 +129,10 @@ export class BeliefProjection {
   }
 
   tick(currentTick: number): void {
-    const currentDay = Math.floor(currentTick / 24)
+    const currentDay = Math.floor(currentTick / TICKS_PER_DAY)
     for (const [npcId, npcMap] of this.rowsByNpc) {
       for (const [key, row] of npcMap) {
-        const observedDay = Math.floor(row.observedAtTick / 24)
+        const observedDay = Math.floor(row.observedAtTick / TICKS_PER_DAY)
         const daysPassed = currentDay - observedDay
         if (daysPassed <= 0) continue
         const newConf = row.confidence - row.decayRatePerDay * daysPassed
@@ -182,7 +183,7 @@ export function formatBeliefContext(rows: readonly BeliefRow[], currentTick: num
   const alive = rows.filter(r => r.confidence > 0)
   if (alive.length === 0) return ''
   const lines = alive.map(r => {
-    const daysAgo = Math.floor((currentTick - r.observedAtTick) / 24)
+    const daysAgo = Math.floor((currentTick - r.observedAtTick) / TICKS_PER_DAY)
     const hedge = r.confidence >= 70 ? '' : r.confidence >= 40 ? '（我聽說）' : '（也許）'
     return `- ${subjectLabel(r)}：${valueLabel(r.value)}${hedge}，${daysAgo}天前觀察`
   })
