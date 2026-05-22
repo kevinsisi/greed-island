@@ -2754,7 +2754,7 @@ const VALIDATORS: Readonly<
     if (typeof p.intentType !== 'string' || !['survival', 'economic', 'social', 'ecosystem'].includes(p.intentType)) return 'intentType must be one of: survival, economic, social, ecosystem'
     if (typeof p.targetTile !== 'string' || p.targetTile.length === 0) return 'targetTile required'
     if (typeof p.outcome !== 'string' || !['success', 'failure'].includes(p.outcome)) return 'outcome must be one of: success, failure'
-    if (!isNonNegativeInteger(p.urgencyAtDispatch)) return 'urgencyAtDispatch must be non-negative integer'
+    if (typeof p.urgencyAtDispatch !== 'number' || p.urgencyAtDispatch < 0) return 'urgencyAtDispatch must be non-negative number'
     if (!isNonNegativeInteger(p.resolvedAtTick)) return 'resolvedAtTick must be non-negative integer'
     return null
   },
