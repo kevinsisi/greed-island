@@ -27,6 +27,8 @@ export interface BeliefRow {
   observedAtTick: number
   decayRatePerDay: number
   emotionalTag?: EmotionalTag
+  /** Only set for faction_control beliefs; stores which faction controls the tile */
+  factionId?: string
 }
 
 // World tile adjacency (borders).
@@ -72,6 +74,7 @@ export class BeliefProjection {
   ): void {
     const tileId = readStr(data.tileId)
     if (!tileId) return
+    const rawFactionId = readStr(data.factionId)
     for (const [npcId, npcTile] of npcLocations) {
       const conf = perceiveConfidence(npcTile, tileId)
       if (conf === 0) continue
@@ -80,11 +83,13 @@ export class BeliefProjection {
         value: 'dangerous', confidence: conf, observedAtTick: tick,
         decayRatePerDay: 2, emotionalTag: 'fear',
       })
-      this.upsert({
+      const factionControlRow: BeliefRow = {
         npcId, subject: 'faction_control', qualifier: tileId,
         value: 'controlled', confidence: conf, observedAtTick: tick,
         decayRatePerDay: 1,
-      })
+      }
+      if (rawFactionId) factionControlRow.factionId = rawFactionId
+      this.upsert(factionControlRow)
     }
   }
 

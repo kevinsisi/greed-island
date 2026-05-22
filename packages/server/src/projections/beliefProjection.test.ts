@@ -49,6 +49,17 @@ describe('BeliefProjection', () => {
     expect(ctrl.confidence).toBe(90)
   })
 
+  it('faction_control belief stores factionId from FACTION_TILE_SEIZED event', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-a', 't_dock']])
+    proj.apply(ev(10, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'tide_hunters', previousFactionId: null, seizedAtTick: 10, narration: 'x'
+    }), locs)
+    const ctrl = proj.getBeliefs('npc-a').find(b => b.subject === 'faction_control')!
+    expect(ctrl).toBeDefined()
+    expect(ctrl.factionId).toBe('tide_hunters')
+  })
+
   it('FACTION_TILE_SEIZED on adjacent tile → confidence 40', () => {
     const proj = new BeliefProjection()
     // npc-a is on t_central; t_dock is adjacent to t_central
