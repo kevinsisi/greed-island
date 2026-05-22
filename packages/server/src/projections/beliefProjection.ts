@@ -53,6 +53,9 @@ export class BeliefProjection {
       case 'FACTION_TILE_SEIZED':
         this.applyFactionSeized(data, event.tick ?? 0, npcLocations)
         break
+      case 'ANIMAL_ATTACKED_NPC':
+        this.applyAnimalAttack(data, event.tick ?? 0, npcLocations)
+        break
     }
   }
 
@@ -75,6 +78,24 @@ export class BeliefProjection {
         npcId, subject: 'faction_control', qualifier: tileId,
         value: 'controlled', confidence: conf, observedAtTick: tick,
         decayRatePerDay: 1,
+      })
+    }
+  }
+
+  private applyAnimalAttack(
+    data: Record<string, unknown>,
+    tick: number,
+    npcLocations: ReadonlyMap<string, string>,
+  ): void {
+    const tileId = readStr(data.tileId)
+    if (!tileId) return
+    for (const [npcId, npcTile] of npcLocations) {
+      const conf = perceiveConfidence(npcTile, tileId)
+      if (conf === 0) continue
+      this.upsert({
+        npcId, subject: 'tile_safety', qualifier: tileId,
+        value: 'dangerous', confidence: conf, observedAtTick: tick,
+        decayRatePerDay: 3, emotionalTag: 'fear',
       })
     }
   }

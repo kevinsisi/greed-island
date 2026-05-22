@@ -76,4 +76,44 @@ describe('BeliefProjection', () => {
     }), locs)
     expect(proj.getBeliefs('npc-any')).toHaveLength(0)
   })
+
+  it('ANIMAL_ATTACKED_NPC on NPC tile → tile_safety dangerous, confidence 90', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-b', 't_forest']])
+    proj.apply(ev(20, 'ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-1', animalId: 'wolf-1', speciesId: 'fog_wolf',
+      npcId: 'npc-b', tileId: 't_forest', attackedAtTick: 20,
+      damage: { mood: -10, health: -15 }, narration: 'attacked'
+    }), locs)
+    const safety = proj.getBeliefs('npc-b').find(b => b.subject === 'tile_safety')!
+    expect(safety).toBeDefined()
+    expect(safety.value).toBe('dangerous')
+    expect(safety.confidence).toBe(90)
+    expect(safety.emotionalTag).toBe('fear')
+  })
+
+  it('ANIMAL_ATTACKED_NPC: bystander NPC on same tile also gets belief', () => {
+    const proj = new BeliefProjection()
+    // npc-b is the victim; npc-c is also on t_forest
+    const locs = new Map([['npc-b', 't_forest'], ['npc-c', 't_forest']])
+    proj.apply(ev(20, 'ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-1', animalId: 'wolf-1', speciesId: 'fog_wolf',
+      npcId: 'npc-b', tileId: 't_forest', attackedAtTick: 20,
+      damage: { mood: -10, health: -15 }, narration: 'attacked'
+    }), locs)
+    expect(proj.getBeliefs('npc-c').find(b => b.subject === 'tile_safety')).toBeDefined()
+  })
+
+  it('ANIMAL_ATTACKED_NPC: NPC on adjacent tile gets confidence 40', () => {
+    const proj = new BeliefProjection()
+    // npc-d is on t_central; t_forest is adjacent to t_central
+    const locs = new Map([['npc-d', 't_central']])
+    proj.apply(ev(20, 'ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-1', animalId: 'wolf-1', speciesId: 'fog_wolf',
+      npcId: 'npc-x', tileId: 't_forest', attackedAtTick: 20,
+      damage: { mood: -10, health: -15 }, narration: 'attacked'
+    }), locs)
+    const safety = proj.getBeliefs('npc-d').find(b => b.subject === 'tile_safety')!
+    expect(safety.confidence).toBe(40)
+  })
 })
