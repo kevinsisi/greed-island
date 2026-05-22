@@ -3263,7 +3263,9 @@ export class SimulationRuntime {
       const allBuildings = listAllBuildings(this.lifeExpansion.unlockedBuildingIds)
       for (const b of allBuildings) {
         const row = this.buildingStateProjection.getState(b.id)
-        if (row.state === 'abandoned') continue
+        if (row.state === 'abandoned' || row.state === 'under_construction') continue
+        // Skip buildings that have no projection entry (never had BUILDING_CONSTRUCTED event)
+        if (row.lastActivityTick === 0 && row.state === 'operational' && row.tileId === '') continue
         const hasOccupant = [...this.npcEngine.snapshotAll()].some(
           ([npcId]) => this.isNpcInsideBuilding(npcId, b.id)
         )

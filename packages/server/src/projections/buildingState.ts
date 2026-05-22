@@ -61,7 +61,7 @@ export class BuildingStateProjection {
         this.rows.set(buildingId, {
           buildingId,
           tileId: tileId || existing?.tileId || '',
-          state: 'operational',
+          state: existing?.state === 'under_construction' ? 'under_construction' : 'operational',
           health: Math.max(0, Math.min(100, readNumber(data.health, 100))),
           lastActivityTick: event.tick ?? existing?.lastActivityTick ?? 0,
         })
