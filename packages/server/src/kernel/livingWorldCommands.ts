@@ -195,6 +195,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Faction Conflict Consequences (v0.33.0)
   'FACTION_TILE_SEIZED',
   'FACTION_NPC_LOYALTY_SHIFTED',
+  // NPC Intention Layer (v0.51.0)
+  'NPC_INTENT_RESOLVED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -369,6 +371,18 @@ export type FactionNpcLoyaltyShiftedCmd = Readonly<{
   toFaction: string
   shiftedAtTick: number
   narration: string
+}>
+
+// NPC Intention Layer (v0.51.0)
+export type IntentKind = 'survival' | 'economic' | 'social' | 'ecosystem'
+
+export type NpcIntentResolvedCmd = Readonly<{
+  npcId: string
+  intentType: IntentKind
+  targetTile: string
+  outcome: 'success' | 'failure'
+  urgencyAtDispatch: number
+  resolvedAtTick: number
 }>
 
 // Sprint 2B — Animal aggression
@@ -1478,6 +1492,7 @@ export type LivingWorldCommandPayload =
   | NpcHeirAssignedCmd
   | FactionTileSeizedCmd
   | FactionNpcLoyaltyShiftedCmd
+  | NpcIntentResolvedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2730,6 +2745,17 @@ const VALIDATORS: Readonly<
     if (typeof p.toFaction !== 'string' || p.toFaction.length === 0) return 'toFaction required'
     if (!isNonNegativeInteger(p.shiftedAtTick)) return 'shiftedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  // NPC Intention Layer (v0.51.0)
+  NPC_INTENT_RESOLVED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.intentType !== 'string' || !['survival', 'economic', 'social', 'ecosystem'].includes(p.intentType)) return 'intentType must be one of: survival, economic, social, ecosystem'
+    if (typeof p.targetTile !== 'string' || p.targetTile.length === 0) return 'targetTile required'
+    if (typeof p.outcome !== 'string' || !['success', 'failure'].includes(p.outcome)) return 'outcome must be one of: success, failure'
+    if (!isNonNegativeInteger(p.urgencyAtDispatch)) return 'urgencyAtDispatch must be non-negative integer'
+    if (!isNonNegativeInteger(p.resolvedAtTick)) return 'resolvedAtTick must be non-negative integer'
     return null
   },
 }
