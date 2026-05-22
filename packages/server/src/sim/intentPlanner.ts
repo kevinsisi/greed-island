@@ -178,7 +178,7 @@ function computeEcosystemIntent(
 
   const adjacents = MAP_ADJACENCY[currentTile] ?? []
   const healthyTile = adjacents.find(t => !depletedTiles.has(t))
-  const targetTile = healthyTile ?? profile.defaultLocation ?? currentTile
+  const targetTile = healthyTile ?? (profile.defaultLocation || currentTile)
 
   return {
     kind: 'ecosystem',
