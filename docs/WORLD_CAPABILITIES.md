@@ -1220,6 +1220,14 @@ But know nothing about:
 
 ## 12.5.5 Belief System
 
+> **v0.50.0 — BeliefProjection shipped.** Belief+Perception Layer 2 baseline operational.
+> - 4 belief subjects: `tile_safety`, `goods_scarcity`, `ecosystem_health`, `faction_control`
+> - Triggers: `FACTION_TILE_SEIZED` (tile_safety + faction_control), `ANIMAL_ATTACKED_NPC` (tile_safety), `GOODS_CONSUMED` food (goods_scarcity), ecosystem cadence every 48 ticks (ecosystem_health)
+> - Locality-based perception: same-tile = 90% confidence, adjacent = 40%; ecosystem capped to 70/30
+> - Confidence decay: `tick()` every `TICKS_PER_DAY`; rows at ≤0 deleted
+> - Dialog integration: `AiDialogContext.beliefContext` + `buildBeliefBlock` hedge-language rules injected into Gemini NPC prompt (≥70 direct, 40–69 "我聽說", <40 "也許")
+> - 23 tests in `beliefProjection.test.ts`
+
 Beliefs are not truth.
 
 Beliefs are:
@@ -2034,7 +2042,7 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 29. Layer-by-Layer Status (v0.34.0)
+## 29. Layer-by-Layer Status (v0.50.0)
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|

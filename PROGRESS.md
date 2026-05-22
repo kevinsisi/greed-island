@@ -5,6 +5,37 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-22 — Handoff Snapshot @ v0.50.0
+
+### Current Version
+`0.50.0` — TypeScript build clean. 812 tests pass across 115 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.49.0 → v0.50.0)
+
+**v0.50.0 — NPC Belief + Perception Layer (Cognitive Runtime Layer 2 baseline)**
+
+**新增檔案：**
+- `packages/server/src/projections/beliefProjection.ts` — `BeliefProjection` class（nested Map architecture, O(1) per-NPC lookup），`TILE_ADJACENCY`（7 tiles adjacency map），`formatBeliefContext`（exported），`subjectLabel` / `valueLabel`（module-private helpers），`FOOD_GOODS_IDS`
+- `packages/server/src/projections/beliefProjection.test.ts` — 23 unit tests（event triggers, confidence decay, perception locality, formatBeliefContext hedge language, end-to-end smoke）
+
+**修改檔案：**
+- `packages/server/src/sim/runtime.ts`：`beliefProjection` field + fan-out（`apply(ev, npcLocs)` per event） + decay cadence（every `TICKS_PER_DAY`） + ecosystem cadence（every 48 ticks，`densityPct = 1 - pressureLevel/100`） + `getFormattedBeliefContext(npcId)` getter
+- `packages/server/src/npcs/aiDialog.ts`：`AiDialogContext.beliefContext?: string` 欄位；`buildBeliefBlock()` exported helper（injects hedge rules into prompt）；`buildSystemPrompt` 注入 `buildBeliefBlock`
+- `packages/server/src/http/npc.ts`：`beliefCtx = runtime.getFormattedBeliefContext(npcId)` + spread into `dialogCtx`
+- `docs/WORLD_CAPABILITIES.md`：§12.5.5 Belief System 加入 v0.50.0 shipped note；§29 status table 更新至 v0.50.0
+
+**架構關鍵點：**
+- `BeliefProjection.apply(event, npcLocations)` 傳入當下 NPC 位置 map — 不從 EventLog boot hydrate（NPC 所在地於事件時刻無法從 log 重建），重啟後數分鐘內從 live events 重新填滿
+- Locality: same-tile = conf 90（goods 80），adjacent = conf 40（goods 35），non-adjacent = skip
+- Ecosystem indirect signal: conf === 90 → 70，conf === 40 → 30
+- `tick()` updates `observedAtTick = currentTick` on surviving rows to prevent double-decay
+- `upsert()` keyed by `subject|qualifier` per npcId → latest observation wins automatically
+- Event payload shape: `event.payload.data`（nested）— same as `buildingState.ts` pattern
+
+**Next:** NPC Intention layer (v0.51) — long-term/short-term `IntentStack` driving NPC behavior changes based on accumulated beliefs.
+
+---
+
 ## 2026-05-22 — Handoff Snapshot @ v0.49.0
 
 ### Current Version
