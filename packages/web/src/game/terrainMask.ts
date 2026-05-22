@@ -186,7 +186,7 @@ function staticLandTerrainAt(tileId: string, col: number, row: number): LandTerr
 }
 
 export function effectiveTerrainAt(
-  tileId: string,
+  tileId: DistrictId,
   col: number,
   row: number,
   buildings: readonly { col: number; row: number; state: string }[],
@@ -194,18 +194,18 @@ export function effectiveTerrainAt(
   const b = buildings.find(b => b.col === col && b.row === row)
   if (b) return b.state === 'abandoned' ? 'rough' : 'building'
   if (LAND_MASKS[tileId] === undefined) {
-    return terrainAt(tileId as DistrictId, col, row)
+    return terrainAt(tileId, col, row)
   }
   return staticLandTerrainAt(tileId, col, row)
 }
 
 export function walkableCellsForTile(
-  tileId: string,
+  tileId: DistrictId,
   buildings: readonly { col: number; row: number; state: string }[],
 ): readonly { col: number; row: number }[] {
   const result: { col: number; row: number }[] = []
-  for (let row = 0; row < 10; row++) {
-    for (let col = 0; col < 15; col++) {
+  for (let row = 0; row < AREA_GRID_ROWS; row++) {
+    for (let col = 0; col < AREA_GRID_COLS; col++) {
       const t = effectiveTerrainAt(tileId, col, row, buildings)
       if (t !== 'blocked' && t !== 'building' && t !== 'open_water') {
         result.push({ col, row })

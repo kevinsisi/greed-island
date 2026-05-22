@@ -145,6 +145,15 @@ describe('walkableCellsForTile', () => {
     // (1,1) is open → included
     expect(cells.find(c => c.col === 1 && c.row === 1)).toBeDefined()
   })
+
+  it('excludes open_water cells from water tile results', () => {
+    // t_dock has no LAND_MASKS entry → falls back to terrainAt
+    const cells = walkableCellsForTile('t_dock', [])
+    // col 14, row 0 of t_dock = open_water → must not be in result
+    expect(cells.find(c => c.col === 14 && c.row === 0)).toBeUndefined()
+    // col 0, row 0 of t_dock = 'land' → must be in result
+    expect(cells.find(c => c.col === 0 && c.row === 0)).toBeDefined()
+  })
 })
 
 describe('terrain speed modifiers', () => {
