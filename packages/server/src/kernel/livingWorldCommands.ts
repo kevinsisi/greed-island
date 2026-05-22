@@ -2751,9 +2751,9 @@ const VALIDATORS: Readonly<
   NPC_INTENT_RESOLVED: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
-    if (typeof p.intentType !== 'string' || !['survival', 'economic', 'social', 'ecosystem'].includes(p.intentType)) return 'intentType must be one of: survival, economic, social, ecosystem'
+    if (!isIntentKind(p.intentType)) return 'intentType must be one of: survival, economic, social, ecosystem'
     if (typeof p.targetTile !== 'string' || p.targetTile.length === 0) return 'targetTile required'
-    if (typeof p.outcome !== 'string' || !['success', 'failure'].includes(p.outcome)) return 'outcome must be one of: success, failure'
+    if (!isIntentOutcome(p.outcome)) return 'outcome must be one of: success, failure'
     if (typeof p.urgencyAtDispatch !== 'number' || p.urgencyAtDispatch < 0) return 'urgencyAtDispatch must be non-negative number'
     if (!isNonNegativeInteger(p.resolvedAtTick)) return 'resolvedAtTick must be non-negative integer'
     return null
@@ -3054,6 +3054,14 @@ function isPressureScore(value: unknown): value is number {
 
 function isSettlementStatus(value: unknown): value is SettlementStatus {
   return value === 'stable' || value === 'strained' || value === 'declining' || value === 'recovering'
+}
+
+function isIntentKind(value: unknown): value is IntentKind {
+  return value === 'survival' || value === 'economic' || value === 'social' || value === 'ecosystem'
+}
+
+function isIntentOutcome(value: unknown): value is 'success' | 'failure' {
+  return value === 'success' || value === 'failure'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
