@@ -21,6 +21,89 @@ import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 
+// Land terrain masks duplicated from terrainMask.ts (no Phaser dependency here)
+// IMPORTANT: Keep in sync with LAND_MASKS in packages/web/src/game/terrainMask.ts
+const LAND_MASK_SERVER: Readonly<Record<string, readonly string[]>> = {
+  t_forest: [
+    'XXXXXXXXXXXXXXX', // 0
+    'XoooooooooooooX', // 1
+    'XooorrooooooooX', // 2
+    'oopppooooooopoX', // 3
+    'XoopppooooooooX', // 4
+    'XroXXXXXXrooooX', // 5
+    'XoooooXXrrooooX', // 6
+    'XoooooorroooooX', // 7
+    'XrroooooooooooX', // 8
+    'XXXXXXXXXXXXXXX', // 9
+  ],
+  t_mountain: [
+    'XXXXXoooXXXXXXX', // 0
+    'XXXXooopXXXXXXX', // 1
+    'XXrroopppooXXXX', // 2
+    'XrrrooopppooooX', // 3
+    'XXoopppppoorroX', // 4
+    'XXrroooppooXXXX', // 5
+    'XrrrooppooooXXX', // 6
+    'XoopppoooorrroX', // 7
+    'XoopppooooooooX', // 8
+    'XXXXXpppXXXXXXX', // 9
+  ],
+  t_desert: [
+    'ooooooooooooooo', // 0
+    'orrrooooooorrrr', // 1
+    'ooppooooooooooo', // 2
+    'ooooooooooooooo', // 3
+    'rrrooooooooorrr', // 4
+    'rrrooooooooorrr', // 5
+    'oooopppppoooooo', // 6
+    'oooopppppoooooo', // 7
+    'orrrroooooorrrr', // 8
+    'ooooooooooooooo', // 9
+  ],
+  t_central: [
+    'ooooooooooooooo', // 0
+    'opppoooooooooop', // 1
+    'ooopppoooooooop', // 2
+    'oooopppppoooooo', // 3
+    'ooooooooooooooo', // 4
+    'pppoooooooooopp', // 5
+    'pppooooooooooop', // 6
+    'ooooooooooooooo', // 7
+    'opooooooopoooop', // 8
+    'ooooooooooooooo', // 9
+  ],
+  t_ruin: [
+    'XrrrooooooorrrX', // 0
+    'XoooooooooooooX', // 1
+    'XoorroooooorroX', // 2
+    'XoooooooooooooX', // 3
+    'XrrroooooorrroX', // 4
+    'XoooXXXXooooooX', // 5
+    'XoooooXXooooooX', // 6
+    'XrrooooooorrooX', // 7
+    'XoooooooooooooX', // 8
+    'XrrrooooooorrrX', // 9
+  ],
+  t_dimai: [
+    'XXXXXXXoXXXXXXX', // 0
+    'XrrrrrrooooopXX', // 1
+    'XrrrrrrroooopoX', // 2
+    'XoopppppooorroX', // 3
+    'XoopppppooorroX', // 4
+    'XoooooooooooooX', // 5
+    'XrroooooooooorX', // 6
+    'XrroooooooooorX', // 7
+    'XrroooooooooorX', // 8
+    'XXXXXXXXXXXXXXX', // 9
+  ],
+}
+
+function isLandWalkable(tileId: string, col: number, row: number): boolean {
+  const ch = LAND_MASK_SERVER[tileId]?.[row]?.[col]
+  if (ch === undefined) return true // water tiles / unknown = walkable
+  return ch !== 'X'
+}
+
 export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
 export type NpcAgentPermission =
   | 'move.cross_tile'
@@ -224,6 +307,8 @@ export type NpcTickContext = Readonly<{
   npcsInsideBuildings?: ReadonlySet<string>
   /** v0.28.0：持有坐騎的 NPC ids；travel tick 減少為 ceil(base / MOUNT_SPEED_MULTIPLIER)。 */
   mountedNpcIds?: ReadonlySet<string>
+  /** v0.49.0：當前所有建築狀態，用於 NPC 子格 walkable cell 計算（排除非 abandoned 建築佔格）。 */
+  buildingStates?: readonly { buildingId: string; tileId: string; col: number; row: number; state: string }[]
 }>
 
 // schedule slot：profile 沒給 schedule 就從 routine 推導
@@ -240,6 +325,24 @@ export class NpcEngine {
   private readonly factions = new Map<string, string>()
   private readonly lastInteractTickByPair = new Map<string, number>()
   private readonly lastProductiveTickByNpc = new Map<string, number>()
+  private readonly walkableCellCache = new Map<string, readonly { col: number; row: number }[]>()
+
+  private getWalkableCellsForTile(
+    tileId: string,
+    buildings: readonly { col: number; row: number; state: string }[]
+  ): readonly { col: number; row: number }[] {
+    const key = `${tileId}:${buildings.map(b => `${b.col},${b.row},${b.state}`).join('|')}`
+    if (this.walkableCellCache.has(key)) return this.walkableCellCache.get(key)!
+    const cells: { col: number; row: number }[] = []
+    for (let r = SUB_INNER_MIN_ROW; r <= SUB_INNER_MAX_ROW; r++) {
+      for (let c = SUB_INNER_MIN_COL; c <= SUB_INNER_MAX_COL; c++) {
+        const isBuilding = buildings.some(b => b.col === c && b.row === r && b.state !== 'abandoned')
+        if (!isBuilding && isLandWalkable(tileId, c, r)) cells.push({ col: c, row: r })
+      }
+    }
+    this.walkableCellCache.set(key, cells)
+    return cells
+  }
 
   constructor(private readonly profiles: readonly NpcProfile[]) {
     for (const profile of profiles) {
@@ -365,6 +468,15 @@ export class NpcEngine {
       crowdByTile.set(s.tile, (crowdByTile.get(s.tile) ?? 0) + 1)
     }
 
+    // Build a per-tile walkable-cell lookup for terrain-aware sub-anchor placement.
+    const buildingStates = context?.buildingStates ?? []
+    const walkableForTile = (tileId: string): readonly { col: number; row: number }[] => {
+      const tileBuildingStates = buildingStates
+        .filter(b => b.tileId === tileId)
+        .map(b => ({ col: b.col, row: b.row, state: b.state }))
+      return this.getWalkableCellsForTile(tileId, tileBuildingStates)
+    }
+
     // ---- Phase 1: 每個 NPC 自己的決策 ----
     for (const profile of this.profiles) {
       const before = this.state.get(profile.id)
@@ -375,7 +487,8 @@ export class NpcEngine {
         this.schedules.get(profile.id) ?? [],
         currentTick,
         context ?? null,
-        crowdByTile
+        crowdByTile,
+        walkableForTile
       )
       if (next.tile !== before.tile) {
         events.push({
@@ -434,14 +547,19 @@ export class NpcEngine {
       arr.push(npcId)
       groups.set(k, arr)
     }
-    for (const [, ids] of groups) {
+    for (const [key, ids] of groups) {
       ids.sort()
       const total = ids.length
+      // Solo NPC: no collision possible, skip dispersal to avoid double-move in one tick.
+      if (total <= 1) continue
+      // Extract tileId from the group key (format: "tileId::activity")
+      const tileId = key.split('::')[0] ?? ''
+      const walkable = walkableForTile(tileId)
       for (let rank = 0; rank < total; rank++) {
         const id = ids[rank]!
         const s = this.state.get(id)
         if (!s) continue
-        const target = dispersedSubAnchor(rank, total)
+        const target = dispersedSubAnchor(rank, total, walkable)
         const subCol = stepToward(s.subCol, target.col)
         const subRow = stepToward(s.subRow, target.row)
         if (subCol !== s.subCol || subRow !== s.subRow) {
@@ -659,7 +777,8 @@ function decideNextState(
   schedule: readonly ScheduleSlot[],
   currentTick: number,
   context: NpcTickContext | null,
-  crowdByTile: ReadonlyMap<string, number>
+  crowdByTile: ReadonlyMap<string, number>,
+  walkableForTile: (tileId: string) => readonly { col: number; row: number }[]
 ): NpcRuntimeState {
   if (
     before.agent.activeTask.kind === 'player-dialog' &&
@@ -721,7 +840,8 @@ function decideNextState(
       subCol = entry.col
       subRow = entry.row
     } else {
-      const anchor = subAnchor(profile.id, nextTile, activity, currentTick)
+      const walkable = walkableForTile(nextTile)
+      const anchor = subAnchor(profile.id, nextTile, activity, currentTick, walkable)
       subCol = stepToward(before.subCol, anchor.col)
       subRow = stepToward(before.subRow, anchor.row)
     }
@@ -1163,21 +1283,19 @@ function entrySubTile(
   return { col: SUB_INNER_MIN_COL + ((h >>> 8) % innerColRange), row: AREA_SUB_ROWS - 1 }
 }
 
-/** 在當前 tile 內，依 (npcId, tile, activity, refreshIdx) 決定下一個目標子格。 */
+/** 在當前 tile 內，依 (npcId, tile, activity, refreshIdx) 決定下一個目標子格。
+ *  v0.49.0 — terrain-aware: when walkable list is provided, picks from walkable cells only. */
 function subAnchor(
   npcId: string,
   tile: string,
   activity: NpcActivity,
-  tick: number
+  tick: number,
+  walkable: readonly { col: number; row: number }[]
 ): { col: number; row: number } {
+  if (walkable.length === 0) return { col: SUB_INNER_MIN_COL, row: SUB_INNER_MIN_ROW }
   const refreshIdx = Math.floor(tick / NPC_LOCAL_WAYPOINT_REFRESH_TICKS)
   const h = hashStr(`${npcId}|${tile}|${activity}|${refreshIdx}`)
-  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1
-  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1
-  return {
-    col: SUB_INNER_MIN_COL + (h % innerColRange),
-    row: SUB_INNER_MIN_ROW + ((h >>> 8) % innerRowRange)
-  }
+  return walkable[h % walkable.length]!
 }
 
 function initialSubTile(npcId: string, tile: string): { col: number; row: number } {
@@ -1191,22 +1309,18 @@ function initialSubTile(npcId: string, tile: string): { col: number; row: number
 }
 
 /** v0.43.0 — collision-free sub-cell assignment for NPCs sharing (tile, activity).
- *  Lays out NPCs as a near-square grid spread across the inner 13×8 area cells.
- *  Pure function of (rank, total) so two NPCs at the same rank+total always
- *  land on the same cell (deterministic replay-safe). */
-function dispersedSubAnchor(rank: number, total: number): { col: number; row: number } {
-  const innerColRange = SUB_INNER_MAX_COL - SUB_INNER_MIN_COL + 1 // 13
-  const innerRowRange = SUB_INNER_MAX_ROW - SUB_INNER_MIN_ROW + 1 // 8
-  // Pick a row count that roughly matches sqrt(total) but never exceeds innerRowRange.
-  const perRow = Math.max(1, Math.min(innerColRange, Math.ceil(Math.sqrt(total))))
-  const usedRows = Math.max(1, Math.min(innerRowRange, Math.ceil(total / perRow)))
-  const colStep = perRow > 1 ? Math.floor((innerColRange - 1) / (perRow - 1)) : 0
-  const rowStep = usedRows > 1 ? Math.floor((innerRowRange - 1) / (usedRows - 1)) : 0
-  const r = Math.floor(rank / perRow)
-  const c = rank % perRow
-  const col = SUB_INNER_MIN_COL + Math.min(innerColRange - 1, c * Math.max(1, colStep))
-  const row = SUB_INNER_MIN_ROW + Math.min(innerRowRange - 1, r * Math.max(1, rowStep))
-  return { col, row }
+ *  v0.49.0 — terrain-aware: uses walkable cell list so NPCs land only on valid cells.
+ *  When walkable list is provided, distributes NPCs evenly across walkable cells by rank.
+ *  Falls back to legacy grid spread if walkable list is empty. */
+function dispersedSubAnchor(
+  rank: number,
+  total: number,
+  walkable: readonly { col: number; row: number }[]
+): { col: number; row: number } {
+  if (walkable.length === 0) return { col: SUB_INNER_MIN_COL, row: SUB_INNER_MIN_ROW }
+  const step = Math.max(1, Math.floor(walkable.length / Math.max(total, 1)))
+  const idx = (rank * step) % walkable.length
+  return walkable[idx]!
 }
 
 function hashStr(s: string): number {

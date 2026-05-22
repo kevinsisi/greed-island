@@ -1651,6 +1651,13 @@ export class SimulationRuntime {
       areaSafety.set(worldEvent.tileId, Math.max(0, base - LEGENDARY_WORLD_EVENT_SEVERITY))
     }
     const mountedNpcIds = this.livestockRegistryProjection.getMountedNpcIdSet()
+    const buildingStates = listAllBuildings(this.lifeExpansion.unlockedBuildingIds).map(b => ({
+      buildingId: b.id,
+      tileId: b.tileId,
+      col: b.placement.col,
+      row: b.placement.row,
+      state: this.buildingStateProjection.getState(b.id).state,
+    }))
     const npcResult = this.npcEngine.tick(nextTick, {
       areaSafety,
       areaEconomy,
@@ -1658,7 +1665,8 @@ export class SimulationRuntime {
       rareWindowOpen: this.rareWindowOpen,
       activeNpcSet: npcPartition.active,
       npcsInsideBuildings,
-      mountedNpcIds
+      mountedNpcIds,
+      buildingStates
     })
     // Phase E4: legendary hunt detection (per-tick, O(active world events))
     const activeWorldEvents = this.worldEventProjection.list()
