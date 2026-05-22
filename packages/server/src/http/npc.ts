@@ -231,6 +231,8 @@ export function createNpcRouter(input: {
           ? rawSkills.map((s) => ({ skillId: s.skillId, level: s.level }))
           : undefined
 
+        const beliefCtx = input.runtime.getFormattedBeliefContext(npcId) || undefined
+
         const dialogCtx: AiDialogContext = {
           profile,
           player,
@@ -250,6 +252,7 @@ export function createNpcRouter(input: {
           ...(tileHistoryArcs ? { tileHistoryArcs } : {}),
           ...(recentLocalEvents ? { recentLocalEvents } : {}),
           ...(skillLevels ? { skillLevels } : {}),
+          ...(beliefCtx ? { beliefContext: beliefCtx } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({
