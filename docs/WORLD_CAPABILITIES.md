@@ -1267,6 +1267,8 @@ Beliefs influence:
 
 ## 12.5.6 Intention System
 
+> **v0.51.0 — IntentPlanner + IntentProjection shipped.** NPC Intention Layer operational. All 4 intent types implemented (`survival`, `economic`, `social`, `ecosystem`); `computeIntentStack` / `selectHighestIntent` pure functions drive priority resolution; `NPC_INTENT_RESOLVED` event closes the Command→Event loop; `intentOverride` allows external priority injection with duration guard; Reflection learning system (`IntentProjection`) records outcomes and adjusts weights across restarts via event-sourced `INTENT_REFLECTION_RECORDED`. 35 tests in `intentProjection.test.ts` + `intentPlanner.test.ts`.
+
 Intentions drive action.
 
 ### Long-Term Intentions
@@ -2042,7 +2044,7 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 29. Layer-by-Layer Status (v0.50.0)
+## 29. Layer-by-Layer Status (v0.51.0)
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|

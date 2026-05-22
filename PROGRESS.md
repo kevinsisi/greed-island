@@ -5,6 +5,40 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-22 — Handoff Snapshot @ v0.51.0
+
+### Current Version
+`0.51.0` — TypeScript build clean. 847 tests pass across 117 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.50.0 → v0.51.0)
+
+**v0.51.0 — NPC Intention Layer (Cognitive Runtime Layer 2, Step 2)**
+
+**新增檔案：**
+- `packages/server/src/projections/intentProjection.ts` — `IntentProjection` class（Reflection system, per-NPC learning weights, `INTENT_REFLECTION_RECORDED` event-sourced persistence, `rebuildFromEvents` boot hydration）
+- `packages/server/src/projections/intentProjection.test.ts` — unit tests（intent resolution, reflection weight updates, override expiry, boot hydration）
+- `packages/server/src/sim/intentPlanner.ts` — `computeIntentStack` + `selectHighestIntent`（純函數，4 intent types: survival / economic / social / ecosystem）
+- `packages/server/src/sim/intentPlanner.test.ts` — unit tests（priority ordering, urgency threshold, belief-driven intent scoring）
+
+**修改檔案：**
+- `packages/server/src/config/world.ts`：5 個新常數（`INTENT_RECOMPUTE_INTERVAL`, `INTENT_OVERRIDE_DURATION_TICKS`, `INTENT_URGENCY_THRESHOLD`, `REFLECTION_DURATION_TICKS`, `MAX_REFLECTIONS_PER_NPC`）
+- `packages/server/src/kernel/livingWorldCommands.ts`：`IntentKind` type + `NPC_INTENT_RESOLVED` event + validator
+- `packages/server/src/projections/beliefProjection.ts`：`BeliefRow` 新增 `factionId?: string`
+- `packages/server/src/sim/npcEngine.ts`：`intentOverride` field + `setIntentOverride` / `clearIntentOverride` + budget guard
+- `packages/server/src/sim/runtime.ts`：`intentProjection` field、fan-out、boot hydration（`rebuildFromEvents`）、resolution detection cadence、recompute cadence（`INTENT_RECOMPUTE_INTERVAL`）
+- `docs/WORLD_CAPABILITIES.md`：§12.5.6 加入 v0.51.0 shipped note；§29 status table 更新至 v0.51.0
+
+**架構關鍵點：**
+- `NPC_INTENT_RESOLVED` event 關閉 Command→Event 迴路；AI 在意圖層仍只做 read-only 旁白，不下 Command
+- `intentOverride` 有 `INTENT_OVERRIDE_DURATION_TICKS` 上限，逾期自動清除，防止 NPC 被外力無限劫持
+- `IntentProjection` 全量 boot hydrate（scan EventLog for `INTENT_REFLECTION_RECORDED`），unlike BeliefProjection（無 hydration）
+- `selectHighestIntent` 以 urgency 分數排序；urgency ≥ `INTENT_URGENCY_THRESHOLD` 升為 critical（不可被 override 覆蓋）
+- 4 intent types 對應 WORLD_CAPABILITIES §12.5.2.2 四大動機：survival / economic / social / ecosystem
+
+**Next:** v0.52.0 — Reflection injection into dialog context（NPC dialog references past intent successes/failures）。
+
+---
+
 ## 2026-05-22 — Handoff Snapshot @ v0.50.0
 
 ### Current Version
