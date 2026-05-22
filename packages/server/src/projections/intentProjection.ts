@@ -78,4 +78,11 @@ export class IntentProjection {
   getReflections(npcId: string): readonly Reflection[] {
     return this.reflectionsByNpc.get(npcId) ?? []
   }
+
+  rebuildFromEvents(events: readonly Event[]): void {
+    this.reflectionsByNpc.clear()
+    for (const ev of events) {
+      this.project(ev)
+    }
+  }
 }

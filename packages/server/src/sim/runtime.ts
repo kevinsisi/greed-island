@@ -70,6 +70,9 @@ import {
   LEGENDARY_WORLD_EVENT_SEVERITY,
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
+  INTENT_RECOMPUTE_INTERVAL,
+  INTENT_OVERRIDE_DURATION_TICKS,
+  INTENT_URGENCY_THRESHOLD,
   SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS,
   SETTLEMENT_FOOD_GOODS,
   SETTLEMENT_FOOD_UNITS_PER_NPC,
@@ -212,6 +215,8 @@ import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { BeliefProjection, formatBeliefContext } from '../projections/beliefProjection.js'
+import { IntentProjection } from '../projections/intentProjection.js'
+import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -322,6 +327,9 @@ const MORTALITY_BOOT_EVENT_TYPES = [
 // Area state projection event types — read selectively during fast-boot
 // so per-tile faction/resource snapshots survive restarts on large logs.
 const AREA_STATE_BOOT_EVENT_TYPES = ['AREA_STATE_RECORDED'] as const
+// Intent projection event types — read selectively during fast-boot so
+// NPC learning weights (Reflection system) survive server restarts.
+const INTENT_PROJECTION_BOOT_EVENT_TYPES = ['NPC_INTENT_RESOLVED'] as const
 // Faction control projection event types — read selectively during fast-boot.
 const FACTION_BOOT_EVENT_TYPES = [
   'FACTION_TILE_SEIZED',
@@ -520,6 +528,7 @@ export class SimulationRuntime {
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly beliefProjection = new BeliefProjection()
+  private readonly intentProjection = new IntentProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1551,6 +1560,7 @@ export class SimulationRuntime {
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
+      this.intentProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -3863,6 +3873,56 @@ export class SimulationRuntime {
     const typedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
     const postAcceptedCommands: LivingWorldCommand[] = []
+
+    // Intent resolution detection — detect NPC intent success/failure; emit NPC_INTENT_RESOLVED.
+    // Must run before intent recompute cadence so expired/arrived intents are cleared first.
+    for (const profile of this.profiles) {
+      const state = this.npcEngine.getState(profile.id)
+      const io = state?.intentOverride
+      if (!io) continue
+
+      let outcome: 'success' | 'failure' | null = null
+      if (state!.tile === io.targetTile) outcome = 'success'
+      else if (nextTick >= io.expiresAtTick) outcome = 'failure'
+
+      if (outcome) {
+        typedDrafts.push(makeLivingWorldCommand(
+          'NPC_INTENT_RESOLVED', profile.id, SIM_ACTOR_WORLD, nextTick, submittedAt,
+          { npcId: profile.id, intentType: io.intentType, targetTile: io.targetTile,
+            outcome, urgencyAtDispatch: io.urgency, resolvedAtTick: nextTick },
+        ) as unknown as EventDraft)
+        this.npcEngine.clearIntentOverride(profile.id)
+      }
+    }
+
+    // Intent recompute cadence — phase-offset per NPC so load is spread across ticks.
+    // Uses belief state (decayed this tick) + learning weights from past resolutions.
+    for (const profile of this.profiles) {
+      const phase = this.profiles.indexOf(profile) % INTENT_RECOMPUTE_INTERVAL
+      if (nextTick % INTENT_RECOMPUTE_INTERVAL !== phase) continue
+
+      const state = this.npcEngine.getState(profile.id)
+      if (!state) continue
+
+      const beliefs = this.beliefProjection.getBeliefs(profile.id)
+      const weights = this.intentProjection.getLearningWeights(profile.id, nextTick)
+      const stack = computeIntentStack(
+        profile.id, beliefs, profile, weights,
+        state.tile, state.faction || undefined, nextTick,
+      )
+      const best = selectHighestIntent(stack, INTENT_URGENCY_THRESHOLD, state.intentOverride)
+
+      if (best) {
+        this.npcEngine.setIntentOverride(profile.id, {
+          targetTile: best.targetTile,
+          expiresAtTick: nextTick + INTENT_OVERRIDE_DURATION_TICKS,
+          intentType: best.kind,
+          urgency: best.urgency,
+          reason: best.reason,
+        })
+      }
+    }
+
     // Phase 3 §37.3 — collect (tileId, skillId) pairs when NPC_OBSERVED_SKILL is accepted to run norm seeder.
     const normCheckPairs = new Set<string>()
     // Phase 3 §37.2 — mentorship XP increments run every tick before the main command loop.
@@ -4954,6 +5014,7 @@ export class SimulationRuntime {
       this.historyChronicleProjection.rebuildFromEvents(allEvents)
       this.areaStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
+      this.intentProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
       // Ecosystem projections are small relative to the full event log —
@@ -4997,6 +5058,9 @@ export class SimulationRuntime {
       this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
       const buildingStateEvents = this.store.readEventsByTypes(BUILDING_STATE_BOOT_EVENT_TYPES)
       this.buildingStateProjection.rebuildFromEvents(buildingStateEvents)
+      // Intent projection — rebuild NPC learning weights from intent resolution history.
+      const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
+      this.intentProjection.rebuildFromEvents(intentEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
