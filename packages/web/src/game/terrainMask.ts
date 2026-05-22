@@ -79,6 +79,142 @@ export function isWalkableLand(t: LandTerrain): boolean {
   return t !== 'blocked' && t !== 'building'
 }
 
+// Each row: exactly 15 chars. o=open r=rough p=path X=blocked
+export const LAND_MASKS: Readonly<Record<string, readonly string[]>> = {
+
+  // t_forest — dense forest edges, central clearing, winding path
+  // buildings: (1,3), (13,3)
+  t_forest: [
+    'XXXXXXXXXXXXXXX', // 0
+    'XoooooooooooooX', // 1
+    'XooorrooooooooX', // 2
+    'oopppooooooopoX', // 3  col1=o, col13=o
+    'XoopppooooooooX', // 4
+    'XroXXXXXXrooooX', // 5
+    'XoooooXXrrooooX', // 6
+    'XoooooorroooooX', // 7
+    'XrroooooooooooX', // 8
+    'XXXXXXXXXXXXXXX', // 9
+  ],
+
+  // t_mountain — cliffs, rocky ledges, narrow path
+  // buildings: (4,1)
+  t_mountain: [
+    'XXXXXoooXXXXXXX', // 0
+    'XXXXooopXXXXXXX', // 1  col4=o
+    'XXrroopppooXXXX', // 2
+    'XrrrooopppooooX', // 3
+    'XXoopppppoorroX', // 4
+    'XXrroooppooXXXX', // 5
+    'XrrrooppooooXXX', // 6
+    'XoopppoooorrroX', // 7
+    'XoopppooooooooX', // 8
+    'XXXXXpppXXXXXXX', // 9
+  ],
+
+  // t_desert — sand flats, dune ridges, rocky outcrops
+  // buildings: (2,3), (9,3)
+  t_desert: [
+    'ooooooooooooooo', // 0
+    'orrrooooooorrrr', // 1
+    'ooppooooooooooo', // 2
+    'ooooooooooooooo', // 3  col2=o, col9=o
+    'rrrooooooooorrr', // 4
+    'rrrooooooooorrr', // 5
+    'oooopppppoooooo', // 6
+    'oooopppppoooooo', // 7
+    'orrrroooooorrrr', // 8
+    'ooooooooooooooo', // 9
+  ],
+
+  // t_central — urban grass, paths, open plazas
+  // buildings: (4,1), (9,8), (4,8), (1,8)
+  t_central: [
+    'ooooooooooooooo', // 0
+    'opppoooooooooop', // 1  col4=o
+    'ooopppoooooooop', // 2
+    'oooopppppoooooo', // 3
+    'ooooooooooooooo', // 4
+    'pppoooooooooopp', // 5
+    'pppooooooooooop', // 6
+    'ooooooooooooooo', // 7
+    'opooooooopoooop', // 8  col1=o, col4=o, col9=o
+    'ooooooooooooooo', // 9
+  ],
+
+  // t_ruin — collapsed walls, rubble, open ruin floor
+  // buildings: (2,3), (7,3), (1,8)
+  t_ruin: [
+    'XrrrooooooorrrX', // 0
+    'XoooooooooooooX', // 1
+    'XoorroooooorroX', // 2
+    'XoooooooooooooX', // 3  col2=o, col7=o
+    'XrrroooooorrroX', // 4
+    'XoooXXXXooooooX', // 5
+    'XoooooXXooooooX', // 6
+    'XrrooooooorrooX', // 7
+    'XoooooooooooooX', // 8  col1=o
+    'XrrrooooooorrrX', // 9
+  ],
+
+  // t_dimai — underground ruin, ley-line channels
+  // buildings: (7,0), (12,1)
+  t_dimai: [
+    'XXXXXXXoXXXXXXX', // 0  col7=o
+    'XrrrrrrooooopXX', // 1  col12=o
+    'XrrrrrrroooopoX', // 2
+    'XoopppppooorroX', // 3
+    'XoopppppooorroX', // 4
+    'XoooooooooooooX', // 5
+    'XrroooooooooorX', // 6
+    'XrroooooooooorX', // 7
+    'XrroooooooooorX', // 8
+    'XXXXXXXXXXXXXXX', // 9
+  ],
+}
+
+const LAND_GLYPH_TO_TERRAIN: Readonly<Record<string, LandTerrain>> = {
+  o: 'open',
+  r: 'rough',
+  p: 'path',
+  X: 'blocked',
+}
+
+function staticLandTerrainAt(tileId: string, col: number, row: number): LandTerrain {
+  const ch = LAND_MASKS[tileId]?.[row]?.[col]
+  return (ch ? LAND_GLYPH_TO_TERRAIN[ch] : null) ?? 'open'
+}
+
+export function effectiveTerrainAt(
+  tileId: string,
+  col: number,
+  row: number,
+  buildings: readonly { col: number; row: number; state: string }[],
+): AnyTerrain {
+  const b = buildings.find(b => b.col === col && b.row === row)
+  if (b) return b.state === 'abandoned' ? 'rough' : 'building'
+  if (LAND_MASKS[tileId] === undefined) {
+    return terrainAt(tileId as DistrictId, col, row)
+  }
+  return staticLandTerrainAt(tileId, col, row)
+}
+
+export function walkableCellsForTile(
+  tileId: string,
+  buildings: readonly { col: number; row: number; state: string }[],
+): readonly { col: number; row: number }[] {
+  const result: { col: number; row: number }[] = []
+  for (let row = 0; row < 10; row++) {
+    for (let col = 0; col < 15; col++) {
+      const t = effectiveTerrainAt(tileId, col, row, buildings)
+      if (t !== 'blocked' && t !== 'building' && t !== 'open_water') {
+        result.push({ col, row })
+      }
+    }
+  }
+  return result
+}
+
 /**
  * Hand-authored masks. The world's three water-biome districts each
  * have their own geography:

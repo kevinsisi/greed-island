@@ -5,6 +5,9 @@ import {
   terrainMaskForDistrict,
   TERRAIN_SPEED_MODIFIER,
   isWalkableLand,
+  LAND_MASKS,
+  effectiveTerrainAt,
+  walkableCellsForTile,
 } from './terrainMask'
 import { AREA_GRID_COLS, AREA_GRID_ROWS } from './areaGrid'
 
@@ -78,6 +81,69 @@ describe('terrainMask.terrainAt', () => {
     // building. New mask MUST make this walkable.
     const marshCell = terrainAt('t_salt_marsh', 7, 4)
     expect(['land', 'pier', 'shore', 'shallow_water']).toContain(marshCell)
+  })
+})
+
+describe('LAND_MASKS', () => {
+  it('every tile mask has 10 rows of exactly 15 chars', () => {
+    for (const [tileId, rows] of Object.entries(LAND_MASKS)) {
+      expect(rows.length, `${tileId}: row count`).toBe(10)
+      for (let i = 0; i < rows.length; i++) {
+        expect(rows[i]!.length, `${tileId} row ${i}`).toBe(15)
+      }
+    }
+  })
+
+  it('building anchor cells are walkable in mask', () => {
+    const anchors: [string, number, number][] = [
+      ['t_forest', 1, 3], ['t_forest', 13, 3],
+      ['t_mountain', 4, 1],
+      ['t_desert', 2, 3], ['t_desert', 9, 3],
+      ['t_central', 4, 1], ['t_central', 9, 8], ['t_central', 4, 8], ['t_central', 1, 8],
+      ['t_ruin', 2, 3], ['t_ruin', 7, 3], ['t_ruin', 1, 8],
+      ['t_dimai', 7, 0], ['t_dimai', 12, 1],
+    ]
+    for (const [tileId, col, row] of anchors) {
+      const ch = LAND_MASKS[tileId]?.[row]?.[col]
+      expect(['o', 'r', 'p'], `${tileId}(${col},${row})=${ch}`).toContain(ch)
+    }
+  })
+})
+
+describe('effectiveTerrainAt', () => {
+  it('returns building for a building anchor cell (non-abandoned)', () => {
+    const result = effectiveTerrainAt('t_forest', 1, 3, [{ col: 1, row: 3, state: 'operational' }])
+    expect(result).toBe('building')
+  })
+
+  it('returns rough for abandoned building', () => {
+    const result = effectiveTerrainAt('t_forest', 1, 3, [{ col: 1, row: 3, state: 'abandoned' }])
+    expect(result).toBe('rough')
+  })
+
+  it('returns static terrain when no building at cell', () => {
+    // col 0, row 0 in t_forest = 'X' → blocked
+    const result = effectiveTerrainAt('t_forest', 0, 0, [])
+    expect(result).toBe('blocked')
+  })
+
+  it('returns land-type terrain for water tile (no land mask)', () => {
+    // Water tiles fall back to terrainAt() which returns SubcellTerrain
+    const result = effectiveTerrainAt('t_dock', 0, 0, [])
+    // t_dock row 0 col 0 = 'L' → 'land'
+    expect(result).toBe('land')
+  })
+})
+
+describe('walkableCellsForTile', () => {
+  it('returns only non-blocked, non-building cells', () => {
+    const cells = walkableCellsForTile('t_forest', [{ col: 1, row: 3, state: 'operational' }])
+    // (1,3) is an operational building → not included
+    expect(cells.find(c => c.col === 1 && c.row === 3)).toBeUndefined()
+    // (0,0) is blocked → not included
+    expect(cells.find(c => c.col === 0 && c.row === 0)).toBeUndefined()
+    // (1,1) is open → included
+    expect(cells.find(c => c.col === 1 && c.row === 1)).toBeDefined()
   })
 })
 
