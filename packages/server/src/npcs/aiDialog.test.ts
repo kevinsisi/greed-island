@@ -6,6 +6,7 @@ import {
   buildEcologyBlock,
   buildRecentEventsBlock,
   buildSkillBlock,
+  buildReflectionBlock,
   parseReply,
 } from './aiDialog.js'
 
@@ -307,5 +308,34 @@ describe('buildSkillBlock', () => {
     expect(lines).toContain('1')
     expect(lines).toContain('建造')
     expect(lines).toContain('3')
+  })
+})
+
+describe('buildReflectionBlock', () => {
+  it('returns empty array for undefined', () => {
+    expect(buildReflectionBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array for empty string', () => {
+    expect(buildReflectionBlock('')).toEqual([])
+  })
+
+  it('returns empty array for whitespace-only string', () => {
+    expect(buildReflectionBlock('   ')).toEqual([])
+  })
+
+  it('includes the formatted reflection content in output', () => {
+    const content = '### 你的近期行動記憶（意圖成敗形成的印象）\n  · 【生存】嘗試逃離危險地區 → 成功（你對自身判斷更有信心）'
+    const joined = buildReflectionBlock(content).join('\n')
+    expect(joined).toContain('你的近期行動記憶')
+    expect(joined).toContain('嘗試逃離危險地區')
+  })
+
+  it('includes the usage rules block', () => {
+    const content = '### 你的近期行動記憶\n  · 【生存】test'
+    const joined = buildReflectionBlock(content).join('\n')
+    expect(joined).toContain('⚠️ 記憶使用規則')
+    expect(joined).toContain('禁止虛構記憶以外的事件')
+    expect(joined).toContain('不要逐字列出記憶清單')
   })
 })

@@ -71,6 +71,7 @@ export type AiDialogContext = Readonly<{
   dominantFaction?: string | null
   tileHistoryArcs?: readonly TileHistoryArcContext[]
   beliefContext?: string
+  reflectionContext?: string
 }>
 
 export class AiDialogError extends Error {
@@ -192,6 +193,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
     ...buildSkillBlock(ctx.skillLevels),
     ...buildBeliefBlock(ctx.beliefContext),
+    ...buildReflectionBlock(ctx.reflectionContext),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -543,6 +545,19 @@ export function buildBeliefBlock(beliefContext: string | undefined): string[] {
     '- 信心40–69%：必須用「我聽說」「大概」「好像」等表達',
     '- 信心<40%：必須用「也許」「我不確定」「有人提到但我不知道真假」',
     '- 禁止虛構信念列表以外的地名、人物或事件',
+    '',
+  ]
+}
+
+export function buildReflectionBlock(reflectionContext: string | undefined): string[] {
+  if (!reflectionContext || reflectionContext.trim().length === 0) return []
+  return [
+    reflectionContext,
+    '',
+    '⚠️ 記憶使用規則：',
+    '- 可以自然融入對話，表達情緒、態度、或做過的選擇',
+    '- 不要逐字列出記憶清單，要自然融入人物個性',
+    '- 禁止虛構記憶以外的事件',
     '',
   ]
 }
