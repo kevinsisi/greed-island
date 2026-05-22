@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { BeliefProjection } from './beliefProjection.js'
+import { BeliefProjection, formatBeliefContext } from './beliefProjection.js'
+import type { BeliefRow } from './beliefProjection.js'
 import type { Event } from '../kernel/types.js'
 
 function ev(tick: number, eventType: string, data: unknown): Event {
@@ -197,5 +198,60 @@ describe('BeliefProjection', () => {
     // still just one row (not two)
     expect(allSafety).toHaveLength(1)
     expect(allSafety[0]!.observedAtTick).toBe(50)
+  })
+
+  it('updateEcosystemBeliefs: densityPct < 0.20 on NPC tile → ecosystem_health depleted', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-h', 't_forest']])
+    proj.updateEcosystemBeliefs('t_forest', 0.15, 500, locs)
+    const eco = proj.getBeliefs('npc-h').find(b => b.subject === 'ecosystem_health')!
+    expect(eco).toBeDefined()
+    expect(eco.value).toBe('depleted')
+    expect(eco.qualifier).toBe('t_forest')
+    expect(eco.confidence).toBe(70)
+    expect(eco.emotionalTag).toBe('anger')
+  })
+
+  it('updateEcosystemBeliefs: densityPct >= 0.20 → no belief', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-h', 't_forest']])
+    proj.updateEcosystemBeliefs('t_forest', 0.50, 500, locs)
+    expect(proj.getBeliefs('npc-h').find(b => b.subject === 'ecosystem_health')).toBeUndefined()
+  })
+
+  it('formatBeliefContext: empty rows → empty string', () => {
+    expect(formatBeliefContext([], 0)).toBe('')
+  })
+
+  it('formatBeliefContext: confidence ≥70 → direct statement (no hedge)', () => {
+    const rows: BeliefRow[] = [{
+      npcId: 'npc-x', subject: 'tile_safety', qualifier: 't_dock',
+      value: 'dangerous', confidence: 85, observedAtTick: 0,
+      decayRatePerDay: 2, emotionalTag: 'fear'
+    }]
+    const out = formatBeliefContext(rows, 0)
+    expect(out).toContain('危險')
+    expect(out).not.toContain('聽說')
+    expect(out).not.toContain('也許')
+  })
+
+  it('formatBeliefContext: confidence 40–69 → 「我聽說」hedge', () => {
+    const rows: BeliefRow[] = [{
+      npcId: 'npc-x', subject: 'tile_safety', qualifier: 't_dock',
+      value: 'dangerous', confidence: 50, observedAtTick: 0,
+      decayRatePerDay: 2,
+    }]
+    const out = formatBeliefContext(rows, 0)
+    expect(out).toContain('聽說')
+  })
+
+  it('formatBeliefContext: confidence <40 → 「也許」hedge', () => {
+    const rows: BeliefRow[] = [{
+      npcId: 'npc-x', subject: 'goods_scarcity', qualifier: 'fish',
+      value: 'scarce', confidence: 20, observedAtTick: 0,
+      decayRatePerDay: 4,
+    }]
+    const out = formatBeliefContext(rows, 0)
+    expect(out).toContain('也許')
   })
 })

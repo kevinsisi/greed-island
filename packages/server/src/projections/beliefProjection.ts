@@ -146,12 +146,22 @@ export class BeliefProjection {
   }
 
   updateEcosystemBeliefs(
-    _tileId: string,
-    _densityPct: number,
-    _currentTick: number,
-    _npcLocations: ReadonlyMap<string, string>,
+    tileId: string,
+    densityPct: number,
+    currentTick: number,
+    npcLocations: ReadonlyMap<string, string>,
   ): void {
-    // TODO: write ecosystem_health beliefs when densityPct < 0.20
+    if (densityPct >= 0.20) return
+    for (const [npcId, npcTile] of npcLocations) {
+      const conf = perceiveConfidence(npcTile, tileId)
+      if (conf === 0) continue
+      const adjustedConf = conf === 90 ? 70 : 30
+      this.upsert({
+        npcId, subject: 'ecosystem_health', qualifier: tileId,
+        value: 'depleted', confidence: adjustedConf, observedAtTick: currentTick,
+        decayRatePerDay: 2, emotionalTag: 'anger',
+      })
+    }
   }
 
   getBeliefs(npcId: string): readonly BeliefRow[] {
@@ -166,6 +176,36 @@ export class BeliefProjection {
     }
     npcMap.set(subjectKey(row.subject, row.qualifier), row)
   }
+}
+
+export function formatBeliefContext(rows: readonly BeliefRow[], currentTick: number): string {
+  const alive = rows.filter(r => r.confidence > 0)
+  if (alive.length === 0) return ''
+  const lines = alive.map(r => {
+    const daysAgo = Math.floor((currentTick - r.observedAtTick) / 24)
+    const hedge = r.confidence >= 70 ? '' : r.confidence >= 40 ? '（我聽說）' : '（也許）'
+    return `- ${subjectLabel(r)}：${valueLabel(r.value)}${hedge}，${daysAgo}天前觀察`
+  })
+  return `【NPC主觀信念 — 可能與事實不符】\n${lines.join('\n')}`
+}
+
+function subjectLabel(row: BeliefRow): string {
+  switch (row.subject) {
+    case 'tile_safety': return `${row.qualifier}安全狀況`
+    case 'goods_scarcity': return `${row.qualifier}供應`
+    case 'ecosystem_health': return `${row.qualifier}生態`
+    case 'faction_control': return `${row.qualifier}控制勢力`
+  }
+}
+
+function valueLabel(value: BeliefValue): string {
+  const map: Record<BeliefValue, string> = {
+    dangerous: '危險', safe: '安全',
+    scarce: '緊張', abundant: '充裕',
+    depleted: '枯竭', recovering: '恢復中',
+    controlled: '被控制', contested: '爭奪中', free: '自由',
+  }
+  return map[value]
 }
 
 function readPayloadData(event: Event): Record<string, unknown> | null {
