@@ -211,6 +211,7 @@ import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type Hi
 import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
+import { BeliefProjection, formatBeliefContext } from '../projections/beliefProjection.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -518,6 +519,7 @@ export class SimulationRuntime {
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
+  private readonly beliefProjection = new BeliefProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1147,6 +1149,11 @@ export class SimulationRuntime {
     return this.buildingStateProjection.getByTile(tileId)
   }
 
+  /** v0.50.0 — NPC's subjective beliefs (formatted string for AI dialog prompt). */
+  getFormattedBeliefContext(npcId: string): string {
+    return formatBeliefContext(this.beliefProjection.getBeliefs(npcId), this.currentTick)
+  }
+
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
   getBioNodesOnTile(tileId: string): readonly BioNodeRow[] {
     return this.bioNodeProjection.listOnTile(tileId)
@@ -1543,6 +1550,7 @@ export class SimulationRuntime {
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
+      this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -3275,6 +3283,20 @@ export class SimulationRuntime {
             }
           ))
         }
+      }
+    }
+
+    // BeliefProjection confidence decay — once per in-game day
+    if (nextTick % TICKS_PER_DAY === 0) {
+      this.beliefProjection.tick(nextTick)
+    }
+
+    // Ecosystem health beliefs — every 48 ticks (≈ 2 in-game days)
+    if (nextTick % 48 === 0) {
+      const npcLocs = new Map(this.getNpcs().map(n => [n.id, n.location]))
+      for (const region of this.ecosystemRegionProjection.list()) {
+        const densityPct = 1 - (region.pressureLevel / 100)
+        this.beliefProjection.updateEcosystemBeliefs(region.tileId, densityPct, nextTick, npcLocs)
       }
     }
 
