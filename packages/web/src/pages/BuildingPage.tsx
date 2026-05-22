@@ -34,6 +34,23 @@ const TYPE_LABEL_ZH: Record<string, string> = {
   construction: '工地'
 }
 
+const DOMAIN_LABEL: Record<string, string> = {
+  build: '建造',
+  learn: '學習',
+  trade: '交易',
+  service: '服務'
+}
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  work: '工作中',
+  sleep: '休息中',
+  eat: '用餐中',
+  idle: '待機',
+  trade: '交易中',
+  patrol: '巡邏中',
+  move: '移動中'
+}
+
 export function BuildingPage() {
   const { buildingId = '' } = useParams<{ buildingId: string }>()
   const { t: _t, locale } = useI18n()
@@ -279,6 +296,13 @@ export function BuildingPage() {
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {presentNpcs.map(({ npc, occupant }) => {
               const name = npc?.name ?? occupant.npcId
+              const activity = 'activity' in occupant ? occupant.activity : 'idle'
+              const activityText = ACTIVITY_LABEL[activity] ?? activity
+              const domain = 'domain' in occupant ? occupant.domain : undefined
+              const domainText = domain && activity === 'work'
+                ? ` · ${DOMAIN_LABEL[domain] ?? domain}`
+                : ''
+              const narration = 'narration' in occupant ? occupant.narration : undefined
               return (
                 <li key={occupant.npcId}>
                   <button
@@ -286,6 +310,7 @@ export function BuildingPage() {
                     onClick={() => token && npc && setActiveNpc(npc)}
                     disabled={!token}
                     className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-sharp border border-ground-700 hover:border-ember-600 transition-colors"
+                    title={narration ?? ''}
                   >
                     <span
                       className={[
@@ -301,6 +326,9 @@ export function BuildingPage() {
                       </div>
                       <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                         {name}
+                      </div>
+                      <div className="text-[11px] text-ground-300">
+                        {activityText}{domainText}
                       </div>
                       {npc?.intentLine && (
                         <div className="text-[11px] text-ember-300 truncate">
