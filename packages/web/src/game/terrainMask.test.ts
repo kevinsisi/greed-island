@@ -3,6 +3,8 @@ import {
   isWalkableTerrain,
   terrainAt,
   terrainMaskForDistrict,
+  TERRAIN_SPEED_MODIFIER,
+  isWalkableLand,
 } from './terrainMask'
 import { AREA_GRID_COLS, AREA_GRID_ROWS } from './areaGrid'
 
@@ -76,5 +78,28 @@ describe('terrainMask.terrainAt', () => {
     // building. New mask MUST make this walkable.
     const marshCell = terrainAt('t_salt_marsh', 7, 4)
     expect(['land', 'pier', 'shore', 'shallow_water']).toContain(marshCell)
+  })
+})
+
+describe('terrain speed modifiers', () => {
+  it('open is full speed', () => {
+    expect(TERRAIN_SPEED_MODIFIER.open).toBe(1.0)
+  })
+  it('rough is 0.75x', () => {
+    expect(TERRAIN_SPEED_MODIFIER.rough).toBe(0.75)
+  })
+  it('path is 1.15x', () => {
+    expect(TERRAIN_SPEED_MODIFIER.path).toBe(1.15)
+  })
+  it('blocked and building are impassable', () => {
+    expect(TERRAIN_SPEED_MODIFIER.blocked).toBe(0)
+    expect(TERRAIN_SPEED_MODIFIER.building).toBe(0)
+  })
+  it('isWalkableLand returns false for blocked and building', () => {
+    expect(isWalkableLand('blocked')).toBe(false)
+    expect(isWalkableLand('building')).toBe(false)
+    expect(isWalkableLand('open')).toBe(true)
+    expect(isWalkableLand('rough')).toBe(true)
+    expect(isWalkableLand('path')).toBe(true)
   })
 })

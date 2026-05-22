@@ -46,6 +46,39 @@ export function isWalkableTerrain(terrain: SubcellTerrain): boolean {
   return terrain !== 'open_water'
 }
 
+// Land terrain types (non-water biomes)
+export type LandTerrain = 'open' | 'rough' | 'path' | 'blocked' | 'building'
+
+// All terrain types combined
+export type AnyTerrain = SubcellTerrain | LandTerrain
+
+export const TERRAIN_SPEED_MODIFIER: Readonly<Record<AnyTerrain, number>> = {
+  // water types (player can't enter open_water)
+  land: 1.0,
+  pier: 1.0,
+  shore: 0.9,
+  shallow_water: 0.7,
+  open_water: 0,
+  // land types
+  open: 1.0,
+  rough: 0.75,
+  path: 1.15,
+  blocked: 0,
+  building: 0,
+}
+
+export const LAND_COLOR_FOR_TERRAIN: Readonly<Record<LandTerrain, number>> = {
+  open: 0x6b8a4b,      // muted green
+  rough: 0x7a6a3a,     // earthy brown
+  path: 0x9a8a6a,      // pale ochre
+  blocked: 0x2a2a2a,   // near-black
+  building: 0x3a3a3a,  // dark grey (hidden under building sprite)
+}
+
+export function isWalkableLand(t: LandTerrain): boolean {
+  return t !== 'blocked' && t !== 'building'
+}
+
 /**
  * Hand-authored masks. The world's three water-biome districts each
  * have their own geography:
