@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## v0.52.0 — NPC Reflection Dialog Injection (2026-05-22)
+## 2026-05-22 — Handoff Snapshot @ v0.52.0
 
 ### Current Version
 `0.52.0` — TypeScript build clean. 862 tests pass across 117 test files. Commits pushed to `main`.
@@ -14,28 +14,34 @@ developer. Keep latest status at the top.
 
 **v0.52.0 — NPC Reflection Dialog Injection (Cognitive Runtime Layer 2, Step 3)**
 
-**新增檔案：**
-- None (feature integrated into existing projections)
+NPC AI 對話脈絡現在包含過去意圖成敗的記憶。IntentProjection 在 v0.51.0 已記錄每次 `NPC_INTENT_RESOLVED` 的 Reflection；本版把這些 Reflection 格式化注入 AI prompt，NPC 說話時可自然引用自身判斷史。
+
+**新增檔案：** 無（整合進現有檔案）
 
 **修改檔案：**
-- `packages/server/src/projections/intentProjection.ts`：`formatReflectionContext()` exported function — formats up to 5 most recent active reflections with duration-aware filtering
-- `packages/server/src/config/world.ts`：`MAX_REFLECTION_CONTEXT_BULLETS = 5` 新常數
-- `packages/server/src/npcs/aiDialog.ts`：`buildReflectionBlock()` 新 exported helper；`AiDialogContext.reflectionContext?: string` 欄位；`buildSystemPrompt()` 注入 `buildReflectionBlock()`
-- `packages/server/src/http/npc.ts`：`reflectionCtx = runtime.getFormattedReflectionContext(npcId)` + spread into `dialogCtx`
-- `packages/server/src/sim/npcEngine.ts`：`getFormattedReflectionContext()` public method 暴露格式化反思
+- `packages/server/src/config/world.ts`：新增 `MAX_REFLECTION_CONTEXT_BULLETS = 5`
+- `packages/server/src/projections/intentProjection.ts`：新增 `INTENT_LABELS` 常數 + `export function formatReflectionContext(reflections, currentTick): string` — 過濾 active reflections（age < REFLECTION_DURATION_TICKS），取最新 `slice(-MAX_REFLECTION_CONTEXT_BULLETS)` 條，格式化為中文子彈清單
+- `packages/server/src/npcs/aiDialog.ts`：`AiDialogContext` 新增 `reflectionContext?: string`；新增 `export function buildReflectionBlock(ctx?: string): string[]`（guard 同 `buildBeliefBlock`，附 ⚠️ 記憶使用規則）；`buildSystemPrompt` 在 `buildBeliefBlock` 後注入 `buildReflectionBlock`
+- `packages/server/src/sim/runtime.ts`：import `formatReflectionContext`；新增 `getFormattedReflectionContext(npcId): string` public method
+- `packages/server/src/http/npc.ts`：`reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined`；spread `...(reflectionCtx ? { reflectionContext: reflectionCtx } : {})` 進 `dialogCtx`
 
 **架構關鍵點：**
-- `formatReflectionContext()` 掃描 NPC 的 active reflections（仍在 REFLECTION_DURATION_TICKS 內）；按 intent type 分組（survival / economic / social / ecosystem）
-- 每種 intent type 最多取 1 條最新 reflection（防止冗長）；若無則 skip；順序：survival → economic → social → ecosystem
-- Reflection 格式：「survival intent 前日成功解決飢荒」「economic intent 未能完成商人委任」等自然語言；NPC dialog 可在回應中自然引用
-- NPC 無 active reflection 時 block 完全省略（不空洞注入）
-- `reflectionCtx` 與 `beliefCtx` / `intentCtx` 平行，各自獨立；AI 仍 read-only 旁白，無法改變反思內容
+- `Reflection` 介面保持 private；`formatReflectionContext` 在同一檔案定義，runtime.ts 透過 structural typing 傳遞 `getReflections()` 回傳值，無需 export 類型
+- Active reflection 判斷：`currentTick - r.startTick < r.durationTicks`（與 `getLearningWeights` 的過濾邏輯一致）
+- 無 active reflection 時 `formatReflectionContext` 回傳 `''`，`buildReflectionBlock` 回傳 `[]`，prompt 完全不注入空塊
+- AI 仍只做 read-only 旁白；reflectionContext 是唯讀上下文，不影響任何模擬狀態
 
 **測試：**
-- 862 passing tests across 117 files (format helpers 單體測試，end-to-end dialog injection 煙測)
-- Build clean TypeScript
+- +15 新測試（10 for `formatReflectionContext`、5 for `buildReflectionBlock`）
+- 862 passing tests / 117 files；build clean
 
-**Next:** v0.53.0 — NPC Intention Recomputation Trigger (intent recomputation 事件驅動化，由 belief/faction/goods 變化觸發)
+**Verification:**
+```
+cd packages/server && npx vitest run   # 862 pass
+cd packages/server && npm run build    # clean
+```
+
+**Next:** v0.53.0 — TBD（可能方向：NPC 主動敘事、記憶衰退視覺化、或 intention recomputation 事件驅動化）
 
 ---
 
