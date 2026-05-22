@@ -127,8 +127,22 @@ export class BeliefProjection {
     }
   }
 
-  tick(_currentTick: number): void {
-    // TODO: decay confidence by decayRatePerDay; delete rows ≤ 0
+  tick(currentTick: number): void {
+    const currentDay = Math.floor(currentTick / 24)
+    for (const [npcId, npcMap] of this.rowsByNpc) {
+      for (const [key, row] of npcMap) {
+        const observedDay = Math.floor(row.observedAtTick / 24)
+        const daysPassed = currentDay - observedDay
+        if (daysPassed <= 0) continue
+        const newConf = row.confidence - row.decayRatePerDay * daysPassed
+        if (newConf <= 0) {
+          npcMap.delete(key)
+        } else {
+          npcMap.set(key, { ...row, confidence: newConf, observedAtTick: currentTick })
+        }
+      }
+      if (npcMap.size === 0) this.rowsByNpc.delete(npcId)
+    }
   }
 
   updateEcosystemBeliefs(

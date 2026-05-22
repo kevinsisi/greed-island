@@ -156,4 +156,46 @@ describe('BeliefProjection', () => {
     const scarcity = proj.getBeliefs('npc-g').find(b => b.subject === 'goods_scarcity')!
     expect(scarcity.confidence).toBe(35)
   })
+
+  it('tick() decays confidence by decayRatePerDay per 24 ticks', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-a', 't_dock']])
+    proj.apply(ev(100, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'guild', previousFactionId: null,
+      seizedAtTick: 100, narration: 'x'
+    }), locs)
+    // tile_safety: decayRatePerDay=2 → after 1 day (24 ticks) confidence drops by 2
+    proj.tick(124) // 24 ticks later (observedAtTick=100, so daysPassed=1)
+    const safety = proj.getBeliefs('npc-a').find(b => b.subject === 'tile_safety')!
+    expect(safety.confidence).toBe(88) // 90 - 2
+  })
+
+  it('tick() removes rows when confidence reaches 0', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-a', 't_dock']])
+    proj.apply(ev(0, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'guild', previousFactionId: null,
+      seizedAtTick: 0, narration: 'x'
+    }), locs)
+    // tile_safety: confidence=90, decayRatePerDay=2 → 45 days × 2 = 90 → hits 0
+    proj.tick(45 * 24)
+    expect(proj.getBeliefs('npc-a').find(b => b.subject === 'tile_safety')).toBeUndefined()
+  })
+
+  it('second event on same subject replaces row (latest wins)', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-a', 't_dock']])
+    proj.apply(ev(10, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'guild', previousFactionId: null,
+      seizedAtTick: 10, narration: 'x'
+    }), locs)
+    proj.apply(ev(50, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'militia', previousFactionId: 'guild',
+      seizedAtTick: 50, narration: 'x'
+    }), locs)
+    const allSafety = proj.getBeliefs('npc-a').filter(b => b.subject === 'tile_safety')
+    // still just one row (not two)
+    expect(allSafety).toHaveLength(1)
+    expect(allSafety[0]!.observedAtTick).toBe(50)
+  })
 })
