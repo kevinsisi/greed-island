@@ -63,8 +63,7 @@ export function createBuildingsRouter(input: {
               ...view.def,
               state: bState?.state ?? 'operational',
               health: bState?.health ?? 100,
-              constructionProgress:
-                bState?.state === 'under_construction' ? bState.health : undefined
+              constructionProgress: undefined  // TODO: wire from construction project when tracked
             }
           }
         })

@@ -134,9 +134,9 @@ export interface AreaMapBuilding {
   glyph: string
   size: number
   enterable: boolean
-  // v0.49.0 — building lifecycle state
-  state?: string
-  health?: number
+  // v0.49.0 — building lifecycle state (non-optional when tileId specified)
+  state: string
+  health: number
   constructionProgress?: number
 }
 
