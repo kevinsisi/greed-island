@@ -1,6 +1,6 @@
 import type { Event } from '../kernel/types.js'
 import type { IntentKind } from '../kernel/livingWorldCommands.js'
-import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC } from '../config/world.js'
+import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC, MAX_REFLECTION_CONTEXT_BULLETS } from '../config/world.js'
 
 interface Reflection {
   triggeringEventId: string   // EventLog sequence number (event.eventId, a string)
@@ -28,7 +28,7 @@ export function formatReflectionContext(
 ): string {
   const active = reflections.filter(r => currentTick - r.startTick < r.durationTicks)
   if (active.length === 0) return ''
-  const recent = active.slice(-5)
+  const recent = active.slice(-MAX_REFLECTION_CONTEXT_BULLETS)
   const bullets = recent.map(r => {
     const label = INTENT_LABELS[r.intentType]
     const outcome = r.emotionalImpact > 0

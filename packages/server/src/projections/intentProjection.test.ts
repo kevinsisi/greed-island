@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { IntentProjection, formatReflectionContext } from './intentProjection.js'
 import type { Event } from '../kernel/types.js'
-import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC } from '../config/world.js'
+import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC, MAX_REFLECTION_CONTEXT_BULLETS } from '../config/world.js'
 
 function ev(eventId: string, eventType: string, data: unknown): Event {
   return {
@@ -258,8 +258,8 @@ describe('formatReflectionContext', () => {
 
   it('caps output at 5 most recent active reflections', () => {
     const proj = new IntentProjection()
-    // 7 reflections: index 0 and 1 should be excluded (only last 5 shown)
-    for (let i = 0; i < 7; i++) {
+    // MAX_REFLECTION_CONTEXT_BULLETS + 2 reflections: oldest 2 should be excluded (only last MAX_REFLECTION_CONTEXT_BULLETS shown)
+    for (let i = 0; i < MAX_REFLECTION_CONTEXT_BULLETS + 2; i++) {
       proj.project(ev(`e${i}`, 'NPC_INTENT_RESOLVED', {
         npcId: 'npc-x',
         intentType: i % 2 === 0 ? 'survival' : 'economic',
@@ -271,6 +271,6 @@ describe('formatReflectionContext', () => {
     }
     const result = formatReflectionContext(proj.getReflections('npc-x'), 1)
     const bulletCount = (result.match(/  · /g) ?? []).length
-    expect(bulletCount).toBe(5)
+    expect(bulletCount).toBe(MAX_REFLECTION_CONTEXT_BULLETS)
   })
 })

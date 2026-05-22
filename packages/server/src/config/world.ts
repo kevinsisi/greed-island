@@ -253,6 +253,7 @@ export const INTENT_OVERRIDE_DURATION_TICKS = TICKS_PER_HOUR * 6
 export const INTENT_URGENCY_THRESHOLD = 30
 export const REFLECTION_DURATION_TICKS = TICKS_PER_DAY * 30
 export const MAX_REFLECTIONS_PER_NPC = 20
+export const MAX_REFLECTION_CONTEXT_BULLETS = 5
 
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
