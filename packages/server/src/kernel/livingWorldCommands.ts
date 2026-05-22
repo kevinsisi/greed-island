@@ -52,6 +52,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'CONSTRUCTION_INITIATE',
   'CONSTRUCTION_PROJECT_PROGRESS',
   'BUILDING_CONSTRUCTED',
+  'BUILDING_DAMAGED',
+  'BUILDING_REPAIRED',
+  'BUILDING_ABANDONED',
   'MAP_TILE_UNLOCKED',
   'NPC_INTERACT',
   'AREA_PRESSURE',
@@ -477,6 +480,26 @@ export type BuildingConstructedCmd = Readonly<{
   tileId: string
   motivation?: ConstructionMotivation
   narration: string
+}>
+
+export type BuildingDamagedCmd = Readonly<{
+  buildingId: string
+  tileId: string
+  health: number
+  cause: 'combat' | 'neglect'
+}>
+
+export type BuildingRepairedCmd = Readonly<{
+  buildingId: string
+  tileId: string
+  health: number
+  repairedByNpcId: string
+}>
+
+export type BuildingAbandonedCmd = Readonly<{
+  buildingId: string
+  tileId: string
+  lastActivityTick: number
 }>
 
 export type MapTileUnlockedCmd = Readonly<{
@@ -1340,6 +1363,9 @@ export type LivingWorldCommandPayload =
   | ConstructionInitiateCmd
   | ConstructionProjectProgressCmd
   | BuildingConstructedCmd
+  | BuildingDamagedCmd
+  | BuildingRepairedCmd
+  | BuildingAbandonedCmd
   | MapTileUnlockedCmd
   | NpcInteractCmd
   | AreaPressureCmd
@@ -1649,6 +1675,29 @@ const VALIDATORS: Readonly<
       if (err) return err
     }
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  BUILDING_DAMAGED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.buildingId !== 'string' || !p.buildingId) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || !p.tileId) return 'tileId required'
+    if (typeof p.health !== 'number' || p.health < 0 || p.health > 100) return 'health must be 0–100'
+    if (p.cause !== 'combat' && p.cause !== 'neglect') return 'cause must be combat or neglect'
+    return null
+  },
+  BUILDING_REPAIRED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.buildingId !== 'string' || !p.buildingId) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || !p.tileId) return 'tileId required'
+    if (typeof p.health !== 'number' || p.health < 0 || p.health > 100) return 'health must be 0–100'
+    if (typeof p.repairedByNpcId !== 'string' || !p.repairedByNpcId) return 'repairedByNpcId required'
+    return null
+  },
+  BUILDING_ABANDONED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.buildingId !== 'string' || !p.buildingId) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || !p.tileId) return 'tileId required'
+    if (typeof p.lastActivityTick !== 'number') return 'lastActivityTick required'
     return null
   },
   MAP_TILE_UNLOCKED: (p) => {
