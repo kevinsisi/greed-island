@@ -70,6 +70,7 @@ export type AiDialogContext = Readonly<{
   skillLevels?: readonly { skillId: string; level: number }[]
   dominantFaction?: string | null
   tileHistoryArcs?: readonly TileHistoryArcContext[]
+  beliefContext?: string
 }>
 
 export class AiDialogError extends Error {
@@ -190,6 +191,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildTileHistoryBlock(ctx.tileHistoryArcs),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
     ...buildSkillBlock(ctx.skillLevels),
+    ...buildBeliefBlock(ctx.beliefContext),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -527,6 +529,20 @@ export function buildSkillBlock(skills: readonly { skillId: string; level: numbe
   return [
     `### 你自身的技能等級（這是你真正掌握的能力，可自然融入對話中提及）`,
     skills.map((s) => `  · ${skillNames[s.skillId] ?? s.skillId}：等級 ${s.level}`).join('\n'),
+    '',
+  ]
+}
+
+export function buildBeliefBlock(beliefContext: string | undefined): string[] {
+  if (!beliefContext || beliefContext.trim().length === 0) return []
+  return [
+    beliefContext,
+    '',
+    '⚠️ 信念使用規則：',
+    '- 信心≥70%：可以直接陳述（「我知道...」「那裡很危險...」）',
+    '- 信心40–69%：必須用「我聽說」「大概」「好像」等表達',
+    '- 信心<40%：必須用「也許」「我不確定」「有人提到但我不知道真假」',
+    '- 禁止虛構信念列表以外的地名、人物或事件',
     '',
   ]
 }
