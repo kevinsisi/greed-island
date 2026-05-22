@@ -18,6 +18,7 @@ export interface BeliefRow {
   npcId: string
   subject: BeliefSubjectKind
   qualifier: string
+  /** 0–100 */
   value: BeliefValue
   confidence: number
   observedAtTick: number
@@ -36,13 +37,13 @@ export const TILE_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
   t_mountain: ['t_forest', 't_dimai'],
 }
 
-// Row key: npcId + '|' + subject + '|' + qualifier
-function rowKey(npcId: string, subject: BeliefSubjectKind, qualifier: string): string {
-  return `${npcId}|${subject}|${qualifier}`
+function subjectKey(subject: BeliefSubjectKind, qualifier: string): string {
+  return `${subject}|${qualifier}`
 }
 
 export class BeliefProjection {
-  private readonly rows = new Map<string, BeliefRow>()
+  // npcId → (subject|qualifier → row)
+  private readonly rowsByNpc = new Map<string, Map<string, BeliefRow>>()
 
   apply(_event: Event, _npcLocations: ReadonlyMap<string, string>): void {
     // TODO: implement per-event handlers
@@ -62,11 +63,15 @@ export class BeliefProjection {
   }
 
   getBeliefs(npcId: string): readonly BeliefRow[] {
-    return [...this.rows.values()].filter(r => r.npcId === npcId)
+    return [...(this.rowsByNpc.get(npcId)?.values() ?? [])]
   }
 
-  // Internal helpers
-  protected upsert(row: BeliefRow): void {
-    this.rows.set(rowKey(row.npcId, row.subject, row.qualifier), row)
+  private upsert(row: BeliefRow): void {
+    let npcMap = this.rowsByNpc.get(row.npcId)
+    if (!npcMap) {
+      npcMap = new Map()
+      this.rowsByNpc.set(row.npcId, npcMap)
+    }
+    npcMap.set(subjectKey(row.subject, row.qualifier), row)
   }
 }
