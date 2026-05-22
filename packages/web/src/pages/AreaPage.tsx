@@ -242,16 +242,26 @@ export function AreaPage() {
 
   const mapBuildings = useMemo<AreaMapBuilding[]>(
     () =>
-      buildings.map((view) => ({
-        id: view.def.id,
-        nameZh: view.def.nameZh,
-        type: view.def.type,
-        col: view.def.placement.col,
-        row: view.def.placement.row,
-        glyph: view.def.placement.glyph,
-        size: view.def.placement.size,
-        enterable: view.def.enterable
-      })),
+      buildings.map((view) => {
+        const building: AreaMapBuilding = {
+          id: view.def.id,
+          nameZh: view.def.nameZh,
+          type: view.def.type,
+          col: view.def.placement.col,
+          row: view.def.placement.row,
+          glyph: view.def.placement.glyph,
+          size: view.def.placement.size,
+          enterable: view.def.enterable,
+          // v0.49.0 — building lifecycle state
+          state: view.def.state ?? 'operational',
+          health: view.def.health ?? 100
+        }
+        // only set constructionProgress if present
+        if (view.def.constructionProgress !== undefined) {
+          building.constructionProgress = view.def.constructionProgress
+        }
+        return building
+      }),
     [buildings]
   )
 

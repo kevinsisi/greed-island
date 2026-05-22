@@ -134,6 +134,10 @@ export interface AreaMapBuilding {
   glyph: string
   size: number
   enterable: boolean
+  // v0.49.0 — building lifecycle state
+  state?: string
+  health?: number
+  constructionProgress?: number
 }
 
 export interface AreaSceneInit {

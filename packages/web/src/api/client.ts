@@ -636,6 +636,8 @@ export type ServerAmbient = {
 
 export type ServerShift = 'morning' | 'afternoon' | 'night'
 
+export type BuildingState = 'under_construction' | 'operational' | 'damaged' | 'abandoned'
+
 export type ServerBuildingDef = {
   id: string
   tileId: string
@@ -654,6 +656,10 @@ export type ServerBuildingDef = {
   hiring: Array<{ shift: ServerShift; capacity: number; wage: number; taskZh: string }>
   enterable: boolean
   restorative: boolean
+  // v0.49.0 — building lifecycle state (from BuildingStateProjection)
+  state?: BuildingState
+  health?: number
+  constructionProgress?: number
 }
 
 export type ServerBuildingView = {

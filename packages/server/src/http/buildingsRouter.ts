@@ -45,7 +45,32 @@ export function createBuildingsRouter(input: {
     const constructionSites = inProgress
       .map((project) => constructionSiteView(project))
       .filter((view): view is BuildingRuntimeView => view !== null)
-    res.json({ buildings: [...views, ...constructionSites], inProgress })
+
+    // v0.49.0 — inject building state/health/constructionProgress
+    let buildingStates: Map<string, { state: string; health: number }> | null = null
+    if (tileId) {
+      buildingStates = new Map(
+        input.runtime.getBuildingStatesByTile(tileId).map((s) => [s.buildingId, { state: s.state, health: s.health }])
+      )
+    }
+
+    const buildingsWithState = buildingStates
+      ? [...views, ...constructionSites].map((view) => {
+          const bState = buildingStates!.get(view.def.id)
+          return {
+            ...view,
+            def: {
+              ...view.def,
+              state: bState?.state ?? 'operational',
+              health: bState?.health ?? 100,
+              constructionProgress:
+                bState?.state === 'under_construction' ? bState.health : undefined
+            }
+          }
+        })
+      : [...views, ...constructionSites]
+
+    res.json({ buildings: buildingsWithState, inProgress })
   })
 
   router.get('/buildings/:id', (req: Request, res: Response) => {
