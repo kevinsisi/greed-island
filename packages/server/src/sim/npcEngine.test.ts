@@ -924,4 +924,68 @@ describe('NpcEngine', () => {
       })
     )
   })
+
+  describe('intentOverride', () => {
+    it('setIntentOverride stores the override on the NPC state', () => {
+      const engine = new NpcEngine([makeProfile({ id: 'intent.npc' })])
+      engine.setIntentOverride('intent.npc', {
+        targetTile: 't_dock',
+        expiresAtTick: 100,
+        intentType: 'survival',
+        urgency: 80,
+        reason: 'test'
+      })
+      const state = engine.getState('intent.npc')!
+      expect(state.intentOverride?.targetTile).toBe('t_dock')
+      expect(state.intentOverride?.intentType).toBe('survival')
+      expect(state.intentOverride?.urgency).toBe(80)
+    })
+
+    it('clearIntentOverride removes the override', () => {
+      const engine = new NpcEngine([makeProfile({ id: 'intent.clear' })])
+      engine.setIntentOverride('intent.clear', {
+        targetTile: 't_dock',
+        expiresAtTick: 100,
+        intentType: 'economic',
+        urgency: 50,
+        reason: 'set-then-clear'
+      })
+      expect(engine.getState('intent.clear')!.intentOverride).not.toBeNull()
+      engine.clearIntentOverride('intent.clear')
+      expect(engine.getState('intent.clear')!.intentOverride).toBeNull()
+    })
+
+    it('intentOverride.targetTile takes priority over personalityOverride.targetTile after ticking', () => {
+      // Both intentOverride and personalityOverride point to different tiles.
+      // After one tick, the NPC should be heading toward intentOverride.targetTile.
+      const profile = makeProfile({
+        id: 'intent.priority',
+        defaultLocation: 't_central',
+        routine: [
+          { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'work' }
+        ]
+      })
+      const engine = new NpcEngine([profile])
+      // Hydrate with a personalityOverride pointing to t_forest
+      engine.hydrate('intent.priority', {
+        tile: 't_central',
+        targetTile: 't_central',
+        activity: 'idle',
+        personalityOverride: { targetTile: 't_forest', expiresAtTick: 9999, reason: 'personality' }
+      })
+      // Set intentOverride pointing to t_dock (higher priority)
+      engine.setIntentOverride('intent.priority', {
+        targetTile: 't_dock',
+        expiresAtTick: 9999,
+        intentType: 'economic',
+        urgency: 90,
+        reason: 'intent-wins'
+      })
+      engine.tick(1)
+      const state = engine.getState('intent.priority')!
+      // The NPC should be moving toward t_dock (not t_forest) — travelRoute.targetTile confirms the effective target
+      const effectiveTarget = state.travelRoute?.targetTile ?? state.targetTile
+      expect(effectiveTarget).toBe('t_dock')
+    })
+  })
 })

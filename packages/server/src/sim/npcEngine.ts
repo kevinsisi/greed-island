@@ -20,6 +20,7 @@
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
+import type { IntentKind } from '../kernel/livingWorldCommands.js'
 
 // Land terrain masks duplicated from terrainMask.ts (no Phaser dependency here)
 // IMPORTANT: Keep in sync with LAND_MASKS in packages/web/src/game/terrainMask.ts
@@ -177,6 +178,15 @@ export type NpcRuntimeState = {
   /** v0.14.0：個性 nudge 暫時覆寫 schedule 的 targetTile；到 expiresAtTick
    *  自動失效，回到 schedule 推導的目標。沒有 nudge 時為 null。 */
   personalityOverride?: { targetTile: string; expiresAtTick: number; reason: string } | null
+  /** v0.51.0：Intention Layer 設定的最高優先級 tile 目標；覆蓋 personalityOverride
+   *  與 schedule。過期後自動失效。沒有意圖時為 null。 */
+  intentOverride?: {
+    targetTile: string
+    expiresAtTick: number
+    intentType: IntentKind
+    urgency: number
+    reason: string
+  } | null
   /** v0.15.12：NPC 正在跨區移動時的單一 worldline segment。非移動時為 null。 */
   travelRoute?: {
     fromTile: string
@@ -367,6 +377,7 @@ export class NpcEngine {
         subRow: initSub.row,
         subZ: 0,
         personalityOverride: null,
+        intentOverride: null,
         travelRoute: null,
         agent
       })
@@ -397,6 +408,10 @@ export class NpcEngine {
         }
       }
     }
+    const intentOverride: NpcRuntimeState['intentOverride'] =
+      (raw as Record<string, unknown>).intentOverride != null
+        ? (((raw as Record<string, unknown>).intentOverride) as NpcRuntimeState['intentOverride']) ?? null
+        : null
     let travelRoute: NpcRuntimeState['travelRoute'] = null
     if (r.travelRoute && typeof r.travelRoute === 'object') {
       const tr = r.travelRoute as Partial<{
@@ -441,6 +456,7 @@ export class NpcEngine {
           : fallbackSub.row,
       subZ: typeof r.subZ === 'number' ? clampInt(r.subZ, -10, 50) : 0,
       personalityOverride,
+      intentOverride,
       travelRoute,
       agent: readAgentState(profile ?? null, r.agent, tile)
     }
@@ -509,6 +525,8 @@ export class NpcEngine {
       }
       const beforeOverrideTarget = before.personalityOverride?.targetTile ?? null
       const nextOverrideTarget = next.personalityOverride?.targetTile ?? null
+      const beforeIntentTarget = before.intentOverride?.targetTile ?? null
+      const nextIntentTarget = next.intentOverride?.targetTile ?? null
       const beforeRoute = before.travelRoute ?? null
       const nextRoute = next.travelRoute ?? null
       if (
@@ -521,6 +539,7 @@ export class NpcEngine {
         next.subRow !== before.subRow ||
         next.subZ !== before.subZ ||
         beforeOverrideTarget !== nextOverrideTarget ||
+        beforeIntentTarget !== nextIntentTarget ||
         beforeRoute?.fromTile !== nextRoute?.fromTile ||
         beforeRoute?.toTile !== nextRoute?.toTile ||
         beforeRoute?.targetTile !== nextRoute?.targetTile ||
@@ -769,6 +788,20 @@ export class NpcEngine {
     this.state.set(npcId, next)
     return { npcId, state: next }
   }
+
+  /** v0.51.0：Intention Layer 設定最高優先級 tile 目標。覆蓋 personalityOverride 與 schedule。 */
+  setIntentOverride(npcId: string, override: NonNullable<NpcRuntimeState['intentOverride']>): void {
+    const state = this.state.get(npcId)
+    if (!state) return
+    state.intentOverride = override
+  }
+
+  /** v0.51.0：清除 Intention Layer 設定的 tile 目標，回到 personalityOverride / schedule 優先級。 */
+  clearIntentOverride(npcId: string): void {
+    const state = this.state.get(npcId)
+    if (!state) return
+    state.intentOverride = null
+  }
 }
 
 function decideNextState(
@@ -822,7 +855,12 @@ function decideNextState(
       }
     }
   }
-  const targetTile = personalityOverride?.targetTile ?? scheduleTarget
+  // intentOverride: expire if past expiresAtTick, otherwise carry forward.
+  let intentOverride = before.intentOverride ?? null
+  if (intentOverride && currentTick >= intentOverride.expiresAtTick) {
+    intentOverride = null
+  }
+  const targetTile = intentOverride?.targetTile ?? personalityOverride?.targetTile ?? scheduleTarget
 
   const finish = (
     nextTile: string,
@@ -863,6 +901,7 @@ function decideNextState(
       subRow,
       subZ: before.subZ,
       personalityOverride,
+      intentOverride,
       travelRoute,
       agent: buildNextAgentState({
         profile,
@@ -1942,6 +1981,13 @@ function statesEqual(a: NpcRuntimeState, b: NpcRuntimeState): boolean {
         ar.startedAtTick === br.startedAtTick
   if (!routeEqual) return false
   if (!agentStatesEqual(a.agent, b.agent)) return false
+  const ai = a.intentOverride ?? null
+  const bi = b.intentOverride ?? null
+  const intentEqual =
+    ai === null && bi === null
+      ? true
+      : ai !== null && bi !== null && ai.targetTile === bi.targetTile && ai.expiresAtTick === bi.expiresAtTick
+  if (!intentEqual) return false
   if (ao === null && bo === null) return true
   if (ao === null || bo === null) return false
   return ao.targetTile === bo.targetTile && ao.expiresAtTick === bo.expiresAtTick
