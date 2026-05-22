@@ -3878,11 +3878,12 @@ export class SimulationRuntime {
     // Must run before intent recompute cadence so expired/arrived intents are cleared first.
     for (const profile of this.profiles) {
       const state = this.npcEngine.getState(profile.id)
-      const io = state?.intentOverride
+      if (!state) continue
+      const io = state.intentOverride
       if (!io) continue
 
       let outcome: 'success' | 'failure' | null = null
-      if (state!.tile === io.targetTile) outcome = 'success'
+      if (state.tile === io.targetTile) outcome = 'success'
       else if (nextTick >= io.expiresAtTick) outcome = 'failure'
 
       if (outcome) {
