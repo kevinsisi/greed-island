@@ -215,7 +215,7 @@ import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { BeliefProjection, formatBeliefContext } from '../projections/beliefProjection.js'
-import { IntentProjection } from '../projections/intentProjection.js'
+import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
@@ -1161,6 +1161,11 @@ export class SimulationRuntime {
   /** v0.50.0 — NPC's subjective beliefs (formatted string for AI dialog prompt). */
   getFormattedBeliefContext(npcId: string): string {
     return formatBeliefContext(this.beliefProjection.getBeliefs(npcId), this.currentTick)
+  }
+
+  /** v0.52.0 — NPC's reflection memory (formatted string for AI dialog prompt). */
+  getFormattedReflectionContext(npcId: string): string {
+    return formatReflectionContext(this.intentProjection.getReflections(npcId), this.currentTick)
   }
 
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */

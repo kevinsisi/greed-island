@@ -232,6 +232,7 @@ export function createNpcRouter(input: {
           : undefined
 
         const beliefCtx = input.runtime.getFormattedBeliefContext(npcId) || undefined
+        const reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined
 
         const dialogCtx: AiDialogContext = {
           profile,
@@ -253,6 +254,7 @@ export function createNpcRouter(input: {
           ...(recentLocalEvents ? { recentLocalEvents } : {}),
           ...(skillLevels ? { skillLevels } : {}),
           ...(beliefCtx ? { beliefContext: beliefCtx } : {}),
+          ...(reflectionCtx ? { reflectionContext: reflectionCtx } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({
