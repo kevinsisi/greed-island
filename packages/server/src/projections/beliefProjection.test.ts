@@ -219,6 +219,16 @@ describe('BeliefProjection', () => {
     expect(proj.getBeliefs('npc-h').find(b => b.subject === 'ecosystem_health')).toBeUndefined()
   })
 
+  it('updateEcosystemBeliefs: adjacent NPC → confidence 30', () => {
+    const proj = new BeliefProjection()
+    // npc on t_central; t_forest is adjacent to t_central
+    const locs = new Map([['npc-adj', 't_central']])
+    proj.updateEcosystemBeliefs('t_forest', 0.10, 600, locs)
+    const eco = proj.getBeliefs('npc-adj').find(b => b.subject === 'ecosystem_health')!
+    expect(eco).toBeDefined()
+    expect(eco.confidence).toBe(30)
+  })
+
   it('formatBeliefContext: empty rows → empty string', () => {
     expect(formatBeliefContext([], 0)).toBe('')
   })
