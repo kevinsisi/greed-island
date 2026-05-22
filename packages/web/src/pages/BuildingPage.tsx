@@ -111,21 +111,15 @@ export function BuildingPage() {
 
   const presentNpcs = useMemo(() => {
     if (!view) return []
-    return npcs
-      .filter((npc) => npc.buildingId === view.def.id)
-      .map((npc) => ({
-        npc,
-        occupant: view.occupants.find((occ) => occ.npcId === npc.id) ?? {
-          npcId: npc.id,
-          shift: null,
-          isOwner: false
-        }
-      }))
+    return view.occupants.map((occupant) => {
+      const npc = npcs.find((n) => n.id === occupant.npcId)
+      return { npc, occupant }
+    })
   }, [view, npcs])
 
   const sceneNpcs = useMemo<BuildingSceneNpc[]>(() => {
     return presentNpcs.map(({ npc, occupant }) => {
-      const fullName = npc?.name ?? occupant.npcId
+      const fullName = occupant.nameZh ?? npc?.name ?? occupant.npcId
       const base: BuildingSceneNpc = {
         id: occupant.npcId,
         name: fullName,
@@ -291,11 +285,11 @@ export function BuildingPage() {
           室內人員 {presentNpcs.length}
         </div>
         {presentNpcs.length === 0 ? (
-          <div className="text-[12px] text-ground-500 italic">目前沒有人在這裡。</div>
+          <div className="text-[12px] text-ground-500 italic">無人在場</div>
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {presentNpcs.map(({ npc, occupant }) => {
-              const name = npc?.name ?? occupant.npcId
+              const name = occupant.nameZh ?? npc?.name ?? occupant.npcId
               const activity = 'activity' in occupant ? occupant.activity : 'idle'
               const activityText = ACTIVITY_LABEL[activity] ?? activity
               const domain = 'domain' in occupant ? occupant.domain : undefined
