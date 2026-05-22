@@ -667,7 +667,7 @@ export type BuildingOccupantView = {
   nameZh: string
   shift: ServerShift | null
   isOwner: boolean
-  activity?: string         // e.g. 'work' | 'idle' | 'move' — from NPC state
+  activity: string          // e.g. 'work' | 'idle' | 'move' — from NPC state
   domain?: string           // e.g. 'build' | 'learn' | 'trade' | 'service'
   narration?: string        // last productive action narration, shown as tooltip
 }
