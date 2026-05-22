@@ -1,5 +1,7 @@
 import type { Event } from '../kernel/types.js'
 
+const FOOD_GOODS_IDS = new Set(['fish', 'meat', 'grain'])
+
 export type BeliefSubjectKind =
   | 'tile_safety'
   | 'goods_scarcity'
@@ -56,6 +58,9 @@ export class BeliefProjection {
       case 'ANIMAL_ATTACKED_NPC':
         this.applyAnimalAttack(data, event.tick ?? 0, npcLocations)
         break
+      case 'GOODS_CONSUMED':
+        this.applyGoodsConsumed(data, event.tick ?? 0, npcLocations)
+        break
     }
   }
 
@@ -96,6 +101,28 @@ export class BeliefProjection {
         npcId, subject: 'tile_safety', qualifier: tileId,
         value: 'dangerous', confidence: conf, observedAtTick: tick,
         decayRatePerDay: 3, emotionalTag: 'fear',
+      })
+    }
+  }
+
+  private applyGoodsConsumed(
+    data: Record<string, unknown>,
+    tick: number,
+    npcLocations: ReadonlyMap<string, string>,
+  ): void {
+    const goodsId = readStr(data.goodsId)
+    if (!FOOD_GOODS_IDS.has(goodsId)) return
+    const tileId = readStr(data.tileId)
+    if (!tileId) return
+    for (const [npcId, npcTile] of npcLocations) {
+      const rawConf = perceiveConfidence(npcTile, tileId)
+      if (rawConf === 0) continue
+      // direct = 80, adjacent = 35 (lower than safety events; food scarcity is indirect signal)
+      const conf = rawConf === 90 ? 80 : 35
+      this.upsert({
+        npcId, subject: 'goods_scarcity', qualifier: goodsId,
+        value: 'scarce', confidence: conf, observedAtTick: tick,
+        decayRatePerDay: 4, emotionalTag: 'worry',
       })
     }
   }

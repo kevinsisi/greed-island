@@ -116,4 +116,44 @@ describe('BeliefProjection', () => {
     const safety = proj.getBeliefs('npc-d').find(b => b.subject === 'tile_safety')!
     expect(safety.confidence).toBe(40)
   })
+
+  it('GOODS_CONSUMED fish on NPC tile → goods_scarcity scarce, confidence 80', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-e', 't_dock']])
+    proj.apply(ev(30, 'GOODS_CONSUMED', {
+      goodsId: 'fish', quantity: 10,
+      holderType: 'settlement', holderId: 'settlement-dock', tileId: 't_dock',
+      consumedAtTick: 30, narration: 'consumed'
+    }), locs)
+    const scarcity = proj.getBeliefs('npc-e').find(b => b.subject === 'goods_scarcity')!
+    expect(scarcity).toBeDefined()
+    expect(scarcity.value).toBe('scarce')
+    expect(scarcity.qualifier).toBe('fish')
+    expect(scarcity.confidence).toBe(80)
+    expect(scarcity.emotionalTag).toBe('worry')
+  })
+
+  it('GOODS_CONSUMED non-food goods → no belief', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-f', 't_dock']])
+    proj.apply(ev(30, 'GOODS_CONSUMED', {
+      goodsId: 'refined_salt', quantity: 5,
+      holderType: 'settlement', holderId: 'settlement-dock', tileId: 't_dock',
+      consumedAtTick: 30, narration: 'consumed'
+    }), locs)
+    expect(proj.getBeliefs('npc-f')).toHaveLength(0)
+  })
+
+  it('GOODS_CONSUMED on adjacent tile → confidence 35', () => {
+    const proj = new BeliefProjection()
+    // npc-g on t_central; t_dock is adjacent to t_central
+    const locs = new Map([['npc-g', 't_central']])
+    proj.apply(ev(30, 'GOODS_CONSUMED', {
+      goodsId: 'meat', quantity: 3,
+      holderType: 'npc', holderId: 'npc-x', tileId: 't_dock',
+      consumedAtTick: 30, narration: 'consumed'
+    }), locs)
+    const scarcity = proj.getBeliefs('npc-g').find(b => b.subject === 'goods_scarcity')!
+    expect(scarcity.confidence).toBe(35)
+  })
 })
