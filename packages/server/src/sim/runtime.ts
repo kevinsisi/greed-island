@@ -1269,6 +1269,19 @@ export class SimulationRuntime {
     return state ? this.buildingRuntime.resolveNpcBuildingId(npcId, state) : null
   }
 
+  /** 回傳 NPC 最近一次 productive action 的 domain 與 narration，供建築 API 用。 */
+  getLastProductiveAction(npcId: string): { domain: string; narration: string } | null {
+    return this.npcStateProjection.getLastProductiveAction(npcId)
+  }
+
+  /** 回傳 NPC 的顯示名稱與目前 activity，供建築佔用者列表用。 */
+  getNpcActivityAndName(npcId: string): { nameZh: string; activity: string } | null {
+    const profile = this.profiles.find((p) => p.id === npcId)
+    if (!profile) return null
+    const state = this.npcEngine.getState(npcId)
+    return { nameZh: profile.name.zh, activity: state?.activity ?? 'idle' }
+  }
+
   isRareWindowOpen(): boolean {
     return this.rareWindowOpen
   }

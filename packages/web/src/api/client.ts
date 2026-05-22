@@ -662,9 +662,19 @@ export type ServerBuildingDef = {
   constructionProgress?: number
 }
 
+export type BuildingOccupantView = {
+  npcId: string
+  nameZh: string
+  shift: ServerShift | null
+  isOwner: boolean
+  activity?: string         // e.g. 'work' | 'idle' | 'move' — from NPC state
+  domain?: string           // e.g. 'build' | 'learn' | 'trade' | 'service'
+  narration?: string        // last productive action narration, shown as tooltip
+}
+
 export type ServerBuildingView = {
   def: ServerBuildingDef
-  occupants: Array<{ npcId: string; shift: ServerShift | null; isOwner: boolean }>
+  occupants: Array<BuildingOccupantView>
 }
 
 export type ServerConstructionProject = {

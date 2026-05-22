@@ -69,7 +69,7 @@ export function createBuildingsRouter(input: {
         })
       : [...views, ...constructionSites]
 
-    res.json({ buildings: buildingsWithState, inProgress })
+    res.json({ buildings: buildingsWithState.map((v) => enrichBuildingView(v, input.runtime)), inProgress })
   })
 
   router.get('/buildings/:id', (req: Request, res: Response) => {
@@ -78,7 +78,7 @@ export function createBuildingsRouter(input: {
       res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
       return
     }
-    res.json({ building: view })
+    res.json({ building: enrichBuildingView(view, input.runtime) })
   })
 
   router.post('/buildings/:id/apply', auth, (req: Request, res: Response) => {
@@ -289,4 +289,19 @@ function hashString(value: string): number {
   let h = 5381
   for (const ch of value) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
   return h
+}
+
+function enrichBuildingView(view: BuildingRuntimeView, runtime: SimulationRuntime): object {
+  const occupants = view.occupants.map((occ) => {
+    const npcInfo = runtime.getNpcActivityAndName(occ.npcId)
+    const lastProductive = runtime.getLastProductiveAction(occ.npcId)
+    return {
+      ...occ,
+      nameZh: npcInfo?.nameZh ?? occ.npcId,
+      activity: npcInfo?.activity ?? 'idle',
+      domain: lastProductive?.domain ?? undefined,
+      narration: lastProductive?.narration ?? undefined,
+    }
+  })
+  return { ...view, occupants }
 }

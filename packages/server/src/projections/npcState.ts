@@ -33,28 +33,46 @@ export type NpcStateRow = Readonly<{
   state: NpcStateSnapshot
 }>
 
+export type NpcLastProductiveAction = Readonly<{
+  domain: string
+  narration: string
+}>
+
 const NPC_STATE_RECORDED = 'NPC_STATE_RECORDED'
+const NPC_PRODUCTIVE_ACTION = 'NPC_PRODUCTIVE_ACTION'
 
 export class NpcStateProjection {
   private rows = new Map<string, NpcStateRow>()
+  private lastProductiveActions = new Map<string, NpcLastProductiveAction>()
 
   rebuildFromEvents(events: readonly Event[]): void {
     this.rows = new Map()
+    this.lastProductiveActions = new Map()
     for (const event of events) this.project(event)
   }
 
   project(event: Event): void {
-    if (event.eventType !== NPC_STATE_RECORDED) return
-    const row = rowFromEvent(event)
-    if (!row) return
-    const previous = this.rows.get(row.npcId)
-    if (!previous || previous.sequence <= row.sequence) {
-      this.rows.set(row.npcId, row)
+    if (event.eventType === NPC_STATE_RECORDED) {
+      const row = rowFromEvent(event)
+      if (!row) return
+      const previous = this.rows.get(row.npcId)
+      if (!previous || previous.sequence <= row.sequence) {
+        this.rows.set(row.npcId, row)
+      }
+    } else if (event.eventType === NPC_PRODUCTIVE_ACTION) {
+      const productive = productiveActionFromEvent(event)
+      if (productive) {
+        this.lastProductiveActions.set(productive.npcId, { domain: productive.domain, narration: productive.narration })
+      }
     }
   }
 
   getByNpcId(npcId: string): NpcStateRow | null {
     return this.rows.get(npcId) ?? null
+  }
+
+  getLastProductiveAction(npcId: string): NpcLastProductiveAction | null {
+    return this.lastProductiveActions.get(npcId) ?? null
   }
 
   getAll(): readonly NpcStateRow[] {
@@ -78,4 +96,14 @@ function rowFromEvent(event: Event): NpcStateRow | null {
     sequence: event.sequence,
     state: p.state as NpcStateSnapshot,
   }
+}
+
+function productiveActionFromEvent(event: Event): { npcId: string; domain: string; narration: string } | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as Record<string, unknown>
+  if (typeof p.npcId !== 'string' || p.npcId.length === 0) return null
+  if (typeof p.domain !== 'string' || p.domain.length === 0) return null
+  const narration = typeof p.narration === 'string' ? p.narration : ''
+  return { npcId: p.npcId, domain: p.domain, narration }
 }
