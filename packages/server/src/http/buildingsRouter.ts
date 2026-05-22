@@ -48,7 +48,7 @@ export function createBuildingsRouter(input: {
 
     // v0.49.0 — inject building state/health/constructionProgress
     let buildingStates: Map<string, { state: string; health: number }> | null = null
-    if (tileId) {
+    if (tileId && input.runtime.getBuildingStatesByTile) {
       buildingStates = new Map(
         input.runtime.getBuildingStatesByTile(tileId).map((s) => [s.buildingId, { state: s.state, health: s.health }])
       )
@@ -293,8 +293,8 @@ function hashString(value: string): number {
 
 function enrichBuildingView(view: BuildingRuntimeView, runtime: SimulationRuntime): object {
   const occupants = view.occupants.map((occ) => {
-    const npcInfo = runtime.getNpcActivityAndName(occ.npcId)
-    const lastProductive = runtime.getLastProductiveAction(occ.npcId)
+    const npcInfo = runtime.getNpcActivityAndName?.(occ.npcId)
+    const lastProductive = runtime.getLastProductiveAction?.(occ.npcId)
     return {
       ...occ,
       nameZh: npcInfo?.nameZh ?? occ.npcId,
