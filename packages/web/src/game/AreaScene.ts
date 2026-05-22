@@ -12,9 +12,13 @@ import type { CharacterFacing, CharacterPoint } from './characterVisualState'
 import { labelForSpecies, visualForSpecies } from './speciesPalette'
 import {
   COLOR_FOR_TERRAIN,
-  isWalkableTerrain,
+  effectiveTerrainAt,
+  LAND_COLOR_FOR_TERRAIN,
+  TERRAIN_SPEED_MODIFIER,
   terrainAt,
   terrainMaskForDistrict,
+  type AnyTerrain,
+  type LandTerrain,
   type SubcellTerrain,
 } from './terrainMask'
 import type { NpcActivity } from '../state/types'
@@ -240,6 +244,7 @@ export class AreaScene extends Phaser.Scene {
   private playerName: string | null = null
   private drops: AreaMapDrop[] = []
   private buildings: AreaMapBuilding[] = []
+  private buildingOverlay: { col: number; row: number; state: string }[] = []
   private hudStrings: AreaSceneInit['hudStrings'] = {
     interact: '',
     pickup: '',
@@ -419,6 +424,9 @@ export class AreaScene extends Phaser.Scene {
     // Land districts return `null` and fall through to the existing
     // single-color checker path.
     const mask = terrainMaskForDistrict(this.tileId)
+    // v0.49.0 — pre-compute buildingOverlay so effectiveTerrainAt can
+    // treat building cells as blocked (or rough for abandoned buildings).
+    this.buildingOverlay = this.buildings.map((b) => ({ col: b.col, row: b.row, state: b.state ?? 'operational' }))
 
     const g = this.add.graphics()
     for (let row = 0; row < AREA_GRID_ROWS; row += 1) {
@@ -428,10 +436,23 @@ export class AreaScene extends Phaser.Scene {
         const terrain: SubcellTerrain | null = mask ? mask[row]?.[col] ?? 'land' : null
         let fill: number
         if (terrain && terrain !== 'land') {
+          // Water-biome tile: use SubcellTerrain color from COLOR_FOR_TERRAIN.
           const base = COLOR_FOR_TERRAIN[terrain]
           // Darken the checker cells by a small fixed amount so the
           // sub-cell grid stays visible without losing the terrain hue.
           fill = checker ? base : darken(base, 0x101010)
+        } else if (!mask) {
+          // Land-biome tile: use effectiveTerrainAt which accounts for
+          // buildings, LAND_MASKS, and road overrides.
+          const effTerrain: AnyTerrain = effectiveTerrainAt(this.tileId, col, row, this.buildingOverlay)
+          if (isRoad) {
+            fill = checker ? AREA_ROAD_COLOR : AREA_ROAD_SHADE
+          } else if ((effTerrain as string) in LAND_COLOR_FOR_TERRAIN) {
+            const base = LAND_COLOR_FOR_TERRAIN[effTerrain as LandTerrain]
+            fill = checker ? base : darken(base, 0x080808)
+          } else {
+            fill = checker ? def.color : def.shade
+          }
         } else if (isRoad) {
           fill = checker ? AREA_ROAD_COLOR : AREA_ROAD_SHADE
         } else {
@@ -1169,9 +1190,22 @@ export class AreaScene extends Phaser.Scene {
   private spawnBuildings(): void {
     this.buildingsSignature = this.signatureForBuildings(this.buildings)
     this.clearBuildingSprites()
+    // v0.49.0 — keep buildingOverlay in sync so effectiveTerrainAt and
+    // isAreaWalkable reflect the current building set after every refresh.
+    this.buildingOverlay = this.buildings.map((b) => ({ col: b.col, row: b.row, state: b.state ?? 'operational' }))
     for (const b of this.buildings) {
       const cx = b.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
       const cy = b.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+
+      // v0.49.0 — state-driven glyph and label color
+      const state = b.state ?? 'operational'
+      const displayGlyph = state === 'under_construction' ? '🚧'
+                         : state === 'abandoned'           ? '🏚'
+                         : b.glyph
+      const labelColor = state === 'under_construction' ? '#f5c518'
+                       : state === 'damaged'             ? '#e05a2b'
+                       : state === 'abandoned'           ? '#888888'
+                       : '#fff5b8'
 
       // hit area：覆蓋約 2 個 tile 的範圍，方便手機點擊
       const hitW = AREA_TILE_SIZE * 1.5
@@ -1179,7 +1213,7 @@ export class AreaScene extends Phaser.Scene {
       const hitRect = this.add.rectangle(cx, cy, hitW, hitH, 0x000000, 0)
       hitRect.setOrigin(0.5, 0.5)
 
-      const glyph = this.add.text(cx, cy, b.glyph, {
+      const glyph = this.add.text(cx, cy, displayGlyph, {
         fontFamily:
           '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
         fontSize: `${b.size + 4}px`,
@@ -1193,7 +1227,7 @@ export class AreaScene extends Phaser.Scene {
         fontFamily:
           '"Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: '10px',
-        color: '#fff5b8',
+        color: labelColor,
         stroke: '#0a0a0a',
         strokeThickness: 2
       })
@@ -1211,7 +1245,33 @@ export class AreaScene extends Phaser.Scene {
       bubble.setOrigin(0.5, 1)
       bubble.setVisible(false)
 
-      const container = this.add.container(0, 0, [hitRect, glyph, nameLabel, bubble])
+      // v0.49.0 — damaged buildings get a warning overlay icon
+      const containerChildren: Phaser.GameObjects.GameObject[] = [hitRect, glyph, nameLabel, bubble]
+      if (state === 'damaged') {
+        const warningIcon = this.add.text(cx + b.size * 0.4, cy - b.size * 0.4, '⚠️', {
+          fontFamily:
+            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
+          fontSize: '12px'
+        })
+        warningIcon.setOrigin(0.5)
+        containerChildren.push(warningIcon)
+      }
+
+      // v0.49.0 — under_construction buildings show a progress bar
+      if (state === 'under_construction' && typeof b.constructionProgress === 'number') {
+        const barW = b.size * 1.2
+        const barH = 5
+        const barX = cx - barW / 2
+        const barY = cy + b.size * 0.85
+        const barBg = this.add.rectangle(barX + barW / 2, barY, barW, barH, 0x333333)
+        barBg.setOrigin(0.5, 0)
+        const progress = Math.max(0, Math.min(1, b.constructionProgress / 100))
+        const barFill = this.add.rectangle(barX + (barW * progress) / 2, barY, barW * progress, barH, 0xf5c518)
+        barFill.setOrigin(0.5, 0)
+        containerChildren.push(barBg, barFill)
+      }
+
+      const container = this.add.container(0, 0, containerChildren)
       container.setDepth(45)
       container.setData('buildingId', b.id)
       container.setData('bubble', bubble)
@@ -1255,7 +1315,7 @@ export class AreaScene extends Phaser.Scene {
 
   private signatureForBuildings(buildings: readonly AreaMapBuilding[]): string {
     return buildings
-      .map((b) => `${b.id}:${b.nameZh}:${b.type}:${b.col},${b.row}:${b.glyph}:${b.size}:${b.enterable}`)
+      .map((b) => `${b.id}:${b.nameZh}:${b.type}:${b.col},${b.row}:${b.glyph}:${b.size}:${b.enterable}:${b.state ?? 'operational'}:${b.health ?? 100}:${b.constructionProgress ?? ''}`)
       .sort()
       .join('|')
   }
@@ -2253,7 +2313,13 @@ export class AreaScene extends Phaser.Scene {
 
     if (vx !== 0 || vy !== 0) {
       const len = Math.hypot(vx, vy) || 1
-      this.player.setVelocity((vx / len) * PLAYER_SPEED, (vy / len) * PLAYER_SPEED)
+      // v0.49.0 — apply terrain speed modifier so rough/path/shallow_water
+      // affects player movement rate without changing the walkability gate.
+      const playerCol = Math.floor(this.player.x / AREA_TILE_SIZE)
+      const playerRow = Math.floor(this.player.y / AREA_TILE_SIZE)
+      const currentTerrain = effectiveTerrainAt(this.tileId, playerCol, playerRow, this.buildingOverlay)
+      const speedMod = TERRAIN_SPEED_MODIFIER[currentTerrain] ?? 1.0
+      this.player.setVelocity((vx / len) * PLAYER_SPEED * speedMod, (vy / len) * PLAYER_SPEED * speedMod)
     } else {
       this.player.setVelocity(0, 0)
     }
@@ -2270,7 +2336,11 @@ export class AreaScene extends Phaser.Scene {
     if (x >= AREA_CANVAS_WIDTH || y >= AREA_CANVAS_HEIGHT) return false
     const col = Math.floor(x / AREA_TILE_SIZE)
     const row = Math.floor(y / AREA_TILE_SIZE)
-    return isWalkableTerrain(terrainAt(this.tileId, col, row))
+    // v0.49.0 — use effectiveTerrainAt so building cells are blocked and
+    // land-biome LAND_MASKS are respected (blocked/X cells are unwalkable).
+    const terrain = effectiveTerrainAt(this.tileId, col, row, this.buildingOverlay)
+    if (terrain === 'open_water' || terrain === 'blocked' || terrain === 'building') return false
+    return true
   }
 
   /**
