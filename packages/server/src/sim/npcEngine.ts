@@ -420,14 +420,14 @@ export class NpcEngine {
       if (
         typeof io.targetTile === 'string' &&
         typeof io.expiresAtTick === 'number' &&
-        typeof io.intentType === 'string' &&
+        (io.intentType === 'survival' || io.intentType === 'economic' || io.intentType === 'social' || io.intentType === 'ecosystem') &&
         typeof io.urgency === 'number' &&
         typeof io.reason === 'string'
       ) {
         intentOverride = {
           targetTile: io.targetTile,
           expiresAtTick: io.expiresAtTick,
-          intentType: io.intentType as import('../kernel/livingWorldCommands.js').IntentKind,
+          intentType: io.intentType,
           urgency: io.urgency,
           reason: io.reason,
         }
@@ -1584,6 +1584,7 @@ function isBudgetActiveNpc(
   if (state.activity === 'move') return true
   if (state.agent.activeTask.kind === 'player-dialog') return true
   if (state.personalityOverride?.targetTile) return true
+  if (state.intentOverride?.targetTile) return true
   return false
 }
 
