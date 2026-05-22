@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { IntentProjection } from './intentProjection.js'
+import { IntentProjection, formatReflectionContext } from './intentProjection.js'
 import type { Event } from '../kernel/types.js'
 import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC } from '../config/world.js'
 
@@ -169,5 +169,108 @@ describe('IntentProjection', () => {
     const weights = proj.getLearningWeights('npc-j', 120)
     expect(weights.survival!).toBeGreaterThan(1.0)
     expect(weights.economic!).toBeLessThan(1.0)
+  })
+})
+
+// ─── formatReflectionContext ──────────────────────────────────────────────────
+
+describe('formatReflectionContext', () => {
+  it('returns empty string for empty reflections', () => {
+    const proj = new IntentProjection()
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 0)).toBe('')
+  })
+
+  it('returns empty string when all reflections are expired', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'survival', targetTile: 't_forest',
+      outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    // age = REFLECTION_DURATION_TICKS + 1 ≥ durationTicks → expired
+    expect(formatReflectionContext(proj.getReflections('npc-x'), REFLECTION_DURATION_TICKS + 1)).toBe('')
+  })
+
+  it('contains header when at least one active reflection exists', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'survival', targetTile: 't_forest',
+      outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    const result = formatReflectionContext(proj.getReflections('npc-x'), 1)
+    expect(result).toContain('你的近期行動記憶')
+  })
+
+  it('maps survival → 【生存】嘗試逃離危險地區', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'survival', targetTile: 't_forest',
+      outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1)).toContain('【生存】嘗試逃離危險地區')
+  })
+
+  it('maps economic → 【經濟】尋找物資', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'economic', targetTile: 't_central',
+      outcome: 'failure', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1)).toContain('【經濟】尋找物資')
+  })
+
+  it('maps social → 【社交】回避敵對勢力', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'social', targetTile: 't_central',
+      outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1)).toContain('【社交】回避敵對勢力')
+  })
+
+  it('maps ecosystem → 【生態】遠離環境惡化地區', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'ecosystem', targetTile: 't_central',
+      outcome: 'failure', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1)).toContain('【生態】遠離環境惡化地區')
+  })
+
+  it('success shows → 成功（你對自身判斷更有信心）', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'survival', targetTile: 't_forest',
+      outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1))
+      .toContain('→ 成功（你對自身判斷更有信心）')
+  })
+
+  it('failure shows → 失敗（你仍感到不安，下次更謹慎）', () => {
+    const proj = new IntentProjection()
+    proj.project(ev('e1', 'NPC_INTENT_RESOLVED', {
+      npcId: 'npc-x', intentType: 'survival', targetTile: 't_forest',
+      outcome: 'failure', urgencyAtDispatch: 0.5, resolvedAtTick: 0,
+    }))
+    expect(formatReflectionContext(proj.getReflections('npc-x'), 1))
+      .toContain('→ 失敗（你仍感到不安，下次更謹慎）')
+  })
+
+  it('caps output at 5 most recent active reflections', () => {
+    const proj = new IntentProjection()
+    // 7 reflections: index 0 and 1 should be excluded (only last 5 shown)
+    for (let i = 0; i < 7; i++) {
+      proj.project(ev(`e${i}`, 'NPC_INTENT_RESOLVED', {
+        npcId: 'npc-x',
+        intentType: i % 2 === 0 ? 'survival' : 'economic',
+        targetTile: 't_forest',
+        outcome: 'success',
+        urgencyAtDispatch: 0.5,
+        resolvedAtTick: i * 10,
+      }))
+    }
+    const result = formatReflectionContext(proj.getReflections('npc-x'), 1)
+    const bulletCount = (result.match(/  · /g) ?? []).length
+    expect(bulletCount).toBe(5)
   })
 })

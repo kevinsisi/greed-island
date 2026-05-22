@@ -15,6 +15,33 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+const INTENT_LABELS: Record<IntentKind, { zh: string; action: string }> = {
+  survival:  { zh: '生存',  action: '嘗試逃離危險地區' },
+  economic:  { zh: '經濟',  action: '尋找物資' },
+  social:    { zh: '社交',  action: '回避敵對勢力' },
+  ecosystem: { zh: '生態',  action: '遠離環境惡化地區' },
+}
+
+export function formatReflectionContext(
+  reflections: readonly Reflection[],
+  currentTick: number,
+): string {
+  const active = reflections.filter(r => currentTick - r.startTick < r.durationTicks)
+  if (active.length === 0) return ''
+  const recent = active.slice(-5)
+  const bullets = recent.map(r => {
+    const label = INTENT_LABELS[r.intentType]
+    const outcome = r.emotionalImpact > 0
+      ? '→ 成功（你對自身判斷更有信心）'
+      : '→ 失敗（你仍感到不安，下次更謹慎）'
+    return `  · 【${label.zh}】${label.action} ${outcome}`
+  })
+  return [
+    '### 你的近期行動記憶（意圖成敗形成的印象）',
+    ...bullets,
+  ].join('\n')
+}
+
 export class IntentProjection {
   private readonly reflectionsByNpc = new Map<string, Reflection[]>()
 
