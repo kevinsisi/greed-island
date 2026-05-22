@@ -5,6 +5,40 @@ developer. Keep latest status at the top.
 
 ---
 
+## v0.52.0 — NPC Reflection Dialog Injection (2026-05-22)
+
+### Current Version
+`0.52.0` — TypeScript build clean. 862 tests pass across 117 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.51.0 → v0.52.0)
+
+**v0.52.0 — NPC Reflection Dialog Injection (Cognitive Runtime Layer 2, Step 3)**
+
+**新增檔案：**
+- None (feature integrated into existing projections)
+
+**修改檔案：**
+- `packages/server/src/projections/intentProjection.ts`：`formatReflectionContext()` exported function — formats up to 5 most recent active reflections with duration-aware filtering
+- `packages/server/src/config/world.ts`：`MAX_REFLECTION_CONTEXT_BULLETS = 5` 新常數
+- `packages/server/src/npcs/aiDialog.ts`：`buildReflectionBlock()` 新 exported helper；`AiDialogContext.reflectionContext?: string` 欄位；`buildSystemPrompt()` 注入 `buildReflectionBlock()`
+- `packages/server/src/http/npc.ts`：`reflectionCtx = runtime.getFormattedReflectionContext(npcId)` + spread into `dialogCtx`
+- `packages/server/src/sim/npcEngine.ts`：`getFormattedReflectionContext()` public method 暴露格式化反思
+
+**架構關鍵點：**
+- `formatReflectionContext()` 掃描 NPC 的 active reflections（仍在 REFLECTION_DURATION_TICKS 內）；按 intent type 分組（survival / economic / social / ecosystem）
+- 每種 intent type 最多取 1 條最新 reflection（防止冗長）；若無則 skip；順序：survival → economic → social → ecosystem
+- Reflection 格式：「survival intent 前日成功解決飢荒」「economic intent 未能完成商人委任」等自然語言；NPC dialog 可在回應中自然引用
+- NPC 無 active reflection 時 block 完全省略（不空洞注入）
+- `reflectionCtx` 與 `beliefCtx` / `intentCtx` 平行，各自獨立；AI 仍 read-only 旁白，無法改變反思內容
+
+**測試：**
+- 862 passing tests across 117 files (format helpers 單體測試，end-to-end dialog injection 煙測)
+- Build clean TypeScript
+
+**Next:** v0.53.0 — NPC Intention Recomputation Trigger (intent recomputation 事件驅動化，由 belief/faction/goods 變化觸發)
+
+---
+
 ## 2026-05-22 — Handoff Snapshot @ v0.51.0
 
 ### Current Version

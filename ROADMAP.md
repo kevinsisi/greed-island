@@ -5,6 +5,30 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.52.0 ✅ shipped — 2026-05-22
+
+**主題：NPC 反思對話注入（Reflection Dialog Injection）**
+
+- ✅ `formatReflectionContext()`：掃描 NPC active reflections，按 intent type 排序；最多 5 條
+- ✅ `buildReflectionBlock()` + `reflectionContext?: string` 注入 AI prompt
+- ✅ 無 active reflection 時 block 完全省略（不空洞注入）
+- ✅ NPC 對話可自然引用個人反思（「昨日成功解決飢荒」「未能完成商人委任」等）
+- ✅ `MAX_REFLECTION_CONTEXT_BULLETS = 5` 配置常數
+- ✅ 862 個測試通過；build 乾淨
+
+---
+
+## v0.51.0 ✅ shipped — 2026-05-22
+
+**主題：NPC 意圖層（Intention Layer）**
+
+- ✅ `IntentProjection`：`INTENT_REFLECTION_RECORDED` event-sourced persistence + boot hydration
+- ✅ `computeIntentStack()` + `selectHighestIntent()`；4 intent types: survival / economic / social / ecosystem
+- ✅ `intentOverride` + 時間上限 `INTENT_OVERRIDE_DURATION_TICKS`；urgency ≥ threshold 升為 critical（不可覆蓋）
+- ✅ 847 個測試通過；build 乾淨
+
+---
+
 ## v0.48.0 ✅ shipped — 2026-05-21
 
 **主題：NPC 自主貨運系統（Carrier Trade）**
