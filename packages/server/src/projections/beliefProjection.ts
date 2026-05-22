@@ -45,8 +45,38 @@ export class BeliefProjection {
   // npcId → (subject|qualifier → row)
   private readonly rowsByNpc = new Map<string, Map<string, BeliefRow>>()
 
-  apply(_event: Event, _npcLocations: ReadonlyMap<string, string>): void {
-    // TODO: implement per-event handlers
+  apply(event: Event, npcLocations: ReadonlyMap<string, string>): void {
+    const data = readPayloadData(event)
+    if (!data) return
+
+    switch (event.eventType) {
+      case 'FACTION_TILE_SEIZED':
+        this.applyFactionSeized(data, event.tick ?? 0, npcLocations)
+        break
+    }
+  }
+
+  private applyFactionSeized(
+    data: Record<string, unknown>,
+    tick: number,
+    npcLocations: ReadonlyMap<string, string>,
+  ): void {
+    const tileId = readStr(data.tileId)
+    if (!tileId) return
+    for (const [npcId, npcTile] of npcLocations) {
+      const conf = perceiveConfidence(npcTile, tileId)
+      if (conf === 0) continue
+      this.upsert({
+        npcId, subject: 'tile_safety', qualifier: tileId,
+        value: 'dangerous', confidence: conf, observedAtTick: tick,
+        decayRatePerDay: 2, emotionalTag: 'fear',
+      })
+      this.upsert({
+        npcId, subject: 'faction_control', qualifier: tileId,
+        value: 'controlled', confidence: conf, observedAtTick: tick,
+        decayRatePerDay: 1,
+      })
+    }
   }
 
   tick(_currentTick: number): void {
@@ -74,4 +104,21 @@ export class BeliefProjection {
     }
     npcMap.set(subjectKey(row.subject, row.qualifier), row)
   }
+}
+
+function readPayloadData(event: Event): Record<string, unknown> | null {
+  const data = (event.payload as { data?: unknown } | null)?.data
+  if (!data || typeof data !== 'object') return null
+  return data as Record<string, unknown>
+}
+
+function readStr(v: unknown): string {
+  return typeof v === 'string' ? v : ''
+}
+
+function perceiveConfidence(npcTile: string, eventTile: string): number {
+  if (npcTile === eventTile) return 90
+  const adjacent = TILE_ADJACENCY[npcTile] ?? []
+  if (adjacent.includes(eventTile)) return 40
+  return 0
 }
