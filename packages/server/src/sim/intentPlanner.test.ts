@@ -191,6 +191,19 @@ describe('computeIntentStack', () => {
     }
   })
 
+  it('survival falls back to currentTile when defaultLocation absent and all adjacents dangerous', () => {
+    const beliefs: BeliefRow[] = [
+      makeBelief({ subject: 'tile_safety', qualifier: CURRENT_TILE, value: 'dangerous', confidence: 80 }),
+      makeBelief({ subject: 'tile_safety', qualifier: 't_desert', value: 'dangerous', confidence: 90 }),
+      makeBelief({ subject: 'tile_safety', qualifier: 't_mountain', value: 'dangerous', confidence: 85 }),
+      makeBelief({ subject: 'tile_safety', qualifier: 't_central', value: 'dangerous', confidence: 75 }),
+    ]
+    const profile = { ...makeProfile(), defaultLocation: '' } as unknown as NpcProfile
+    const stack = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, undefined, 0)
+    const entry = stack.entries.find(e => e.kind === 'survival')!
+    expect(entry.targetTile).toBe(CURRENT_TILE)
+  })
+
   it('learningWeights multiplier scales urgency', () => {
     const beliefs: BeliefRow[] = [
       makeBelief({ subject: 'tile_safety', qualifier: CURRENT_TILE, value: 'dangerous', confidence: 80 }),

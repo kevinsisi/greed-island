@@ -60,7 +60,7 @@ function computeSurvivalIntent(
 
   // If all adjacents are dangerous (or no adjacents), use profile.defaultLocation.
   // Otherwise pick the first adjacent tile with no dangerous belief.
-  const targetTile = safeTile ?? profile.defaultLocation ?? currentTile
+  const targetTile = safeTile ?? (profile.defaultLocation || currentTile)
 
   return {
     kind: 'survival',
@@ -90,7 +90,7 @@ function computeEconomicIntent(
 
   // Pick first adjacent tile as the economic target (moving away from scarcity)
   const adjacents = MAP_ADJACENCY[currentTile] ?? []
-  const targetTile = adjacents[0] ?? profile.defaultLocation ?? currentTile
+  const targetTile = adjacents[0] ?? (profile.defaultLocation || currentTile)
 
   return {
     kind: 'economic',
@@ -143,7 +143,7 @@ function computeSocialIntent(
 
   const adjacents = MAP_ADJACENCY[currentTile] ?? []
   const safeTile = adjacents.find(t => !enemyControlledTiles.has(t))
-  const targetTile = safeTile ?? profile.defaultLocation ?? currentTile
+  const targetTile = safeTile ?? (profile.defaultLocation || currentTile)
 
   return {
     kind: 'social',
