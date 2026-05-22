@@ -5,6 +5,59 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-22 — Handoff Snapshot @ v0.49.0
+
+### Current Version
+`0.49.0` (package.json version bump pending — all code shipped and pushed). TypeScript build clean. 898/899 tests pass (1 pre-existing `runtimeSettlementFamine` timeout — not introduced this session). Commit `a4a5336` pushed to `main`.
+
+### What Was Shipped This Session (v0.48.0 → v0.49.0)
+
+**v0.49.0 — Building Complete: Terrain System + Building Lifecycle + NPC Work Visibility**
+
+**新增檔案：**
+- `packages/server/src/projections/buildingState.ts` — `BuildingStateProjection`：四種生命週期狀態（`under_construction / operational / damaged / abandoned`）+ `BUILDING_STATE_BOOT_EVENT_TYPES`
+- `packages/server/src/projections/buildingState.test.ts` — 7 unit tests（狀態轉換、預設值、tile 查詢）
+
+**修改檔案：**
+- `packages/web/src/game/terrainMask.ts`：新增 `LandTerrain`、`AnyTerrain`、`TERRAIN_SPEED_MODIFIER`、`LAND_COLOR_FOR_TERRAIN`、`isWalkableLand`、`LAND_MASKS`（6 個陸域 tile 15×10 ASCII mask）、`effectiveTerrainAt`（動態建築疊加層）、`walkableCellsForTile`
+- `packages/web/src/game/terrainMask.test.ts`：21 tests（速度修正器、mask 長度、建築錨點可行走、effectiveTerrainAt、walkableCellsForTile）
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 `BUILDING_DAMAGED`、`BUILDING_REPAIRED`、`BUILDING_ABANDONED` 命令類型＋驗證器＋ payload types
+- `packages/server/src/sim/runtime.ts`：BuildingStateProjection wiring（fan-out × 2、boot hydration）；觸發器：`FACTION_TILE_SEIZED → BUILDING_DAMAGED`（−30 hp）、NPC build-domain → `BUILDING_REPAIRED`（+5 hp）、48 in-world day 廢棄 cadence；public getters `getBuildingState` / `getBuildingStatesByTile` / `getLastProductiveAction` / `getNpcActivityAndName`
+- `packages/server/src/sim/npcEngine.ts`：`LAND_MASK_SERVER`（與 terrainMask.ts 同步）、`isLandWalkable`、`getWalkableCellsForTile`（含 cache）、`dispersedSubAnchor` / `subAnchor` 接受 walkable cells；`NpcTickContext` 新增 `buildingStates`
+- `packages/server/src/projections/npcState.ts`：追蹤 `lastProductiveAction`（domain + narration from `NPC_PRODUCTIVE_ACTION`）
+- `packages/server/src/http/buildingsRouter.ts`：注入 `state / health / constructionProgress` 到建築列表；`enrichBuildingView` 注入 `activity / domain / narration` 到佔用者列表；optional chaining 保持測試向後相容
+- `packages/web/src/api/client.ts`：`AreaMapBuilding` + `BuildingOccupantView` 型別擴充
+- `packages/web/src/pages/AreaPage.tsx`：傳遞 `state / health / constructionProgress` 給 AreaScene
+- `packages/web/src/game/AreaScene.ts`：`drawBackground()` 使用 `effectiveTerrainAt` 渲染陸域地形顏色；`handleMovement()` 速度修正器；`isAreaWalkable` 使用 effectiveTerrainAt；`spawnBuildings()` 狀態驅動字型（🚧/🏚/原始字型）＋顏色＋⚠️疊加＋施工進度條
+- `packages/web/src/pages/BuildingPage.tsx`：佔用者顯示活動標籤（工作中 · 建造）＋ narration tooltip；改用 server-authoritative occupant list
+
+**陷阱記錄：**
+- `buildingState.ts` projection 的 `project()` 接受 kernel `Event` 型別（data 包在 `payload.data` 裡），而非扁平 `{ eventType, data }`
+- `LAND_MASK_SERVER` 在 `npcEngine.ts` 必須與 `LAND_MASKS` 在 `terrainMask.ts` 保持完全同步（修改 mask 時兩處都要改）
+- `BuildingStateProjection` 的 `BUILDING_REPAIRED` 保留 `under_construction` 狀態；廢棄 cadence 跳過 `under_construction` 和從未被投影的建築（`tileId === ''`）
+- `buildingsRouter.ts` 新方法用 optional chaining（`?.`）呼叫，讓現有 test mock 不需改動
+
+### Local Verification
+```
+npx tsc --noEmit -p packages/server/tsconfig.json   → clean (0 errors)
+npx tsc --noEmit -p packages/web/tsconfig.json       → clean (0 errors)
+npm run build                                         → clean (pre-existing chunk warning)
+npx vitest run                                        → 898/899 pass (1 pre-existing timeout)
+git push                                              → main @ a4a5336
+```
+
+### CI/CD Status
+推上 `main`（commit `a4a5336`）。GitHub Actions CI 觸發中。本機 docker smoke test 未做。
+
+### Active Blockers
+無程式阻塞。`runtimeSettlementFamine` 超時是既有問題，非本 session 引入。
+
+### Next Steps
+1. **NPC-as-agent phase（v0.50.0+）**：每個 NPC 成為真正的 agent，具備記憶、目標、決策自主權。架構：7 層 Cognitive Runtime（Layer 2 = Cognitive Runtime，已在 `WORLD_CAPABILITIES.md` §12.5 定義）。CognitiveActor model：beliefs / intentions / planning / reflection / memory / social reasoning。NPC 思考管線：Perception → Belief Update → Need Evaluation → Intent Generation → Planning → Social Evaluation → Action Selection → Command Submission → Outcome Observation → Reflection → Memory Update。
+2. 本機 docker smoke test（建議在開始下一 feature 前確認環境正常）
+
+---
+
 ## 2026-05-21 — Handoff Snapshot @ v0.48.0
 
 ### Current Version
