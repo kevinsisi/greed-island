@@ -408,10 +408,31 @@ export class NpcEngine {
         }
       }
     }
-    const intentOverride: NpcRuntimeState['intentOverride'] =
-      (raw as Record<string, unknown>).intentOverride != null
-        ? (((raw as Record<string, unknown>).intentOverride) as NpcRuntimeState['intentOverride']) ?? null
-        : null
+    let intentOverride: NpcRuntimeState['intentOverride'] = null
+    if ((raw as Record<string, unknown>).intentOverride != null) {
+      const io = (raw as Record<string, unknown>).intentOverride as Partial<{
+        targetTile: string
+        expiresAtTick: number
+        intentType: string
+        urgency: number
+        reason: string
+      }>
+      if (
+        typeof io.targetTile === 'string' &&
+        typeof io.expiresAtTick === 'number' &&
+        typeof io.intentType === 'string' &&
+        typeof io.urgency === 'number' &&
+        typeof io.reason === 'string'
+      ) {
+        intentOverride = {
+          targetTile: io.targetTile,
+          expiresAtTick: io.expiresAtTick,
+          intentType: io.intentType as import('../kernel/livingWorldCommands.js').IntentKind,
+          urgency: io.urgency,
+          reason: io.reason,
+        }
+      }
+    }
     let travelRoute: NpcRuntimeState['travelRoute'] = null
     if (r.travelRoute && typeof r.travelRoute === 'object') {
       const tr = r.travelRoute as Partial<{
@@ -855,11 +876,8 @@ function decideNextState(
       }
     }
   }
-  // intentOverride: expire if past expiresAtTick, otherwise carry forward.
-  let intentOverride = before.intentOverride ?? null
-  if (intentOverride && currentTick >= intentOverride.expiresAtTick) {
-    intentOverride = null
-  }
+  // intentOverride carries forward unchanged — expiry and resolution detection live in runtime.ts
+  const intentOverride = before.intentOverride ?? null
   const targetTile = intentOverride?.targetTile ?? personalityOverride?.targetTile ?? scheduleTarget
 
   const finish = (
