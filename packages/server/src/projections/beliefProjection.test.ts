@@ -264,4 +264,30 @@ describe('BeliefProjection', () => {
     const out = formatBeliefContext(rows, 0)
     expect(out).toContain('也許')
   })
+
+  it('end-to-end: FACTION_TILE_SEIZED → formatBeliefContext includes hedge-appropriate text', () => {
+    const proj = new BeliefProjection()
+    const locs = new Map([['npc-z', 't_dock']])
+
+    // Direct observation (confidence 90 → no hedge)
+    proj.apply(ev(0, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'guild', previousFactionId: null,
+      seizedAtTick: 0, narration: 'x'
+    }), locs)
+
+    const ctx = formatBeliefContext(proj.getBeliefs('npc-z'), 0)
+    expect(ctx).toContain('NPC主觀信念')
+    expect(ctx).toContain('危險')
+    expect(ctx).not.toContain('也許')
+
+    // Adjacent observation (confidence 40 → 我聽說)
+    const locs2 = new Map([['npc-z2', 't_central']])
+    const proj2 = new BeliefProjection()
+    proj2.apply(ev(0, 'FACTION_TILE_SEIZED', {
+      tileId: 't_dock', factionId: 'guild', previousFactionId: null,
+      seizedAtTick: 0, narration: 'x'
+    }), locs2)
+    const ctx2 = formatBeliefContext(proj2.getBeliefs('npc-z2'), 0)
+    expect(ctx2).toContain('聽說')
+  })
 })
