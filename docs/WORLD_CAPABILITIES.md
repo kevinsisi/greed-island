@@ -5,9 +5,10 @@
 >
 > Five parts (continuous section numbering 1–43):
 >
-> - **Part I — Runtime Constitution & Civilization Program** (§1–§12,
+> - **Part I — Runtime Constitution & Civilization Program** (§1–§12.5,
 >   user-authored): non-negotiable world laws + civilization vision +
->   ecosystem vision + engineering priorities + recommended phase order.
+>   ecosystem vision + Cognitive Runtime architecture (§12.5) +
+>   engineering priorities + recommended phase order.
 > - **Part II — Current Verified Baseline** (§13–§28, v0.15.47):
 >   what the world actually does today, verified against
 >   `packages/server/src/` and `packages/web/src/`. ❌ marks are real
@@ -196,36 +197,45 @@ AI 是 observer。
 
 ## 3. Runtime Layer Model
 
-整個世界分成六層。
+整個世界分成七層。（2026-05-22 重新編號：新增 Layer 2 — Cognitive Runtime；原 Layer 2.5 升為 Layer 3；原 Layer 3–5 依序升為 Layer 4–6。）
 
 每層只能透過 Command interaction。
 不能直接改下一層 state。
 
 ```text
-Layer 5    — Perception Runtime
+Layer 6    — Narrative / Perception Runtime
              AI narration / dialog / rumors / history
 
-Layer 4    — Combat Runtime
+Layer 5    — Combat Runtime
              Combat / card operators / tactical resolution
 
-Layer 3    — Civilization Runtime
+Layer 4    — Civilization Runtime
              Settlement / economy / logistics / territory
 
-Layer 2.5  — Ecosystem Runtime
+Layer 3    — Ecosystem Runtime
              Species / wildlife / predation / migration /
              fishery / forest / domestication / biome recovery
 
-Layer 2    — Living World Runtime
+Layer 2    — Cognitive Runtime
+             NPC cognition / beliefs / intentions / planning /
+             memory / reflection / social reasoning / households
+
+Layer 1    — Living World Runtime
              NPC routines / movement / weather / world events
 
-Layer 1    — Simulation Kernel
+Layer 0    — Simulation Kernel
              Deterministic event runtime
 ```
 
-Layer 2.5 sits below Civilization Runtime by design: civilization
-consumes ecosystems, not the other way around. Without Layer 2.5,
-Layer 3's metabolism (§5.2) is decorative — `economy` becomes a
+Layer 3 (Ecosystem) sits below Civilization Runtime by design: civilization
+consumes ecosystems, not the other way around. Without Layer 3,
+Layer 4's metabolism (§5.2) is decorative — `economy` becomes a
 scalar with no biological substrate.
+
+Layer 2 (Cognitive) sits between Living World and Ecosystem: NPCs are not
+schedule-runners — they are cognitive agents with beliefs, intentions, and
+memory. Without Layer 2, NPCs are puppets; civilization cannot emerge from
+genuine agent reasoning.
 
 ---
 
@@ -1001,6 +1011,643 @@ NPC 會聊起來，市集裡的魚會貴一些，沒人能解釋為什麼但每�
 Greed Island 才真正成立。
 
 而不是一個包著 AI NPC 的聊天室。
+
+---
+
+## 12.5 Cognitive Runtime Architecture (Layer 2)
+
+> 以下內容原文來自 2026-05-22 架構願景文件，逐字整合。
+
+---
+
+# Greed Island — Complete World Architecture & Cognitive Runtime
+
+> This document defines the full runtime structure of Greed Island.
+>
+> Not as a game.
+> Not as an MMO.
+> Not as an AI chat world.
+>
+> But as:
+>
+> a deterministic civilization simulation system operating on top of a living ecosystem inhabited by cognitive agents.
+>
+> The objective is not to create content.
+>
+> The objective is to create:
+>
+> a world capable of generating history.
+
+---
+
+## 12.5.0 Core Definition
+
+Greed Island is:
+
+* deterministic
+* event-sourced
+* replayable
+* autonomous
+* civilization-driven
+* ecology-dependent
+* cognition-enabled
+* AI-perceived
+
+The world continues existing:
+
+* without players
+* without rendering
+* without AI narration
+* without clients
+
+Only committed Events are reality.
+
+---
+
+## 12.5.1 Layer 2 — Cognitive Runtime
+
+This is the missing soul layer.
+
+Without this layer:
+
+* NPCs are puppets
+* schedules pretend to be intelligence
+* dialog pretends to be thought
+
+The Cognitive Runtime transforms runtime actors into:
+
+> agents.
+
+---
+
+## 12.5.2 Cognitive Runtime Principles
+
+### 12.5.2.1 Local Knowledge Principle
+
+No actor is omniscient.
+
+Every NPC has:
+
+* incomplete information
+* biased beliefs
+* outdated assumptions
+* personal experiences
+
+Reality and belief are separate.
+
+---
+
+### 12.5.2.2 Intention Principle
+
+Actions emerge from intentions.
+
+Schedules do not create decisions.
+
+Intentions create schedules.
+
+---
+
+### 12.5.2.3 Reflection Principle
+
+Actors evaluate outcomes.
+
+Experience changes future behavior.
+
+Without reflection:
+
+* actors never learn
+* behavior becomes repetitive
+* worlds feel fake
+
+---
+
+### 12.5.2.4 Social Cognition Principle
+
+Civilization emerges from:
+
+* trust
+* fear
+* loyalty
+* debt
+* obligation
+* reputation
+
+Not from isolated utility calculations.
+
+---
+
+## 12.5.3 Cognitive Actor Model
+
+```text
+CognitiveActor {
+  identity
+  beliefs
+  knownEntities
+  intentions
+  priorities
+  memories
+  traumas
+  relationships
+  factionViews
+  riskTolerance
+  moralProfile
+  householdResponsibilities
+  currentPlan
+  learnedBehaviors
+  socialStatus
+}
+```
+
+---
+
+## 12.5.4 Perception System
+
+### Purpose
+
+Actors perceive:
+
+* nearby events
+* rumors
+* market conditions
+* faction danger
+* ecosystem changes
+* combat
+* deaths
+* shortages
+
+Perception is:
+
+* limited
+* delayed
+* biased
+* lossy
+
+---
+
+### Perception Graph
+
+```text
+PerceptionGraph {
+  actorId
+  knownPeople[]
+  knownPlaces[]
+  knownEvents[]
+  knownThreats[]
+  knownTradeRoutes[]
+  knownFactions[]
+  confidence
+  lastConfirmedTick
+}
+```
+
+---
+
+### Example
+
+A fisherman may know:
+
+* fish populations declining
+* dangerous reefs
+* harbor politics
+
+But know nothing about:
+
+* mountain bandits
+* desert migration
+* secret faction wars
+
+---
+
+## 12.5.5 Belief System
+
+Beliefs are not truth.
+
+Beliefs are:
+
+* subjective
+* incomplete
+* wrong sometimes
+
+```text
+Belief {
+  subject
+  confidence
+  emotionalWeight
+  source
+  observedAtTick
+  decayRate
+}
+```
+
+Examples:
+
+```text
+"The forest road is unsafe."
+"The guild controls food prices."
+"The marsh spirits are angry."
+```
+
+Beliefs influence:
+
+* movement
+* faction alignment
+* market decisions
+* fear
+* migration
+
+---
+
+## 12.5.6 Intention System
+
+Intentions drive action.
+
+### Long-Term Intentions
+
+Examples:
+
+* become wealthy
+* protect family
+* gain faction power
+* survive winter
+* escape debt
+* seek revenge
+
+---
+
+### Short-Term Intentions
+
+Examples:
+
+* buy food
+* avoid danger
+* escort caravan
+* hunt prey
+* repair building
+
+---
+
+### Intent Stack
+
+```text
+IntentStack {
+  survival
+  economic
+  social
+  ideological
+  emotional
+}
+```
+
+Each intent has:
+
+* urgency
+* reward expectation
+* risk estimate
+* emotional influence
+
+---
+
+## 12.5.7 Planning System
+
+Planning converts intentions into executable actions.
+
+### Example
+
+```text
+Need money
+→ find work
+→ nearest settlement unsafe
+→ choose caravan escort
+→ recruit allies
+→ travel route
+```
+
+Plans may fail.
+
+Actors must adapt.
+
+---
+
+### Planning Components
+
+```text
+Planner {
+  evaluateOptions()
+  estimateRisk()
+  estimateReward()
+  evaluateSocialImpact()
+  selectPlan()
+}
+```
+
+---
+
+## 12.5.8 Utility Evaluation
+
+Actors evaluate:
+
+* hunger
+* safety
+* money
+* reputation
+* social approval
+* faction pressure
+* family pressure
+* emotional state
+
+Different personalities weight values differently.
+
+---
+
+### Example
+
+Greedy merchant:
+
+```text
+rewardWeight = high
+riskTolerance = high
+```
+
+Fearful villager:
+
+```text
+safetyWeight = very high
+```
+
+---
+
+## 12.5.9 Reflection System
+
+Reflection modifies future behavior.
+
+Without reflection:
+
+* no learning
+* no adaptation
+* no personality growth
+
+---
+
+### Reflection Example
+
+```text
+Caravan attacked by wolves
+→ fear increases
+→ avoid forest route
+→ hire guards next time
+```
+
+---
+
+### Reflection Data
+
+```text
+Reflection {
+  triggeringEvent
+  emotionalImpact
+  behavioralChange
+  duration
+}
+```
+
+---
+
+## 12.5.10 Memory System
+
+Memory is not a list.
+
+Memory is weighted.
+
+### Memory Components
+
+```text
+Memory {
+  eventId
+  salience
+  trauma
+  emotionalTag
+  socialImportance
+  historicalImportance
+  decayCurve
+}
+```
+
+---
+
+### Memory Weight Examples
+
+| Event             | Salience  |
+| ----------------- | --------- |
+| buying soup       | low       |
+| witnessing murder | extreme   |
+| losing child      | permanent |
+| surviving famine  | very high |
+
+---
+
+## 12.5.11 Social Reasoning
+
+Actors reason socially.
+
+Questions:
+
+```text
+Who can I trust?
+Who owes me?
+Who is dangerous?
+Who controls this region?
+What happens if others discover this?
+```
+
+Civilization emerges from these evaluations.
+
+---
+
+## 12.5.12 Relationship Runtime
+
+Relationships are multidimensional.
+
+Not a single trust scalar.
+
+```text
+Relationship {
+  trust
+  fear
+  respect
+  attraction
+  loyalty
+  resentment
+  dependency
+  familiarity
+}
+```
+
+Relationships evolve through:
+
+* trade
+* combat
+* betrayal
+* mentorship
+* shared survival
+* faction conflict
+
+---
+
+## 12.5.13 Household Runtime
+
+Households are decision units.
+
+Not cosmetic family links.
+
+### Shared Systems
+
+* pooled resources
+* child care
+* food allocation
+* inheritance
+* emotional pressure
+* survival coordination
+
+---
+
+### Household Decisions
+
+Examples:
+
+```text
+Should we:
+- move settlement?
+- spend money on food?
+- risk dangerous work?
+- send child to learn trade?
+```
+
+---
+
+## 12.5.14 NPC Thinking Flow
+
+This is the actual cognition pipeline.
+
+```text
+Perception
+→ Belief Update
+→ Need Evaluation
+→ Intent Generation
+→ Planning
+→ Social Evaluation
+→ Action Selection
+→ Command Submission
+→ Outcome Observation
+→ Reflection
+→ Memory Update
+```
+
+This loop repeats forever.
+
+That is:
+
+> thought.
+
+---
+
+## 12.5.15 Example Runtime Scenario
+
+### Situation
+
+Fish populations collapse.
+
+---
+
+### Ecosystem Runtime
+
+```text
+fishDensity ↓
+```
+
+---
+
+### Civilization Runtime
+
+```text
+food supply ↓
+market prices ↑
+```
+
+---
+
+### Cognitive Runtime
+
+Fisherman beliefs update:
+
+```text
+"The marsh is dying."
+```
+
+Intentions change:
+
+```text
+survive winter
+find alternative work
+```
+
+---
+
+### Logistics Runtime
+
+Caravans reroute.
+
+---
+
+### Faction Runtime
+
+Guild exploits shortages.
+
+---
+
+### Social Runtime
+
+Crime rises.
+
+---
+
+### Narrative Runtime
+
+NPC says:
+
+> "The sea used to feed everyone. Now even the gulls are leaving."
+
+That sentence now means something.
+
+Because the simulation produced it.
+
+Not the prompt.
+
+---
+
+## 12.5.16 Final Objective (Cognitive Layer Framing)
+
+The player should eventually feel:
+
+* the world existed before them
+* the world survives without them
+* civilization depends on fragile systems
+* NPCs genuinely evaluate reality
+* ecosystems react to civilization
+* history emerges from interactions
+* memory persists beyond sessions
+* actions alter future generations
+
+At that point:
+
+Greed Island stops being:
+
+* an AI roleplay game
+* a scripted MMO
+* a reactive sandbox
+
+And becomes:
+
+> a deterministic civilization simulation operating inside a living planet inhabited by cognitive agents.
 
 ---
 
