@@ -1,8 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { BuildingStateProjection } from './buildingState.js'
+import type { Event } from '../kernel/types.js'
 
-function ev(tick: number, eventType: string, data: unknown) {
-  return { sequence: tick, eventType, data, tick, submittedAt: 0, actorId: 'system', actorType: 'system' as const }
+function ev(tick: number, eventType: string, data: unknown): Event {
+  return {
+    id: `ev-${tick}-${eventType}`,
+    eventType,
+    actorId: 'system',
+    sequence: tick,
+    tick,
+    timestamp: new Date().toISOString(),
+    payload: { data },
+  } as unknown as Event
 }
 
 describe('BuildingStateProjection', () => {

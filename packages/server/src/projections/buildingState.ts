@@ -1,3 +1,5 @@
+import type { Event } from '../kernel/types.js'
+
 export type BuildingState = 'under_construction' | 'operational' | 'damaged' | 'abandoned'
 
 export type BuildingStateRow = {
@@ -15,6 +17,12 @@ export const BUILDING_STATE_BOOT_EVENT_TYPES = [
   'BUILDING_ABANDONED',
 ] as const
 
+function readData(event: Event): Record<string, unknown> | null {
+  const payload = (event.payload as { data?: unknown } | null)?.data
+  if (!payload || typeof payload !== 'object') return null
+  return payload as Record<string, unknown>
+}
+
 function readString(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
@@ -26,8 +34,8 @@ function readNumber(v: unknown, fallback: number): number {
 export class BuildingStateProjection {
   private rows = new Map<string, BuildingStateRow>()
 
-  project(event: { eventType: string; data: unknown; tick?: number }): void {
-    const data = event.data as Record<string, unknown>
+  project(event: Event): void {
+    const data = readData(event)
     if (!data) return
     const buildingId = readString(data.buildingId)
     if (!buildingId) return
@@ -91,7 +99,7 @@ export class BuildingStateProjection {
     return [...this.rows.values()]
   }
 
-  rebuildFromEvents(events: readonly { eventType: string; data: unknown; tick?: number }[]): void {
+  rebuildFromEvents(events: readonly Event[]): void {
     this.rows.clear()
     for (const ev of events) this.project(ev)
   }

@@ -210,6 +210,7 @@ import { FactionControlProjection } from '../projections/factionControl.js'
 import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
 import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
+import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -516,6 +517,7 @@ export class SimulationRuntime {
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
+  private readonly buildingStateProjection = new BuildingStateProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1135,6 +1137,16 @@ export class SimulationRuntime {
     return this.bioNodeProjection.list()
   }
 
+  /** v0.49.0 — Building state for a specific building. */
+  getBuildingState(buildingId: string) {
+    return this.buildingStateProjection.getState(buildingId)
+  }
+
+  /** v0.49.0 — All building state rows for a specific tile. */
+  getBuildingStatesByTile(tileId: string) {
+    return this.buildingStateProjection.getByTile(tileId)
+  }
+
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
   getBioNodesOnTile(tileId: string): readonly BioNodeRow[] {
     return this.bioNodeProjection.listOnTile(tileId)
@@ -1517,6 +1529,7 @@ export class SimulationRuntime {
       if (this.npcMemory) this.npcMemory.project(ev)
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
+      this.buildingStateProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -3244,6 +3257,29 @@ export class SimulationRuntime {
       }
     }
 
+    // Building abandonment cadence (v0.49.0)
+    const BUILDING_ABANDONMENT_TICKS = TICKS_PER_HOUR * 48
+    if (nextTick % BUILDING_ABANDONMENT_TICKS === 0) {
+      const allBuildings = listAllBuildings(this.lifeExpansion.unlockedBuildingIds)
+      for (const b of allBuildings) {
+        const row = this.buildingStateProjection.getState(b.id)
+        if (row.state === 'abandoned') continue
+        const hasOccupant = [...this.npcEngine.snapshotAll()].some(
+          ([npcId]) => this.isNpcInsideBuilding(npcId, b.id)
+        )
+        if (!hasOccupant && (nextTick - row.lastActivityTick) >= BUILDING_ABANDONMENT_TICKS) {
+          commands.push(makeLivingWorldCommand(
+            'BUILDING_ABANDONED',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            { buildingId: b.id, tileId: b.tileId, lastActivityTick: row.lastActivityTick, narration: `${b.nameZh} 長期無人使用，已廢棄。` },
+          ))
+        }
+      }
+    }
+
     // ---- AreaState engine：每 tile 派系 / 資源演化 ----
     const areaResult = this.areaEngine.tick(nextTick, {
       weather: this.weather,
@@ -3311,6 +3347,20 @@ export class SimulationRuntime {
           narration: `${factionLabel}奪取了${tileName}的主導權。`,
         }
       ))
+      // Damage buildings on seized tile
+      const buildingsOnTile = listBuildingsForTile(seizure.tileId, this.lifeExpansion.unlockedBuildingIds)
+      for (const b of buildingsOnTile) {
+        const current = this.buildingStateProjection.getState(b.id)
+        const newHealth = Math.max(0, current.health - 30)
+        commands.push(makeLivingWorldCommand(
+          'BUILDING_DAMAGED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          { buildingId: b.id, tileId: seizure.tileId, health: newHealth, cause: 'combat', narration: `${b.nameZh} 在派系衝突中受損，健康值降至 ${newHealth}。` },
+        ))
+      }
     }
     if (areaResult.seizureIntents.length > 0) {
       const loyaltyShifts = planLoyaltyShifts({
@@ -3837,6 +3887,24 @@ export class SimulationRuntime {
             ...(isEventMotivation(payload.motivation) ? { motivation: payload.motivation } : {}),
           })
           if (householdContribution) postAcceptedCommands.push(householdContribution)
+          // Repair building if NPC is doing build work inside one
+          if (payload.domain === 'build') {
+            const buildingId = this.getNpcBuildingId(payload.npcId)
+            if (buildingId) {
+              const current = this.buildingStateProjection.getState(buildingId)
+              if (current.health < 100) {
+                const newHealth = Math.min(100, current.health + 5)
+                commands.push(makeLivingWorldCommand(
+                  'BUILDING_REPAIRED',
+                  payload.npcId,
+                  'npc',
+                  nextTick,
+                  submittedAt,
+                  { buildingId, tileId: current.tileId, health: newHealth, repairedByNpcId: payload.npcId, narration: `建築健康值恢復至 ${newHealth}。` },
+                ))
+              }
+            }
+          }
         } else if (cmd.commandType === 'CONSTRUCTION_PROJECT_PROGRESS') {
           const payload = cmd.payload as { delta: number; projectId?: string }
           this.lifeExpansion = withConstructionProgress(this.lifeExpansion, {
@@ -4201,6 +4269,7 @@ export class SimulationRuntime {
         if (this.npcMemory) this.npcMemory.project(ev)
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
+        this.buildingStateProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
@@ -4881,6 +4950,8 @@ export class SimulationRuntime {
       // BIO_NODE_SEEDED / REGREW / HARVESTED events.
       const bioNodeEvents = this.store.readEventsByTypes(BIO_NODE_BOOT_EVENT_TYPES)
       this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
+      const buildingStateEvents = this.store.readEventsByTypes(BUILDING_STATE_BOOT_EVENT_TYPES)
+      this.buildingStateProjection.rebuildFromEvents(buildingStateEvents)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
