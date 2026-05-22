@@ -1,5 +1,5 @@
 import type { Event } from '../kernel/types.js'
-import type { IntentKind, NpcIntentResolvedCmd } from '../kernel/livingWorldCommands.js'
+import type { IntentKind } from '../kernel/livingWorldCommands.js'
 import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC } from '../config/world.js'
 
 interface Reflection {
@@ -21,16 +21,18 @@ export class IntentProjection {
   project(event: Event): void {
     if (event.eventType !== 'NPC_INTENT_RESOLVED') return
 
-    const data = (event.payload as { data?: unknown } | null)?.data as NpcIntentResolvedCmd | undefined
+    const data = (event.payload as { data?: unknown } | null)?.data as Record<string, unknown> | undefined
     if (!data || typeof data !== 'object') return
 
     const { npcId, intentType, outcome, resolvedAtTick } = data
-    if (!npcId || !intentType) return
+    if (typeof npcId !== 'string' || !npcId) return
+    if (typeof intentType !== 'string' || !intentType) return
+    if (typeof resolvedAtTick !== 'number') return
 
     const isSuccess = outcome === 'success'
     const reflection: Reflection = {
       triggeringEventId: event.eventId,
-      intentType,
+      intentType: intentType as IntentKind,
       emotionalImpact: isSuccess ? 10 : -10,
       urgencyDelta: isSuccess ? 0.1 : -0.1,
       startTick: resolvedAtTick,

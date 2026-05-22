@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { IntentProjection } from './intentProjection.js'
 import type { Event } from '../kernel/types.js'
-import { REFLECTION_DURATION_TICKS } from '../config/world.js'
+import { REFLECTION_DURATION_TICKS, MAX_REFLECTIONS_PER_NPC } from '../config/world.js'
 
 function ev(eventId: string, eventType: string, data: unknown): Event {
   return {
@@ -116,19 +116,18 @@ describe('IntentProjection', () => {
 
   it('MAX_REFLECTIONS_PER_NPC cap removes oldest', () => {
     const proj = new IntentProjection()
-    // Project 21 events (1 beyond cap of 20)
-    for (let i = 0; i < 21; i++) {
+    const total = MAX_REFLECTIONS_PER_NPC + 1
+    for (let i = 0; i < total; i++) {
       proj.project(ev(`evt-cap-${i}`, 'NPC_INTENT_RESOLVED', {
         npcId: 'npc-h', intentType: 'survival', targetTile: 't_forest',
         outcome: 'success', urgencyAtDispatch: 0.5, resolvedAtTick: i * 10,
       }))
     }
     const reflections = proj.getReflections('npc-h')
-    expect(reflections.length).toBe(20)
+    expect(reflections.length).toBe(MAX_REFLECTIONS_PER_NPC)
     // The oldest (evt-cap-0) was removed; first remaining is evt-cap-1
     expect(reflections[0]!.triggeringEventId).toBe('evt-cap-1')
-    // The 21st event (evt-cap-20) should be present
-    expect(reflections[reflections.length - 1]!.triggeringEventId).toBe('evt-cap-20')
+    expect(reflections[reflections.length - 1]!.triggeringEventId).toBe(`evt-cap-${total - 1}`)
   })
 
   it('multiple NPCs have independent reflection sets', () => {
