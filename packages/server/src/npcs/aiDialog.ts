@@ -72,6 +72,7 @@ export type AiDialogContext = Readonly<{
   tileHistoryArcs?: readonly TileHistoryArcContext[]
   beliefContext?: string
   reflectionContext?: string
+  memoryContext?: string
 }>
 
 export class AiDialogError extends Error {
@@ -194,6 +195,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildSkillBlock(ctx.skillLevels),
     ...buildBeliefBlock(ctx.beliefContext),
     ...buildReflectionBlock(ctx.reflectionContext),
+    ...buildMemoryBlock(ctx.memoryContext),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -558,6 +560,20 @@ export function buildReflectionBlock(reflectionContext: string | undefined): str
     '- 可以自然融入對話，表達情緒、態度、或做過的選擇',
     '- 不要逐字列出記憶清單，要自然融入人物個性',
     '- 禁止虛構記憶以外的事件',
+    '',
+  ]
+}
+
+export function buildMemoryBlock(memoryContext: string | undefined): string[] {
+  if (!memoryContext || memoryContext.trim().length === 0) return []
+  return [
+    '## 個人記憶（⚠️ 記憶規則：僅引用以下實際記錄，不可虛構記憶內容）',
+    memoryContext,
+    '',
+    '⚠️ 個人記憶使用規則：',
+    '- 僅引用以下實際記錄的記憶，不可虛構記憶以外的事件',
+    '- 可自然融入對話，表達情緒、態度、或過去的經歷',
+    '- 不要逐字列出記憶清單，要自然融入人物個性',
     '',
   ]
 }

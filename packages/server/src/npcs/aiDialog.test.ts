@@ -7,6 +7,7 @@ import {
   buildRecentEventsBlock,
   buildSkillBlock,
   buildReflectionBlock,
+  buildMemoryBlock,
   parseReply,
 } from './aiDialog.js'
 
@@ -337,5 +338,23 @@ describe('buildReflectionBlock', () => {
     expect(joined).toContain('⚠️ 記憶使用規則')
     expect(joined).toContain('禁止虛構記憶以外的事件')
     expect(joined).toContain('不要逐字列出記憶清單')
+  })
+})
+
+describe('buildMemoryBlock', () => {
+  it('returns [] when ctx is undefined', () => {
+    expect(buildMemoryBlock(undefined)).toEqual([])
+  })
+
+  it('returns [] when ctx is empty string', () => {
+    expect(buildMemoryBlock('')).toEqual([])
+  })
+
+  it('returns header line + ctx when ctx is present', () => {
+    const ctx = '- [importance:9] 目睹派系奪權，感到恐懼'
+    const result = buildMemoryBlock(ctx)
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.join('\n')).toContain('個人記憶')
+    expect(result.join('\n')).toContain(ctx)
   })
 })
