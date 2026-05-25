@@ -1168,6 +1168,12 @@ export class SimulationRuntime {
     return formatReflectionContext(this.intentProjection.getReflections(npcId), this.currentTick)
   }
 
+  /** v0.53.0 — NPC's episodic memory (formatted string for AI dialog prompt). */
+  getFormattedMemoryContext(npcId: string): string {
+    if (!this.npcMemory) return ''
+    return this.npcMemory.formatMemoryContext(npcId, this.currentTick)
+  }
+
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
   getBioNodesOnTile(tileId: string): readonly BioNodeRow[] {
     return this.bioNodeProjection.listOnTile(tileId)
@@ -1560,7 +1566,11 @@ export class SimulationRuntime {
           }
         }
       }
-      if (this.npcMemory) this.npcMemory.project(ev)
+      if (this.npcMemory) {
+        const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location]))
+        this.npcMemory.project(ev)
+        this.npcMemory.projectWithLocality(ev, npcTileMap)
+      }
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
@@ -4377,7 +4387,11 @@ export class SimulationRuntime {
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
       for (const ev of committed) {
-        if (this.npcMemory) this.npcMemory.project(ev)
+        if (this.npcMemory) {
+          const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location]))
+          this.npcMemory.project(ev)
+          this.npcMemory.projectWithLocality(ev, npcTileMap)
+        }
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
