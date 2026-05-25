@@ -65,6 +65,7 @@ export type AiDialogContext = Readonly<{
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
   extinctionWarnings?: readonly string[]
+  recentPopulationShifts?: readonly string[]
   pollutionLevel?: number
   plantContext?: readonly PlantContextRow[]
   recentLocalEvents?: readonly string[]
@@ -189,7 +190,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     historyBlock,
     '',
     ...buildRumorsBlock(ctx.activeRumors),
-    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings, ctx.plantContext, ctx.pollutionLevel),
+    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings, ctx.plantContext, ctx.pollutionLevel, ctx.recentPopulationShifts),
     ...buildFactionBlock(ctx.dominantFaction),
     ...buildTileHistoryBlock(ctx.tileHistoryArcs),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
@@ -455,13 +456,15 @@ export function buildEcologyBlock(
   extinctionWarnings?: readonly string[],
   plants?: readonly PlantContextRow[],
   pollutionLevel?: number,
+  recentPopulationShifts?: readonly string[],
 ): string[] {
   const hasEcology = ecology && ecology.length > 0
   const hasFishery = fishery != null
   const hasWarnings = extinctionWarnings && extinctionWarnings.length > 0
   const hasPlants = plants && plants.length > 0
   const hasPollution = pollutionLevel != null && pollutionLevel > 0
-  if (!hasEcology && !hasFishery && !hasWarnings && !hasPlants && !hasPollution) return []
+  const hasShifts = recentPopulationShifts && recentPopulationShifts.length > 0
+  if (!hasEcology && !hasFishery && !hasWarnings && !hasPlants && !hasPollution && !hasShifts) return []
   const lines: string[] = []
   if (hasEcology) {
     const sorted = [...ecology].sort(
@@ -480,6 +483,9 @@ export function buildEcologyBlock(
   }
   if (hasPollution) {
     lines.push(`  · ⚠️ 環境污染指數：${pollutionLevel}（可見的環境惡化，可自然融入對話）`)
+  }
+  if (hasShifts) {
+    lines.push(`  · 📉 近期族群下降：${recentPopulationShifts!.join('、')} 數量明顯減少（可自然融入對話，不可捏造未列名物種）`)
   }
   if (hasPlants) {
     const sorted = [...plants].sort((a, b) => b.saturationPct - a.saturationPct)

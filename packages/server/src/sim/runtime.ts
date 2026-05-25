@@ -1226,6 +1226,22 @@ export class SimulationRuntime {
     return this.ecosystemRegionProjection.getForTile(tileId).pollutionLevel
   }
 
+  getRecentPopulationShifts(withinTicks: number): readonly string[] {
+    const since = this.currentTick - withinTicks
+    const seen = new Set<string>()
+    const results: string[] = []
+    for (const ev of this.getRecentEvents(100)) {
+      if (ev.eventType !== 'SPECIES_POPULATION_SHIFTED' || ev.tick < since) continue
+      const data = ev.payload.data as Record<string, unknown> | undefined
+      const speciesId = typeof data?.speciesId === 'string' ? data.speciesId : null
+      if (speciesId && !seen.has(speciesId)) {
+        seen.add(speciesId)
+        results.push(speciesId)
+      }
+    }
+    return results
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }

@@ -50,7 +50,7 @@ import {
 } from '../npcs/greetLine.js'
 import type { NpcProfile } from '../npcs/types.js'
 import type { SettingsStore } from './settings.js'
-import { TICKS_PER_HOUR } from '../config/world.js'
+import { TICKS_PER_HOUR, TICKS_PER_DAY } from '../config/world.js'
 
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
@@ -202,6 +202,7 @@ export function createNpcRouter(input: {
           }))
         const extinctionWarnings = input.runtime.getExtinctionWarningsOnTile(npcTile)
         const tilePollutionLevel = input.runtime.getTilePollutionLevel(npcTile)
+        const populationShifts = input.runtime.getRecentPopulationShifts(3 * TICKS_PER_DAY)
 
         // faction + history grounding (§11.9)
         const dominantFaction = input.runtime.getDominantFactionOnTile(npcTile)
@@ -250,6 +251,7 @@ export function createNpcRouter(input: {
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),
+          ...(populationShifts.length > 0 ? { recentPopulationShifts: populationShifts } : {}),
           ...(tilePollutionLevel > 0 ? { pollutionLevel: tilePollutionLevel } : {}),
           ...(plantContext.length > 0 ? { plantContext } : {}),
           ...(dominantFaction ? { dominantFaction } : {}),
