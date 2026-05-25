@@ -70,6 +70,7 @@ import {
   LEGENDARY_WORLD_EVENT_SEVERITY,
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
+  HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
   INTENT_OVERRIDE_DURATION_TICKS,
   INTENT_URGENCY_THRESHOLD,
@@ -216,6 +217,7 @@ import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirec
 import { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
+import { planHouseholdMigration } from './householdMigrationPlanner.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { FactionDominanceProjection } from '../projections/factionDominance.js'
 import { planFactionDominance } from './factionDominancePlanner.js'
@@ -3513,6 +3515,45 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- NPC Household Migration cadence (v0.74.0) ----
+    if (nextTick % HOUSEHOLD_MIGRATION_CADENCE_TICKS === 0) {
+      const npcHomeTiles = new Map(
+        this.profiles.map((p) => {
+          const state = this.npcEngine.getState(p.id)
+          const home = state?.homeTileOverride ?? p.defaultLocation
+          return [p.id, home] as [string, string]
+        })
+      )
+      const migrationIntents = planHouseholdMigration({
+        currentTick: nextTick,
+        profiles: this.profiles,
+        npcHomeTiles,
+        areaSafety,
+        settlementsProjection: this.settlementsProjection,
+        mortalityProjection: this.npcMortalityProjection,
+      })
+      for (const intent of migrationIntents) {
+        const profile = this.profiles.find((p) => p.id === intent.npcId)
+        const npcName = profile?.name.zh ?? intent.npcId
+        const fromName = TILE_BY_ID[intent.fromTileId]?.name ?? intent.fromTileId
+        const toName = TILE_BY_ID[intent.toTileId]?.name ?? intent.toTileId
+        commands.push(makeLivingWorldCommand(
+          'NPC_HOUSEHOLD_MIGRATED',
+          intent.npcId,
+          'npc',
+          nextTick,
+          submittedAt,
+          {
+            npcId: intent.npcId,
+            fromTileId: intent.fromTileId,
+            toTileId: intent.toTileId,
+            reason: intent.reason,
+            narration: `${npcName}的家族因為${fromName}的安全局勢惡化，決定遷移至${toName}定居。`,
+          }
+        ))
+      }
+    }
+
     // BeliefProjection confidence decay — once per in-game day
     if (nextTick % TICKS_PER_DAY === 0) {
       this.beliefProjection.tick(nextTick)
@@ -4681,6 +4722,13 @@ export class SimulationRuntime {
         this.historyChronicleProjection.project(ev)
         this.areaStateProjection.project(ev)
         this.bioNodeProjection.project(ev)
+        // Household migration — permanently update NPC home tile in engine
+        if (ev.eventType === 'NPC_HOUSEHOLD_MIGRATED') {
+          const d = (ev.payload as { data?: Record<string, unknown> })?.data
+          const npcId = typeof d?.npcId === 'string' ? d.npcId : null
+          const toTileId = typeof d?.toTileId === 'string' ? d.toTileId : null
+          if (npcId && toTileId) this.npcEngine.setHomeTile(npcId, toTileId)
+        }
         // Famine evacuation — set survival intent override for all fleeing NPCs
         if (ev.eventType === 'SETTLEMENT_EVACUATION_STARTED') {
           const d = (ev.payload as { data?: Record<string, unknown> })?.data

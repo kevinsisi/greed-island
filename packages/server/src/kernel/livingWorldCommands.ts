@@ -209,6 +209,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'TERRITORY_CLAIM_CHANGED',
   // NPC Intention Layer (v0.51.0)
   'NPC_INTENT_RESOLVED',
+  // NPC Household Migration (v0.74.0)
+  'NPC_HOUSEHOLD_MIGRATED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -411,6 +413,14 @@ export type NpcIntentResolvedCmd = Readonly<{
   outcome: 'success' | 'failure'
   urgencyAtDispatch: number
   resolvedAtTick: number
+}>
+
+export type NpcHouseholdMigratedCmd = Readonly<{
+  npcId: string
+  fromTileId: string
+  toTileId: string
+  reason: string
+  narration: string
 }>
 
 // Sprint 2B — Animal aggression
@@ -1616,6 +1626,7 @@ export type LivingWorldCommandPayload =
   | FactionDominanceShiftedCmd
   | TerritoryClaimChangedCmd
   | NpcIntentResolvedCmd
+  | NpcHouseholdMigratedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2985,6 +2996,15 @@ const VALIDATORS: Readonly<
     if (!isIntentOutcome(p.outcome)) return 'outcome must be one of: success, failure'
     if (typeof p.urgencyAtDispatch !== 'number' || p.urgencyAtDispatch < 0) return 'urgencyAtDispatch must be non-negative number'
     if (!isNonNegativeInteger(p.resolvedAtTick)) return 'resolvedAtTick must be non-negative integer'
+    return null
+  },
+  NPC_HOUSEHOLD_MIGRATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
 }

@@ -5,6 +5,36 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.74.0
+
+### Current Version
+`0.74.0` — TypeScript build clean. 1000 tests pass. Commits pushed to `main`.
+
+### What Was Shipped (v0.74.0)
+
+**v0.74.0 — NPC Household Permanent Migration**
+- `planHouseholdMigration()` in `householdMigrationPlanner.ts`: cadence-gated (HOUSEHOLD_MIGRATION_CADENCE_TICKS = 2 in-game days), fires when home tile safety < 20 and a better tile (safety ≥ 50, has settlement) exists; at most 1 migration per cadence tick
+- `NPC_HOUSEHOLD_MIGRATED` event type + `NpcHouseholdMigratedCmd` payload type; Rule Engine validator added
+- `homeTileOverride?: string` field on `NpcRuntimeState` — persisted via `NPC_STATE_RECORDED`, restored in `hydrate()`
+- `NpcEngine.setHomeTile(npcId, tileId)`: public method called when `NPC_HOUSEHOLD_MIGRATED` event is committed; updates in-memory routing fallback immediately
+- `nextNpcState()` now uses `before.homeTileOverride ?? profile.defaultLocation` as the schedule fallback — migrated NPCs drift toward new tile between routine slots
+- 4 world.ts constants: HOUSEHOLD_MIGRATION_CADENCE_TICKS, MIGRATION_PUSH_SAFETY_THRESHOLD, MIGRATION_PULL_SAFETY_MIN, MIGRATION_MAX_PER_CADENCE
+- 8 tests in `householdMigration.test.ts`
+- Layer 2 upgraded to ✅ in WORLD_CAPABILITIES.md; "NPC permanent migration" gap closed
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Roads/bridges/walls as buildable map features (the last major structural gap)
+- NPC-to-NPC trade (carrier NPCs autonomously routing goods)
+- Cards as combat rule operators (Phase 4)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.73.0
 
 ### Current Version

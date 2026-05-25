@@ -247,6 +247,12 @@ export const NPC_BASE_LIFESPAN_TICKS = 120_960
 export const NPC_LIFESPAN_VARIANCE_TICKS = 60_480
 export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
 
+// NPC Household Migration (v0.74.0)
+export const HOUSEHOLD_MIGRATION_CADENCE_TICKS = TICKS_PER_DAY * 2
+export const MIGRATION_PUSH_SAFETY_THRESHOLD = 20   // home tile safety must be below this
+export const MIGRATION_PULL_SAFETY_MIN = 50          // target tile safety must be above this
+export const MIGRATION_MAX_PER_CADENCE = 1           // at most one NPC migrates per cadence tick
+
 // NPC Intention Layer (v0.51.0)
 export const INTENT_RECOMPUTE_INTERVAL = TICKS_PER_HOUR * 2
 export const INTENT_OVERRIDE_DURATION_TICKS = TICKS_PER_HOUR * 6

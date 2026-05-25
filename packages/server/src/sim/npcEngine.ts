@@ -196,6 +196,10 @@ export type NpcRuntimeState = {
   } | null
   /** v0.15.23：deterministic runtime-agent projection for this NPC. */
   agent: NpcAgentState
+  /** v0.74.0：permanent home tile override after household migration.
+   *  Replaces `profile.defaultLocation` as the routing fallback.
+   *  Persisted via NPC_STATE_RECORDED. */
+  homeTileOverride?: string
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -455,6 +459,7 @@ export class NpcEngine {
         }
       }
     }
+    const rawRecord = raw as Record<string, unknown>
     const next: NpcRuntimeState = {
       tile,
       mood: clamp(typeof r.mood === 'number' ? r.mood : 60, MOOD_MIN, MOOD_MAX),
@@ -479,7 +484,10 @@ export class NpcEngine {
       personalityOverride,
       intentOverride,
       travelRoute,
-      agent: readAgentState(profile ?? null, r.agent, tile)
+      agent: readAgentState(profile ?? null, r.agent, tile),
+      ...(typeof rawRecord.homeTileOverride === 'string' && rawRecord.homeTileOverride.length > 0
+        ? { homeTileOverride: rawRecord.homeTileOverride }
+        : {}),
     }
     this.state.set(npcId, next)
   }
@@ -823,6 +831,14 @@ export class NpcEngine {
     if (!state) return
     state.intentOverride = null
   }
+
+  /** v0.74.0：永久設定 NPC 的戶籍所在地，作為 schedule 無匹配 slot 時的 fallback 目標。
+   *  NPC_HOUSEHOLD_MIGRATED event committed 後呼叫；透過 NPC_STATE_RECORDED 持久化。 */
+  setHomeTile(npcId: string, tileId: string): void {
+    const state = this.state.get(npcId)
+    if (!state) return
+    state.homeTileOverride = tileId
+  }
 }
 
 function decideNextState(
@@ -850,7 +866,8 @@ function decideNextState(
 
   const tickOfDay = ((currentTick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
   const slot = pickSlot(schedule, tickOfDay)
-  const scheduleTarget = slot?.location ?? before.targetTile ?? profile.defaultLocation
+  const homeTile = before.homeTileOverride ?? profile.defaultLocation
+  const scheduleTarget = slot?.location ?? before.targetTile ?? homeTile
 
   // ---- 個性 nudge：每 PERSONALITY_DECISION_INTERVAL tick 重算一次 ----
   // 不同 NPC 在 deterministic 偏移上決策，避免大家同 tick 一起轉向。
