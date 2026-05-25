@@ -5,6 +5,44 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.67.0
+
+### Current Version
+`0.67.0` — TypeScript build clean. 942 tests pass across 125 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.67.0)
+
+**v0.67.0 — NPC Relationship Graph Dialog Injection (§11.9 partial)**
+- `RelationshipContextRow` type added to `AiDialogContext` (nameZh, trust, type, interactionCount)
+- `buildRelationshipBlock()` in `aiDialog.ts`: renders friend/rival/neutral classifications with trust scores into NPC system prompt
+- `npc.ts` dialog handler queries `getNpcRelationships().listFor(npcId)` (cap 10, sorted by most recent) and maps to `relationshipContext`
+- Block injected after known-person block, before anti-hallucination block in prompt
+- NPCs now know the trust level and relationship type for each person they've interacted with (e.g. 友好/對立/普通)
+- 5 new tests in `aiDialog.test.ts` covering all three relationship types and edge cases
+- Closes §11.9 partial (NPC social history now grounds dialog)
+
+### §43 Criteria Status (unchanged from v0.66.0)
+
+**§43.1 Civilization** — all 4 criteria ✅
+**§43.2 Ecosystem** — 10 of 11 criteria ✅, criterion 11 ("all co-occur") pending long-run observation
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET still used for area state, building occupants, weather, season, rare windows
+- §11.6 budget gate (simulation budget specified but not enforced)
+- §11.9 dialog grounding — relationship graph now injected; remaining: faction knowledge grounding
+- BioNode / Forest Regrowth Engine — **SHIPPED** (Phase E5, confirmed in runtime.ts); WORLD_CAPABILITIES.md Part II needs update
+- Roads/bridges as map features
+- NPC household permanent migration (move to new tile permanently)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.66.0
 
 ### Current Version

@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow, type RelationshipContextRow } from '../npcs/aiDialog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -189,6 +189,22 @@ export function createNpcRouter(input: {
               .filter((n): n is string => typeof n === 'string')
           : undefined
 
+        // relationship context — trust + friend/rival type from interaction history (cap 10)
+        const npcRelationshipsStore = input.runtime.getNpcRelationships()
+        const relationshipContext: readonly RelationshipContextRow[] | undefined = (() => {
+          if (!npcRelationshipsStore) return undefined
+          const rows = npcRelationshipsStore.listFor(npcId).slice(0, 10)
+          if (rows.length === 0) return undefined
+          return rows
+            .map((row): RelationshipContextRow | null => {
+              const otherId = row.npcA === npcId ? row.npcB : row.npcA
+              const nameZh = allProfiles.find((n) => n.id === otherId)?.name.zh
+              if (!nameZh) return null
+              return { nameZh, trust: row.trust, type: row.relationshipType, interactionCount: row.interactionCount }
+            })
+            .filter((r): r is RelationshipContextRow => r !== null)
+        })()
+
         // ecology context
         const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
         const fisheryRow = input.runtime.getFisheryDensityOnTile(npcTile)
@@ -248,6 +264,7 @@ export function createNpcRouter(input: {
           worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
           ...(knownPersonNames ? { knownPersonNames } : {}),
+          ...(relationshipContext ? { relationshipContext } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),

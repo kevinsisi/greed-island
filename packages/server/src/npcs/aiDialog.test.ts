@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildRumorsBlock,
   buildKnownPersonBlock,
+  buildRelationshipBlock,
   buildAntiHallucinationBlock,
   buildEcologyBlock,
   buildRecentEventsBlock,
@@ -154,6 +155,51 @@ describe('buildKnownPersonBlock', () => {
     const joined = lines.join('\n')
     expect(joined).toContain('沈若雲')
     expect(joined).toContain('老王')
+  })
+})
+
+describe('buildRelationshipBlock', () => {
+  it('returns empty array when rows is undefined', () => {
+    expect(buildRelationshipBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array when rows is empty', () => {
+    expect(buildRelationshipBlock([])).toEqual([])
+  })
+
+  it('includes friend name in output', () => {
+    const lines = buildRelationshipBlock([
+      { nameZh: '沈若雲', trust: 80, type: 'friend', interactionCount: 12 },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('沈若雲')
+    expect(joined).toContain('友好')
+    expect(joined).toContain('80')
+  })
+
+  it('includes rival name in output', () => {
+    const lines = buildRelationshipBlock([
+      { nameZh: '烏鴉王', trust: 20, type: 'rival', interactionCount: 5 },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('烏鴉王')
+    expect(joined).toContain('對立')
+    expect(joined).toContain('20')
+  })
+
+  it('separates friends, rivals, and neutrals into distinct lines', () => {
+    const lines = buildRelationshipBlock([
+      { nameZh: '老王', trust: 80, type: 'friend', interactionCount: 8 },
+      { nameZh: '小張', trust: 50, type: 'neutral', interactionCount: 3 },
+      { nameZh: '刀疤李', trust: 15, type: 'rival', interactionCount: 2 },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('友好')
+    expect(joined).toContain('對立')
+    expect(joined).toContain('普通')
+    expect(joined).toContain('老王')
+    expect(joined).toContain('刀疤李')
+    expect(joined).toContain('小張')
   })
 })
 

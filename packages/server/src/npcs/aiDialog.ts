@@ -47,6 +47,13 @@ export type PlantContextRow = Readonly<{
   saturationPct: number  // 0–100, density/capacity * 100
 }>
 
+export type RelationshipContextRow = Readonly<{
+  nameZh: string
+  trust: number
+  type: 'friend' | 'rival' | 'neutral'
+  interactionCount: number
+}>
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -62,6 +69,7 @@ export type AiDialogContext = Readonly<{
   worldValidNpcNames?: readonly string[]
   activeRumors?: readonly ActiveRumorContext[]
   knownPersonNames?: readonly string[]
+  relationshipContext?: readonly RelationshipContextRow[]
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
   extinctionWarnings?: readonly string[]
@@ -179,6 +187,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     `- 世界資料中可驗證存在的 NPC 名稱只有：${worldValidNpcNames.length > 0 ? worldValidNpcNames : '（未提供）'}。這份清單只用來避免你虛構名字，不代表你本人認識清單上的每個人。玩家提到不在清單內的人名、外號或稱呼時，你只能說不確定並請玩家說明；不可宣稱世界裡有這個人、很多個同名者、或你知道此人的背景。`,
     '',
     ...buildKnownPersonBlock(ctx.knownPersonNames),
+    ...buildRelationshipBlock(ctx.relationshipContext),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
       [
@@ -427,6 +436,25 @@ export function buildKnownPersonBlock(names: readonly string[] | undefined): str
     names.map((n) => `  · ${n}`).join('\n'),
     '',
   ]
+}
+
+export function buildRelationshipBlock(rows: readonly RelationshipContextRow[] | undefined): string[] {
+  if (!rows || rows.length === 0) return []
+  const friends = rows.filter((r) => r.type === 'friend')
+  const rivals = rows.filter((r) => r.type === 'rival')
+  const neutrals = rows.filter((r) => r.type === 'neutral')
+  const lines: string[] = [`### 你與已知人物的關係（根據互動歷史）`]
+  if (friends.length > 0) {
+    lines.push(`**友好（信任 ≥ 75）：** ${friends.map((r) => `${r.nameZh}（信任 ${r.trust}，互動 ${r.interactionCount} 次）`).join('、')}`)
+  }
+  if (rivals.length > 0) {
+    lines.push(`**對立（信任 ≤ 25）：** ${rivals.map((r) => `${r.nameZh}（信任 ${r.trust}，互動 ${r.interactionCount} 次）`).join('、')}`)
+  }
+  if (neutrals.length > 0) {
+    lines.push(`**普通：** ${neutrals.map((r) => `${r.nameZh}（信任 ${r.trust}）`).join('、')}`)
+  }
+  lines.push(`這些關係影響你如何評論、信任或提防這些人，但不要主動提及這份資料本身。`, '')
+  return lines
 }
 
 export function buildAntiHallucinationBlock(knownNames: readonly string[], knownSpecies: readonly string[]): string[] {
