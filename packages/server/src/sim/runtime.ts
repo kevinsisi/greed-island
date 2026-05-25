@@ -3924,9 +3924,13 @@ export class SimulationRuntime {
 
       const beliefs = this.beliefProjection.getBeliefs(profile.id)
       const weights = this.intentProjection.getLearningWeights(profile.id, nextTick)
+      const memoryBoost = this.npcMemory
+        ? this.npcMemory.getMemoryUrgencyBoost(profile.id, nextTick)
+        : 0
       const stack = computeIntentStack(
         profile.id, beliefs, profile, weights,
         state.tile, state.faction || undefined, nextTick,
+        memoryBoost,
       )
       const best = selectHighestIntent(stack, INTENT_URGENCY_THRESHOLD, state.intentOverride)
 

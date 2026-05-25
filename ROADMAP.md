@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.54.0 ✅ shipped — 2026-05-25
+
+**主題：記憶意圖提升（Memory Urgency Boost）**
+
+- ✅ `SqliteNpcMemoryStore.getMemoryUrgencyBoost(npcId, currentTick)`：查詢 fear/grief 情感標籤的記憶，importance ≥ 9 永久返回 1.0，importance 7–8 在 30天內返回 0.5，否則 0
+- ✅ `MEMORY_URGENCY_BOOST_PERMANENT = 1.0` + `MEMORY_URGENCY_BOOST_HIGH = 0.5` 常數
+- ✅ `computeIntentStack` 新增 optional `memoryUrgencyBoost = 0` 參數，只放大 survival intent 乘數
+- ✅ runtime.ts intent recompute loop 取得 `memoryBoost` 後傳入 `computeIntentStack`
+- ✅ 恐懼記憶（被攻擊、派系奪地、聚落衰落）現在讓 NPC 在相同感知下更積極逃離危險
+- ✅ +8 新測試（npcMemory.test.ts: 6；intentPlanner.test.ts: 2）；893 tests pass；build 乾淨
+
+---
+
 ## v0.53.0 ✅ shipped — 2026-05-25
 
 **主題：NPC 記憶對話注入（Memory Dialog Injection）**

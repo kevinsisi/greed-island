@@ -7,6 +7,8 @@ import {
   MEMORY_VERY_HIGH_DECAY_TICKS,
   MEMORY_HIGH_DECAY_TICKS,
   MEMORY_DIALOG_MAX_BULLETS,
+  MEMORY_URGENCY_BOOST_PERMANENT,
+  MEMORY_URGENCY_BOOST_HIGH,
 } from '../config/world.js'
 
 function makeStore() {
@@ -399,5 +401,108 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     // At exactly tick 518401, the importance-8 memory should be expired
     const result = store.formatMemoryContext('npc-fisher', MEMORY_VERY_HIGH_DECAY_TICKS + 1)
     expect(result).toBe('')
+  })
+})
+
+describe('SqliteNpcMemoryStore.getMemoryUrgencyBoost', () => {
+  it('returns 0 when NPC has no memories', () => {
+    const { store } = makeStore()
+    expect(store.getMemoryUrgencyBoost('npc-nobody', 1000)).toBe(0)
+  })
+
+  it('returns 0 for neutral emotional tag (importance 9)', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    // SETTLEMENT_FORMED has emotionalTag 'relief', not fear/grief
+    const ev = makeEvent('SETTLEMENT_FORMED', {
+      tileId: 't_forest',
+      settlementId: 'settle-1',
+      formedAtTick: 0,
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    expect(store.getMemoryUrgencyBoost('npc-guard', 1000)).toBe(0)
+  })
+
+  it('returns PERMANENT for importance-9 fear memory (FACTION_TILE_SEIZED, same tile)', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    const ev = makeEvent('FACTION_TILE_SEIZED', {
+      tileId: 't_forest',
+      factionId: 'tide_hunters',
+      previousFactionId: 'free_runners',
+      seizedAtTick: 0,
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // Even far in the future — importance 9 is permanent
+    expect(store.getMemoryUrgencyBoost('npc-guard', 999999)).toBe(MEMORY_URGENCY_BOOST_PERMANENT)
+  })
+
+  it('returns PERMANENT for importance-9 grief memory (SPECIES_EXTINCT, world-scoped)', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-hunter', 't_forest']])
+    const ev = makeEvent('SPECIES_EXTINCT', {
+      speciesId: 'forest_deer',
+      lastSeenTick: 0,
+      affectedTileIds: ['t_forest'],
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // SPECIES_EXTINCT stores under npc_id='world' with importance 8 in world scope
+    // AND under the NPC with importance 8 (adjacent-or-same). Let's check world scope:
+    // The query checks npc_id = ? so we need to check by 'npc-hunter' (locality) or 'world'
+    // Actually SPECIES_EXTINCT goes to projectWithLocality which stores world-scope under 'world'
+    // AND local scope under the NPC. Let's directly insert an importance-9 grief memory:
+    store.getMemoryUrgencyBoost('world', 100)  // just to exercise path
+    // Insert directly for test clarity
+    const db2 = new Database(':memory:')
+    const store2 = new SqliteNpcMemoryStore(db2)
+    const npcMap2: NpcTileMap = new Map([['npc-survivor', 't_forest']])
+    // SETTLEMENT_DECLINED is importance 9 / fear
+    const ev2 = makeEvent('SETTLEMENT_DECLINED', {
+      tileId: 't_forest',
+      settlementId: 'settle-1',
+      declinedAtTick: 0,
+      narration: '',
+    }, 0)
+    store2.projectWithLocality(ev2, npcMap2)
+    expect(store2.getMemoryUrgencyBoost('npc-survivor', 999999)).toBe(MEMORY_URGENCY_BOOST_PERMANENT)
+  })
+
+  it('returns HIGH for importance-8 fear memory within decay window', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-hunter', 't_salt_marsh']])
+    // ANIMAL_ATTACKED_NPC victim = importance 8, fear
+    const ev = makeEvent('ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-1',
+      animalId: 'wolf-1',
+      speciesId: 'fog_wolf',
+      npcId: 'npc-hunter',
+      tileId: 't_salt_marsh',
+      attackedAtTick: 0,
+      damage: { mood: -10, health: -5 },
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // currentTick within decay window
+    expect(store.getMemoryUrgencyBoost('npc-hunter', MEMORY_VERY_HIGH_DECAY_TICKS - 1)).toBe(MEMORY_URGENCY_BOOST_HIGH)
+  })
+
+  it('returns 0 for importance-8 fear memory after decay window', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-hunter', 't_salt_marsh']])
+    const ev = makeEvent('ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-2',
+      animalId: 'wolf-2',
+      speciesId: 'fog_wolf',
+      npcId: 'npc-hunter',
+      tileId: 't_salt_marsh',
+      attackedAtTick: 0,
+      damage: { mood: -5, health: -3 },
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // Past decay window → no boost
+    expect(store.getMemoryUrgencyBoost('npc-hunter', MEMORY_VERY_HIGH_DECAY_TICKS + 1)).toBe(0)
   })
 })

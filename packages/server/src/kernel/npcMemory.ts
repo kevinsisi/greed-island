@@ -34,6 +34,8 @@ import {
   MEMORY_HIGH_DECAY_TICKS,
   MEMORY_NORMAL_DECAY_TICKS,
   MEMORY_DIALOG_MAX_BULLETS,
+  MEMORY_URGENCY_BOOST_PERMANENT,
+  MEMORY_URGENCY_BOOST_HIGH,
 } from '../config/world.js'
 
 type DatabaseConnection = Database.Database
@@ -269,6 +271,39 @@ export class SqliteNpcMemoryStore {
       .prepare('SELECT COUNT(*) as c FROM npc_memory')
       .get() as { c: number }
     return row.c
+  }
+
+  /**
+   * Returns the urgency boost (0, 0.5, or 1.0) this NPC's fear/grief memories contribute
+   * to their survival intent calculation. Permanent (importance >= 9) memories always return
+   * MEMORY_URGENCY_BOOST_PERMANENT; decaying (7–8) memories within 30 days return
+   * MEMORY_URGENCY_BOOST_HIGH; otherwise 0.
+   */
+  getMemoryUrgencyBoost(npcId: string, currentTick: number): number {
+    const permanentRow = this.db
+      .prepare(
+        `SELECT id FROM npc_memory
+          WHERE npc_id = ?
+            AND importance >= 9
+            AND json_extract(content_json, '$.emotionalTag') IN ('fear', 'grief')
+          LIMIT 1`
+      )
+      .get(npcId)
+    if (permanentRow) return MEMORY_URGENCY_BOOST_PERMANENT
+
+    const highRow = this.db
+      .prepare(
+        `SELECT id FROM npc_memory
+          WHERE npc_id = ?
+            AND importance >= 7
+            AND json_extract(content_json, '$.emotionalTag') IN ('fear', 'grief')
+            AND ? - tick <= ?
+          LIMIT 1`
+      )
+      .get(npcId, currentTick, MEMORY_VERY_HIGH_DECAY_TICKS)
+    if (highRow) return MEMORY_URGENCY_BOOST_HIGH
+
+    return 0
   }
 
   /** Deterministic canonical hash of all rows — used by replay tests. */

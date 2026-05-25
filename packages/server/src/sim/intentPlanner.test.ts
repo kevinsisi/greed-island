@@ -301,3 +301,39 @@ describe('selectHighestIntent', () => {
     expect(selectHighestIntent(stack, 30, null)).toBeNull()
   })
 })
+
+// ─── memoryUrgencyBoost ───────────────────────────────────────────────────────
+
+describe('computeIntentStack with memoryUrgencyBoost', () => {
+  it('memoryUrgencyBoost amplifies survival urgency', () => {
+    const beliefs: BeliefRow[] = [
+      makeBelief({ subject: 'tile_safety', qualifier: CURRENT_TILE, value: 'dangerous', confidence: 50 }),
+    ]
+    const profile = makeProfile({ safetyWeight: 1.0 })
+    const base = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, undefined, 0, 0)
+    const boosted = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, undefined, 0, 1.0)
+    const baseUrgency = base.entries.find(e => e.kind === 'survival')!.urgency
+    const boostedUrgency = boosted.entries.find(e => e.kind === 'survival')!.urgency
+    // boost=1.0 should raise urgency: confidence(50) * safetyWeight(1.0) * (1.0 + 1.0) = 100
+    expect(boostedUrgency).toBeGreaterThan(baseUrgency)
+    expect(boostedUrgency).toBeCloseTo(50 * 1.0 * 2.0)
+  })
+
+  it('memoryUrgencyBoost does not affect economic, social, or ecosystem intents', () => {
+    const beliefs: BeliefRow[] = [
+      makeBelief({ subject: 'goods_scarcity', qualifier: 'fish', value: 'scarce', confidence: 60 }),
+      makeBelief({ subject: 'faction_control', qualifier: CURRENT_TILE, value: 'controlled', confidence: 70, factionId: 'enemy' }),
+      makeBelief({ subject: 'ecosystem_health', qualifier: CURRENT_TILE, value: 'depleted', confidence: 50 }),
+    ]
+    const profile = makeProfile({ safetyWeight: 1.0, economyWeight: 0.7, factionLoyalty: 0.5 })
+    const base = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, 'ally', 0, 0)
+    const boosted = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, 'ally', 0, 1.0)
+    for (const kind of ['economic', 'social', 'ecosystem'] as const) {
+      const baseEntry = base.entries.find(e => e.kind === kind)
+      const boostedEntry = boosted.entries.find(e => e.kind === kind)
+      if (baseEntry && boostedEntry) {
+        expect(boostedEntry.urgency).toBeCloseTo(baseEntry.urgency)
+      }
+    }
+  })
+})

@@ -5,6 +5,57 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.54.0
+
+### Current Version
+`0.54.0` — TypeScript build clean. 893 tests pass across 118 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.53.0 → v0.54.0)
+
+**v0.54.0 — Memory Urgency Boost (Cognitive Runtime Layer 2, Step 5)**
+
+NPC 的恐懼/悲傷記憶現在直接提升生存意圖的緊迫度。`SqliteNpcMemoryStore.getMemoryUrgencyBoost()` 依記憶重要性（importance 9 = 永久 +1.0 boost；importance 7–8 = 30天內 +0.5 boost）放大 `computeIntentStack` 的生存乘數，使受過創傷的 NPC（曾被攻擊、目睹派系奪地、聚落衰落）在相同感知條件下比普通 NPC 更快逃離危險區域。
+
+**修改檔案：**
+- `packages/server/src/config/world.ts`：新增 `MEMORY_URGENCY_BOOST_PERMANENT = 1.0` + `MEMORY_URGENCY_BOOST_HIGH = 0.5`
+- `packages/server/src/kernel/npcMemory.ts`：新增 `getMemoryUrgencyBoost(npcId, currentTick): number`
+- `packages/server/src/kernel/npcMemory.test.ts`：新增 6 個 `getMemoryUrgencyBoost` 測試
+- `packages/server/src/sim/intentPlanner.ts`：`computeIntentStack` 新增 optional `memoryUrgencyBoost = 0` 參數；傳入 `computeSurvivalIntent`
+- `packages/server/src/sim/intentPlanner.test.ts`：新增 2 個 memoryUrgencyBoost 測試
+- `packages/server/src/sim/runtime.ts`：intent recompute loop 中從 `npcMemory.getMemoryUrgencyBoost()` 取值後傳入 `computeIntentStack`
+
+**架構關鍵點：**
+- boost 只作用於 survival intent，不影響 economic / social / ecosystem
+- importance >= 9 的 fear/grief 永久 boost（FACTION_TILE_SEIZED 同 tile、SETTLEMENT_DECLINED 同 tile）
+- importance 7–8 的 fear/grief 在 MEMORY_VERY_HIGH_DECAY_TICKS（30天 = 518400 ticks）內有效
+- boost = 0 時行為與 v0.53.0 完全相同（backward-compatible）
+- `npcMemory` 為 null 時 boost 固定 0（無記憶系統不影響邏輯）
+
+**Cognitive Runtime Layer 2 完整進度：**
+| 步驟 | 版本 | 功能 |
+|---|---|---|
+| 1 感知 | v0.50 | BeliefProjection |
+| 2 意圖 | v0.51 | IntentProjection + IntentPlanner |
+| 3 反思 | v0.52 | ReflectionDialog Injection |
+| 4 記憶對話 | v0.53 | MemoryDialog Injection |
+| 5 記憶意圖 | v0.54 | Memory Urgency Boost ← 本版 |
+
+**測試：**
+- +8 新測試（npcMemory.test.ts: 6；intentPlanner.test.ts: 2）
+- 893 passing tests / 118 files；build clean
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 893 pass
+cd packages/server && npm run build    # clean
+```
+
+**Next:** v0.55.0 — 下一個最高影響力的 §43 acceptance criteria gap。建議候選：
+- FOREST_DEPLETED + POLLUTION_INCREASED 事件（E2.2 completion，closes §43.2 ecological collapse criterion）
+- Faction dominance cascade（FACTION_DOMINANCE_SHIFTED → TRADE_ROUTE_CLOSED，closes §43.1 criterion 3）
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.53.0
 
 ### Current Version

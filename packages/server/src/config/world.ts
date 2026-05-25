@@ -262,6 +262,12 @@ export const MEMORY_VERY_HIGH_DECAY_TICKS = 30 * TICKS_PER_DAY  // importance 7�
 export const MEMORY_HIGH_DECAY_TICKS = 7 * TICKS_PER_DAY         // importance 5–6
 export const MEMORY_NORMAL_DECAY_TICKS = 2 * TICKS_PER_DAY       // importance 1–4
 
+// v0.54.0 — Memory Urgency Boost. Fear/grief memories amplify NPC survival intent.
+// PERMANENT applies when importance >= 9 (never decays).
+// HIGH applies when importance 7–8 and within MEMORY_VERY_HIGH_DECAY_TICKS.
+export const MEMORY_URGENCY_BOOST_PERMANENT = 1.0
+export const MEMORY_URGENCY_BOOST_HIGH = 0.5
+
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
   let h = 2166136261

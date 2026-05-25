@@ -202,6 +202,7 @@ export function computeIntentStack(
   currentTile: string,
   npcFaction: string | undefined,
   currentTick: number,
+  memoryUrgencyBoost = 0,
 ): IntentStack {
   const entries: IntentEntry[] = []
 
@@ -210,7 +211,7 @@ export function computeIntentStack(
   const socialMultiplier = learningWeights.social ?? 1.0
   const ecosystemMultiplier = learningWeights.ecosystem ?? 1.0
 
-  const survival = computeSurvivalIntent(beliefs, profile, currentTile, survivalMultiplier)
+  const survival = computeSurvivalIntent(beliefs, profile, currentTile, survivalMultiplier + memoryUrgencyBoost)
   if (survival) entries.push(survival)
 
   const economic = computeEconomicIntent(beliefs, profile, currentTile, economicMultiplier)
