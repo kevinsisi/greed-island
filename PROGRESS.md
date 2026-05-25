@@ -5,6 +5,40 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.81.0
+
+### Current Version
+`0.81.0` — TypeScript build clean. 1057 server tests pass (135 files). Commits pushed to `main`.
+
+### What Was Shipped (v0.81.0)
+
+**v0.81.0 — Household Joint Decisions (§19 gap closed)**
+- `HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS = TICKS_PER_DAY * 3` in `config/world.ts`
+- `HOUSEHOLD_JOINT_DECISION_GOLD_THRESHOLD = 100` (minimum household balance for `invest_in_settlement`)
+- `NPC_HOUSEHOLD_JOINT_DECISION` command type + `NpcHouseholdJointDecisionCmd` payload in `kernel/livingWorldCommands.ts`; Rule Engine validator added
+- `planHouseholdJointDecisions()` pure fn in `sim/householdJointDecisionPlanner.ts`:
+  - Scans all households with ≥2 living members from `NpcLineageProjection`
+  - Requires all living members to share the same `tileId` (co-located)
+  - `decisionKind`: `invest_in_settlement` when household balance ≥ 100, else `pool_resources`
+  - `goldCommitted`: 10% of household balance for investment decisions (informational, no gold moves)
+  - Deduplication via `seenHouseholds` set
+- `kernel/npcMemory.ts`: `NPC_HOUSEHOLD_JOINT_DECISION` case adds importance-5 memory for all member NPCs with `household.joint.decision` kind
+- `sim/runtime.ts`: cadence block wired; uses `npcLineageProjection` + `npcMortalityProjection` + `householdEconomyProjection`
+- 6 tests in `sim/householdJointDecision.test.ts` (135 test files, 1057 tests total)
+- WORLD_CAPABILITIES.md §19 household joint decisions gap closed
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Player carrying goods physically between tiles
+- Buildings not upgradeable or capturable
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.80.0
 
 ### Current Version

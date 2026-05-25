@@ -1858,7 +1858,7 @@ What an NPC "is" at any tick:
 
 ✅ **Knowledge boundary** — NPC's known-person graph (v0.67.0), alias memory (v0.70.0), faction knowledge all injected (§11.9 CLOSED v0.71.0).
 ✅ **Ecological awareness in dialog** — animal population, fishery density, extinction warnings, pollution, plant nodes, population shifts all injected into `AiDialogContext` and NPC system prompt.
-❌ **Household joint decisions** — economy pooled but no shared command decisions yet.
+✅ **Household joint decisions** — `NPC_HOUSEHOLD_JOINT_DECISION` event fires every 3 in-game days when co-located household members share a tile; decision kind = `invest_in_settlement` (balance ≥ 100) or `pool_resources`; both members' memories updated at importance 5 (v0.81.0).
 
 ---
 

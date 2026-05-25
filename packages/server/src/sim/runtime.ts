@@ -73,6 +73,7 @@ import {
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   WALL_CONSTRUCTION_CADENCE_TICKS,
+  HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS,
   NPC_LONG_INCAP_TICKS,
   NPC_LOCAL_TRADE_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
@@ -227,6 +228,7 @@ import { planRoadConstruction } from './roadConstructionPlanner.js'
 import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
 import { planWallConstruction } from './wallConstructionPlanner.js'
 import { WallNetworkProjection, WALL_NETWORK_BOOT_EVENT_TYPES } from '../projections/wallNetwork.js'
+import { planHouseholdJointDecisions } from './householdJointDecisionPlanner.js'
 import { ActiveRuleOperatorsProjection, ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES } from '../projections/activeRuleOperators.js'
 import { NpcIncapacitationProjection, NPC_INCAPACITATION_BOOT_EVENT_TYPES } from '../projections/npcIncapacitation.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
@@ -4400,6 +4402,42 @@ export class SimulationRuntime {
             tileId: trade.tileId,
             tradedAtTick: nextTick,
             narration: `${sellerName}在市集上向${buyerName}售出 ${trade.quantity} 份 ${trade.goodsId}。`,
+          }
+        ))
+      }
+    }
+
+    // ---- Household Joint Decision cadence (v0.81.0) ----
+    if (nextTick % HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS === 0) {
+      const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location ?? ''] as [string, string]))
+      const jointDecisions = planHouseholdJointDecisions({
+        npcLineage: this.npcLineageProjection,
+        npcMortality: this.npcMortalityProjection,
+        householdEconomy: this.householdEconomyProjection,
+        npcTileMap,
+      })
+      for (const decision of jointDecisions) {
+        const memberNames = decision.memberNpcIds
+          .map(id => this.profiles.find(p => p.id === id)?.name?.zh ?? id)
+          .join('與')
+        const tileName = TILE_BY_ID[decision.tileId]?.name ?? decision.tileId
+        const narration = decision.decisionKind === 'invest_in_settlement'
+          ? `${memberNames}在${tileName}共同商議，決定投入家庭積蓄支持聚落建設。`
+          : `${memberNames}在${tileName}相聚，共同為家庭的未來謀算。`
+        commands.push(makeLivingWorldCommand(
+          'NPC_HOUSEHOLD_JOINT_DECISION',
+          decision.memberNpcIds[0]!,
+          'npc',
+          nextTick,
+          submittedAt,
+          {
+            householdId: decision.householdId,
+            memberNpcIds: decision.memberNpcIds,
+            tileId: decision.tileId,
+            decisionKind: decision.decisionKind,
+            goldCommitted: decision.goldCommitted,
+            decidedAtTick: nextTick,
+            narration,
           }
         ))
       }

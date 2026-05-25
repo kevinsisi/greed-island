@@ -225,6 +225,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Walls / defenses (v0.80.0)
   'WALL_BUILT',
   'WALL_DEMOLISHED',
+  // Household Joint Decisions (v0.81.0)
+  'NPC_HOUSEHOLD_JOINT_DECISION',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -470,6 +472,17 @@ export type WallDemolishedCmd = Readonly<{
   tileIdA: string
   tileIdB: string
   demolishedAtTick: number
+  narration: string
+}>
+
+// Household Joint Decisions (v0.81.0)
+export type NpcHouseholdJointDecisionCmd = Readonly<{
+  householdId: string
+  memberNpcIds: readonly string[]
+  tileId: string
+  decisionKind: 'invest_in_settlement' | 'pool_resources'
+  goldCommitted: number
+  decidedAtTick: number
   narration: string
 }>
 
@@ -1735,6 +1748,7 @@ export type LivingWorldCommandPayload =
   | NpcGoodsTradedCmd
   | WallBuiltCmd
   | WallDemolishedCmd
+  | NpcHouseholdJointDecisionCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3202,6 +3216,17 @@ const VALIDATORS: Readonly<
     if (typeof p.tileIdA !== 'string' || p.tileIdA.length === 0) return 'tileIdA required'
     if (typeof p.tileIdB !== 'string' || p.tileIdB.length === 0) return 'tileIdB required'
     if (!isNonNegativeInteger(p.demolishedAtTick)) return 'demolishedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_HOUSEHOLD_JOINT_DECISION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (!Array.isArray(p.memberNpcIds) || p.memberNpcIds.length < 2) return 'memberNpcIds must have ≥2 members'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (p.decisionKind !== 'invest_in_settlement' && p.decisionKind !== 'pool_resources') return 'unknown decisionKind'
+    if (!isNonNegativeInteger(p.goldCommitted)) return 'goldCommitted must be non-negative integer'
+    if (!isNonNegativeInteger(p.decidedAtTick)) return 'decidedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

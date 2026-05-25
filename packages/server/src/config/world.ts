@@ -259,6 +259,8 @@ export const MIGRATION_MAX_PER_CADENCE = 1           // at most one NPC migrates
 export const NPC_LONG_INCAP_TICKS = TICKS_PER_DAY * 3  // combat defeat → 3 days of incapacitation
 export const NPC_LOCAL_TRADE_CADENCE_TICKS = TICKS_PER_HOUR * 4  // local NPC-to-NPC market trade cadence
 export const WALL_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 5  // wall auto-builds on contested borders
+export const HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS = TICKS_PER_DAY * 3  // household joint decision sweep
+export const HOUSEHOLD_JOINT_DECISION_GOLD_THRESHOLD = 100  // min household balance to trigger invest decision
 
 // NPC Intention Layer (v0.51.0)
 export const INTENT_RECOMPUTE_INTERVAL = TICKS_PER_HOUR * 2

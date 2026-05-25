@@ -24,6 +24,7 @@ import type {
   NpcMoveCmd,
   NpcProductiveActionCmd,
   NpcGoodsTradedCmd,
+  NpcHouseholdJointDecisionCmd,
   NpcRumorSpreadCmd,
   PlayerIntervenecmd,
   SeasonChangeCmd,
@@ -542,6 +543,15 @@ function deriveMemoryRows(
           importance: 3,
         },
       ]
+    }
+    case 'NPC_HOUSEHOLD_JOINT_DECISION': {
+      const d = data as NpcHouseholdJointDecisionCmd
+      return d.memberNpcIds.map((npcId) => ({
+        npcId,
+        memoryType: 'event' as const,
+        content: { kind: 'household.joint.decision', householdId: d.householdId, decisionKind: d.decisionKind, goldCommitted: d.goldCommitted, tileId: d.tileId, tick },
+        importance: 5,
+      }))
     }
     case 'NPC_RUMOR_SPREAD': {
       const d = data as NpcRumorSpreadCmd
