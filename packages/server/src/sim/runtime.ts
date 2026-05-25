@@ -224,6 +224,7 @@ import { AreaStateProjection } from '../projections/areaState.js'
 import { WorldStateProjection, WORLD_STATE_BOOT_EVENT_TYPES } from '../projections/worldState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
+import { BuildingOccupantsProjection, BUILDING_OCCUPANTS_BOOT_EVENT_TYPES } from '../projections/buildingOccupants.js'
 import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
@@ -552,6 +553,7 @@ export class SimulationRuntime {
   private readonly worldStateProjection = new WorldStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
+  private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
 
@@ -1634,6 +1636,7 @@ export class SimulationRuntime {
       if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
+      this.buildingOccupantsProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.intentProjection.project(ev)
       this.npcStateProjection.project(ev)
@@ -4652,6 +4655,7 @@ export class SimulationRuntime {
         if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
+        this.buildingOccupantsProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
@@ -5316,6 +5320,7 @@ export class SimulationRuntime {
       this.areaStateProjection.rebuildFromEvents(allEvents)
       this.worldStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
+      this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
@@ -5364,6 +5369,9 @@ export class SimulationRuntime {
       this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
       const buildingStateEvents = this.store.readEventsByTypes(BUILDING_STATE_BOOT_EVENT_TYPES)
       this.buildingStateProjection.rebuildFromEvents(buildingStateEvents)
+      // BuildingOccupants projection — rebuild NPC indoor presence from BUILDING_ENTER/LEAVE events.
+      const buildingOccupantsEvents = this.store.readEventsByTypes(BUILDING_OCCUPANTS_BOOT_EVENT_TYPES)
+      this.buildingOccupantsProjection.rebuildFromEvents(buildingOccupantsEvents)
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)
@@ -5418,8 +5426,15 @@ export class SimulationRuntime {
       const raw = facts[`${AREA_STATE_PREFIX}${tile.id}`]
       if (raw) this.areaEngine.hydrate(tile.id, raw)
     }
-    const buildingFact = facts[FACT_BUILDING_OCCUPANTS]
-    if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
+    // §11.5 — prefer BuildingOccupantsProjection over FACT_BUILDING_OCCUPANTS for
+    // NPC indoor presence. If the projection has seen typed BUILDING_ENTER/LEAVE
+    // events it is authoritative; fall back to FACT_SET for older event logs.
+    if (this.buildingOccupantsProjection.isHydrated()) {
+      this.buildingRuntime.hydrate(this.buildingOccupantsProjection.toJSON())
+    } else {
+      const buildingFact = facts[FACT_BUILDING_OCCUPANTS]
+      if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
+    }
 
     this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
     this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)

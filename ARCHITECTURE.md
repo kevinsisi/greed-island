@@ -686,13 +686,13 @@ Command → Rule Engine → EventLog → `projectEvent()` fanout. Boot replay
 rebuilds `CombatStore` from events. 1000-event determinism test in
 `replayDeterminism.test.ts` verifies byte-identical rebuild.
 
-### 11.5 FACT_SET Snapshot Path — Substantially Closed v0.72.0
+### 11.5 FACT_SET Snapshot Path ✅ CLOSED v0.73.0
 
-All major runtime domains now have typed EventLog projections as primary boot source; FACT_SET remains only as backward-compatible fallback for old logs:
+All runtime domains now have typed EventLog projections as primary boot source; FACT_SET remains only as backward-compatible fallback for old logs:
 - ✅ **NPC state** (`NpcStateProjection` via `NPC_STATE_RECORDED`, v0.3x)
 - ✅ **Area state** (`AreaStateProjection` via `AREA_STATE_RECORDED`, v0.3x)
 - ✅ **Weather / Season / Rare window / Active world events** (`WorldStateProjection` via `WEATHER_CHANGE`, `SEASON_CHANGE`, `RARE_WINDOW_OPEN/CLOSE`, `WORLD_EVENT_SPAWN/END`, v0.72.0)
-- 🟡 **Building occupants** (`FACT_BUILDING_OCCUPANTS`) — still uses FACT_SET; covered by `BuildingStateProjection` for occupant history but boot hydration not yet migrated
+- ✅ **Building occupants** (`BuildingOccupantsProjection` via `BUILDING_ENTER` / `BUILDING_LEAVE`, v0.73.0)
 
 New features must not add new long-lived `FACT_SET` domains. All new state must use typed Events + projections.
 

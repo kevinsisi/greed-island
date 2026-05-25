@@ -5,6 +5,38 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.73.0
+
+### Current Version
+`0.73.0` — TypeScript build clean. 992 tests pass (server package). Commits pushed to `main`.
+
+### What Was Shipped (v0.73.0)
+
+**v0.73.0 — BuildingOccupantsProjection fully closes §11.5**
+- New `BuildingOccupantsProjection` in `projections/buildingOccupants.ts`: tracks NPC indoor presence (npcId → buildingId|null) from typed `BUILDING_ENTER` / `BUILDING_LEAVE` events
+- `BUILDING_OCCUPANTS_BOOT_EVENT_TYPES` for large-log selective replay
+- `isHydrated()` flag: distinguishes "no events seen yet" from "all NPCs are outside"
+- `toJSON()` returns same shape as `BuildingRuntime.toJSON()` for seamless `buildingRuntime.hydrate()` compatibility
+- `rebuildFromEvents` sorts by sequence for deterministic replay
+- Wired into runtime.ts: both incremental `project()` paths, small-log rebuild, large-log selective rebuild
+- Boot hydration: projection-first when hydrated, FACT_SET fallback for old logs
+- 10 new tests in `buildingOccupants.test.ts`
+- ARCHITECTURE.md §11.5 upgraded from "Substantially Closed" to **✅ CLOSED v0.73.0**
+- `FACT_BUILDING_OCCUPANTS` read at line 5250 still kept in `readLatestFactValues` call as fallback; const at line 247 retained
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog (COMBAT_PLAYER_ACTION and related)
+- Roads/bridges as buildable map features
+- NPC household permanent migration
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.72.0
 
 ### Current Version
