@@ -28,6 +28,13 @@ import type {
   SeasonChangeCmd,
   WeatherChangeCmd
 } from './livingWorldCommands.js'
+import { TILE_ADJACENCY } from '../projections/beliefProjection.js'
+import {
+  MEMORY_VERY_HIGH_DECAY_TICKS,
+  MEMORY_HIGH_DECAY_TICKS,
+  MEMORY_NORMAL_DECAY_TICKS,
+  MEMORY_DIALOG_MAX_BULLETS,
+} from '../config/world.js'
 
 type DatabaseConnection = Database.Database
 
@@ -91,6 +98,32 @@ export class SqliteNpcMemoryStore {
     )
 
     const rows = deriveMemoryRows(event.eventType, data, tick, payload.narration ?? null)
+    insertMemoryRows(insert, rows, tick)
+  }
+
+  /**
+   * Project an event into per-NPC memory rows using locality-based fan-out.
+   * Same-tile NPCs receive full importance; adjacent-tile NPCs receive
+   * importance - 2 (floor 1). Distant NPCs receive no row.
+   * Called alongside project() from the runtime fan-out loop.
+   */
+  projectWithLocality(
+    event: Event,
+    npcTileMap: ReadonlyMap<string, string>
+  ): void {
+    if (typeof event.tick !== 'number') return
+    const payload = event.payload
+    if (!isLivingWorldEventPayload(payload)) return
+    const data = payload.data as Record<string, unknown>
+    const tick = event.tick
+
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO npc_memory
+        (npc_id, memory_type, content_json, content_hash, tick, importance)
+       VALUES (@npcId, @memoryType, @contentJson, @contentHash, @tick, @importance)`
+    )
+
+    const rows = deriveLocalityRows(event.eventType, data, tick, npcTileMap, payload.narration ?? null)
     insertMemoryRows(insert, rows, tick)
   }
 
@@ -451,6 +484,180 @@ function deriveMemoryRows(
     default:
       return []
   }
+}
+
+function deriveLocalityRows(
+  eventType: string,
+  data: Record<string, unknown>,
+  tick: number,
+  npcTileMap: ReadonlyMap<string, string>,
+  narration: string | null
+): readonly DerivedMemoryRow[] {
+  switch (eventType) {
+    case 'FACTION_TILE_SEIZED': {
+      const tileId = data.tileId as string
+      const factionId = data.factionId as string
+      const previousFactionId = (data.previousFactionId as string | null) ?? null
+      return fanOutByLocality(npcTileMap, tileId, 9, {
+        kind: 'faction.tile_seized',
+        tileId,
+        factionId,
+        previousFactionId,
+        emotionalTag: 'fear',
+        narration,
+        tick,
+      }, 'event')
+    }
+
+    case 'ANIMAL_ATTACKED_NPC': {
+      const victimNpcId = data.npcId as string
+      const speciesId = data.speciesId as string
+      const tileId = data.tileId as string
+      const rows: DerivedMemoryRow[] = [
+        {
+          npcId: victimNpcId,
+          memoryType: 'event',
+          content: { kind: 'animal.attacked_npc', speciesId, tileId, emotionalTag: 'fear', narration, tick },
+          importance: 8,
+        },
+      ]
+      for (const [npcId, npcTile] of npcTileMap) {
+        if (npcId === victimNpcId) continue
+        if (npcTile === tileId) {
+          rows.push({
+            npcId,
+            memoryType: 'observation',
+            content: { kind: 'animal.attacked_npc.witnessed', speciesId, victimNpcId, tileId, emotionalTag: 'fear', narration, tick },
+            importance: 7,
+          })
+        } else if ((TILE_ADJACENCY[npcTile] ?? []).includes(tileId)) {
+          rows.push({
+            npcId,
+            memoryType: 'observation',
+            content: { kind: 'animal.attacked_npc.heard', speciesId, victimNpcId, tileId, emotionalTag: 'fear', tick },
+            importance: Math.max(1, 7 - 2),
+          })
+        }
+      }
+      return rows
+    }
+
+    case 'MIGRATION_WAVE_STARTED': {
+      const fromTileId = data.fromTileId as string
+      const toTileId = data.toTileId as string
+      const speciesId = data.speciesId as string
+      return fanOutByLocality(npcTileMap, fromTileId, 7, {
+        kind: 'migration.wave_started',
+        speciesId,
+        fromTileId,
+        toTileId,
+        emotionalTag: 'awe',
+        tick,
+      }, 'observation')
+    }
+
+    case 'SPECIES_EXTINCT': {
+      const speciesId = data.speciesId as string
+      const lastSeenTick = data.lastSeenTick as number
+      return [
+        {
+          npcId: 'world',
+          memoryType: 'event',
+          content: { kind: 'species.extinct', speciesId, lastSeenTick, emotionalTag: 'grief', tick },
+          importance: 8,
+        },
+      ]
+    }
+
+    case 'SETTLEMENT_FORMED': {
+      const tileId = data.tileId as string
+      const settlementId = data.settlementId as string
+      return fanOutByLocality(npcTileMap, tileId, 7, {
+        kind: 'settlement.formed',
+        tileId,
+        settlementId,
+        emotionalTag: 'relief',
+        tick,
+      }, 'event')
+    }
+
+    case 'SETTLEMENT_DECLINED': {
+      const tileId = data.tileId as string
+      const settlementId = data.settlementId as string
+      return fanOutByLocality(npcTileMap, tileId, 9, {
+        kind: 'settlement.declined',
+        tileId,
+        settlementId,
+        emotionalTag: 'fear',
+        tick,
+      }, 'event')
+    }
+
+    case 'GOODS_TRANSPORT_LOST': {
+      const carrierNpcId = data.carrierNpcId as string
+      const goodsId = data.goodsId as string
+      const fromTileId = data.fromTileId as string
+      const toTileId = data.toTileId as string
+      const lostNarration = typeof data.narration === 'string' ? data.narration : null
+      return [
+        {
+          npcId: carrierNpcId,
+          memoryType: 'event',
+          content: { kind: 'goods.transport_lost', goodsId, fromTileId, toTileId, emotionalTag: 'anger', narration: lostNarration, tick },
+          importance: 5,
+        },
+      ]
+    }
+
+    case 'COMBAT_DEFEAT': {
+      const actorId = data.actorId as string
+      const defeatedByActorId = data.defeatedByActorId as string | undefined
+      const rows: DerivedMemoryRow[] = [
+        {
+          npcId: actorId,
+          memoryType: 'event',
+          content: { kind: 'combat.defeat', defeatedByActorId: defeatedByActorId ?? null, emotionalTag: 'fear', tick },
+          importance: 7,
+        },
+      ]
+      const defeatedTile = npcTileMap.get(actorId)
+      if (defeatedTile) {
+        for (const [npcId, npcTile] of npcTileMap) {
+          if (npcId === actorId) continue
+          if (npcTile === defeatedTile) {
+            rows.push({
+              npcId,
+              memoryType: 'observation',
+              content: { kind: 'combat.defeat.witnessed', defeatedNpcId: actorId, emotionalTag: 'fear', tick },
+              importance: 6,
+            })
+          }
+        }
+      }
+      return rows
+    }
+
+    default:
+      return []
+  }
+}
+
+function fanOutByLocality(
+  npcTileMap: ReadonlyMap<string, string>,
+  eventTileId: string,
+  baseImportance: number,
+  contentBase: Record<string, unknown>,
+  memoryType: NpcMemoryType
+): readonly DerivedMemoryRow[] {
+  const rows: DerivedMemoryRow[] = []
+  for (const [npcId, npcTile] of npcTileMap) {
+    if (npcTile === eventTileId) {
+      rows.push({ npcId, memoryType, content: contentBase, importance: baseImportance })
+    } else if ((TILE_ADJACENCY[npcTile] ?? []).includes(eventTileId)) {
+      rows.push({ npcId, memoryType, content: contentBase, importance: Math.max(1, baseImportance - 2) })
+    }
+  }
+  return rows
 }
 
 function insertMemoryRows(
