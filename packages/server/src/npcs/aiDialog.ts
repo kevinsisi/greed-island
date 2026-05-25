@@ -59,6 +59,26 @@ export type HouseholdContextRow = Readonly<{
   role: string
 }>
 
+export const PLAYER_ALIAS_TIERS = [
+  { minTrust: 90, alias: '摯友' },
+  { minTrust: 75, alias: '老友' },
+  { minTrust: 60, minCount: 10, alias: '常客老友' },
+  { minTrust: 60, alias: '朋友' },
+  { minTrust: 30, minCount: 10, alias: '常客' },
+  { minTrust: 30, alias: '熟識的訪客' },
+  { minTrust: 0, alias: '面熟的旅人' },
+] as const
+
+export function computePlayerAlias(trust: number, interactionCount: number): string {
+  if (interactionCount === 0) return '陌生旅人'
+  if (interactionCount <= 2) return '旅人'
+  for (const tier of PLAYER_ALIAS_TIERS) {
+    const countOk = 'minCount' in tier ? interactionCount >= tier.minCount : true
+    if (trust >= tier.minTrust && countOk) return tier.alias
+  }
+  return '面熟的旅人'
+}
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -86,6 +106,7 @@ export type AiDialogContext = Readonly<{
   dominantFaction?: string | null
   tileHistoryArcs?: readonly TileHistoryArcContext[]
   householdMembers?: readonly HouseholdContextRow[]
+  playerAlias?: string
   beliefContext?: string
   reflectionContext?: string
   memoryContext?: string
@@ -195,6 +216,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildKnownPersonBlock(ctx.knownPersonNames),
     ...buildRelationshipBlock(ctx.relationshipContext),
     ...buildHouseholdBlock(ctx.householdMembers),
+    ...buildPlayerAliasBlock(ctx.playerAlias),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
       [
@@ -471,6 +493,15 @@ export function buildHouseholdBlock(members: readonly HouseholdContextRow[] | un
     `### 你的家人（同一個家庭的其他成員，目前仍在世）`,
     memberLines,
     `這些是你在這個世界裡的家人。你了解他們的日常、習慣、個性，但不要刻意每次都主動提及他們——只在對話自然帶到的時候用。`,
+    '',
+  ]
+}
+
+export function buildPlayerAliasBlock(alias: string | undefined): string[] {
+  if (!alias) return []
+  return [
+    `### 你對這位玩家的私稱`,
+    `你在心裡（和自然對話中）稱這位玩家為「${alias}」。這個稱謂反映你們的關係深度，在對話中可以自然地用它來稱呼對方，但不要強行解釋這個稱謂的由來。`,
     '',
   ]
 }

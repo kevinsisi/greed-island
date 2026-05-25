@@ -1,6 +1,6 @@
 {
   "name": "greed-island",
-  "version": "0.69.0",
+  "version": "0.70.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -23,4 +23,5 @@
     "vitest": "^3.1.3"
   }
 }
+
 

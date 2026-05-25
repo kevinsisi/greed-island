@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, computePlayerAlias, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow } from '../npcs/aiDialog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -259,6 +259,9 @@ export function createNpcRouter(input: {
         const reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined
         const memoryCtx = input.runtime.getFormattedMemoryContext(npcId) || undefined
 
+        // alias memory — the NPC's private name for this player based on relationship history
+        const playerAlias = previousCount > 0 ? computePlayerAlias(previousTrust, previousCount) : undefined
+
         const dialogCtx: AiDialogContext = {
           profile,
           player,
@@ -272,6 +275,7 @@ export function createNpcRouter(input: {
           ...(knownPersonNames ? { knownPersonNames } : {}),
           ...(relationshipContext ? { relationshipContext } : {}),
           ...(householdMembers ? { householdMembers } : {}),
+          ...(playerAlias ? { playerAlias } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),

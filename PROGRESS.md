@@ -5,6 +5,38 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.70.0
+
+### Current Version
+`0.70.0` — TypeScript build clean. 1072 tests pass (1 pre-existing timeout). Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.70.0)
+
+**v0.70.0 — NPC Alias Memory Dialog Injection (§11.9 alias gap)**
+- `PLAYER_ALIAS_TIERS` table + `computePlayerAlias(trust, interactionCount)` pure function in `aiDialog.ts`
+- Low interaction count (0 → 陌生旅人, 1-2 → 旅人) gates trust-tier evaluation — familiarity must be earned
+- Trust tiers for count ≥ 3: 摯友 (trust≥90), 老友 (≥75), 常客老友 (≥60 + ≥10 interactions), 朋友 (≥60), 常客 (≥30 + ≥10 interactions), 熟識的訪客 (≥30), 面熟的旅人 (fallback)
+- `playerAlias?: string` field added to `AiDialogContext`
+- `buildPlayerAliasBlock(alias)` renders "你對這位玩家的私稱是「X」" section into NPC system prompt
+- `npc.ts` computes alias from `previousTrust` + `previousCount`; skips injection on first interaction (count=0)
+- 13 new tests in `aiDialog.test.ts` covering all tiers + edge cases + block render
+- Closes §11.9 alias memory gap (relationship + household + alias now all injected)
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET still used for area/building/weather state
+- §11.9 long-term social history indexing (last gap; relationship + household + alias now done)
+- Roads/bridges as map features
+- NPC household permanent migration
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.69.0
 
 ### Current Version

@@ -10,6 +10,8 @@ import {
   buildSkillBlock,
   buildReflectionBlock,
   buildMemoryBlock,
+  buildPlayerAliasBlock,
+  computePlayerAlias,
   parseReply,
 } from './aiDialog.js'
 
@@ -431,5 +433,68 @@ describe('buildMemoryBlock', () => {
     expect(result.length).toBeGreaterThan(0)
     expect(result.join('\n')).toContain('個人記憶')
     expect(result.join('\n')).toContain(ctx)
+  })
+})
+
+describe('computePlayerAlias', () => {
+  it('returns 陌生旅人 for zero interactions', () => {
+    expect(computePlayerAlias(50, 0)).toBe('陌生旅人')
+  })
+
+  it('returns 旅人 for 1-2 interactions any trust', () => {
+    expect(computePlayerAlias(0, 1)).toBe('旅人')
+    expect(computePlayerAlias(95, 2)).toBe('旅人')
+  })
+
+  it('returns 摯友 for trust ≥ 90 with ≥ 3 interactions', () => {
+    expect(computePlayerAlias(90, 3)).toBe('摯友')
+    expect(computePlayerAlias(100, 20)).toBe('摯友')
+  })
+
+  it('returns 老友 for trust 75-89 with ≥ 3 interactions', () => {
+    expect(computePlayerAlias(75, 5)).toBe('老友')
+    expect(computePlayerAlias(89, 3)).toBe('老友')
+  })
+
+  it('returns 常客老友 for trust ≥ 60 and ≥ 10 interactions', () => {
+    expect(computePlayerAlias(60, 10)).toBe('常客老友')
+    expect(computePlayerAlias(74, 15)).toBe('常客老友')
+  })
+
+  it('returns 朋友 for trust ≥ 60 and < 10 interactions', () => {
+    expect(computePlayerAlias(60, 3)).toBe('朋友')
+    expect(computePlayerAlias(74, 9)).toBe('朋友')
+  })
+
+  it('returns 常客 for trust 30-59 and ≥ 10 interactions', () => {
+    expect(computePlayerAlias(30, 10)).toBe('常客')
+    expect(computePlayerAlias(59, 20)).toBe('常客')
+  })
+
+  it('returns 熟識的訪客 for trust 30-59 and 3-9 interactions', () => {
+    expect(computePlayerAlias(30, 3)).toBe('熟識的訪客')
+    expect(computePlayerAlias(59, 9)).toBe('熟識的訪客')
+  })
+
+  it('returns 面熟的旅人 for trust < 30 and ≥ 3 interactions', () => {
+    expect(computePlayerAlias(0, 3)).toBe('面熟的旅人')
+    expect(computePlayerAlias(29, 9)).toBe('面熟的旅人')
+  })
+})
+
+describe('buildPlayerAliasBlock', () => {
+  it('returns [] when alias is undefined', () => {
+    expect(buildPlayerAliasBlock(undefined)).toEqual([])
+  })
+
+  it('contains the alias in the block', () => {
+    const result = buildPlayerAliasBlock('老友')
+    expect(result.join('\n')).toContain('老友')
+  })
+
+  it('contains private-name instruction', () => {
+    const result = buildPlayerAliasBlock('常客')
+    const text = result.join('\n')
+    expect(text).toContain('私稱')
   })
 })
