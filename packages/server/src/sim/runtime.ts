@@ -135,6 +135,7 @@ import { planSimpleHunt } from '../ecosystem/hunting.js'
 import { planLegendarySpawns } from '../ecosystem/legendarySpawnPlanner.js'
 import { LegendaryHuntTracker } from '../ecosystem/legendaryHuntPlanner.js'
 import { planFactionEcology } from '../ecosystem/factionEcologyPlanner.js'
+import { planFactionEcologyConflict } from '../ecosystem/factionEcologyConflictPlanner.js'
 import { WorldEventProjection } from '../projections/worldEvent.js'
 import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
@@ -222,7 +223,7 @@ import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type Hi
 import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
-import { BeliefProjection, formatBeliefContext } from '../projections/beliefProjection.js'
+import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
@@ -2240,6 +2241,35 @@ export class SimulationRuntime {
                   }
                 )
               )
+              // Faction ecology conflict — tide_hunters contest the collapsed fishery tile
+              const fisheryConflict = planFactionEcologyConflict({
+                tileId: fishery.tileId,
+                resourceType: 'fishery',
+                contestingFactionId: 'tide_hunters',
+                tick: nextTick,
+                getDominantFaction: (tid) => this.factionControlProjection.dominantFactionOf(tid),
+              })
+              if (fisheryConflict) {
+                const resourceLabel = '漁場'
+                commands.push(
+                  makeLivingWorldCommand('FACTION_ECOLOGY_CONFLICT_STARTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                    conflictId: fisheryConflict.conflictId,
+                    tileId: fisheryConflict.tileId,
+                    resourceType: fisheryConflict.resourceType,
+                    contestingFactionId: fisheryConflict.contestingFactionId,
+                    currentFactionId: fisheryConflict.currentFactionId,
+                    tick: nextTick,
+                    narration: `潮獵者趁${fishery.tileId}的${resourceLabel}崩潰之際爭奪控制權。`,
+                  }),
+                  makeLivingWorldCommand('FACTION_TILE_SEIZED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                    tileId: fisheryConflict.tileId,
+                    factionId: fisheryConflict.contestingFactionId,
+                    previousFactionId: fisheryConflict.currentFactionId,
+                    seizedAtTick: nextTick,
+                    narration: `潮獵者在漁場崩潰後奪取了${fishery.tileId}的控制權。`,
+                  }),
+                )
+              }
             }
           }
         }
@@ -3119,6 +3149,34 @@ export class SimulationRuntime {
             tileId, pressureLevel: newLevel, depletedAtTick: nextTick,
             narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的森林於第 ${nextTick} 轉因過度開發而走向衰竭`,
           }))
+          // Faction ecology conflict — free_runners contest the depleted forest tile
+          const forestConflict = planFactionEcologyConflict({
+            tileId,
+            resourceType: 'forest',
+            contestingFactionId: 'free_runners',
+            tick: nextTick,
+            getDominantFaction: (tid) => this.factionControlProjection.dominantFactionOf(tid),
+          })
+          if (forestConflict) {
+            commands.push(
+              makeLivingWorldCommand('FACTION_ECOLOGY_CONFLICT_STARTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                conflictId: forestConflict.conflictId,
+                tileId: forestConflict.tileId,
+                resourceType: forestConflict.resourceType,
+                contestingFactionId: forestConflict.contestingFactionId,
+                currentFactionId: forestConflict.currentFactionId,
+                tick: nextTick,
+                narration: `自由跑者趁${tileId}的林地衰竭之際爭奪控制權。`,
+              }),
+              makeLivingWorldCommand('FACTION_TILE_SEIZED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+                tileId: forestConflict.tileId,
+                factionId: forestConflict.contestingFactionId,
+                previousFactionId: forestConflict.currentFactionId,
+                seizedAtTick: nextTick,
+                narration: `自由跑者在森林衰竭後奪取了${tileId}的控制權。`,
+              }),
+            )
+          }
         }
         if (planPollution({ currentPressureLevel: newLevel, previousPressureLevel: row.pressureLevel }) === 'increased') {
           const pollutionLevel = Math.round(newLevel / 2)

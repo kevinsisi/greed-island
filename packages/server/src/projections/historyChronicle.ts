@@ -45,6 +45,7 @@ export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'FISHERY_RECOVERED',
   'FOREST_DEPLETED',
   'BIOME_RECOVERED',
+  'FACTION_ECOLOGY_CONFLICT_STARTED',
   'MIGRATION_WAVE_STARTED',
   'LEGENDARY_HUNT_STARTED',
   'LEGENDARY_HUNT_CONCLUDED',
@@ -355,6 +356,28 @@ export class HistoryChronicleProjection {
           narrationZh: dominantFactionId
             ? `${losingFactionId} 在第 ${tick} 刻失去所有領地，${dominantFactionId} 取得主導地位。`
             : `${losingFactionId} 在第 ${tick} 刻失去所有領地，退出歷史舞台。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'FACTION_ECOLOGY_CONFLICT_STARTED': {
+        const { conflictId, tileId, resourceType, contestingFactionId, currentFactionId, tick } = p as {
+          conflictId?: string; tileId?: string; resourceType?: string
+          contestingFactionId?: string; currentFactionId?: string | null; tick?: number
+        }
+        if (!str(conflictId) || !str(tileId) || !str(contestingFactionId) || !int(tick)) return
+        const arcId = `arc.faction_seizure.ecology.${conflictId}`
+        const entities = [contestingFactionId!, ...(currentFactionId ? [currentFactionId] : [])]
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'faction_seizure',
+          status: 'concluded',
+          startTick: tick!,
+          endTick: tick!,
+          tileId: tileId!,
+          involvedEntityIds: entities,
+          narrationZh: `${contestingFactionId} 在 ${tileId} 的${resourceType === 'fishery' ? '漁場' : '森林'}崩潰後爭奪控制權（第 ${tick} 刻）。`,
           lastSequence: event.sequence,
         })
         break

@@ -167,6 +167,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'SPECIES_POPULATION_SHIFTED',
   'POLLUTION_INCREASED',
   'POLLUTION_RECOVERED',
+  'FACTION_ECOLOGY_CONFLICT_STARTED',
   // Phase E3 — Domestication
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
@@ -1350,6 +1351,16 @@ export type IndustrialSiteSabotagedCmd = Readonly<{
   narration: string | null
 }>
 
+export type FactionEcologyConflictStartedCmd = Readonly<{
+  conflictId: string
+  tileId: string
+  resourceType: 'fishery' | 'forest'
+  contestingFactionId: string
+  currentFactionId: string | null
+  tick: number
+  narration: string
+}>
+
 export type RitualEcosystemManipulationCmd = Readonly<{
   factionId: string
   tick: number
@@ -1582,6 +1593,7 @@ export type LivingWorldCommandPayload =
   | FishingQuotaEnforcedCmd
   | IndustrialSiteSabotagedCmd
   | RitualEcosystemManipulationCmd
+  | FactionEcologyConflictStartedCmd
   | PlayerPickedUpGoodsCmd
   | PlayerTradedGoodsCmd
   | PlayerHuntedAnimalCmd
@@ -2776,6 +2788,17 @@ const VALIDATORS: Readonly<
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.factionId !== 'string' || p.factionId.length === 0) return 'factionId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  FACTION_ECOLOGY_CONFLICT_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.conflictId !== 'string' || p.conflictId.length === 0) return 'conflictId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (p.resourceType !== 'fishery' && p.resourceType !== 'forest') return 'resourceType must be fishery or forest'
+    if (typeof p.contestingFactionId !== 'string' || p.contestingFactionId.length === 0) return 'contestingFactionId required'
+    if (p.currentFactionId !== null && typeof p.currentFactionId !== 'string') return 'currentFactionId must be string or null'
+    if (!isNonNegativeInteger(p.tick)) return 'tick required'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
   // Phase 6 — Player Civilization
