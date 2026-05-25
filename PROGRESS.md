@@ -5,6 +5,36 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.77.0
+
+### Current Version
+`0.77.0` — TypeScript build clean. 1147 tests pass (1037 server + 110 web). Commits pushed to `main`.
+
+### What Was Shipped (v0.77.0)
+
+**v0.77.0 — Phase 5 Persistent Combat Consequences (§30.7 closed)**
+- `NPC_LONG_INCAP_TICKS = TICKS_PER_DAY * 3` — 3 in-game days of post-combat recovery
+- New `NPC_INCAPACITATED_LONG` command type + `NpcIncapacitatedLongCmd` payload; Rule Engine validator added
+- New `COMBAT_WITNESS_RECORDED` command type + `CombatWitnessRecordedCmd` payload; Rule Engine validator added
+- `NpcIncapacitationProjection` in `projections/npcIncapacitation.ts`: tracks which NPCs are incapacitated until `recoverAtTick`; `isIncapacitated(npcId, tick)` for O(1) lookup; `NPC_INCAPACITATION_BOOT_EVENT_TYPES` for large-log selective rebuild
+- `publishCommittedEvents()`: on `COMBAT_RESOLVE` with `outcome === 'player_victory'` + `enemy_type === 'npc'`, auto-emits `NPC_INCAPACITATED_LONG` for the defeated NPC and `COMBAT_WITNESS_RECORDED` for every NPC on the same tile
+- `HistoryChronicleProjection`: new arc types `'npc_incapacitation'` and `'combat_witness'`; both event types added to `HISTORY_CHRONICLE_BOOT_EVENT_TYPES`
+- `npcEngine.tick()`: incapacitated NPCs are filtered out of the active NPC partition so they skip full behavioral policy while recovering
+- `NpcIncapacitationProjection` wired into incremental `project()` path, small-log rebuild, and large-log selective rebuild
+- 9 tests in `npcIncapacitation.test.ts`
+- WORLD_CAPABILITIES.md §30.7 Phase 5 gap fully closed
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Carrier NPC autonomous routing (NPCs independently choosing trade routes based on market signals)
+
+### CI/CD State
+Main branch; local commit ready. GitHub returned 500 errors on push — retry when available.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.76.0
 
 ### Current Version

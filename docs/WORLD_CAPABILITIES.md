@@ -2119,6 +2119,12 @@ Skill XP carries `lineage`.
 
 Combat events feed history projection (§30.9). Wildlife combat events feed species population (§30.13).
 
+✅ **Phase 5 Persistent Combat Consequences (v0.77.0):**
+- `FACTION_DOMINANCE_SHIFTED` ✅ CLOSED v0.57.0; `TERRITORY_CLAIM_CHANGED` ✅ CLOSED v0.58.0; `NPC_DECEASED` ✅ CLOSED v0.32.0
+- `NPC_INCAPACITATED_LONG` ✅ CLOSED v0.77.0 — `COMBAT_RESOLVE` with `player_victory` auto-emits incapacitation event; `NpcIncapacitationProjection` tracks active incapacitations; incapacitated NPCs excluded from active partition
+- `COMBAT_WITNESS_RECORDED` ✅ CLOSED v0.77.0 — all NPCs on the combat tile at resolution time receive a witness event; arc stored in `HistoryChronicleProjection` (`combat_witness` arc type)
+- `NpcIncapacitationProjection` boot-hydrates from `NPC_INCAPACITATED_LONG` events (selective large-log rebuild)
+
 ### 30.8 Cards As World Rule Operators (Part I §8)
 
 **Reframe:** cards modify rule evaluation for a bounded scope.

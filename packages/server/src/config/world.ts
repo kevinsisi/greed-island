@@ -256,6 +256,7 @@ export const ROAD_TRAVEL_SPEED_MULTIPLIER = 1.5  // roads reduce cross-tile trav
 export const MIGRATION_PUSH_SAFETY_THRESHOLD = 20   // home tile safety must be below this
 export const MIGRATION_PULL_SAFETY_MIN = 50          // target tile safety must be above this
 export const MIGRATION_MAX_PER_CADENCE = 1           // at most one NPC migrates per cadence tick
+export const NPC_LONG_INCAP_TICKS = TICKS_PER_DAY * 3  // combat defeat → 3 days of incapacitation
 
 // NPC Intention Layer (v0.51.0)
 export const INTENT_RECOMPUTE_INTERVAL = TICKS_PER_HOUR * 2

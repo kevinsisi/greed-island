@@ -72,6 +72,7 @@ import {
   MORTALITY_CADENCE_TICKS,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
+  NPC_LONG_INCAP_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
   INTENT_OVERRIDE_DURATION_TICKS,
   INTENT_URGENCY_THRESHOLD,
@@ -222,6 +223,7 @@ import { planHouseholdMigration } from './householdMigrationPlanner.js'
 import { planRoadConstruction } from './roadConstructionPlanner.js'
 import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
 import { ActiveRuleOperatorsProjection, ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES } from '../projections/activeRuleOperators.js'
+import { NpcIncapacitationProjection, NPC_INCAPACITATION_BOOT_EVENT_TYPES } from '../projections/npcIncapacitation.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { FactionDominanceProjection } from '../projections/factionDominance.js'
 import { planFactionDominance } from './factionDominancePlanner.js'
@@ -562,6 +564,7 @@ export class SimulationRuntime {
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
   private readonly roadNetworkProjection = new RoadNetworkProjection()
   private readonly activeRuleOperatorsProjection = new ActiveRuleOperatorsProjection()
+  private readonly npcIncapacitationProjection = new NpcIncapacitationProjection()
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
 
@@ -1647,6 +1650,7 @@ export class SimulationRuntime {
       this.buildingOccupantsProjection.project(ev)
       this.roadNetworkProjection.project(ev)
       this.activeRuleOperatorsProjection.project(ev)
+      this.npcIncapacitationProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.intentProjection.project(ev)
       this.npcStateProjection.project(ev)
@@ -1711,6 +1715,51 @@ export class SimulationRuntime {
                 }
               )
               this.commitLivingWorldCommand(activationCmd)
+            }
+          }
+        }
+      }
+      // Phase 5 — persistent combat consequences on NPC defeat (v0.77.0)
+      if (ev.eventType === 'COMBAT_RESOLVE') {
+        const d = (ev.payload as { data?: Record<string, unknown> })?.data
+        const combatId = typeof d?.combatId === 'string' ? d.combatId : null
+        const outcome = typeof d?.outcome === 'string' ? d.outcome : null
+        if (combatId && outcome === 'player_victory') {
+          const session = this.combatStore?.getSession(combatId)
+          if (session && session.enemy_type === 'npc') {
+            const recoverAtTick = this.currentTick + NPC_LONG_INCAP_TICKS
+            this.commitLivingWorldCommand(makeLivingWorldCommand(
+              'NPC_INCAPACITATED_LONG',
+              SIM_ACTOR_WORLD,
+              'system',
+              this.currentTick,
+              Date.now(),
+              {
+                npcId: session.npc_id,
+                tileId: session.tile_id,
+                incapacitatedAtTick: this.currentTick,
+                recoverAtTick,
+                narration: `${session.npc_id}在戰鬥中落敗，需於 ${session.tile_id} 靜養至第 ${recoverAtTick} tick。`,
+              }
+            ))
+            const witnessNpcs = this.npcStateProjection.getAll()
+              .filter(n => n.state.tile === session.tile_id && n.npcId !== session.npc_id)
+            for (const witness of witnessNpcs) {
+              this.commitLivingWorldCommand(makeLivingWorldCommand(
+                'COMBAT_WITNESS_RECORDED',
+                SIM_ACTOR_WORLD,
+                'system',
+                this.currentTick,
+                Date.now(),
+                {
+                  witnessNpcId: witness.npcId,
+                  combatId,
+                  defeatedNpcId: session.npc_id,
+                  tileId: session.tile_id,
+                  witnessedAtTick: this.currentTick,
+                  narration: `${witness.npcId}目睹了${session.npc_id}在此地的戰敗。`,
+                }
+              ))
             }
           }
         }
@@ -1819,12 +1868,21 @@ export class SimulationRuntime {
       row: b.placement.row,
       state: this.buildingStateProjection.getState(b.id).state,
     }))
+    // Exclude incapacitated NPCs from the active set so they skip full behavioral policy.
+    const incapacitatedNpcIds = new Set(
+      this.npcIncapacitationProjection.list()
+        .filter(r => nextTick < r.recoverAtTick)
+        .map(r => r.npcId)
+    )
+    const effectiveActiveNpcSet = incapacitatedNpcIds.size > 0
+      ? new Set([...npcPartition.active].filter(id => !incapacitatedNpcIds.has(id)))
+      : npcPartition.active
     const npcResult = this.npcEngine.tick(nextTick, {
       areaSafety,
       areaEconomy,
       weather: this.weather,
       rareWindowOpen: this.rareWindowOpen,
-      activeNpcSet: npcPartition.active,
+      activeNpcSet: effectiveActiveNpcSet,
       npcsInsideBuildings,
       mountedNpcIds,
       buildingStates,
@@ -4811,6 +4869,7 @@ export class SimulationRuntime {
         this.buildingOccupantsProjection.project(ev)
         this.roadNetworkProjection.project(ev)
         this.activeRuleOperatorsProjection.project(ev)
+        this.npcIncapacitationProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
@@ -5485,6 +5544,7 @@ export class SimulationRuntime {
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.roadNetworkProjection.rebuildFromEvents(allEvents)
       this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
+      this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
@@ -5542,6 +5602,9 @@ export class SimulationRuntime {
       // ActiveRuleOperators projection — rebuild active card rule operators from activation/expiry events.
       const ruleOperatorEvents = this.store.readEventsByTypes(ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES)
       this.activeRuleOperatorsProjection.rebuildFromEvents(ruleOperatorEvents)
+      // NpcIncapacitation projection — rebuild incapacitated NPCs from NPC_INCAPACITATED_LONG events.
+      const npcIncapEvents = this.store.readEventsByTypes(NPC_INCAPACITATION_BOOT_EVENT_TYPES)
+      this.npcIncapacitationProjection.rebuildFromEvents(npcIncapEvents)
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)

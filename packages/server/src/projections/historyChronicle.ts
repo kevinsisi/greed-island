@@ -16,6 +16,8 @@ export type HistoryArcType =
   | 'great_migration'
   | 'legendary_hunt'
   | 'combat_outcome'
+  | 'npc_incapacitation'
+  | 'combat_witness'
 
 export type HistoryArcStatus = 'active' | 'concluded'
 
@@ -52,6 +54,8 @@ export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'LEGENDARY_HUNT_CONCLUDED',
   'COMBAT_INITIATE',
   'COMBAT_RESOLVE',
+  'NPC_INCAPACITATED_LONG',
+  'COMBAT_WITNESS_RECORDED',
 ] as const
 
 export class HistoryChronicleProjection {
@@ -494,6 +498,46 @@ export class HistoryChronicleProjection {
           narrationZh: narration
             ? narration
             : `戰鬥在 ${tileId ?? '未知地點'} 結束（歷時 ${durationRounds ?? '?'} 回合）：${outcomeZh}。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'NPC_INCAPACITATED_LONG': {
+        const { npcId, tileId: incapTileId, incapacitatedAtTick, recoverAtTick } = p as {
+          npcId?: string; tileId?: string; incapacitatedAtTick?: number; recoverAtTick?: number
+        }
+        if (!str(npcId)) return
+        const arcId = `arc.npc_incapacitation.${npcId}.${incapacitatedAtTick ?? 0}`
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'npc_incapacitation',
+          status: 'active',
+          startTick: incapacitatedAtTick ?? event.tick ?? 0,
+          endTick: recoverAtTick ?? null,
+          tileId: incapTileId ?? null,
+          involvedEntityIds: [npcId!],
+          narrationZh: `${npcId} 在戰鬥中落敗，於 ${incapTileId ?? '未知地點'} 靜養，預計在第 ${recoverAtTick ?? '?'} tick 恢復。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'COMBAT_WITNESS_RECORDED': {
+        const { witnessNpcId, combatId: witnessCombatId, defeatedNpcId, tileId: witnessTileId, witnessedAtTick } = p as {
+          witnessNpcId?: string; combatId?: string; defeatedNpcId?: string; tileId?: string; witnessedAtTick?: number
+        }
+        if (!str(witnessNpcId) || !str(witnessCombatId)) return
+        const arcId = `arc.combat_witness.${witnessCombatId}.${witnessNpcId}`
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'combat_witness',
+          status: 'concluded',
+          startTick: witnessedAtTick ?? event.tick ?? 0,
+          endTick: witnessedAtTick ?? event.tick ?? 0,
+          tileId: witnessTileId ?? null,
+          involvedEntityIds: [witnessNpcId!, ...(defeatedNpcId ? [defeatedNpcId] : [])],
+          narrationZh: `${witnessNpcId} 目睹了 ${defeatedNpcId ?? '某人'} 在 ${witnessTileId ?? '此地'} 的戰敗。`,
           lastSequence: event.sequence,
         })
         break

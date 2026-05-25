@@ -217,6 +217,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Cards as World Rule Operators (v0.76.0)
   'CARD_RULE_OPERATOR_ACTIVATED',
   'CARD_RULE_OPERATOR_EXPIRED',
+  // Phase 5 Persistent Combat Consequences (v0.77.0)
+  'NPC_INCAPACITATED_LONG',
+  'COMBAT_WITNESS_RECORDED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -465,6 +468,23 @@ export type CardRuleOperatorExpiredCmd = Readonly<{
   cardId: string
   playerId: string
   expiredAtTick: number
+  narration: string
+}>
+
+export type NpcIncapacitatedLongCmd = Readonly<{
+  npcId: string
+  tileId: string
+  incapacitatedAtTick: number
+  recoverAtTick: number
+  narration: string
+}>
+
+export type CombatWitnessRecordedCmd = Readonly<{
+  witnessNpcId: string
+  combatId: string
+  defeatedNpcId: string
+  tileId: string
+  witnessedAtTick: number
   narration: string
 }>
 
@@ -1676,6 +1696,8 @@ export type LivingWorldCommandPayload =
   | RoadDestroyedCmd
   | CardRuleOperatorActivatedCmd
   | CardRuleOperatorExpiredCmd
+  | NpcIncapacitatedLongCmd
+  | CombatWitnessRecordedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3093,6 +3115,25 @@ const VALIDATORS: Readonly<
     if (typeof p.cardId !== 'string' || p.cardId.length === 0) return 'cardId required'
     if (typeof p.playerId !== 'string' || p.playerId.length === 0) return 'playerId required'
     if (!isNonNegativeInteger(p.expiredAtTick)) return 'expiredAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_INCAPACITATED_LONG: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.incapacitatedAtTick)) return 'incapacitatedAtTick must be non-negative integer'
+    if (!isNonNegativeInteger(p.recoverAtTick)) return 'recoverAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  COMBAT_WITNESS_RECORDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.witnessNpcId !== 'string' || p.witnessNpcId.length === 0) return 'witnessNpcId required'
+    if (typeof p.combatId !== 'string' || p.combatId.length === 0) return 'combatId required'
+    if (typeof p.defeatedNpcId !== 'string' || p.defeatedNpcId.length === 0) return 'defeatedNpcId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.witnessedAtTick)) return 'witnessedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
