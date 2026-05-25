@@ -5,6 +5,65 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.61.0
+
+### Current Version
+`0.61.0` — TypeScript build clean. 937 tests pass across 125 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.58.0 → v0.61.0)
+
+**v0.59.0 — SPECIES_POPULATION_SHIFTED (§43.2 NPC dialog grounding)**
+
+物種族群下降事件上線。當某物種的全球數量相比上一 tick 快照下降 ≥25%，發出 `SPECIES_POPULATION_SHIFTED`。為 §43.2 標準「NPC 討論消失的動物」提供具名動物的對話錨點（補充既有的 extinctionWarnings）。
+
+**修改檔案：**
+- `packages/server/src/ecosystem/speciesPopulationPlanner.ts`：NEW — 純函數 planSpeciesPopulationShifts
+- `packages/server/src/ecosystem/speciesPopulationPlanner.test.ts`：NEW — 8 tests
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 SPECIES_POPULATION_SHIFTED command type + SpeciesPopulationShiftedCmd + validator；加入 ECOSYSTEM_BOOT_EVENT_TYPES
+- `packages/server/src/config/world.ts`：POPULATION_SHIFT_MIN_PERCENT = 0.25
+- `packages/server/src/sim/runtime.ts`：previousSpeciesPopulationTotals in-memory map；Phase E2.1b block；boot 初始化
+
+**v0.60.0 — POLLUTION_INCREASED + POLLUTION_RECOVERED (§6.5 catalog)**
+
+工業化污染事件上線。當 ecosystemPressureLevel 首次達到 POLLUTION_THRESHOLD（40），發出 POLLUTION_INCREASED；降回 threshold 以下時發出 POLLUTION_RECOVERED。作為 Phase E2.3 壓力事件的伴生事件。
+
+**修改檔案：**
+- `packages/server/src/ecosystem/pollutionPlanner.ts`：NEW — 純函數 planPollution
+- `packages/server/src/ecosystem/pollutionPlanner.test.ts`：NEW — 8 tests
+- `packages/server/src/kernel/livingWorldCommands.ts`：POLLUTION_INCREASED + POLLUTION_RECOVERED；PollutionIncreasedCmd + PollutionRecoveredCmd；validators；ECOSYSTEM_BOOT_EVENT_TYPES
+- `packages/server/src/config/world.ts`：POLLUTION_THRESHOLD = 40
+- `packages/server/src/sim/runtime.ts`：Phase E2.3 block 補伴生事件
+
+**v0.61.0 — HIDE_COLLECTED + BONE_COLLECTED (§6.5 catalog fully closed)**
+
+狩獵副產品收集事件上線。成功狩獵後，如物種有皮革類副產品（hide, pelt, eel_skin...）發出 HIDE_COLLECTED；有骨骼類副產品（bone, fang, claw...）發出 BONE_COLLECTED。§6.5 事件目錄現已完整。
+
+**修改檔案：**
+- `packages/server/src/kernel/livingWorldCommands.ts`：HIDE_COLLECTED + BONE_COLLECTED；HideCollectedCmd + BoneCollectedCmd；validators
+- `packages/server/src/sim/runtime.ts`：HIDE_BYPRODUCTS + BONE_BYPRODUCTS sets；NPC hunt resolution block 補伴生事件
+
+**§43 Progress After v0.61.0:**
+- ✅ §43.1 criterion 1：NPC_DECEASED + 繼承記憶
+- ✅ §43.1 criterion 3：FACTION_DOMINANCE_SHIFTED + TERRITORY_CLAIM_CHANGED + TRADE_ROUTE_CLOSED + BUILDING_ABANDONED
+- ✅ §43.2：MIGRATION_WAVE_STARTED、SPECIES_EXTINCTION_WARNING/EXTINCT/RECOVERED、BIOME_RECOVERED、FOREST_DEPLETED、ANIMAL_DOMESTICATED、LIVESTOCK_BRED、extinctionWarnings 對話注入
+- ✅ §43.2 criterion 9（NPCs discuss disappearing animals）：SPECIES_POPULATION_SHIFTED 已上線
+- ✅ §6.5 事件目錄：完整（HIDE_COLLECTED, BONE_COLLECTED, BIOME_RECOVERED, FOREST_DEPLETED, POLLUTION_INCREASED, POLLUTION_RECOVERED, SPECIES_POPULATION_SHIFTED 全部補齊）
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 937 pass
+npm run build                          # clean
+git log --oneline -5                   # c21229c, 84aea9c, c7972cc, cd78440, 2094265
+```
+
+**Next:** 剩餘 §43 gaps：
+1. §43.1 criterion 2 — famine price spike chain：GOODS_TRANSPORT_LOST → MARKET_PRICE_DISCOVERED 是否可觀測（需端對端驗證）
+2. §43.1 criterion 4 — history_chronicle arc delta（world continues while player absent）
+3. §43.2 criterion 4 — FISHERY_COLLAPSED / FOREST_DEPLETED → price spike + NPC migration 端對端驗證
+4. POLLUTION_INCREASED → NPC dialog grounding（需注入 AiDialogContext）
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.58.0
 
 ### Current Version
