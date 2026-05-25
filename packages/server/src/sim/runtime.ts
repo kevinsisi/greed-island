@@ -1534,6 +1534,9 @@ export class SimulationRuntime {
     options: { projectCombatSubTicks?: boolean } = {}
   ): void {
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
+    const npcTileMap = this.npcMemory
+      ? new Map(this.getNpcs().map(n => [n.id, n.location]))
+      : null
     for (const ev of committed) {
       this.combatStore?.projectEvent(ev)
       this.playerJobsStore?.projectEvent(ev)
@@ -1566,8 +1569,7 @@ export class SimulationRuntime {
           }
         }
       }
-      if (this.npcMemory) {
-        const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location]))
+      if (this.npcMemory && npcTileMap) {
         this.npcMemory.project(ev)
         this.npcMemory.projectWithLocality(ev, npcTileMap)
       }
@@ -4386,9 +4388,11 @@ export class SimulationRuntime {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
+      const npcTileMap = this.npcMemory
+        ? new Map(this.getNpcs().map(n => [n.id, n.location]))
+        : null
       for (const ev of committed) {
-        if (this.npcMemory) {
-          const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location]))
+        if (this.npcMemory && npcTileMap) {
           this.npcMemory.project(ev)
           this.npcMemory.projectWithLocality(ev, npcTileMap)
         }
