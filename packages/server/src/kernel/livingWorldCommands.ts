@@ -227,6 +227,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'WALL_DEMOLISHED',
   // Household Joint Decisions (v0.81.0)
   'NPC_HOUSEHOLD_JOINT_DECISION',
+  // Player Goods Carry (v0.82.0)
+  'PLAYER_DEPOSIT_GOODS',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -1200,7 +1202,7 @@ export type MountAssignedCmd = Readonly<{
   narration: string | null
 }>
 
-export const GOODS_HOLDER_TYPES = ['npc', 'building', 'settlement'] as const
+export const GOODS_HOLDER_TYPES = ['npc', 'building', 'settlement', 'player'] as const
 export type GoodsHolderType = (typeof GOODS_HOLDER_TYPES)[number]
 
 export type GoodsExtractedCmd = Readonly<{
@@ -1498,6 +1500,15 @@ export type PlayerPickedUpGoodsCmd = Readonly<{
   tick: number
 }>
 
+export type PlayerDepositGoodsCmd = Readonly<{
+  playerAccountId: string
+  tileId: string
+  settlementId: string
+  goodsId: string
+  quantity: number
+  tick: number
+}>
+
 export type PlayerTradedGoodsCmd = Readonly<{
   playerAccountId: string
   npcId: string
@@ -1717,6 +1728,7 @@ export type LivingWorldCommandPayload =
   | RitualEcosystemManipulationCmd
   | FactionEcologyConflictStartedCmd
   | PlayerPickedUpGoodsCmd
+  | PlayerDepositGoodsCmd
   | PlayerTradedGoodsCmd
   | PlayerHuntedAnimalCmd
   | PlayerFishedCmd
@@ -2939,6 +2951,16 @@ const VALIDATORS: Readonly<
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity must be positive'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  PLAYER_DEPOSIT_GOODS: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.settlementId !== 'string' || p.settlementId.length === 0) return 'settlementId required'
     if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
     if (typeof p.quantity !== 'number' || !Number.isFinite(p.quantity) || p.quantity <= 0) return 'quantity must be positive'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'

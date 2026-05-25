@@ -5,6 +5,36 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.82.0
+
+### Current Version
+`0.82.0` — TypeScript build clean. 1060 server tests pass (135 files). Commits pushed to `main`.
+
+### What Was Shipped (v0.82.0)
+
+**v0.82.0 — Player Goods Carry (§6.1 player agency gap closed)**
+- `'player'` added to `GOODS_HOLDER_TYPES` in `kernel/livingWorldCommands.ts`
+- `PLAYER_DEPOSIT_GOODS` command type + `PlayerDepositGoodsCmd` payload in `kernel/livingWorldCommands.ts`; Rule Engine validator added
+- `kernel/playerCivilizationRouter.ts`: `PLAYER_DEPOSIT_GOODS` added to `PLAYER_CIVILIZATION_COMMAND_TYPES`
+- `projections/goodsInventory.ts`:
+  - `PLAYER_PICKED_UP_GOODS` handler: adds quantity to `holderType: 'player'` row keyed by `playerAccountId`
+  - `PLAYER_DEPOSIT_GOODS` handler: subtracts from player row, adds to `holderType: 'settlement'` row keyed by `settlementId`
+  - `isGoodsHolderType` updated to accept `'player'`
+- `sim/runtime.ts`: `PLAYER_PICKED_UP_GOODS` and `PLAYER_DEPOSIT_GOODS` added to `GOODS_BOOT_EVENT_TYPES` so player inventory survives server restarts
+- 3 new tests in `projections/goodsInventory.test.ts` (135 test files, 1060 tests total)
+- WORLD_CAPABILITIES.md player-carry-goods ❌ gap closed to ✅
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Buildings not upgradeable or capturable
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.81.0
 
 ### Current Version

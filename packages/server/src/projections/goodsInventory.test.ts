@@ -45,6 +45,45 @@ describe('GoodsInventoryProjection', () => {
     expect(projection.get({ goodsId: 'meat', holderType: 'npc', holderId: 'forest.hunter' })?.quantity).toBe(0)
   })
 
+  it('adds goods to player inventory on PLAYER_PICKED_UP_GOODS', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      playerPickupEvent(1, { playerAccountId: 'acc-1', tileId: 't_market', goodsId: 'fish', quantity: 5, tick: 20 }),
+      playerPickupEvent(2, { playerAccountId: 'acc-1', tileId: 't_market', goodsId: 'fish', quantity: 3, tick: 21 }),
+    ])
+
+    const row = projection.get({ goodsId: 'fish', holderType: 'player', holderId: 'acc-1' })
+    expect(row?.quantity).toBe(8)
+    expect(row?.holderType).toBe('player')
+    expect(row?.holderId).toBe('acc-1')
+  })
+
+  it('moves goods from player to settlement on PLAYER_DEPOSIT_GOODS', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      playerPickupEvent(1, { playerAccountId: 'acc-1', tileId: 't_market', goodsId: 'meat', quantity: 10, tick: 30 }),
+      playerDepositEvent(2, { playerAccountId: 'acc-1', tileId: 't_village', settlementId: 'sett-1', goodsId: 'meat', quantity: 6, tick: 35 }),
+    ])
+
+    const playerRow = projection.get({ goodsId: 'meat', holderType: 'player', holderId: 'acc-1' })
+    expect(playerRow?.quantity).toBe(4)
+    const settlementRow = projection.get({ goodsId: 'meat', holderType: 'settlement', holderId: 'sett-1' })
+    expect(settlementRow?.quantity).toBe(6)
+  })
+
+  it('clamps player deposit at zero if player carries less than deposited', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      playerPickupEvent(1, { playerAccountId: 'acc-2', tileId: 't_dock', goodsId: 'fish', quantity: 3, tick: 10 }),
+      playerDepositEvent(2, { playerAccountId: 'acc-2', tileId: 't_dock', settlementId: 'sett-2', goodsId: 'fish', quantity: 10, tick: 11 }),
+    ])
+
+    const playerRow = projection.get({ goodsId: 'fish', holderType: 'player', holderId: 'acc-2' })
+    expect(playerRow?.quantity).toBe(0)
+    const settlementRow = projection.get({ goodsId: 'fish', holderType: 'settlement', holderId: 'sett-2' })
+    expect(settlementRow?.quantity).toBe(10)
+  })
+
   it('rebuilds to an identical canonical hash', () => {
     const events = [
       storedEvent(1, { goodsId: 'fish', quantity: 12, holderId: 'dock.fisher', tileId: 't_dock', tick: 10 }),
@@ -110,6 +149,33 @@ function consumedEvent(
     tileId: input.tileId,
     consumedAtTick: input.tick,
     narration: 'goods consumed',
+  })
+}
+
+function playerPickupEvent(
+  sequence: number,
+  input: { playerAccountId: string; tileId: string; goodsId: string; quantity: number; tick: number }
+): Event {
+  return baseEvent(sequence, 'PLAYER_PICKED_UP_GOODS', input.tick, {
+    playerAccountId: input.playerAccountId,
+    tileId: input.tileId,
+    goodsId: input.goodsId,
+    quantity: input.quantity,
+    tick: input.tick,
+  })
+}
+
+function playerDepositEvent(
+  sequence: number,
+  input: { playerAccountId: string; tileId: string; settlementId: string; goodsId: string; quantity: number; tick: number }
+): Event {
+  return baseEvent(sequence, 'PLAYER_DEPOSIT_GOODS', input.tick, {
+    playerAccountId: input.playerAccountId,
+    tileId: input.tileId,
+    settlementId: input.settlementId,
+    goodsId: input.goodsId,
+    quantity: input.quantity,
+    tick: input.tick,
   })
 }
 

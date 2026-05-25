@@ -5,6 +5,7 @@ import type { SimulationRuntime } from '../sim/runtime.js'
 
 const PLAYER_CIVILIZATION_COMMAND_TYPES = new Set([
   'PLAYER_PICKED_UP_GOODS',
+  'PLAYER_DEPOSIT_GOODS',
   'PLAYER_TRADED_GOODS',
   'PLAYER_HUNTED_ANIMAL',
   'PLAYER_FISHED',

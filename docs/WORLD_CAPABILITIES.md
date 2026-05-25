@@ -1937,7 +1937,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 **New since v0.15.47 (Phase 6, v0.30.0–v0.31.0):**
 `PLAYER_CLAIMED_TERRITORY`, `PLAYER_HIRED_NPC`, `PLAYER_DISMISSED_NPC`, `PLAYER_JOINED/LEFT/LED_FACTION`, `PLAYER_PLAYED_CARD`, `PLAYER_HUNTED_ANIMAL`, `PLAYER_FISHED`, `PLAYER_DOMESTICATED_ANIMAL`, `PLAYER_PROTECTED_REGION`, `PLAYER_PICKED_UP_GOODS`, `PLAYER_TRADED_GOODS`, `PLAYER_FOUNDED_SETTLEMENT`, `PLAYER_SPONSORED_CONSTRUCTION`.
 
-❌ Player **cannot** carry goods physically between tiles (logistics substrate exists; player-goods-movement is command-only with no spatial carrier simulation).
+✅ Player **can carry goods between tiles** — `PLAYER_PICKED_UP_GOODS` adds to player's `'player'` holder inventory; `PLAYER_DEPOSIT_GOODS` moves goods from player inventory to a settlement; both events tracked in `GoodsInventoryProjection` and survive restarts via `GOODS_BOOT_EVENT_TYPES`. (v0.82.0)
 ✅ `history_chronicle` projection implemented — `/api/world/history-arcs` returns arc deltas showing what changed during player absence (faction seizures, ecological collapses, famine evacuations). (v0.64.0+)
 
 ---

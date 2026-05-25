@@ -16,6 +16,8 @@ const GOODS_STORED = 'GOODS_STORED'
 const GOODS_PROCESSED = 'GOODS_PROCESSED'
 const GOODS_CONSUMED = 'GOODS_CONSUMED'
 const GOODS_DESTROYED = 'GOODS_DESTROYED'
+const PLAYER_PICKED_UP_GOODS = 'PLAYER_PICKED_UP_GOODS'
+const PLAYER_DEPOSIT_GOODS = 'PLAYER_DEPOSIT_GOODS'
 
 export class GoodsInventoryProjection {
   private rows = new Map<string, GoodsInventoryRow>()
@@ -64,6 +66,34 @@ export class GoodsInventoryProjection {
       if (!payload) return
       const tick = event.eventType === GOODS_CONSUMED ? payload.consumedAtTick : payload.destroyedAtTick
       this.subtract(payload, payload.quantity, tick, event.sequence)
+      return
+    }
+    if (event.eventType === PLAYER_PICKED_UP_GOODS) {
+      const payload = readPlayerPickupPayload(event)
+      if (!payload) return
+      this.add(
+        { goodsId: payload.goodsId, holderType: 'player', holderId: payload.playerAccountId, tileId: payload.tileId },
+        payload.quantity,
+        payload.tick,
+        event.sequence
+      )
+      return
+    }
+    if (event.eventType === PLAYER_DEPOSIT_GOODS) {
+      const payload = readPlayerDepositPayload(event)
+      if (!payload) return
+      this.subtract(
+        { goodsId: payload.goodsId, holderType: 'player', holderId: payload.playerAccountId, tileId: payload.tileId },
+        payload.quantity,
+        payload.tick,
+        event.sequence
+      )
+      this.add(
+        { goodsId: payload.goodsId, holderType: 'settlement', holderId: payload.settlementId, tileId: payload.tileId },
+        payload.quantity,
+        payload.tick,
+        event.sequence
+      )
     }
   }
 
@@ -217,6 +247,55 @@ function readData(event: Event): Record<string, unknown> | null {
   return payload as Record<string, unknown>
 }
 
+function readPlayerPickupPayload(event: Event): {
+  playerAccountId: string
+  tileId: string
+  goodsId: string
+  quantity: number
+  tick: number
+} | null {
+  const payload = readData(event)
+  if (!payload) return null
+  if (typeof payload.playerAccountId !== 'string' || payload.playerAccountId.length === 0) return null
+  if (typeof payload.tileId !== 'string' || payload.tileId.length === 0) return null
+  if (typeof payload.goodsId !== 'string' || payload.goodsId.length === 0) return null
+  if (typeof payload.quantity !== 'number' || !Number.isFinite(payload.quantity) || payload.quantity <= 0) return null
+  if (typeof payload.tick !== 'number' || !Number.isInteger(payload.tick) || payload.tick < 0) return null
+  return {
+    playerAccountId: payload.playerAccountId,
+    tileId: payload.tileId,
+    goodsId: payload.goodsId,
+    quantity: payload.quantity,
+    tick: payload.tick,
+  }
+}
+
+function readPlayerDepositPayload(event: Event): {
+  playerAccountId: string
+  tileId: string
+  settlementId: string
+  goodsId: string
+  quantity: number
+  tick: number
+} | null {
+  const payload = readData(event)
+  if (!payload) return null
+  if (typeof payload.playerAccountId !== 'string' || payload.playerAccountId.length === 0) return null
+  if (typeof payload.tileId !== 'string' || payload.tileId.length === 0) return null
+  if (typeof payload.settlementId !== 'string' || payload.settlementId.length === 0) return null
+  if (typeof payload.goodsId !== 'string' || payload.goodsId.length === 0) return null
+  if (typeof payload.quantity !== 'number' || !Number.isFinite(payload.quantity) || payload.quantity <= 0) return null
+  if (typeof payload.tick !== 'number' || !Number.isInteger(payload.tick) || payload.tick < 0) return null
+  return {
+    playerAccountId: payload.playerAccountId,
+    tileId: payload.tileId,
+    settlementId: payload.settlementId,
+    goodsId: payload.goodsId,
+    quantity: payload.quantity,
+    tick: payload.tick,
+  }
+}
+
 function isGoodsHolderType(value: unknown): value is GoodsHolderType {
-  return value === 'npc' || value === 'building' || value === 'settlement'
+  return value === 'npc' || value === 'building' || value === 'settlement' || value === 'player'
 }

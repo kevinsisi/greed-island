@@ -352,6 +352,8 @@ const GOODS_BOOT_EVENT_TYPES = [
   'GOODS_TRANSPORT_ARRIVED',
   'GOODS_TRANSPORT_LOST',
   'MARKET_PRICE_DISCOVERED',
+  'PLAYER_PICKED_UP_GOODS',
+  'PLAYER_DEPOSIT_GOODS',
 ] as const
 // NPC mortality projection event types — read selectively during fast-boot.
 const MORTALITY_BOOT_EVENT_TYPES = [
