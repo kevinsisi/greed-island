@@ -16,7 +16,9 @@ import type { SettingsStore } from '../http/settings.js'
 import { generateWithKeyPool, GeminiUnavailableError, type GeminiGenerationOptions } from './geminiClient.js'
 import {
   generateWithOpenCode,
-  isOpenCodeConfigured,
+  getOpenCodeModel,
+  getOpenCodeServers,
+  getOpenCodeTextVariant,
   OpenCodeUnavailableError,
 } from './openCodeClient.js'
 
@@ -55,15 +57,30 @@ export async function generateWithProviders(
   for (const provider of getProviderPriority(store)) {
     try {
       if (provider === 'opencode') {
-        if (!isOpenCodeConfigured(store)) {
+        const servers = getOpenCodeServers(store)
+        if (servers.length === 0) {
           errors.push('opencode: not configured')
           continue
         }
-        const text = await generateWithOpenCode(store, {
-          systemPrompt: options.systemPrompt,
-          userPrompt: options.userPrompt,
-        })
-        return { text, provider }
+        const model = getOpenCodeModel(store)
+        const variant = getOpenCodeTextVariant(store)
+        let lastErr: string | null = null
+        for (const serverUrl of servers) {
+          try {
+            const text = await generateWithOpenCode(serverUrl, {
+              systemPrompt: options.systemPrompt,
+              userPrompt: options.userPrompt,
+              model,
+              variant,
+            })
+            return { text, provider }
+          } catch (err) {
+            lastErr =
+              err instanceof OpenCodeUnavailableError ? err.message : String(err)
+          }
+        }
+        errors.push(`opencode: all ${servers.length} server(s) failed: ${lastErr}`)
+        continue
       }
       if (provider === 'gemini') {
         if (store.countActive() === 0) {

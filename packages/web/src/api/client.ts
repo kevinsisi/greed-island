@@ -343,6 +343,24 @@ export type ServerSettingsHealth = {
   adminAllowList: boolean
 }
 
+// v0.65.0 — OpenCode settings (contract-aligned).
+export type ServerOpenCodeSource = 'setting' | 'env' | 'default' | 'none'
+export type ServerOpenCodeServerEntry = { id: string; label: string; base_url: string }
+export type ServerOpenCodeStatus = {
+  servers: ServerOpenCodeServerEntry[]
+  servers_source: ServerOpenCodeSource
+  text_model: string
+  text_model_source: ServerOpenCodeSource
+  text_variant: string
+  text_variant_source: ServerOpenCodeSource
+}
+export type ServerOpenCodeModel = { id: string; name: string; provider: string }
+export type ServerOpenCodeModels = {
+  models: ServerOpenCodeModel[]
+  source_server_id: string | null
+  warning: string | null
+}
+
 export type ServerNpcHistoryEvent = {
   id: number
   intent: NpcInteractIntent
@@ -898,6 +916,25 @@ export const api = {
       headers: authHeaders(token),
       body: JSON.stringify(body)
     }),
+  // v0.65.0 — contract-aligned OpenCode settings (servers, model select, variant).
+  settingsGetOpenCode: (token: string) =>
+    jsonFetch<ServerOpenCodeStatus>('/settings/opencode', { headers: authHeaders(token) }),
+  settingsUpdateOpenCode: (
+    token: string,
+    body: { servers?: string; text_model?: string; text_variant?: string }
+  ) =>
+    jsonFetch<ServerOpenCodeStatus>('/settings/opencode', {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+    }),
+  settingsDeleteOpenCode: (token: string) =>
+    jsonFetch<ServerOpenCodeStatus>('/settings/opencode', {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    }),
+  settingsGetOpenCodeModels: (token: string) =>
+    jsonFetch<ServerOpenCodeModels>('/settings/opencode/models', { headers: authHeaders(token) }),
   // -- version --------------------------------------------------------
   version: () => jsonFetch<ServerVersion>('/version'),
   // -- social: friends -----------------------------------------------

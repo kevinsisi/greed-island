@@ -4,6 +4,8 @@ import {
   api,
   ApiError,
   type ServerApiKeySummary,
+  type ServerOpenCodeModel,
+  type ServerOpenCodeStatus,
   type ServerSettingsHealth
 } from '../api/client'
 import { useAuth } from '../state/AuthContext'
@@ -108,44 +110,104 @@ export function SettingsPage() {
     }
   }, [token, refresh, t])
 
-  // v0.42.0 — provider settings state (OpenCode URL/model + priority).
-  const [openCodeBaseUrl, setOpenCodeBaseUrl] = useState('')
-  const [openCodeModel, setOpenCodeModel] = useState('')
-  const [providerPriority, setProviderPriority] = useState('opencode,gemini')
-  const [providerLoading, setProviderLoading] = useState(false)
+  // v0.65.0 — contract-aligned OpenCode settings state.
+  const [ocStatus, setOcStatus] = useState<ServerOpenCodeStatus | null>(null)
+  const [ocServersInput, setOcServersInput] = useState('')
+  const [ocTextModel, setOcTextModel] = useState('')
+  const [ocTextVariant, setOcTextVariant] = useState('')
+  const [ocModels, setOcModels] = useState<ServerOpenCodeModel[]>([])
+  const [ocModelSearch, setOcModelSearch] = useState('')
+  const [ocModelsLoading, setOcModelsLoading] = useState(false)
+  const [ocSaving, setOcSaving] = useState(false)
+  const [ocFlash, setOcFlash] = useState<string | null>(null)
+  const [ocError, setOcError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadOpenCode = useCallback(async () => {
     if (!token) return
-    api.settingsGetProviders(token)
-      .then((p) => {
-        setOpenCodeBaseUrl(p.openCodeBaseUrl ?? '')
-        setOpenCodeModel(p.openCodeModel ?? '')
-        setProviderPriority(p.providerPriority ?? 'opencode,gemini')
-      })
-      .catch(() => {})
+    try {
+      const status = await api.settingsGetOpenCode(token)
+      setOcStatus(status)
+      setOcServersInput(status.servers.map((s) => s.base_url).join('\n'))
+      setOcTextModel(status.text_model_source === 'setting' ? status.text_model : '')
+      setOcTextVariant(status.text_variant_source === 'setting' ? status.text_variant : '')
+    } catch {
+      // non-fatal
+    }
   }, [token])
 
-  const handleSaveProviders = useCallback(async () => {
+  const loadOpenCodeModels = useCallback(async () => {
     if (!token) return
-    setProviderLoading(true)
-    setError(null)
-    setFlash(null)
+    setOcModelsLoading(true)
     try {
-      const updated = await api.settingsUpdateProviders(token, {
-        openCodeBaseUrl: openCodeBaseUrl.trim() || null,
-        openCodeModel: openCodeModel.trim() || null,
-        providerPriority: providerPriority.trim() || 'opencode,gemini',
-      })
-      setOpenCodeBaseUrl(updated.openCodeBaseUrl ?? '')
-      setOpenCodeModel(updated.openCodeModel ?? '')
-      setProviderPriority(updated.providerPriority ?? 'opencode,gemini')
-      setFlash('Provider 設定已儲存')
+      const result = await api.settingsGetOpenCodeModels(token)
+      setOcModels(result.models)
+      if (result.warning) setOcError(result.warning)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Provider 儲存失敗')
+      setOcError(err instanceof Error ? err.message : 'Models 載入失敗')
     } finally {
-      setProviderLoading(false)
+      setOcModelsLoading(false)
     }
-  }, [token, openCodeBaseUrl, openCodeModel, providerPriority])
+  }, [token])
+
+  useEffect(() => {
+    void loadOpenCode()
+  }, [loadOpenCode])
+
+  const handleSaveOpenCode = useCallback(async () => {
+    if (!token) return
+    setOcSaving(true)
+    setOcFlash(null)
+    setOcError(null)
+    try {
+      const updated = await api.settingsUpdateOpenCode(token, {
+        servers: ocServersInput,
+        text_model: ocTextModel,
+        text_variant: ocTextVariant,
+      })
+      setOcStatus(updated)
+      setOcFlash('OpenCode 設定已儲存')
+      await loadOpenCodeModels()
+    } catch (err) {
+      setOcError(err instanceof Error ? err.message : 'OpenCode 儲存失敗')
+    } finally {
+      setOcSaving(false)
+    }
+  }, [token, ocServersInput, ocTextModel, ocTextVariant, loadOpenCodeModels])
+
+  const handleClearOpenCode = useCallback(async () => {
+    if (!token) return
+    if (!confirm('確定要清除 DB 中的 OpenCode 設定？清除後將改讀環境變數。')) return
+    setOcSaving(true)
+    setOcFlash(null)
+    setOcError(null)
+    try {
+      const updated = await api.settingsDeleteOpenCode(token)
+      setOcStatus(updated)
+      setOcServersInput(updated.servers.map((s) => s.base_url).join('\n'))
+      setOcTextModel(updated.text_model_source === 'setting' ? updated.text_model : '')
+      setOcTextVariant(updated.text_variant_source === 'setting' ? updated.text_variant : '')
+      setOcFlash('OpenCode DB 設定已清除')
+    } catch (err) {
+      setOcError(err instanceof Error ? err.message : 'OpenCode 清除失敗')
+    } finally {
+      setOcSaving(false)
+    }
+  }, [token])
+
+  const filteredModels = ocModelSearch
+    ? ocModels.filter(
+        (m) =>
+          m.id.toLowerCase().includes(ocModelSearch.toLowerCase()) ||
+          m.name.toLowerCase().includes(ocModelSearch.toLowerCase()),
+      )
+    : ocModels
+  const modelsByProvider = filteredModels.reduce<Record<string, ServerOpenCodeModel[]>>(
+    (acc, m) => {
+      ;(acc[m.provider] ??= []).push(m)
+      return acc
+    },
+    {},
+  )
 
   if (!account) {
     return (
@@ -207,58 +269,129 @@ export function SettingsPage() {
         )}
       </section>
 
-      {/* v0.42.0 — AI provider routing (OpenCode primary, Gemini fallback). */}
+      {/* v0.65.0 — OpenCode settings (contract-aligned: servers, model select, variant). */}
       <section className="gi-panel p-5 flex flex-col gap-3">
         <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
-          AI Provider
+          OpenCode AI 設定
         </div>
         <p className="text-[12px] text-ground-400 leading-relaxed">
-          OpenCode 為自架服務，優先使用；OpenCode 不可用或未設定時自動 fallback 到 Gemini key pool。
+          文字生成走 OpenCode → Gemini 降級；未填寫時讀取主機環境設定。
         </p>
+
+        {ocStatus && (
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
+            <span className="font-display uppercase tracking-tightest text-ground-500">伺服器</span>
+            <span className="font-mono text-ground-300">
+              {ocStatus.servers.length === 0 ? '—' : ocStatus.servers.map((s) => s.base_url).join(', ')}
+              {' '}<span className="text-ground-600">[{ocStatus.servers_source}]</span>
+            </span>
+            <span className="font-display uppercase tracking-tightest text-ground-500">文字模型</span>
+            <span className="font-mono text-ground-300">
+              {ocStatus.text_model}{' '}
+              <span className="text-ground-600">[{ocStatus.text_model_source}]</span>
+            </span>
+            <span className="font-display uppercase tracking-tightest text-ground-500">品質</span>
+            <span className="font-mono text-ground-300">
+              {ocStatus.text_variant}{' '}
+              <span className="text-ground-600">[{ocStatus.text_variant_source}]</span>
+            </span>
+          </div>
+        )}
+
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">OpenCode Base URL</span>
-          <input
-            type="text"
-            value={openCodeBaseUrl}
-            onChange={(e) => setOpenCodeBaseUrl(e.target.value)}
-            placeholder="http://host.docker.internal:4096"
-            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
+          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">OpenCode 伺服器（一行一個 URL）</span>
+          <textarea
+            rows={3}
+            value={ocServersInput}
+            onChange={(e) => setOcServersInput(e.target.value)}
+            placeholder="https://provider-amd.sisihome.org"
+            className="w-full bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono placeholder:text-ground-600 outline-none resize-y"
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">OpenCode Model</span>
-          <input
-            type="text"
-            value={openCodeModel}
-            onChange={(e) => setOpenCodeModel(e.target.value)}
-            placeholder="opencode/deepseek-v4-flash-free"
-            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
-          />
-          <span className="text-[10px] text-ground-500">
-            格式：{'<'}providerID{'>'}/{'<'}modelID{'>'}，例如 opencode/deepseek-v4-flash-free 或 openai/gpt-4o-mini
-          </span>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">Provider Priority</span>
-          <input
-            type="text"
-            value={providerPriority}
-            onChange={(e) => setProviderPriority(e.target.value)}
-            placeholder="opencode,gemini"
-            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 font-mono outline-none"
-          />
-          <span className="text-[10px] text-ground-500">
-            逗號分隔，由左至右為嘗試順序。允許值：opencode, gemini
-          </span>
-        </label>
-        <div>
+
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="flex flex-col gap-1 flex-1 min-w-[180px]">
+            <span className="text-[11px] text-ground-400 uppercase tracking-tightest">搜尋模型</span>
+            <input
+              type="search"
+              value={ocModelSearch}
+              onChange={(e) => setOcModelSearch(e.target.value)}
+              placeholder="gpt / gemini / …"
+              className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
+            />
+          </label>
           <button
             type="button"
-            onClick={handleSaveProviders}
-            disabled={providerLoading}
+            onClick={() => void loadOpenCodeModels()}
+            disabled={ocModelsLoading}
+            className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest border border-ground-700 text-ground-300 hover:border-ember-600 hover:text-ember-300 rounded-sharp disabled:opacity-40"
+          >
+            {ocModelsLoading ? '載入中…' : '重新整理模型'}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span className="text-[11px] text-ground-400 uppercase tracking-tightest">文字模型</span>
+            <select
+              value={ocTextModel}
+              onChange={(e) => setOcTextModel(e.target.value)}
+              className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
+            >
+              <option value="">— 使用預設（{ocStatus?.text_model ?? 'opencode/deepseek-v4-flash-free'}）—</option>
+              {Object.entries(modelsByProvider)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([provider, models]) => (
+                  <optgroup key={provider} label={provider}>
+                    {[...models].sort((a, b) => a.id.localeCompare(b.id)).map((m) => (
+                      <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                    ))}
+                  </optgroup>
+                ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 min-w-[140px]">
+            <span className="text-[11px] text-ground-400 uppercase tracking-tightest">品質等級</span>
+            <select
+              value={ocTextVariant}
+              onChange={(e) => setOcTextVariant(e.target.value)}
+              className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
+            >
+              <option value="">— 使用預設（{ocStatus?.text_variant ?? 'medium'}）—</option>
+              <option value="default">預設</option>
+              <option value="medium">中等</option>
+              <option value="high">高品質</option>
+            </select>
+          </label>
+        </div>
+
+        {ocError && (
+          <div className="border border-ember-700/60 rounded-sharp p-2 text-[11px] text-ember-300">
+            {ocError}
+          </div>
+        )}
+        {ocFlash && (
+          <div className="border border-moss-700/60 rounded-sharp p-2 text-[11px] text-moss-300">
+            {ocFlash}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleSaveOpenCode()}
+            disabled={ocSaving}
             className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest border border-ember-600 text-ember-300 hover:bg-ember-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {providerLoading ? '儲存中…' : '儲存 Provider 設定'}
+            {ocSaving ? '儲存中…' : '儲存 OpenCode 設定'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleClearOpenCode()}
+            disabled={ocSaving}
+            className="gi-touch px-4 text-[12px] font-display uppercase tracking-tightest border border-ground-700 text-ground-300 hover:border-ember-600 hover:text-ember-300 rounded-sharp disabled:opacity-40"
+          >
+            清除 DB 設定
           </button>
         </div>
       </section>
