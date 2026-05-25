@@ -5,6 +5,44 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.78.0
+
+### Current Version
+`0.78.0` — TypeScript build clean. Tests pass (server + web). Commits pushed to `main`.
+
+### What Was Shipped (v0.78.0)
+
+**v0.78.0 — NPC-to-NPC Local Market Trade (Layer 2 Living World Runtime gap closed)**
+- `NPC_LOCAL_TRADE_CADENCE_TICKS = TICKS_PER_HOUR * 4` in `config/world.ts` — trade planner runs every 4 in-game hours
+- New `NPC_GOODS_TRADED` command type + `NpcGoodsTradedCmd` payload in `kernel/livingWorldCommands.ts`; Rule Engine validator added
+- New `planLocalNpcTrades()` pure function in `sim/localNpcTradePlanner.ts`:
+  - Groups settlement goods by tileId (via `settlementTiles` map)
+  - Groups NPCs by tile from `npcTileMap`
+  - Per tile: requires ≥2 NPCs + at least one producer NPC (hunter/fisher/carrier/craftsman/miner)
+  - Seller = first producer NPC found on tile; buyers = remaining NPCs on tile
+  - Buyer selected deterministically: `buyers[currentTick % buyers.length]` (rotates each cadence tick)
+  - Trades the most plentiful goods on the tile (sort by quantity descending, quantity: 1)
+  - Returns one `LocalNpcTradeIntent` per eligible tile
+- `kernel/npcMemory.ts`: `NPC_GOODS_TRADED` case adds seller memory (`goods.trade.sold`) and buyer memory (`goods.trade.bought`) at importance 3
+- `sim/runtime.ts`: cadence block fires every `NPC_LOCAL_TRADE_CADENCE_TICKS`; builds `settlementTiles`, `npcTileMap`, `producerNpcIds` from current projections; emits `NPC_GOODS_TRADED` commands for each trade intent
+- 8 tests in `sim/localNpcTrade.test.ts`
+- WORLD_CAPABILITIES.md Layer 2 gap "NPC-to-NPC trade" closed; stale `❌ No ecosystem-aware building types` corrected to ✅ (already exists); summary updated to "All six runtime layers now show 'None' for major missing pieces."
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Walls / defenses as buildable map features
+- Household joint decisions
+- Player carrying goods physically between tiles
+- Ecosystem dashboard frontend page
+- Market price panel frontend
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.77.0
 
 ### Current Version

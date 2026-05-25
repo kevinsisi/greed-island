@@ -220,6 +220,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Phase 5 Persistent Combat Consequences (v0.77.0)
   'NPC_INCAPACITATED_LONG',
   'COMBAT_WITNESS_RECORDED',
+  // NPC-to-NPC local market trade (v0.78.0)
+  'NPC_GOODS_TRADED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -485,6 +487,16 @@ export type CombatWitnessRecordedCmd = Readonly<{
   defeatedNpcId: string
   tileId: string
   witnessedAtTick: number
+  narration: string
+}>
+
+export type NpcGoodsTradedCmd = Readonly<{
+  sellerNpcId: string
+  buyerNpcId: string
+  goodsId: string
+  quantity: number
+  tileId: string
+  tradedAtTick: number
   narration: string
 }>
 
@@ -1698,6 +1710,7 @@ export type LivingWorldCommandPayload =
   | CardRuleOperatorExpiredCmd
   | NpcIncapacitatedLongCmd
   | CombatWitnessRecordedCmd
+  | NpcGoodsTradedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3134,6 +3147,17 @@ const VALIDATORS: Readonly<
     if (typeof p.defeatedNpcId !== 'string' || p.defeatedNpcId.length === 0) return 'defeatedNpcId required'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.witnessedAtTick)) return 'witnessedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_GOODS_TRADED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.sellerNpcId !== 'string' || p.sellerNpcId.length === 0) return 'sellerNpcId required'
+    if (typeof p.buyerNpcId !== 'string' || p.buyerNpcId.length === 0) return 'buyerNpcId required'
+    if (typeof p.goodsId !== 'string' || p.goodsId.length === 0) return 'goodsId required'
+    if (!isNonNegativeInteger(p.quantity) || (p.quantity as number) < 1) return 'quantity must be positive integer'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tradedAtTick)) return 'tradedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

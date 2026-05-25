@@ -73,6 +73,7 @@ import {
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   NPC_LONG_INCAP_TICKS,
+  NPC_LOCAL_TRADE_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
   INTENT_OVERRIDE_DURATION_TICKS,
   INTENT_URGENCY_THRESHOLD,
@@ -147,6 +148,7 @@ import { getSpecies, requireSpecies } from '../ecosystem/species.js'
 import { discoverMarketPrices } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
 import { planCarrierDispatches, planCarrierArrivals } from './carrierPlanner.js'
+import { planLocalNpcTrades } from './localNpcTradePlanner.js'
 import {
   NpcEngine,
   NPC_PLAYER_DIALOG_HOLD_TICKS,
@@ -4297,6 +4299,52 @@ export class SimulationRuntime {
         plannedRouteIds: carrierPlannedRouteIds,
         plannedTransportIds: carrierPlannedTransportIds,
       }))
+    }
+
+    // ---- v0.78.0: NPC-to-NPC local market trade planner ----
+    if (nextTick % NPC_LOCAL_TRADE_CADENCE_TICKS === 0) {
+      const settlements = this.settlementsProjection.getAll()
+      const settlementTiles: ReadonlyMap<string, string> = new Map(settlements.map(s => [s.id, s.tileId] as [string, string]))
+      const npcTileMap: ReadonlyMap<string, string> = new Map(this.getNpcs().map(n => [n.id, n.location ?? ''] as [string, string]))
+      // Producer roles: hunters, fishers, craftsmen who accumulate personal goods
+      const producerNpcIds = new Set(
+        this.profiles
+          .filter(p => {
+            const role = typeof p.role === 'string' ? p.role : Object.values(p.role ?? {})[0] ?? ''
+            return role.includes('hunter') || role.includes('fisher') || role.includes('carrier') ||
+              role.includes('craftsman') || role.includes('miner')
+          })
+          .map(p => p.id)
+      )
+      const trades = planLocalNpcTrades({
+        currentTick: nextTick,
+        settlementGoods: this.goodsInventoryProjection.list(),
+        settlementTiles,
+        npcTileMap,
+        producerNpcIds,
+      })
+      for (const trade of trades) {
+        const sellerProfile = this.profiles.find(p => p.id === trade.sellerNpcId)
+        const buyerProfile = this.profiles.find(p => p.id === trade.buyerNpcId)
+        const sellerName = sellerProfile?.name?.zh ?? trade.sellerNpcId
+        const buyerName = buyerProfile?.name?.zh ?? trade.buyerNpcId
+        commands.push(makeLivingWorldCommand(
+          'NPC_GOODS_TRADED',
+          trade.sellerNpcId,
+          'npc',
+          nextTick,
+          submittedAt,
+          {
+            sellerNpcId: trade.sellerNpcId,
+            buyerNpcId: trade.buyerNpcId,
+            goodsId: trade.goodsId,
+            quantity: trade.quantity,
+            tileId: trade.tileId,
+            tradedAtTick: nextTick,
+            narration: `${sellerName}在市集上向${buyerName}售出 ${trade.quantity} 份 ${trade.goodsId}。`,
+          }
+        ))
+      }
     }
 
     // ---- Phase 1 budget gate ----

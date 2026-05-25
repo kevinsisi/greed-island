@@ -23,6 +23,7 @@ import type {
   NpcInteractCmd,
   NpcMoveCmd,
   NpcProductiveActionCmd,
+  NpcGoodsTradedCmd,
   NpcRumorSpreadCmd,
   PlayerIntervenecmd,
   SeasonChangeCmd,
@@ -523,6 +524,23 @@ function deriveMemoryRows(
           content: { kind: 'season', from: d.from, to: d.to, tick },
           importance: 4
         }
+      ]
+    }
+    case 'NPC_GOODS_TRADED': {
+      const d = data as NpcGoodsTradedCmd
+      return [
+        {
+          npcId: d.sellerNpcId,
+          memoryType: 'event',
+          content: { kind: 'goods.trade.sold', goodsId: d.goodsId, quantity: d.quantity, buyerNpcId: d.buyerNpcId, tileId: d.tileId, tick },
+          importance: 3,
+        },
+        {
+          npcId: d.buyerNpcId,
+          memoryType: 'event',
+          content: { kind: 'goods.trade.bought', goodsId: d.goodsId, quantity: d.quantity, sellerNpcId: d.sellerNpcId, tileId: d.tileId, tick },
+          importance: 3,
+        },
       ]
     }
     case 'NPC_RUMOR_SPREAD': {
