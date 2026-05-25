@@ -725,15 +725,16 @@ faction war, household depth, and skill learning still require incremental
 OpenSpec changes with deterministic replay tests before claiming full
 autonomous civilization evolution.
 
-### 11.9 NPC Personal Dialog Is Not Fully Grounded In Memory
+### ✅ CLOSED v0.71.0 — 11.9 NPC Personal Dialog Is Now Fully Grounded In Memory
 
-NPC memory and relationship projections exist for living-world events,
-but private player dialog is still only partially grounded. NPC replies
-do not yet query a full known-person graph, alias memory, household
-state, faction knowledge, or long-term social history before answering.
-Until that grounding exists, AI dialog must be guarded by deterministic
-anti-hallucination checks and must avoid inventing unknown people,
-relationships, or world facts.
+All dialog context gaps are closed as of v0.71.0:
+- **Known-person graph** (v0.15.x): NPC interaction memories → known NPC names
+- **Relationship graph** (v0.67.0): friend/rival/neutral type + trust scores per NPC pair
+- **Household state** (v0.68.0): living family members injected as context
+- **Alias memory** (v0.70.0): 8-tier relationship title derived from trust + interaction count
+- **Social history arc** (v0.71.0): trust trend (rising/falling/stable) + dominant intent pattern
+- **Ecological awareness** (v0.52.x–v0.62.x): animal population, fishery, plants, extinction warnings, pollution
+- Anti-hallucination guard prevents inventing names or species outside verified lists.
 
 ---
 

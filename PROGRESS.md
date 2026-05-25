@@ -5,6 +5,37 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.71.0
+
+### Current Version
+`0.71.0` — TypeScript build clean. 1081 tests pass (1 pre-existing timeout). Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.71.0)
+
+**v0.71.0 — NPC Social History Indexing (§11.9 fully closed)**
+- `SocialHistoryContext` type: `{ totalInteractions, trustTrend, dominantIntent }`
+- `computeSocialHistory(count, history)`: derives trust trend (rising/falling/stable, ≥5 delta threshold) and dominant intent from recent interaction log
+- `socialHistoryContext?` field in `AiDialogContext`
+- `buildSocialHistoryBlock(ctx)` renders "你們已交談 N 次，信任趨勢：X，最常意圖：Y" section
+- Only injected when `previousCount >= 3` (no noise for early interactions)
+- `npc.ts` computes from `previousCount` + `history` (already available)
+- 9 new tests in `aiDialog.test.ts`
+- Fully closes ARCHITECTURE.md §11.9 (relationship graph + household + alias memory + social history all now injected)
+
+### Active Blockers
+None.
+
+### Remaining Gaps
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET still used for area/building/weather state
+- Roads/bridges as map features
+- NPC household permanent migration
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.70.0
 
 ### Current Version

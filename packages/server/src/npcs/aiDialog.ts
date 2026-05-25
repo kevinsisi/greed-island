@@ -59,6 +59,38 @@ export type HouseholdContextRow = Readonly<{
   role: string
 }>
 
+export type SocialHistoryContext = Readonly<{
+  totalInteractions: number
+  trustTrend: 'rising' | 'falling' | 'stable'
+  dominantIntent: string | null
+}>
+
+export function computeSocialHistory(
+  totalInteractions: number,
+  history: readonly Pick<PersonalEventRecord, 'intent' | 'trustAfter'>[],
+): SocialHistoryContext {
+  let trustTrend: 'rising' | 'falling' | 'stable' = 'stable'
+  if (history.length >= 2) {
+    const oldest = history[history.length - 1]!.trustAfter
+    const newest = history[0]!.trustAfter
+    const delta = newest - oldest
+    if (delta >= 5) trustTrend = 'rising'
+    else if (delta <= -5) trustTrend = 'falling'
+  }
+
+  let dominantIntent: string | null = null
+  if (history.length > 0) {
+    const counts = new Map<string, number>()
+    for (const row of history) counts.set(row.intent, (counts.get(row.intent) ?? 0) + 1)
+    let max = 0
+    for (const [intent, count] of counts) {
+      if (count > max) { max = count; dominantIntent = intent }
+    }
+  }
+
+  return { totalInteractions, trustTrend, dominantIntent }
+}
+
 export const PLAYER_ALIAS_TIERS = [
   { minTrust: 90, alias: '摯友' },
   { minTrust: 75, alias: '老友' },
@@ -107,6 +139,7 @@ export type AiDialogContext = Readonly<{
   tileHistoryArcs?: readonly TileHistoryArcContext[]
   householdMembers?: readonly HouseholdContextRow[]
   playerAlias?: string
+  socialHistoryContext?: SocialHistoryContext
   beliefContext?: string
   reflectionContext?: string
   memoryContext?: string
@@ -217,6 +250,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildRelationshipBlock(ctx.relationshipContext),
     ...buildHouseholdBlock(ctx.householdMembers),
     ...buildPlayerAliasBlock(ctx.playerAlias),
+    ...buildSocialHistoryBlock(ctx.socialHistoryContext),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
       [
@@ -504,6 +538,21 @@ export function buildPlayerAliasBlock(alias: string | undefined): string[] {
     `你在心裡（和自然對話中）稱這位玩家為「${alias}」。這個稱謂反映你們的關係深度，在對話中可以自然地用它來稱呼對方，但不要強行解釋這個稱謂的由來。`,
     '',
   ]
+}
+
+export function buildSocialHistoryBlock(ctx: SocialHistoryContext | undefined): string[] {
+  if (!ctx || ctx.totalInteractions < 3) return []
+  const trendZh = ctx.trustTrend === 'rising' ? '上升' : ctx.trustTrend === 'falling' ? '下降' : '穩定'
+  const lines = [
+    `### 你們的互動歷史摘要`,
+    `- 你們已經交談了 ${ctx.totalInteractions} 次`,
+    `- 你對這位玩家的信任趨勢：【${trendZh}】`,
+  ]
+  if (ctx.dominantIntent) {
+    lines.push(`- 玩家最常使用的對話模式：${ctx.dominantIntent}`)
+  }
+  lines.push(`這些資訊幫助你體現長期關係的積累，但不要逐字唸出這份摘要——用它作背景知識，讓回應自然反映你們的關係深度。`, '')
+  return lines
 }
 
 export function buildAntiHallucinationBlock(knownNames: readonly string[], knownSpecies: readonly string[]): string[] {

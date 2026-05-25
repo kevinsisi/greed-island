@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, computePlayerAlias, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, computePlayerAlias, computeSocialHistory, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow, type SocialHistoryContext } from '../npcs/aiDialog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -262,6 +262,11 @@ export function createNpcRouter(input: {
         // alias memory — the NPC's private name for this player based on relationship history
         const playerAlias = previousCount > 0 ? computePlayerAlias(previousTrust, previousCount) : undefined
 
+        // social history — long-term arc summary (total interactions, trust trend, dominant intent)
+        const socialHistoryContext: SocialHistoryContext | undefined = previousCount >= 3
+          ? computeSocialHistory(previousCount, history)
+          : undefined
+
         const dialogCtx: AiDialogContext = {
           profile,
           player,
@@ -276,6 +281,7 @@ export function createNpcRouter(input: {
           ...(relationshipContext ? { relationshipContext } : {}),
           ...(householdMembers ? { householdMembers } : {}),
           ...(playerAlias ? { playerAlias } : {}),
+          ...(socialHistoryContext ? { socialHistoryContext } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),

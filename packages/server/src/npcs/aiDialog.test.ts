@@ -12,6 +12,8 @@ import {
   buildMemoryBlock,
   buildPlayerAliasBlock,
   computePlayerAlias,
+  buildSocialHistoryBlock,
+  computeSocialHistory,
   parseReply,
 } from './aiDialog.js'
 
@@ -496,5 +498,77 @@ describe('buildPlayerAliasBlock', () => {
     const result = buildPlayerAliasBlock('常客')
     const text = result.join('\n')
     expect(text).toContain('私稱')
+  })
+})
+
+describe('computeSocialHistory', () => {
+  it('returns stable trend when history is empty', () => {
+    const result = computeSocialHistory(5, [])
+    expect(result.trustTrend).toBe('stable')
+    expect(result.totalInteractions).toBe(5)
+    expect(result.dominantIntent).toBeNull()
+  })
+
+  it('returns rising trend when newest trust > oldest by ≥5', () => {
+    const history = [
+      { intent: 'ask', trustAfter: 60 },
+      { intent: 'ask', trustAfter: 50 },
+      { intent: 'greet', trustAfter: 40 },
+    ]
+    const result = computeSocialHistory(10, history)
+    expect(result.trustTrend).toBe('rising')
+  })
+
+  it('returns falling trend when newest trust < oldest by ≥5', () => {
+    const history = [
+      { intent: 'ask', trustAfter: 30 },
+      { intent: 'ask', trustAfter: 40 },
+      { intent: 'greet', trustAfter: 50 },
+    ]
+    const result = computeSocialHistory(10, history)
+    expect(result.trustTrend).toBe('falling')
+  })
+
+  it('returns stable trend when delta < 5', () => {
+    const history = [
+      { intent: 'ask', trustAfter: 52 },
+      { intent: 'ask', trustAfter: 50 },
+    ]
+    const result = computeSocialHistory(5, history)
+    expect(result.trustTrend).toBe('stable')
+  })
+
+  it('identifies dominant intent', () => {
+    const history = [
+      { intent: 'ask', trustAfter: 50 },
+      { intent: 'ask', trustAfter: 50 },
+      { intent: 'greet', trustAfter: 50 },
+    ]
+    const result = computeSocialHistory(10, history)
+    expect(result.dominantIntent).toBe('ask')
+  })
+})
+
+describe('buildSocialHistoryBlock', () => {
+  it('returns [] when ctx is undefined', () => {
+    expect(buildSocialHistoryBlock(undefined)).toEqual([])
+  })
+
+  it('returns [] when totalInteractions < 3', () => {
+    expect(buildSocialHistoryBlock({ totalInteractions: 2, trustTrend: 'rising', dominantIntent: 'ask' })).toEqual([])
+  })
+
+  it('includes interaction count and trend', () => {
+    const result = buildSocialHistoryBlock({ totalInteractions: 15, trustTrend: 'rising', dominantIntent: 'ask' })
+    const text = result.join('\n')
+    expect(text).toContain('15')
+    expect(text).toContain('上升')
+    expect(text).toContain('ask')
+  })
+
+  it('does not include dominant intent line when null', () => {
+    const result = buildSocialHistoryBlock({ totalInteractions: 5, trustTrend: 'stable', dominantIntent: null })
+    const text = result.join('\n')
+    expect(text).not.toContain('最常使用')
   })
 })
