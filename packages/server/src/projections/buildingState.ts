@@ -8,6 +8,8 @@ export type BuildingStateRow = {
   state: BuildingState
   health: number
   lastActivityTick: number
+  upgradeLevel: number
+  controllingFactionId: string | null
 }
 
 export const BUILDING_STATE_BOOT_EVENT_TYPES = [
@@ -15,6 +17,8 @@ export const BUILDING_STATE_BOOT_EVENT_TYPES = [
   'BUILDING_DAMAGED',
   'BUILDING_REPAIRED',
   'BUILDING_ABANDONED',
+  'BUILDING_UPGRADED',
+  'BUILDING_CAPTURED',
 ] as const
 
 function readData(event: Event): Record<string, unknown> | null {
@@ -43,7 +47,7 @@ export class BuildingStateProjection {
 
     switch (event.eventType) {
       case 'BUILDING_CONSTRUCTED':
-        this.rows.set(buildingId, { buildingId, tileId, state: 'operational', health: 100, lastActivityTick: event.tick ?? 0 })
+        this.rows.set(buildingId, { buildingId, tileId, state: 'operational', health: 100, lastActivityTick: event.tick ?? 0, upgradeLevel: 1, controllingFactionId: null })
         break
       case 'BUILDING_DAMAGED': {
         const existing = this.rows.get(buildingId)
@@ -53,6 +57,8 @@ export class BuildingStateProjection {
           state: 'damaged',
           health: Math.max(0, Math.min(100, readNumber(data.health, 50))),
           lastActivityTick: existing?.lastActivityTick ?? 0,
+          upgradeLevel: existing?.upgradeLevel ?? 1,
+          controllingFactionId: existing?.controllingFactionId ?? null,
         })
         break
       }
@@ -64,6 +70,8 @@ export class BuildingStateProjection {
           state: existing?.state === 'under_construction' ? 'under_construction' : 'operational',
           health: Math.max(0, Math.min(100, readNumber(data.health, 100))),
           lastActivityTick: event.tick ?? existing?.lastActivityTick ?? 0,
+          upgradeLevel: existing?.upgradeLevel ?? 1,
+          controllingFactionId: existing?.controllingFactionId ?? null,
         })
         break
       }
@@ -75,6 +83,36 @@ export class BuildingStateProjection {
           state: 'abandoned',
           health: existing?.health ?? 50,
           lastActivityTick: readNumber(data.lastActivityTick, 0),
+          upgradeLevel: existing?.upgradeLevel ?? 1,
+          controllingFactionId: existing?.controllingFactionId ?? null,
+        })
+        break
+      }
+      case 'BUILDING_UPGRADED': {
+        const existing = this.rows.get(buildingId)
+        const toLevel = readNumber(data.toLevel, (existing?.upgradeLevel ?? 1) + 1)
+        this.rows.set(buildingId, {
+          buildingId,
+          tileId: tileId || existing?.tileId || '',
+          state: existing?.state ?? 'operational',
+          health: existing?.health ?? 100,
+          lastActivityTick: readNumber(data.upgradedAtTick, event.tick ?? 0),
+          upgradeLevel: toLevel,
+          controllingFactionId: existing?.controllingFactionId ?? null,
+        })
+        break
+      }
+      case 'BUILDING_CAPTURED': {
+        const existing = this.rows.get(buildingId)
+        const capturingFactionId = readString(data.capturingFactionId)
+        this.rows.set(buildingId, {
+          buildingId,
+          tileId: tileId || existing?.tileId || '',
+          state: existing?.state ?? 'operational',
+          health: existing?.health ?? 100,
+          lastActivityTick: readNumber(data.capturedAtTick, event.tick ?? 0),
+          upgradeLevel: existing?.upgradeLevel ?? 1,
+          controllingFactionId: capturingFactionId || null,
         })
         break
       }
@@ -88,6 +126,8 @@ export class BuildingStateProjection {
       state: 'operational',
       health: 100,
       lastActivityTick: 0,
+      upgradeLevel: 1,
+      controllingFactionId: null,
     }
   }
 

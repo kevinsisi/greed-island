@@ -18,7 +18,7 @@ describe('BuildingStateProjection', () => {
   it('returns operational/100 by default for unknown building', () => {
     const proj = new BuildingStateProjection()
     const row = proj.getState('b_unknown')
-    expect(row).toEqual({ buildingId: 'b_unknown', tileId: '', state: 'operational', health: 100, lastActivityTick: 0 })
+    expect(row).toEqual({ buildingId: 'b_unknown', tileId: '', state: 'operational', health: 100, lastActivityTick: 0, upgradeLevel: 1, controllingFactionId: null })
   })
 
   it('BUILDING_CONSTRUCTED → operational, health 100', () => {

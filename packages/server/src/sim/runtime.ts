@@ -74,6 +74,13 @@ import {
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   WALL_CONSTRUCTION_CADENCE_TICKS,
   HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS,
+  BUILDING_UPGRADE_CADENCE_TICKS,
+  BUILDING_UPGRADE_MIN_AGE_TICKS,
+  BUILDING_MAX_UPGRADE_LEVEL,
+  BUILDING_CAPTURE_CADENCE_TICKS,
+  TILE_GENERATION_CADENCE_TICKS,
+  TILE_GENERATION_MIN_TRADE_ROUTES,
+  TILE_GENERATION_MAX_WORLD_TILES,
   NPC_LONG_INCAP_TICKS,
   NPC_LOCAL_TRADE_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
@@ -229,6 +236,11 @@ import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../project
 import { planWallConstruction } from './wallConstructionPlanner.js'
 import { WallNetworkProjection, WALL_NETWORK_BOOT_EVENT_TYPES } from '../projections/wallNetwork.js'
 import { planHouseholdJointDecisions } from './householdJointDecisionPlanner.js'
+import { planBuildingUpgrades } from './buildingUpgradePlanner.js'
+import { planBuildingCaptures } from './buildingCapturePlanner.js'
+import { DynamicTileProjection, DYNAMIC_TILE_BOOT_EVENT_TYPES } from '../projections/dynamicTile.js'
+import { planTileGeneration } from './tileGenerationPlanner.js'
+import { FRONTIER_ZONES } from './mapGraph.js'
 import { ActiveRuleOperatorsProjection, ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES } from '../projections/activeRuleOperators.js'
 import { NpcIncapacitationProjection, NPC_INCAPACITATION_BOOT_EVENT_TYPES } from '../projections/npcIncapacitation.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
@@ -573,6 +585,7 @@ export class SimulationRuntime {
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
   private readonly roadNetworkProjection = new RoadNetworkProjection()
   private readonly wallNetworkProjection = new WallNetworkProjection()
+  private readonly dynamicTileProjection = new DynamicTileProjection()
   private readonly activeRuleOperatorsProjection = new ActiveRuleOperatorsProjection()
   private readonly npcIncapacitationProjection = new NpcIncapacitationProjection()
   private readonly beliefProjection = new BeliefProjection()
@@ -1362,7 +1375,7 @@ export class SimulationRuntime {
     }>
   }> {
     // 室內 NPC 不算在 area scene 上 — 玩家進建築才看到
-    const tiles = listMapTiles(this.lifeExpansion.unlockedTileIds).map((tile) => ({
+    const tiles = listMapTiles(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds()).map((tile) => ({
       ...tile,
       npcIds: this.profiles
         .filter((p) => {
@@ -1665,6 +1678,7 @@ export class SimulationRuntime {
       this.buildingOccupantsProjection.project(ev)
       this.roadNetworkProjection.project(ev)
       this.wallNetworkProjection.project(ev)
+      this.dynamicTileProjection.project(ev)
       this.activeRuleOperatorsProjection.project(ev)
       this.npcIncapacitationProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
@@ -2689,7 +2703,7 @@ export class SimulationRuntime {
     // cadence tick so ecosystem work remains budget-bounded.
     for (const spawn of planAnimalSpawns({
       tick: nextTick,
-      tiles: listMapTiles(this.lifeExpansion.unlockedTileIds),
+      tiles: listMapTiles(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds()),
       getPopulation: (speciesId, tileId) => this.animalPopulationProjection.countSpeciesOnTile(speciesId, tileId),
       getPressureLevel: (tileId) => this.ecosystemRegionProjection.getForTile(tileId).pressureLevel,
     })) {
@@ -2841,7 +2855,7 @@ export class SimulationRuntime {
             npcsOnTile,
             species,
             adjacentTileIds:
-              getMapAdjacency(this.lifeExpansion.unlockedTileIds)[predation.tileId] ?? [],
+              getMapAdjacency(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds())[predation.tileId] ?? [],
           })
         : null
 
@@ -4445,6 +4459,76 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Building Upgrade cadence (v0.83.0) ----
+    if (nextTick % BUILDING_UPGRADE_CADENCE_TICKS === 0) {
+      const allBuildings = listAllBuildings(this.lifeExpansion.unlockedBuildingIds).map(b => {
+        const s = this.buildingStateProjection.getState(b.id)
+        return { buildingId: b.id, tileId: b.tileId, state: s.state, upgradeLevel: s.upgradeLevel, lastActivityTick: s.lastActivityTick }
+      })
+      const upgradeIntents = planBuildingUpgrades({ buildings: allBuildings, currentTick: nextTick, minAgeTicks: BUILDING_UPGRADE_MIN_AGE_TICKS, maxLevel: BUILDING_MAX_UPGRADE_LEVEL })
+      for (const intent of upgradeIntents) {
+        const buildingName = listAllBuildings(this.lifeExpansion.unlockedBuildingIds).find(b => b.id === intent.buildingId)?.nameZh ?? intent.buildingId
+        commands.push(makeLivingWorldCommand('BUILDING_UPGRADED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          buildingId: intent.buildingId,
+          tileId: intent.tileId,
+          fromLevel: intent.fromLevel,
+          toLevel: intent.toLevel,
+          upgradedAtTick: nextTick,
+          narration: `${buildingName}經長期運作，設施升級至等級 ${intent.toLevel}。`,
+        }))
+      }
+    }
+
+    // ---- Building Capture cadence (v0.83.0) ----
+    if (nextTick % BUILDING_CAPTURE_CADENCE_TICKS === 0) {
+      const allBuildingsForCapture = listAllBuildings(this.lifeExpansion.unlockedBuildingIds).map(b => {
+        const s = this.buildingStateProjection.getState(b.id)
+        return { buildingId: b.id, tileId: b.tileId, controllingFactionId: s.controllingFactionId }
+      })
+      const captureIntents = planBuildingCaptures({ buildings: allBuildingsForCapture, factionControlProjection: this.factionControlProjection })
+      for (const intent of captureIntents) {
+        const buildingName = listAllBuildings(this.lifeExpansion.unlockedBuildingIds).find(b => b.id === intent.buildingId)?.nameZh ?? intent.buildingId
+        const tileName = TILE_BY_ID[intent.tileId]?.name ?? intent.tileId
+        const narration = intent.previousFactionId
+          ? `${tileName}的${buildingName}易主，落入新勢力掌控。`
+          : `${tileName}的${buildingName}被勢力佔領，納入其管轄。`
+        commands.push(makeLivingWorldCommand('BUILDING_CAPTURED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          buildingId: intent.buildingId,
+          tileId: intent.tileId,
+          capturingFactionId: intent.capturingFactionId,
+          previousFactionId: intent.previousFactionId,
+          capturedAtTick: nextTick,
+          narration,
+        }))
+      }
+    }
+
+    // ---- Tile Generation cadence (v0.84.0) ----
+    if (nextTick % TILE_GENERATION_CADENCE_TICKS === 0) {
+      const currentTileIds = listMapTiles(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds()).map(t => t.id)
+      const openTradeRouteCount = this.logisticsProjection.snapshot().routes.filter(r => r.open).length
+      const tileIntents = planTileGeneration({
+        currentTileIds,
+        generatedTileIds: this.dynamicTileProjection.listTileIds(),
+        openTradeRouteCount,
+        minTradeRoutes: TILE_GENERATION_MIN_TRADE_ROUTES,
+        maxWorldTiles: TILE_GENERATION_MAX_WORLD_TILES,
+        frontierZones: FRONTIER_ZONES,
+      })
+      for (const intent of tileIntents) {
+        commands.push(makeLivingWorldCommand('TILE_GENERATED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          tileId: intent.tileId,
+          biome: intent.biome,
+          name: intent.name,
+          x: intent.x,
+          y: intent.y,
+          adjacentTileIds: intent.adjacentTileIds,
+          generatedAtTick: nextTick,
+          narration: `文明擴張——${intent.name}已開闢，與世界相連。`,
+        }))
+      }
+    }
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -5691,6 +5775,7 @@ export class SimulationRuntime {
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.roadNetworkProjection.rebuildFromEvents(allEvents)
       this.wallNetworkProjection.rebuildFromEvents(allEvents)
+      this.dynamicTileProjection.rebuildFromEvents(allEvents)
       this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
@@ -5750,6 +5835,9 @@ export class SimulationRuntime {
       // WallNetwork projection — rebuild faction border walls from WALL_BUILT/WALL_DEMOLISHED events.
       const wallNetworkEvents = this.store.readEventsByTypes(WALL_NETWORK_BOOT_EVENT_TYPES)
       this.wallNetworkProjection.rebuildFromEvents(wallNetworkEvents)
+      // DynamicTile projection — rebuild runtime-generated frontier tiles from TILE_GENERATED events.
+      const dynamicTileEvents = this.store.readEventsByTypes(DYNAMIC_TILE_BOOT_EVENT_TYPES)
+      this.dynamicTileProjection.rebuildFromEvents(dynamicTileEvents)
       // ActiveRuleOperators projection — rebuild active card rule operators from activation/expiry events.
       const ruleOperatorEvents = this.store.readEventsByTypes(ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES)
       this.activeRuleOperatorsProjection.rebuildFromEvents(ruleOperatorEvents)

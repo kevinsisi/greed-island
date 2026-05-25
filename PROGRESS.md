@@ -5,6 +5,43 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.84.0
+
+### Current Version
+`0.84.0` — TypeScript build clean. 1076 server tests pass (138 files). No remaining ❌ gaps in WORLD_CAPABILITIES.md. Commits pushed to `main`.
+
+### What Was Shipped (v0.83.0 + v0.84.0)
+
+**v0.83.0 — Building Upgrade & Capture (§21 gap closed)**
+- `BUILDING_UPGRADED` + `BUILDING_CAPTURED` command types + payload types + validators in `kernel/livingWorldCommands.ts`
+- `projections/buildingState.ts`: `BuildingStateRow` gains `upgradeLevel: number` (default 1) + `controllingFactionId: string | null` (default null); handles both new events; `BUILDING_STATE_BOOT_EVENT_TYPES` updated
+- `config/world.ts`: `BUILDING_UPGRADE_CADENCE_TICKS = 7 days`, `BUILDING_UPGRADE_MIN_AGE_TICKS = 14 days`, `BUILDING_MAX_UPGRADE_LEVEL = 3`, `BUILDING_CAPTURE_CADENCE_TICKS = 2 days`
+- `sim/buildingUpgradePlanner.ts`: upgrades operational buildings past age threshold, skips damaged/max-level
+- `sim/buildingCapturePlanner.ts`: captures buildings where tile's dominant faction ≠ controllingFactionId
+- `sim/runtime.ts`: both cadence blocks wired; uses `listAllBuildings()` + `buildingStateProjection.getState()` for full sweep
+- 11 tests in 2 new test files
+
+**v0.84.0 — Dynamic Tile Generation (§17 gap closed)**
+- `FRONTIER_ZONES` (3 zones: badlands, highland, cove) added to `sim/mapGraph.ts` — NOT in MAP_TILES/EXPANSION_TILES catalog
+- `getMapAdjacency()` + `listMapTiles()` + `nextStepTowards()` accept optional `generatedTileIds` parameter; frontier tiles fully integrated into adjacency graph when generated
+- `TILE_GENERATED` command type + `TileGeneratedCmd` payload + validator in `kernel/livingWorldCommands.ts`
+- `projections/dynamicTile.ts`: `DynamicTileProjection` tracks runtime-generated tiles; `DYNAMIC_TILE_BOOT_EVENT_TYPES = ['TILE_GENERATED']`
+- `config/world.ts`: `TILE_GENERATION_CADENCE_TICKS = 30 days`, `TILE_GENERATION_MIN_TRADE_ROUTES = 2`, `TILE_GENERATION_MAX_WORLD_TILES = 12`
+- `sim/tileGenerationPlanner.ts`: fires when trade routes ≥ 2 and tile cap not reached; picks first unused frontier zone
+- `sim/runtime.ts`: `dynamicTileProjection` field; incremental project in tick loop + publishCommittedEvents; small-log + large-log boot hydration; tile generation cadence block; all `listMapTiles`/`getMapAdjacency` calls updated to pass dynamic tile IDs
+- 5 tests in `sim/tileGeneration.test.ts`
+
+### Active Blockers
+None.
+
+### Remaining Gaps
+**None.** All ❌ markers in WORLD_CAPABILITIES.md Part II have been closed.
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — In-Progress Investigation: v0.83.0 + v0.84.0
 
 ### Status

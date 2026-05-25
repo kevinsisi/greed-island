@@ -1814,7 +1814,7 @@ The simulation is **deterministic, event-sourced, append-only**.
 
 ✅ **Roads / bridges** as buildable map features (v0.75.0) — auto-constructed when ≥2 trade routes exist; reduce NPC travel time.
 ✅ **Faction border walls** as buildable map features (v0.80.0) — `WALL_BUILT` auto-fires on any tile-border where different factions control each side; `WALL_DEMOLISHED` fires when the contested state resolves. `WallNetworkProjection` tracks standing walls; `planWallConstruction()` pure planner; 6 tests. `runtime.getWalls()` exposes world state.
-❌ No **new tile creation** beyond the predefined catalog.
+✅ **Dynamic tile generation** — `TILE_GENERATED` event creates frontier tiles at runtime from `FRONTIER_ZONES` pool (3 zones not in MAP_TILES/EXPANSION_TILES); `DynamicTileProjection` tracks them; `planTileGeneration()` fires when open trade routes ≥ 2 and world tile cap not reached; `getMapAdjacency()` + `listMapTiles()` updated to incorporate generated tiles; survives restarts via `DYNAMIC_TILE_BOOT_EVENT_TYPES`. (v0.84.0)
 
 ---
 
@@ -1892,7 +1892,7 @@ What NPCs do **without any player action**:
 - ✅ **Dynamic NPC-completed buildings** with monotonic state invariant.
 - ✅ **Per-tile visibility cap**: 3 autonomous completed/open buildings per tile.
 
-🟡 Buildings: **damageable** (BUILDING_DAMAGED), **repairable** (BUILDING_REPAIRED), **abandonable** (BUILDING_ABANDONED) all wired (v0.49.0+). ❌ Not yet upgradeable or capturable.
+✅ Buildings: **damageable** (BUILDING_DAMAGED), **repairable** (BUILDING_REPAIRED), **abandonable** (BUILDING_ABANDONED), **upgradeable** (BUILDING_UPGRADED), **capturable** (BUILDING_CAPTURED) all wired. `BuildingStateRow` tracks `upgradeLevel` (1–3) and `controllingFactionId`; `planBuildingUpgrades()` + `planBuildingCaptures()` pure planners; weekly upgrade sweep + bi-daily capture check in runtime. (v0.49.0–v0.83.0)
 ✅ **Ecosystem-aware building types**: `b_salt_marsh_ranch` (ranch type, Phase E3), `b_dock_warehouse` (warehouse type) — both in buildings/catalog.ts.
 ✅ **Roads / bridges** as buildable map features (v0.75.0). ✅ **Faction border walls** as buildable map features (v0.80.0).
 

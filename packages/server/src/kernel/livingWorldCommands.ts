@@ -229,6 +229,11 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_HOUSEHOLD_JOINT_DECISION',
   // Player Goods Carry (v0.82.0)
   'PLAYER_DEPOSIT_GOODS',
+  // Building Upgrade & Capture (v0.83.0)
+  'BUILDING_UPGRADED',
+  'BUILDING_CAPTURED',
+  // Dynamic Tile Generation (v0.84.0)
+  'TILE_GENERATED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -668,11 +673,40 @@ export type BuildingAbandonedCmd = Readonly<{
   lastActivityTick: number
 }>
 
+export type BuildingUpgradedCmd = Readonly<{
+  buildingId: string
+  tileId: string
+  fromLevel: number
+  toLevel: number
+  upgradedAtTick: number
+  narration: string
+}>
+
+export type BuildingCapturedCmd = Readonly<{
+  buildingId: string
+  tileId: string
+  capturingFactionId: string
+  previousFactionId: string | null
+  capturedAtTick: number
+  narration: string
+}>
+
 export type MapTileUnlockedCmd = Readonly<{
   projectId: string
   tileId: string
   adjacentTo: readonly string[]
   motivation?: ConstructionMotivation
+  narration: string
+}>
+
+export type TileGeneratedCmd = Readonly<{
+  tileId: string
+  biome: string
+  name: string
+  x: number
+  y: number
+  adjacentTileIds: readonly string[]
+  generatedAtTick: number
   narration: string
 }>
 
@@ -1624,7 +1658,10 @@ export type LivingWorldCommandPayload =
   | BuildingDamagedCmd
   | BuildingRepairedCmd
   | BuildingAbandonedCmd
+  | BuildingUpgradedCmd
+  | BuildingCapturedCmd
   | MapTileUnlockedCmd
+  | TileGeneratedCmd
   | NpcInteractCmd
   | AreaPressureCmd
   | WeatherChangeCmd
@@ -1983,6 +2020,26 @@ const VALIDATORS: Readonly<
     if (typeof p.lastActivityTick !== 'number') return 'lastActivityTick required'
     return null
   },
+  BUILDING_UPGRADED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.buildingId !== 'string' || !p.buildingId) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || !p.tileId) return 'tileId required'
+    if (!isNonNegativeInteger(p.fromLevel) || (p.fromLevel as number) < 1) return 'fromLevel must be positive integer'
+    if (!isNonNegativeInteger(p.toLevel) || (p.toLevel as number) <= (p.fromLevel as number)) return 'toLevel must be greater than fromLevel'
+    if (!isNonNegativeInteger(p.upgradedAtTick)) return 'upgradedAtTick required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  BUILDING_CAPTURED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.buildingId !== 'string' || !p.buildingId) return 'buildingId required'
+    if (typeof p.tileId !== 'string' || !p.tileId) return 'tileId required'
+    if (typeof p.capturingFactionId !== 'string' || !p.capturingFactionId) return 'capturingFactionId required'
+    if (p.previousFactionId !== null && typeof p.previousFactionId !== 'string') return 'previousFactionId must be string or null'
+    if (!isNonNegativeInteger(p.capturedAtTick)) return 'capturedAtTick required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
   MAP_TILE_UNLOCKED: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.projectId !== 'string' || p.projectId.length === 0) return 'projectId required'
@@ -1992,6 +2049,18 @@ const VALIDATORS: Readonly<
       const err = validateConstructionMotivation(p.motivation)
       if (err) return err
     }
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  TILE_GENERATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.biome !== 'string' || p.biome.length === 0) return 'biome required'
+    if (typeof p.name !== 'string' || p.name.length === 0) return 'name required'
+    if (typeof p.x !== 'number' || !Number.isFinite(p.x)) return 'x required'
+    if (typeof p.y !== 'number' || !Number.isFinite(p.y)) return 'y required'
+    if (!Array.isArray(p.adjacentTileIds) || !p.adjacentTileIds.every((v) => typeof v === 'string')) return 'adjacentTileIds must be string array'
+    if (!isNonNegativeInteger(p.generatedAtTick)) return 'generatedAtTick required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

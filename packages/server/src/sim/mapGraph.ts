@@ -62,23 +62,56 @@ export const EXPANSION_ADJACENCY: Readonly<Record<string, readonly string[]>> = 
   t_salt_marsh: ['t_dock', 't_ruin']
 }
 
-export function listMapTiles(unlockedTileIds: readonly string[] = []): ReadonlyArray<MapTileDef> {
+// Frontier zones: coordinate slots NOT in MAP_TILES or EXPANSION_TILES.
+// These tiles are created at runtime by TILE_GENERATED events when
+// civilization expands beyond the starting territory.
+export type FrontierZoneDef = MapTileDef & { readonly adjacentTo: readonly string[] }
+
+export const FRONTIER_ZONES: ReadonlyArray<FrontierZoneDef> = [
+  { id: 't_frontier_badlands', name: '荒土地帶', x: 9, y: 3, biome: 'ruin', adjacentTo: ['t_ruin', 't_salt_marsh'] },
+  { id: 't_frontier_highland', name: '高地山脊', x: 2, y: -1, biome: 'mountain', adjacentTo: ['t_forest', 't_mountain'] },
+  { id: 't_frontier_cove', name: '隱蔽海灣', x: 1, y: 6, biome: 'water', adjacentTo: ['t_desert', 't_dock'] },
+]
+
+export function listMapTiles(
+  unlockedTileIds: readonly string[] = [],
+  generatedTileIds: readonly string[] = []
+): ReadonlyArray<MapTileDef> {
   const unlocked = new Set(unlockedTileIds)
+  const generated = new Set(generatedTileIds)
   return [
     ...MAP_TILES,
-    ...EXPANSION_TILES.filter((tile) => unlocked.has(tile.id))
+    ...EXPANSION_TILES.filter((tile) => unlocked.has(tile.id)),
+    ...FRONTIER_ZONES.filter((zone) => generated.has(zone.id)),
   ]
 }
 
-export function getMapAdjacency(unlockedTileIds: readonly string[] = []): Readonly<Record<string, readonly string[]>> {
+export function getMapAdjacency(
+  unlockedTileIds: readonly string[] = [],
+  generatedTileIds: readonly string[] = []
+): Readonly<Record<string, readonly string[]>> {
   const unlocked = new Set(unlockedTileIds)
-  if (!unlocked.has('t_salt_marsh')) return MAP_ADJACENCY
-  return {
-    ...MAP_ADJACENCY,
-    t_dock: [...(MAP_ADJACENCY.t_dock ?? []), 't_salt_marsh'],
-    t_ruin: [...(MAP_ADJACENCY.t_ruin ?? []), 't_salt_marsh'],
-    t_salt_marsh: EXPANSION_ADJACENCY.t_salt_marsh ?? []
+  const generated = new Set(generatedTileIds)
+  const base: Record<string, readonly string[]> = { ...MAP_ADJACENCY }
+
+  if (unlocked.has('t_salt_marsh')) {
+    base.t_dock = [...(MAP_ADJACENCY.t_dock ?? []), 't_salt_marsh']
+    base.t_ruin = [...(MAP_ADJACENCY.t_ruin ?? []), 't_salt_marsh']
+    base.t_salt_marsh = EXPANSION_ADJACENCY.t_salt_marsh ?? []
   }
+
+  for (const zone of FRONTIER_ZONES) {
+    if (!generated.has(zone.id)) continue
+    base[zone.id] = zone.adjacentTo
+    for (const neighborId of zone.adjacentTo) {
+      const existing = base[neighborId] ?? []
+      if (!existing.includes(zone.id)) {
+        base[neighborId] = [...existing, zone.id]
+      }
+    }
+  }
+
+  return base
 }
 
 /**
@@ -86,8 +119,8 @@ export function getMapAdjacency(unlockedTileIds: readonly string[] = []): Readon
  * - origin === target 回傳 null（已抵達）
  * - 找不到路徑（例如 target 不在 graph）也回傳 null
  */
-export function nextStepTowards(originId: string, targetId: string, unlockedTileIds: readonly string[] = []): string | null {
-  const adjacency = getMapAdjacency(unlockedTileIds)
+export function nextStepTowards(originId: string, targetId: string, unlockedTileIds: readonly string[] = [], generatedTileIds: readonly string[] = []): string | null {
+  const adjacency = getMapAdjacency(unlockedTileIds, generatedTileIds)
   if (originId === targetId) return null
   if (!adjacency[originId] || !adjacency[targetId]) return null
 

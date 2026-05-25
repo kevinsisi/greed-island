@@ -261,6 +261,15 @@ export const NPC_LOCAL_TRADE_CADENCE_TICKS = TICKS_PER_HOUR * 4  // local NPC-to
 export const WALL_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 5  // wall auto-builds on contested borders
 export const HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS = TICKS_PER_DAY * 3  // household joint decision sweep
 export const HOUSEHOLD_JOINT_DECISION_GOLD_THRESHOLD = 100  // min household balance to trigger invest decision
+// Building Upgrade & Capture (v0.83.0)
+export const BUILDING_UPGRADE_CADENCE_TICKS = TICKS_PER_DAY * 7        // weekly upgrade sweep
+export const BUILDING_UPGRADE_MIN_AGE_TICKS = TICKS_PER_DAY * 14       // must be operational 14 days
+export const BUILDING_MAX_UPGRADE_LEVEL = 3
+export const BUILDING_CAPTURE_CADENCE_TICKS = TICKS_PER_DAY * 2        // faction capture check every 2 days
+// Dynamic Tile Generation (v0.84.0)
+export const TILE_GENERATION_CADENCE_TICKS = TICKS_PER_DAY * 30       // monthly frontier expansion check
+export const TILE_GENERATION_MIN_TRADE_ROUTES = 2                      // min open trade routes before expansion
+export const TILE_GENERATION_MAX_WORLD_TILES = 12                      // cap total tiles (core + expansion + generated)
 
 // NPC Intention Layer (v0.51.0)
 export const INTENT_RECOMPUTE_INTERVAL = TICKS_PER_HOUR * 2
