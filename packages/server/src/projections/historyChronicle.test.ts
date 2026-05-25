@@ -185,4 +185,116 @@ describe('HistoryChronicleProjection', () => {
 
     expect(rebuilt.canonicalHash()).toBe(incremental.canonicalHash())
   })
+
+  it('records combat_outcome arc from COMBAT_INITIATE + COMBAT_RESOLVE (player victory)', () => {
+    const proj = new HistoryChronicleProjection()
+    proj.project({
+      ...makeEvent('COMBAT_INITIATE', {
+        combatId: 'combat.1',
+        tile: 't_forest',
+        playerAccountId: 'player.1',
+        npcId: 'npc.wolf',
+        reason: 'aggression',
+      }, 1),
+      tick: 100,
+    } as unknown as Event)
+    expect(proj.list()).toHaveLength(0)
+
+    proj.project({
+      ...makeEvent('COMBAT_RESOLVE', {
+        combatId: 'combat.1',
+        playerAccountId: 'player.1',
+        npcId: 'npc.wolf',
+        outcome: 'player_victory',
+        durationRounds: 3,
+        finalPlayerHp: 80,
+        finalNpcHp: 0,
+      }, 2),
+      tick: 103,
+    } as unknown as Event)
+    const arcs = proj.list()
+    expect(arcs).toHaveLength(1)
+    expect(arcs[0]).toMatchObject({
+      arcId: 'arc.combat_outcome.combat.1',
+      arcType: 'combat_outcome',
+      status: 'concluded',
+      startTick: 100,
+      endTick: 103,
+      tileId: 't_forest',
+    })
+    expect(arcs[0]?.involvedEntityIds).toContain('player.1')
+    expect(arcs[0]?.involvedEntityIds).toContain('npc.wolf')
+    expect(arcs[0]?.narrationZh).toContain('玩家獲勝')
+  })
+
+  it('records combat_outcome arc from COMBAT_RESOLVE with fled outcome', () => {
+    const proj = new HistoryChronicleProjection()
+    proj.project({
+      ...makeEvent('COMBAT_INITIATE', {
+        combatId: 'combat.2',
+        tile: 't_cave',
+        playerAccountId: 'player.1',
+        animalId: 'animal.bear.5',
+        reason: 'aggression',
+      }, 1),
+      tick: 200,
+    } as unknown as Event)
+    proj.project({
+      ...makeEvent('COMBAT_RESOLVE', {
+        combatId: 'combat.2',
+        playerAccountId: 'player.1',
+        npcId: 'animal.bear.5',
+        outcome: 'fled',
+        durationRounds: 1,
+        finalPlayerHp: 40,
+        finalNpcHp: 60,
+      }, 2),
+      tick: 201,
+    } as unknown as Event)
+    const arc = proj.list()[0]!
+    expect(arc.arcType).toBe('combat_outcome')
+    expect(arc.tileId).toBe('t_cave')
+    expect(arc.involvedEntityIds).toContain('animal.bear.5')
+    expect(arc.narrationZh).toContain('玩家逃脫')
+  })
+
+  it('uses narration from COMBAT_RESOLVE payload when present', () => {
+    const proj = new HistoryChronicleProjection()
+    proj.project(makeEvent('COMBAT_INITIATE', {
+      combatId: 'combat.3', tile: 't_plain', playerAccountId: 'player.1', npcId: 'npc.guard', reason: 'duel',
+    }, 1))
+    proj.project(makeEvent('COMBAT_RESOLVE', {
+      combatId: 'combat.3', outcome: 'npc_victory', durationRounds: 5,
+      finalPlayerHp: 0, finalNpcHp: 55,
+      narration: '守衛以壓倒性力量擊敗了玩家。',
+    }, 2))
+    const arc = proj.list()[0]!
+    expect(arc.narrationZh).toBe('守衛以壓倒性力量擊敗了玩家。')
+  })
+
+  it('combat_outcome survives rebuildFromEvents', () => {
+    const events: Event[] = [
+      {
+        ...makeEvent('COMBAT_INITIATE', {
+          combatId: 'combat.4', tile: 't_river', playerAccountId: 'player.1', npcId: 'npc.x',
+        }, 1),
+        tick: 50,
+      } as unknown as Event,
+      {
+        ...makeEvent('COMBAT_RESOLVE', {
+          combatId: 'combat.4', outcome: 'player_victory', durationRounds: 2,
+          finalPlayerHp: 90, finalNpcHp: 0,
+        }, 2),
+        tick: 52,
+      } as unknown as Event,
+    ]
+    const incremental = new HistoryChronicleProjection()
+    for (const ev of events) incremental.project(ev)
+
+    const rebuilt = new HistoryChronicleProjection()
+    rebuilt.rebuildFromEvents(events)
+
+    expect(rebuilt.canonicalHash()).toBe(incremental.canonicalHash())
+    expect(rebuilt.getByType('combat_outcome')).toHaveLength(1)
+  })
 })

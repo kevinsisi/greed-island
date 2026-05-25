@@ -5,6 +5,38 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.69.0
+
+### Current Version
+`0.69.0` — TypeScript build clean. 1060 tests pass (1 pre-existing timeout in runtimeSettlementFamine). Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.69.0)
+
+**v0.69.0 — Combat Chronicle Arc (§22 partial)**
+- `'combat_outcome'` added to `HistoryArcType` union
+- `pendingCombatInitiates` Map added to `HistoryChronicleProjection` for cross-event `combatId` correlation
+- `COMBAT_INITIATE` handler stores tile + playerActorId + npcActorId keyed by combatId
+- `COMBAT_RESOLVE` handler looks up pending data, creates `combat_outcome` arc with tile, participants, outcome (玩家獲勝/對手獲勝/玩家逃脫), narration from payload when present
+- `COMBAT_INITIATE` and `COMBAT_RESOLVE` added to `HISTORY_CHRONICLE_BOOT_EVENT_TYPES` so replay reconstructs combat arcs correctly
+- `rebuildFromEvents` resets `pendingCombatInitiates` so full rebuild is deterministic
+- 4 new tests in `historyChronicle.test.ts` (player victory, fled, payload narration, rebuild idempotency)
+- Closes §22 "combat outcomes don't feed history_chronicle" gap (🟡→✅)
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET still used for area state, building occupants, weather, season, rare windows
+- §11.9 dialog grounding — relationship + household now injected; remaining: alias memory, long-term social history
+- Roads/bridges as map features
+- NPC household permanent migration (move to new tile permanently)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.68.0
 
 ### Current Version

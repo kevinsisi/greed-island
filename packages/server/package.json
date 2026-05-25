@@ -1,6 +1,6 @@
 {
   "name": "@greed-island/server",
-  "version": "0.68.0",
+  "version": "0.69.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -25,3 +25,4 @@
     "@types/jsonwebtoken": "^9.0.7"
   }
 }
+

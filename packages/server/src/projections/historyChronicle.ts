@@ -15,6 +15,7 @@ export type HistoryArcType =
   | 'species_extinction'
   | 'great_migration'
   | 'legendary_hunt'
+  | 'combat_outcome'
 
 export type HistoryArcStatus = 'active' | 'concluded'
 
@@ -49,13 +50,17 @@ export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'MIGRATION_WAVE_STARTED',
   'LEGENDARY_HUNT_STARTED',
   'LEGENDARY_HUNT_CONCLUDED',
+  'COMBAT_INITIATE',
+  'COMBAT_RESOLVE',
 ] as const
 
 export class HistoryChronicleProjection {
   private arcs = new Map<string, HistoryArc>()
+  private pendingCombatInitiates = new Map<string, { tile: string; playerActorId: string; npcActorId?: string; tick: number }>()
 
   rebuildFromEvents(events: readonly Event[]): void {
     this.arcs = new Map()
+    this.pendingCombatInitiates = new Map()
     for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
       this.project(event)
     }
@@ -447,6 +452,48 @@ export class HistoryChronicleProjection {
           status: 'concluded',
           endTick: concludedAtTick!,
           narrationZh: `傳奇獵殺在第 ${concludedAtTick} 刻落幕：${outcomeZh}。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'COMBAT_INITIATE': {
+        const { combatId, tile, playerAccountId, npcId, animalId } = p as {
+          combatId?: string; tile?: string; playerAccountId?: string; npcId?: string; animalId?: string
+        }
+        if (!str(combatId) || !str(tile)) return
+        const actorId = npcId ?? animalId
+        this.pendingCombatInitiates.set(combatId!, {
+          tile: tile!,
+          playerActorId: playerAccountId ?? '',
+          tick: event.tick ?? 0,
+          ...(actorId ? { npcActorId: actorId } : {}),
+        })
+        break
+      }
+
+      case 'COMBAT_RESOLVE': {
+        const { combatId, outcome, durationRounds, narration } = p as {
+          combatId?: string; outcome?: string; durationRounds?: number; narration?: string
+        }
+        if (!str(combatId) || !str(outcome)) return
+        const pending = this.pendingCombatInitiates.get(combatId!)
+        this.pendingCombatInitiates.delete(combatId!)
+        const arcId = `arc.combat_outcome.${combatId}`
+        const outcomeZh = outcome === 'player_victory' ? '玩家獲勝' : outcome === 'npc_victory' ? '對手獲勝' : '玩家逃脫'
+        const tileId = pending?.tile ?? null
+        const involved = [pending?.playerActorId, pending?.npcActorId].filter((x): x is string => !!x)
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'combat_outcome',
+          status: 'concluded',
+          startTick: pending?.tick ?? event.tick ?? 0,
+          endTick: event.tick ?? 0,
+          tileId,
+          involvedEntityIds: involved,
+          narrationZh: narration
+            ? narration
+            : `戰鬥在 ${tileId ?? '未知地點'} 結束（歷時 ${durationRounds ?? '?'} 回合）：${outcomeZh}。`,
           lastSequence: event.sequence,
         })
         break
