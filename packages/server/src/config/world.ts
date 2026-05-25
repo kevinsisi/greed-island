@@ -258,6 +258,7 @@ export const MIGRATION_PULL_SAFETY_MIN = 50          // target tile safety must 
 export const MIGRATION_MAX_PER_CADENCE = 1           // at most one NPC migrates per cadence tick
 export const NPC_LONG_INCAP_TICKS = TICKS_PER_DAY * 3  // combat defeat → 3 days of incapacitation
 export const NPC_LOCAL_TRADE_CADENCE_TICKS = TICKS_PER_HOUR * 4  // local NPC-to-NPC market trade cadence
+export const WALL_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 5  // wall auto-builds on contested borders
 
 // NPC Intention Layer (v0.51.0)
 export const INTENT_RECOMPUTE_INTERVAL = TICKS_PER_HOUR * 2

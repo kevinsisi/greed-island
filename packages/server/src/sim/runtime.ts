@@ -72,6 +72,7 @@ import {
   MORTALITY_CADENCE_TICKS,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
+  WALL_CONSTRUCTION_CADENCE_TICKS,
   NPC_LONG_INCAP_TICKS,
   NPC_LOCAL_TRADE_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
@@ -224,6 +225,8 @@ import { planMortality } from './mortalityPlanner.js'
 import { planHouseholdMigration } from './householdMigrationPlanner.js'
 import { planRoadConstruction } from './roadConstructionPlanner.js'
 import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
+import { planWallConstruction } from './wallConstructionPlanner.js'
+import { WallNetworkProjection, WALL_NETWORK_BOOT_EVENT_TYPES } from '../projections/wallNetwork.js'
 import { ActiveRuleOperatorsProjection, ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES } from '../projections/activeRuleOperators.js'
 import { NpcIncapacitationProjection, NPC_INCAPACITATION_BOOT_EVENT_TYPES } from '../projections/npcIncapacitation.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
@@ -565,6 +568,7 @@ export class SimulationRuntime {
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
   private readonly roadNetworkProjection = new RoadNetworkProjection()
+  private readonly wallNetworkProjection = new WallNetworkProjection()
   private readonly activeRuleOperatorsProjection = new ActiveRuleOperatorsProjection()
   private readonly npcIncapacitationProjection = new NpcIncapacitationProjection()
   private readonly beliefProjection = new BeliefProjection()
@@ -1178,6 +1182,11 @@ export class SimulationRuntime {
     return this.marketPricesProjection.list()
   }
 
+  /** v0.80.0 — All faction-border walls currently standing. */
+  getWalls(): readonly import('../projections/wallNetwork.js').WallRow[] {
+    return this.wallNetworkProjection.list()
+  }
+
   /** Phase 5 §30.9 — history arcs (Layer 5 Perception Runtime). */
   getHistoryArcs(): readonly HistoryArc[] {
     return this.historyChronicleProjection.list()
@@ -1651,6 +1660,7 @@ export class SimulationRuntime {
       this.buildingStateProjection.project(ev)
       this.buildingOccupantsProjection.project(ev)
       this.roadNetworkProjection.project(ev)
+      this.wallNetworkProjection.project(ev)
       this.activeRuleOperatorsProjection.project(ev)
       this.npcIncapacitationProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
@@ -3712,6 +3722,54 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Wall Construction cadence (v0.80.0) ----
+    if (nextTick % WALL_CONSTRUCTION_CADENCE_TICKS === 0) {
+      const wallIntents = planWallConstruction({
+        currentTick: nextTick,
+        factionControlProjection: this.factionControlProjection,
+        wallNetworkProjection: this.wallNetworkProjection,
+      })
+      for (const intent of wallIntents) {
+        if (intent.action === 'build') {
+          const nameA = TILE_BY_ID[intent.tileIdA]?.name ?? intent.tileIdA
+          const nameB = TILE_BY_ID[intent.tileIdB]?.name ?? intent.tileIdB
+          commands.push(makeLivingWorldCommand(
+            'WALL_BUILT',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              wallId: intent.wallId,
+              tileIdA: intent.tileIdA,
+              tileIdB: intent.tileIdB,
+              factionIdA: intent.factionIdA,
+              factionIdB: intent.factionIdB,
+              builtAtTick: nextTick,
+              narration: `${nameA}與${nameB}之間的派系邊界形成了防禦工事。`,
+            }
+          ))
+        } else {
+          const nameA = TILE_BY_ID[intent.tileIdA]?.name ?? intent.tileIdA
+          const nameB = TILE_BY_ID[intent.tileIdB]?.name ?? intent.tileIdB
+          commands.push(makeLivingWorldCommand(
+            'WALL_DEMOLISHED',
+            SIM_ACTOR_WORLD,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              wallId: intent.wallId,
+              tileIdA: intent.tileIdA,
+              tileIdB: intent.tileIdB,
+              demolishedAtTick: nextTick,
+              narration: `${nameA}與${nameB}之間的派系勢力改變，防禦工事已瓦解。`,
+            }
+          ))
+        }
+      }
+    }
+
     // BeliefProjection confidence decay — once per in-game day
     if (nextTick % TICKS_PER_DAY === 0) {
       this.beliefProjection.tick(nextTick)
@@ -4916,6 +4974,7 @@ export class SimulationRuntime {
         this.buildingStateProjection.project(ev)
         this.buildingOccupantsProjection.project(ev)
         this.roadNetworkProjection.project(ev)
+        this.wallNetworkProjection.project(ev)
         this.activeRuleOperatorsProjection.project(ev)
         this.npcIncapacitationProjection.project(ev)
         this.npcStateProjection.project(ev)
@@ -5591,6 +5650,7 @@ export class SimulationRuntime {
       this.bioNodeProjection.rebuildFromEvents(allEvents)
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.roadNetworkProjection.rebuildFromEvents(allEvents)
+      this.wallNetworkProjection.rebuildFromEvents(allEvents)
       this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
@@ -5647,6 +5707,9 @@ export class SimulationRuntime {
       // RoadNetwork projection — rebuild road/bridge map from ROAD_CONSTRUCTED/ROAD_DESTROYED events.
       const roadNetworkEvents = this.store.readEventsByTypes(ROAD_NETWORK_BOOT_EVENT_TYPES)
       this.roadNetworkProjection.rebuildFromEvents(roadNetworkEvents)
+      // WallNetwork projection — rebuild faction border walls from WALL_BUILT/WALL_DEMOLISHED events.
+      const wallNetworkEvents = this.store.readEventsByTypes(WALL_NETWORK_BOOT_EVENT_TYPES)
+      this.wallNetworkProjection.rebuildFromEvents(wallNetworkEvents)
       // ActiveRuleOperators projection — rebuild active card rule operators from activation/expiry events.
       const ruleOperatorEvents = this.store.readEventsByTypes(ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES)
       this.activeRuleOperatorsProjection.rebuildFromEvents(ruleOperatorEvents)

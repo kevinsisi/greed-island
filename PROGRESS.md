@@ -5,6 +5,35 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.80.0
+
+### Current Version
+`0.80.0` — TypeScript build clean. 1051 server tests pass. Commits pushed to `main`.
+
+### What Was Shipped (v0.80.0)
+
+**v0.80.0 — Faction Border Walls (wall gap closed)**
+- `WALL_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 5` in `config/world.ts`
+- `WALL_BUILT` + `WALL_DEMOLISHED` command types + payload types (`WallBuiltCmd`, `WallDemolishedCmd`) in `kernel/livingWorldCommands.ts`; Rule Engine validators for both
+- `WallNetworkProjection` in `projections/wallNetwork.ts`: tracks standing walls keyed by canonical border string; `hasWall()`, `wallIdForBorder()`, `list()`, `rebuildFromEvents()`; `WALL_NETWORK_BOOT_EVENT_TYPES` for large-log selective rebuild
+- `planWallConstruction()` pure fn in `sim/wallConstructionPlanner.ts`: scans all adjacent tile pairs; emits `build` intent when different factions control each side and no wall exists; emits `demolish` intent when a wall exists but the contested state resolved; visited-set prevents duplicate intents per border
+- `sim/runtime.ts`: `wallNetworkProjection` field; incremental `project()` in both the tick event loop and `publishCommittedEvents`; cadence block emits `WALL_BUILT`/`WALL_DEMOLISHED` commands with narration; `getWalls()` public getter; small-log + large-log boot hydration wired
+- 6 tests in `sim/wallConstruction.test.ts` (134 test files, 1051 tests total)
+- WORLD_CAPABILITIES.md: wall ❌ gap closed to ✅ in both §17 and §21
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Household joint decisions
+- Player carrying goods physically between tiles
+- Buildings not upgradeable or capturable
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.79.0
 
 ### Current Version

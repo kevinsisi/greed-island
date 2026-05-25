@@ -1813,8 +1813,8 @@ The simulation is **deterministic, event-sourced, append-only**.
 - ✅ **Biome-driven species spawn** — each species has `biomeAffinity[]`; wildlife engine spawns by biome region.
 
 ✅ **Roads / bridges** as buildable map features (v0.75.0) — auto-constructed when ≥2 trade routes exist; reduce NPC travel time.
+✅ **Faction border walls** as buildable map features (v0.80.0) — `WALL_BUILT` auto-fires on any tile-border where different factions control each side; `WALL_DEMOLISHED` fires when the contested state resolves. `WallNetworkProjection` tracks standing walls; `planWallConstruction()` pure planner; 6 tests. `runtime.getWalls()` exposes world state.
 ❌ No **new tile creation** beyond the predefined catalog.
-❌ No **defenses / walls** as buildable map features.
 
 ---
 
@@ -1894,7 +1894,7 @@ What NPCs do **without any player action**:
 
 🟡 Buildings: **damageable** (BUILDING_DAMAGED), **repairable** (BUILDING_REPAIRED), **abandonable** (BUILDING_ABANDONED) all wired (v0.49.0+). ❌ Not yet upgradeable or capturable.
 ✅ **Ecosystem-aware building types**: `b_salt_marsh_ranch` (ranch type, Phase E3), `b_dock_warehouse` (warehouse type) — both in buildings/catalog.ts.
-✅ **Roads / bridges** as buildable map features (v0.75.0). ❌ Walls not yet implemented.
+✅ **Roads / bridges** as buildable map features (v0.75.0). ✅ **Faction border walls** as buildable map features (v0.80.0).
 
 ---
 

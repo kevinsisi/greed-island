@@ -222,6 +222,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'COMBAT_WITNESS_RECORDED',
   // NPC-to-NPC local market trade (v0.78.0)
   'NPC_GOODS_TRADED',
+  // Walls / defenses (v0.80.0)
+  'WALL_BUILT',
+  'WALL_DEMOLISHED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -448,6 +451,25 @@ export type RoadDestroyedCmd = Readonly<{
   fromTileId: string
   toTileId: string
   destroyedAtTick: number
+  narration: string
+}>
+
+// Walls / defenses (v0.80.0)
+export type WallBuiltCmd = Readonly<{
+  wallId: string
+  tileIdA: string
+  tileIdB: string
+  factionIdA: string
+  factionIdB: string
+  builtAtTick: number
+  narration: string
+}>
+
+export type WallDemolishedCmd = Readonly<{
+  wallId: string
+  tileIdA: string
+  tileIdB: string
+  demolishedAtTick: number
   narration: string
 }>
 
@@ -1711,6 +1733,8 @@ export type LivingWorldCommandPayload =
   | NpcIncapacitatedLongCmd
   | CombatWitnessRecordedCmd
   | NpcGoodsTradedCmd
+  | WallBuiltCmd
+  | WallDemolishedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3158,6 +3182,26 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.quantity) || (p.quantity as number) < 1) return 'quantity must be positive integer'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.tradedAtTick)) return 'tradedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  WALL_BUILT: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.wallId !== 'string' || p.wallId.length === 0) return 'wallId required'
+    if (typeof p.tileIdA !== 'string' || p.tileIdA.length === 0) return 'tileIdA required'
+    if (typeof p.tileIdB !== 'string' || p.tileIdB.length === 0) return 'tileIdB required'
+    if (typeof p.factionIdA !== 'string' || p.factionIdA.length === 0) return 'factionIdA required'
+    if (typeof p.factionIdB !== 'string' || p.factionIdB.length === 0) return 'factionIdB required'
+    if (!isNonNegativeInteger(p.builtAtTick)) return 'builtAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  WALL_DEMOLISHED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.wallId !== 'string' || p.wallId.length === 0) return 'wallId required'
+    if (typeof p.tileIdA !== 'string' || p.tileIdA.length === 0) return 'tileIdA required'
+    if (typeof p.tileIdB !== 'string' || p.tileIdB.length === 0) return 'tileIdB required'
+    if (!isNonNegativeInteger(p.demolishedAtTick)) return 'demolishedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
