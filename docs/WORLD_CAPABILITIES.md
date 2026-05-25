@@ -1664,7 +1664,7 @@ And becomes:
 ---
 
 ═══════════════════════════════════════════════════════════════
-## Part II — Current Verified Baseline (v0.34.0, 2026-05-20)
+## Part II — Current Verified Baseline (v0.68.0, 2026-05-25)
 
 Verified against `packages/server/src/` and `packages/web/src/`.
 ✅ = shipped. ❌ = real gap. 🟡 = partial.
@@ -1701,7 +1701,7 @@ The simulation is **deterministic, event-sourced, append-only**.
 - ✅ **Deterministic random** via `hashSeed(commandId, actorId, tick, ...)`. No `Math.random()` in deterministic paths.
 - ✅ **NPC state typed projection** (`NpcStateProjection`) — replaces FACT_SET for NPC presence/activity.
 
-❌ **Simulation budget (Architecture §7)** is specified but **not enforced** — no command cap, no NPC partitioning, no regional activation throttle. (ARCHITECTURE.md §11.6)
+✅ **Simulation budget (Architecture §7)** — command hard cap (`MAX_COMMANDS_PER_TICK_HARD_CAP = 8000`), NPC partition (`NPC_PARTITION_PERIOD = 4`), and regional tile activation gate (`TILE_ACTIVITY_RECENCY_TICKS`) all enforced in `runtime.ts`. Soft cap warning at 5000. (ARCHITECTURE.md §11.6 closed)
 
 🟡 **ARCHITECTURE.md §11.5 FACT_SET** — NPC state now has typed projection (✅), but area state, building occupants, weather, season, rare windows still use FACT_SET.
 
@@ -1905,7 +1905,7 @@ What NPCs do **without any player action**:
 - ✅ **Faction consequences** — combat dominance shift → `FACTION_TILE_SEIZED` (v0.33.0).
 
 🟡 **ARCHITECTURE.md §11.4** — combat session/log partially outside canonical EventLog (not yet fully merged).
-❌ **History chronicle** — combat outcomes don't feed `history_chronicle` projection (doesn't exist yet).
+🟡 **History chronicle** — `history_chronicle` projection exists (v0.64.0+) with arc types `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline`, `species_extinction`; API at `/api/world/history-arcs`. Combat outcomes still do not feed the chronicle.
 ❌ Player cannot fight animals (player-vs-wildlife commands exist but are not validated to start a sub-tick combat session).
 
 ---
@@ -1933,7 +1933,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 `PLAYER_CLAIMED_TERRITORY`, `PLAYER_HIRED_NPC`, `PLAYER_DISMISSED_NPC`, `PLAYER_JOINED/LEFT/LED_FACTION`, `PLAYER_PLAYED_CARD`, `PLAYER_HUNTED_ANIMAL`, `PLAYER_FISHED`, `PLAYER_DOMESTICATED_ANIMAL`, `PLAYER_PROTECTED_REGION`, `PLAYER_PICKED_UP_GOODS`, `PLAYER_TRADED_GOODS`, `PLAYER_FOUNDED_SETTLEMENT`, `PLAYER_SPONSORED_CONSTRUCTION`.
 
 ❌ Player **cannot** carry goods physically between tiles (logistics substrate exists; player-goods-movement is command-only with no spatial carrier simulation).
-❌ `history_chronicle` projection not implemented — no arc-based history for the player's absence periods.
+✅ `history_chronicle` projection implemented — `/api/world/history-arcs` returns arc deltas showing what changed during player absence (faction seizures, ecological collapses, famine evacuations). (v0.64.0+)
 
 ---
 
@@ -1947,8 +1947,8 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **AI failure / latency cannot block tick**.
 - ✅ **Server-authored motivation payloads**.
 
-❌ **ARCHITECTURE.md §11.9** — NPC personal dialog not fully grounded in known-person graph, alias memory, faction knowledge.
-❌ **Ecological perception** — AI prompts not yet fed animal population / migration / extinction events (ecosystem data exists in projections but not wired to dialog context).
+🟡 **ARCHITECTURE.md §11.9** — NPC dialog grounding: relationship graph (v0.67.0 — friend/rival/trust), household members (v0.68.0), dominant faction, history arcs, ecology context (animal population, fishery, extinction warnings, pollution, plant nodes, population shifts) all injected. Remaining gap: alias memory and full social history indexing.
+✅ **Ecological perception** — animal population (`ecologyContext`), fishery density (`fisheryContext`), extinction warnings, population shifts (`recentPopulationShifts`), pollution level, and plant node density (`plantContext`) all injected into `AiDialogContext` and rendered into NPC system prompt.
 
 ---
 
@@ -1990,9 +1990,9 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **Legendary ecology** (`ecosystem/legendarySpawnPlanner.ts`, `legendaryHuntPlanner.ts`, `factionEcologyPlanner.ts`): mythic species behavior, legendary hunt arc, faction ecological ideology (Phase E4).
 - ✅ **Defense coordination** (`ecosystem/defenseParty.ts`): NPC defense party formation when animal attacks.
 
-❌ **BioNode** (`BioNode {...}` for plants / fungi) — not implemented; only animals and fishery density exist.
-❌ **Forest Regrowth Engine** — `FOREST_DEPLETED` / `BIOME_RECOVERED` commands exist in §6.5 but are not in catalog or wired.
-❌ `SPECIES_POPULATION_SHIFTED` — not yet in command catalog.
+✅ **BioNode** — `BioNodeProjection` + plant species catalog (oak, pine, reed, wild_herb, salt_grass, mushroom, cactus, sand_grass) + `plantRegrowth.ts` engine implemented (Phase E5). `getBioNodesOnTile` wired to dialog context (`plantContext`). `BIO_NODE_SEEDED` idempotently seeds tiles on first tick; `BIO_NODE_REGREW` runs every `TICKS_PER_HOUR` to restore depleted nodes.
+✅ **Forest Regrowth Engine** — `planPlantRegrowth()` runs every hour-tick; `BIO_NODE_REGREW` events restore density toward capacity. Wired in `runtime.ts` Phase E5 block.
+✅ `SPECIES_POPULATION_SHIFTED` — implemented v0.59.0; fires when global species count drops ≥25% vs previous snapshot; wired to dialog `recentPopulationShifts`.
 
 ---
 
@@ -2034,7 +2034,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 | `SkillXpProjection` | NPC skill XP with lineage | v0.3x |
 | `SpeciesExtinctionProjection` | Extinction warnings + extinct species | v0.2x |
 
-❌ **`history_chronicle` projection** — not implemented (§30.9). Combat, ecological, and political events have no emergent arc narrative.
+✅ **`history_chronicle` projection** — implemented (v0.64.0+, §30.9). Arc types: `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline`, `species_extinction`. API: `GET /api/world/history-arcs` and `/api/world/history-arcs/:arcType`. Injected into NPC dialog context via `tileHistoryArcs`. Combat outcomes do not yet feed the chronicle.
 ❌ **ARCHITECTURE.md §11.7** — projection rebuild contract sweep incomplete for some older projections (area state, building occupants).
 
 ---
@@ -2046,18 +2046,18 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 29. Layer-by-Layer Status (v0.51.0)
+## 29. Layer-by-Layer Status (v0.68.0)
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|
-| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~121 command types | ARCHITECTURE.md §11.5 (area FACT_SET), §11.6 (budget gate), §11.7 (rebuild contract sweep) |
-| **2. Living World Runtime** | 🟡 Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction | NPC migration (household moves tile permanently), NPC-to-NPC trade, ARCHITECTURE.md §11.9 dialog grounding |
-| **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, 5 ecosystem projections, faction ecological ideology; §6.5 event catalog complete (FOREST_DEPLETED, BIOME_RECOVERED, SPECIES_POPULATION_SHIFTED, POLLUTION_INCREASED, POLLUTION_RECOVERED, HIDE_COLLECTED, BONE_COLLECTED — v0.55–v0.61) | BioNode (plant/fungal), Forest Regrowth Engine |
-| **3. Civilization Runtime** | 🟡 Substantial | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0) | History chronicle projection; roads/bridges as map features; carrier NPC autonomous routing |
-| **4. Combat Runtime** | 🟡 Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences | ARCHITECTURE.md §11.4 (combat log not fully in canonical EventLog); cards as combat rule operators (Phase 4); history chronicle feed |
-| **5. Perception Runtime** | 🟡 Partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | ARCHITECTURE.md §11.9 dialog grounding (known-person graph), ecological perception (ecosystem data not yet wired to AI prompts), history projection as interpreted arcs |
+| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~130 command types; budget gate (§11.6 ✅): command hard cap + NPC partitioning + regional tile activation | ARCHITECTURE.md §11.5 (area/building FACT_SET), §11.7 (rebuild contract sweep) |
+| **2. Living World Runtime** | 🟡 Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction; Cognitive Runtime (belief, intent, reflection, memory, relationship graph, household context — v0.50–v0.68) | NPC migration (household moves tile permanently), NPC-to-NPC trade, ARCHITECTURE.md §11.9 (alias memory, full social history) |
+| **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, BioNode plant system (Phase E5: oak/pine/reed/wild_herb/salt_grass/mushroom/cactus/sand_grass), Forest Regrowth Engine, SPECIES_POPULATION_SHIFTED; faction ecological ideology; full §6.5 event catalog | None (BioNode + forest regrowth now ✅) |
+| **3. Civilization Runtime** | 🟡 Substantial | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0); history chronicle projection (v0.64.0+) | Roads/bridges as map features; carrier NPC autonomous routing; NPC household permanent migration |
+| **4. Combat Runtime** | 🟡 Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences | ARCHITECTURE.md §11.4 (combat log not fully in canonical EventLog); cards as combat rule operators (Phase 4); history chronicle feed from combat |
+| **5. Perception Runtime** | 🟡 Strong | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard; NPC dialog grounded in: beliefs, intents, reflections, episodic memory, relationship graph (friend/rival/trust), household members, dominant faction, tile history arcs, ecology (animals, fishery, plants, extinction, pollution, population shifts), rumors, skills, local events | ARCHITECTURE.md §11.9 remaining: alias memory, long-term social history indexing |
 
-The "看起來像 civilization 的 placeholder" critique from Part I §4 is now partially resolved: Layer 2.5 is real (not a placeholder), Layer 3 has genuine goods metabolism, and Layer 2 has cultural + mortality depth. The remaining genuine gaps are: budget gate, history chronicle, and AI dialog grounding.
+The "看起來像 civilization 的 placeholder" critique from Part I §4 is now substantially resolved: Layer 2.5 is real (not a placeholder), Layer 3 has genuine goods metabolism, Layer 2 has cultural + mortality depth, and Layer 5 has deep AI dialog grounding. The remaining genuine gaps are: roads/bridges, NPC permanent migration, and combat history chronicle feed.
 
 ---
 

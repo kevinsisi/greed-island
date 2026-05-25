@@ -695,11 +695,14 @@ are replayable, but the target architecture is typed domain Events with
 pure reducers. New features should prefer typed Events and should not
 add additional long-lived `FACT_SET` domains.
 
-### 11.6 Simulation Budget Is Specified But Not Enforced
+### 11.6 Simulation Budget ✅ CLOSED v0.68.x
 
-Section 7 defines command caps, NPC partitioning, regional activation,
-and event-density controls, but the current runtime does not enforce all
-of them. Full autonomy at larger scale requires bounded per-tick work.
+All three budget enforcement tiers from Section 7 are implemented:
+- **Command hard cap** (`MAX_COMMANDS_PER_TICK_HARD_CAP = 8000`): excess commands go to `rejected_command_log`.
+- **NPC partitioning** (`NPC_PARTITION_PERIOD = 4`): background NPCs skip expensive phases each tick.
+- **Regional tile activation gate** (`TILE_ACTIVITY_RECENCY_TICKS`): inactive tiles only run low-frequency ecology drift.
+
+`softCapHitCount` and `hardCapRejectedSinceBoot` are observable via `/api/admin/npc-stats` (budget sub-object).
 
 ### 11.7 Projection Rebuild Contract Is Incomplete
 
