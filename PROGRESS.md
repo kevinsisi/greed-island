@@ -5,6 +5,47 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.53.0
+
+### Current Version
+`0.53.0` — TypeScript build clean. 885 tests pass across 118 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.52.0 → v0.53.0)
+
+**v0.53.0 — NPC Memory Dialog Injection (Cognitive Runtime Layer 2, Step 4)**
+
+NPC AI 對話脈絡現在包含 NPC 親身經歷的情感記憶。`SqliteNpcMemoryStore` 擴充 locality fan-out（8 種新事件型別），並以 importance tier decay 過濾後注入 AI prompt，NPC 說話時可自然引用恐懼、悲傷、驚嘆等情緒記憶。
+
+**修改檔案：**
+- `packages/server/src/config/world.ts`：新增 4 個常數（MEMORY_DIALOG_MAX_BULLETS / MEMORY_VERY_HIGH/HIGH/NORMAL_DECAY_TICKS）
+- `packages/server/src/projections/beliefProjection.ts`：TILE_ADJACENCY 擴充至 9 個 tile（新增 t_salt_marsh、t_desert）
+- `packages/server/src/kernel/npcMemory.ts`：新增 `projectWithLocality()` + `formatMemoryContext()` + `deriveLocalityRows()` + `fanOutByLocality()` + `describeMemoryContent()` + `emotionalTagZh()`
+- `packages/server/src/kernel/npcMemory.test.ts`：新增（20 個測試）
+- `packages/server/src/npcs/aiDialog.ts`：`AiDialogContext.memoryContext?` + `buildMemoryBlock()`；注入 `buildSystemPrompt`
+- `packages/server/src/npcs/aiDialog.test.ts`：新增 3 個 buildMemoryBlock 測試
+- `packages/server/src/sim/runtime.ts`：兩個 fan-out 點各加 `projectWithLocality` 呼叫；新增 `getFormattedMemoryContext()` getter
+- `packages/server/src/http/npc.ts`：填充 `memoryContext` 進 dialogCtx
+
+**架構關鍵點：**
+- `projectWithLocality()` 不在 `rebuildFromEvents()` 呼叫（locality 依賴即時 NPC tile 位置，不存於 EventLog，與 BeliefProjection 相同取捨）
+- SPECIES_EXTINCT 存於 `npc_id = 'world'`（非 fan-out）；`formatMemoryContext` 同時查 personal + world rows
+- importance >= 9 永不過期；decay 在 query-time 實作，不刪除歷史資料
+- `buildMemoryBlock` 回傳 `[]` 時 `buildSystemPrompt` 完全不注入空塊（無雜訊）
+
+**測試：**
+- +20 新測試（npcMemory.test.ts：12 projectWithLocality + 8 formatMemoryContext）+ 3 aiDialog.test.ts
+- 885 passing tests / 118 files；build clean
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 885 pass
+cd packages/server && npm run build    # clean
+```
+
+**Next:** v0.54.0 — Intent urgency boost from memory (`getMemoryUrgencyBoost`)，或其他 Cognitive Runtime Layer 2 延伸
+
+---
+
 ## 2026-05-22 — Handoff Snapshot @ v0.52.0
 
 ### Current Version

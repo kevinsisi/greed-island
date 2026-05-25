@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.53.0 ✅ shipped — 2026-05-25
+
+**主題：NPC 記憶對話注入（Memory Dialog Injection）**
+
+- ✅ `projectWithLocality(event, npcTileMap)`：locality fan-out（同 tile 全額 importance，adjacent - 2，遠端不記）
+- ✅ 8 種新事件覆蓋：FACTION_TILE_SEIZED / ANIMAL_ATTACKED_NPC / MIGRATION_WAVE_STARTED / SPECIES_EXTINCT / SETTLEMENT_FORMED / SETTLEMENT_DECLINED / GOODS_TRANSPORT_LOST / COMBAT_DEFEAT
+- ✅ emotionalTag（fear / grief / relief / anger / awe）編碼入 content_json
+- ✅ `formatMemoryContext(npcId, currentTick)`：decay 過濾（importance 9 永久；7–8 30天；5–6 7天；1–4 2天）；同時查個人與 world-scoped 記憶；最多 5 條中文子彈
+- ✅ `buildMemoryBlock()` + `AiDialogContext.memoryContext?` → 注入 AI system prompt（無記憶時完全省略）
+- ✅ `getFormattedMemoryContext(npcId)` runtime getter
+- ✅ 4 個新常數：MEMORY_DIALOG_MAX_BULLETS / MEMORY_VERY_HIGH/HIGH/NORMAL_DECAY_TICKS
+- ✅ ~20 新測試（npcMemory.test.ts + aiDialog.test.ts）；build 乾淨
+
+---
+
 ## v0.52.0 ✅ shipped — 2026-05-22
 
 **主題：NPC 反思對話注入（Reflection Dialog Injection）**

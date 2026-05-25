@@ -1424,6 +1424,8 @@ Reflection {
 
 ## 12.5.10 Memory System
 
+> **v0.53.0 — Memory Dialog Injection shipped.** `SqliteNpcMemoryStore.projectWithLocality()` provides locality-based fan-out for 8 event types with emotionalTag encoding; `formatMemoryContext()` applies importance-tier decay filtering (permanent/30d/7d/2d); `buildMemoryBlock()` injects NPC episodic memory into AI dialog system prompt. ~20 tests in `npcMemory.test.ts` + `aiDialog.test.ts`.
+
 Memory is not a list.
 
 Memory is weighted.
