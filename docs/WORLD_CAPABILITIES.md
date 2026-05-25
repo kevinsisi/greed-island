@@ -1855,10 +1855,9 @@ What an NPC "is" at any tick:
 | Rumors heard | `RumorProjection` | ✅ |
 | Mentorship state | `SkillXpProjection` (lineage tracked) | ✅ |
 
-❌ Missing:
-- **Knowledge boundary** — NPC's known-person graph, alias memory, faction knowledge (ARCHITECTURE.md §11.9)
-- **Household joint decisions** — economy pooled but no shared command decisions yet
-- **Ecological awareness in dialog** — AI prompts not yet fed ecosystem state from projections
+✅ **Knowledge boundary** — NPC's known-person graph (v0.67.0), alias memory (v0.70.0), faction knowledge all injected (§11.9 CLOSED v0.71.0).
+✅ **Ecological awareness in dialog** — animal population, fishery density, extinction warnings, pollution, plant nodes, population shifts all injected into `AiDialogContext` and NPC system prompt.
+❌ **Household joint decisions** — economy pooled but no shared command decisions yet.
 
 ---
 
@@ -1880,7 +1879,7 @@ What NPCs do **without any player action**:
 - NPC-to-NPC goods trade (carrier NPC moving goods between settlements autonomously)
 - Cross-tile resource transport initiated by NPC merchants
 - Migration (NPC moving household permanently)
-- History narrative arc generation (`history_chronicle` projection not implemented)
+- History narrative arc generation (`history_chronicle` projection now ✅ implemented v0.64.0+; arc types: faction_seizure, ecological_collapse, famine_evacuation, settlement_decline, species_extinction, combat_outcome)
 
 ---
 
@@ -1891,7 +1890,7 @@ What NPCs do **without any player action**:
 - ✅ **Dynamic NPC-completed buildings** with monotonic state invariant.
 - ✅ **Per-tile visibility cap**: 3 autonomous completed/open buildings per tile.
 
-❌ Buildings are **not upgradeable, damageable, abandonable, repairable, capturable**.
+🟡 Buildings: **damageable** (BUILDING_DAMAGED), **repairable** (BUILDING_REPAIRED), **abandonable** (BUILDING_ABANDONED) all wired (v0.49.0+). ❌ Not yet upgradeable or capturable.
 ❌ No **ecosystem-aware building types** — no ranch, no warehouse, no smokehouse, no fishery dock.
 ❌ No **roads / bridges / walls** as buildable map features.
 
@@ -1904,9 +1903,9 @@ What NPCs do **without any player action**:
 - ✅ **Wildlife combat** — animals attack NPCs, retaliate, flee; defense party formation (Sprint 2B/2C).
 - ✅ **Faction consequences** — combat dominance shift → `FACTION_TILE_SEIZED` (v0.33.0).
 
-🟡 **ARCHITECTURE.md §11.4** — combat session/log partially outside canonical EventLog (not yet fully merged).
-🟡 **History chronicle** — `history_chronicle` projection exists (v0.64.0+) with arc types `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline`, `species_extinction`; API at `/api/world/history-arcs`. Combat outcomes still do not feed the chronicle.
-❌ Player cannot fight animals (player-vs-wildlife commands exist but are not validated to start a sub-tick combat session).
+✅ **ARCHITECTURE.md §11.4** — combat session/log fully in canonical EventLog (closed v0.25.0); CombatStore is a read-only EventLog projection.
+✅ **History chronicle** — `history_chronicle` projection (v0.64.0+): arc types `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline`, `species_extinction`, `combat_outcome` (v0.69.0). API: `/api/world/history-arcs`.
+✅ Player can fight animals — wildlife combat validated and wired to Phase B/C sub-tick combat session (v0.46.0+).
 
 ---
 
