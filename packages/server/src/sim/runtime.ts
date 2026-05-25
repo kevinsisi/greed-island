@@ -213,6 +213,8 @@ import { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
+import { FactionDominanceProjection } from '../projections/factionDominance.js'
+import { planFactionDominance } from './factionDominancePlanner.js'
 import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
 import { AreaStateProjection } from '../projections/areaState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
@@ -340,6 +342,7 @@ const INTENT_PROJECTION_BOOT_EVENT_TYPES = ['NPC_INTENT_RESOLVED'] as const
 const FACTION_BOOT_EVENT_TYPES = [
   'FACTION_TILE_SEIZED',
   'FACTION_NPC_LOYALTY_SHIFTED',
+  'FACTION_DOMINANCE_SHIFTED',
 ] as const
 
 export type NarrativeEventPayload = Readonly<{
@@ -530,6 +533,8 @@ export class SimulationRuntime {
   // NpcLineageProjection is initialized in the constructor once profiles are available.
   private npcLineageProjection!: NpcLineageProjection
   private readonly factionControlProjection = new FactionControlProjection()
+  private readonly factionDominanceProjection = new FactionDominanceProjection()
+  private previousFactionTileCounts = new Map<FactionId, number>()
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
@@ -1607,6 +1612,7 @@ export class SimulationRuntime {
       this.npcMortalityProjection.project(ev)
       this.npcLineageProjection.project(ev)
       this.factionControlProjection.project(ev)
+      this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)
       this.areaStateProjection.project(ev)
       this.bioNodeProjection.project(ev)
@@ -3499,6 +3505,41 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Faction dominance shift (v0.57.0) ----
+    const currentFactionTileCounts: Partial<Record<FactionId, number>> = {}
+    for (const f of FACTIONS) {
+      currentFactionTileCounts[f] = this.factionControlProjection.dominantTilesOf(f).length
+    }
+    const shiftFiredFor = new Set<FactionId>(FACTIONS.filter(f => this.factionDominanceProjection.hasShiftFiredFor(f)))
+    const previousCounts: Partial<Record<FactionId, number>> = {}
+    for (const [f, n] of this.previousFactionTileCounts) previousCounts[f] = n
+    const losingFaction = planFactionDominance({ currentTileCounts: currentFactionTileCounts, previousTileCounts: previousCounts, shiftFiredFor })
+    if (losingFaction) {
+      const dominantFaction = FACTIONS
+        .filter(f => f !== losingFaction)
+        .sort((a, b) => (currentFactionTileCounts[b] ?? 0) - (currentFactionTileCounts[a] ?? 0))[0] ?? null
+      const losingLabel = FACTION_LABEL_ZH[losingFaction]
+      const lostCount = this.previousFactionTileCounts.get(losingFaction) ?? 0
+      commands.push(makeLivingWorldCommand('FACTION_DOMINANCE_SHIFTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+        losingFactionId: losingFaction,
+        dominantFactionId: dominantFaction ?? null,
+        lostTileCount: lostCount,
+        tick: nextTick,
+        narration: `${losingLabel}失去所有領地控制，失去 ${lostCount} 個區域的主導權，領土版圖徹底崩潰。`,
+      }))
+      for (const route of this.logisticsProjection.snapshot().routes.filter(r => r.open)) {
+        commands.push(makeLivingWorldCommand('TRADE_ROUTE_CLOSED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          routeId: route.routeId,
+          closedAtTick: nextTick,
+          reason: 'faction_collapse',
+          narration: `${losingLabel}崩潰後，物流通道 ${route.routeId} 因領土動盪而關閉。`,
+        }))
+      }
+    }
+    for (const f of FACTIONS) {
+      this.previousFactionTileCounts.set(f, currentFactionTileCounts[f] ?? 0)
+    }
+
     // ---- 天氣 / 季節 / 稀有窗口 / 世界事件 ----
     if (nextTick % WEATHER_CADENCE_TICKS === 0) {
       const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
@@ -4460,6 +4501,7 @@ export class SimulationRuntime {
         this.npcMortalityProjection.project(ev)
         this.npcLineageProjection.project(ev)
         this.factionControlProjection.project(ev)
+        this.factionDominanceProjection.project(ev)
         this.historyChronicleProjection.project(ev)
         this.areaStateProjection.project(ev)
         this.bioNodeProjection.project(ev)
@@ -5078,6 +5120,8 @@ export class SimulationRuntime {
       this.productionChainsProjection.rebuildFromEvents(allEvents)
       this.settlementsProjection.rebuildFromEvents(allEvents)
       this.historyChronicleProjection.rebuildFromEvents(allEvents)
+      this.factionControlProjection.rebuildFromEvents(allEvents)
+      this.factionDominanceProjection.rebuildFromEvents(allEvents)
       this.areaStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
@@ -5112,6 +5156,7 @@ export class SimulationRuntime {
       // Faction control projection — rebuild from faction seizure/loyalty events.
       const factionEvents = this.store.readEventsByTypes(FACTION_BOOT_EVENT_TYPES)
       this.factionControlProjection.rebuildFromEvents(factionEvents)
+      this.factionDominanceProjection.rebuildFromEvents(factionEvents)
       // History chronicle projection — rebuild from narrative arc event types.
       const historyEvents = this.store.readEventsByTypes(HISTORY_CHRONICLE_BOOT_EVENT_TYPES)
       this.historyChronicleProjection.rebuildFromEvents(historyEvents)
@@ -5128,6 +5173,12 @@ export class SimulationRuntime {
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)
+    }
+
+    // Initialize previous faction tile counts from post-boot projection state
+    // so the dominance planner does not retroactively fire for past shifts.
+    for (const f of FACTIONS) {
+      this.previousFactionTileCounts.set(f, this.factionControlProjection.dominantTilesOf(f).length)
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state

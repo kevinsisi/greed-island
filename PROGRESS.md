@@ -5,6 +5,56 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.57.0
+
+### Current Version
+`0.57.0` — TypeScript build clean. 921 tests pass across 123 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.56.0 → v0.57.0)
+
+**v0.57.0 — Faction Dominance Cascade (Phase 30.7)**
+
+派系主導權崩潰機制上線。當某派系的領地從 N 個 tile 降至 0（被完全驅逐出地圖），系統自動發出 `FACTION_DOMINANCE_SHIFTED` 事件，並關閉所有現存開放的物流通道（`TRADE_ROUTE_CLOSED`）。這部分關閉了 §43.1 criterion 3：「當 faction 戰敗，道路與物流會崩潰」。
+
+**修改檔案：**
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 `FACTION_DOMINANCE_SHIFTED` command type、validator、`FactionDominanceShiftedCmd` payload type；加入 FACTION_BOOT_EVENT_TYPES
+- `packages/server/src/sim/factionDominancePlanner.ts`：NEW — 純函數，比較 currentTileCounts vs previousTileCounts，回傳第一個從 >0 降至 0 的派系
+- `packages/server/src/sim/factionDominancePlanner.test.ts`：NEW — 6 個測試
+- `packages/server/src/projections/factionDominance.ts`：NEW — Set-based projection 追蹤哪些派系已發出 FACTION_DOMINANCE_SHIFTED（防止重複發送）
+- `packages/server/src/projections/factionDominance.test.ts`：NEW — 4 個測試
+- `packages/server/src/sim/runtime.ts`：
+  - import + 初始化 FactionDominanceProjection + `previousFactionTileCounts: Map<FactionId, number>`
+  - 兩個 fan-out 位置 project(ev)
+  - 小 log path 補 factionControlProjection + factionDominanceProjection rebuildFromEvents（修補既有缺漏）
+  - 大 log path 補 factionDominanceProjection rebuildFromEvents
+  - boot 後初始化 previousFactionTileCounts（防止重啟時誤觸發歷史事件）
+  - Phase 30.7 planner block：每 tick 偵測派系降至 0 tiles → FACTION_DOMINANCE_SHIFTED + TRADE_ROUTE_CLOSED
+
+**架構關鍵點：**
+- FactionDominanceProjection 是 guard — 防止重啟後重複發送
+- previousFactionTileCounts 在 boot 後初始化為當前狀態，不回溯歷史
+- planFactionDominance 純函數：shiftFiredFor 作為黑名單；previous>0 且 current==0 → loser
+- TRADE_ROUTE_CLOSED 對所有 open routes 發送（小世界 = 8 tiles，通常路線少）
+- 修補 small-log 路徑遺漏的 factionControlProjection.rebuildFromEvents
+
+**測試：**
+- +10 新測試（factionDominancePlanner.test.ts: 6；factionDominance.test.ts: 4）
+- 921 passing tests / 123 files；build clean
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 921 pass
+npm run build                          # clean
+```
+
+**§43 Progress After v0.57.0:**
+- ✅ §43.1 criterion 3（部分）：FACTION_DOMINANCE_SHIFTED + TRADE_ROUTE_CLOSED（BUILDING_DAMAGED 在 FACTION_TILE_SEIZED 已有）
+- Remaining: TERRITORY_CLAIM_CHANGED（optional companion event）
+
+**Next:** v0.58.0 — SPECIES_POPULATION_SHIFTED (closes §43.2 "NPCs discuss disappearing animals" criterion) 或 POLLUTION_INCREASED (工業化副作用)
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.56.0
 
 ### Current Version

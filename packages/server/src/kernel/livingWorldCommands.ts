@@ -198,6 +198,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Faction Conflict Consequences (v0.33.0)
   'FACTION_TILE_SEIZED',
   'FACTION_NPC_LOYALTY_SHIFTED',
+  'FACTION_DOMINANCE_SHIFTED',
   // NPC Intention Layer (v0.51.0)
   'NPC_INTENT_RESOLVED',
 ] as const
@@ -373,6 +374,14 @@ export type FactionNpcLoyaltyShiftedCmd = Readonly<{
   fromFaction: string
   toFaction: string
   shiftedAtTick: number
+  narration: string
+}>
+
+export type FactionDominanceShiftedCmd = Readonly<{
+  losingFactionId: string
+  dominantFactionId: string | null
+  lostTileCount: number
+  tick: number
   narration: string
 }>
 
@@ -1517,6 +1526,7 @@ export type LivingWorldCommandPayload =
   | NpcHeirAssignedCmd
   | FactionTileSeizedCmd
   | FactionNpcLoyaltyShiftedCmd
+  | FactionDominanceShiftedCmd
   | NpcIntentResolvedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
@@ -2791,6 +2801,15 @@ const VALIDATORS: Readonly<
     if (typeof p.fromFaction !== 'string' || p.fromFaction.length === 0) return 'fromFaction required'
     if (typeof p.toFaction !== 'string' || p.toFaction.length === 0) return 'toFaction required'
     if (!isNonNegativeInteger(p.shiftedAtTick)) return 'shiftedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FACTION_DOMINANCE_SHIFTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.losingFactionId !== 'string' || p.losingFactionId.length === 0) return 'losingFactionId required'
+    if (p.dominantFactionId !== null && typeof p.dominantFactionId !== 'string') return 'dominantFactionId must be string or null'
+    if (!isNonNegativeInteger(p.lostTileCount)) return 'lostTileCount must be non-negative integer'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

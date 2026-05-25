@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.57.0 ✅ shipped — 2026-05-25
+
+**主題：Faction Dominance Cascade（Phase 30.7）**
+
+- ✅ `FACTION_DOMINANCE_SHIFTED` command type + validator + `FactionDominanceShiftedCmd` payload type
+- ✅ `planFactionDominance(currentTileCounts, previousTileCounts, shiftFiredFor)` 純函數 → losing faction | null
+- ✅ `FactionDominanceProjection` — 追蹤已觸發派系，防止重啟後重複發送
+- ✅ runtime.ts：boot 初始化 previousFactionTileCounts；每 tick 偵測派系 tiles 降至 0 → FACTION_DOMINANCE_SHIFTED + TRADE_ROUTE_CLOSED（全部開放路線）
+- ✅ 修補 small-log boot path 遺漏的 factionControlProjection.rebuildFromEvents
+- ✅ §43.1 criterion 3（部分）：「faction 戰敗 → 物流崩潰」可觀測
+- ✅ +10 新測試；921 tests pass；build 乾淨
+
+---
+
 ## v0.56.0 ✅ shipped — 2026-05-25
 
 **主題：BIOME_RECOVERED Event（Phase E2.3）**
