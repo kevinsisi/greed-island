@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.56.0 ✅ shipped — 2026-05-25
+
+**主題：BIOME_RECOVERED Event（Phase E2.3）**
+
+- ✅ `BIOME_RECOVERED` command type + validator + `BiomeRecoveredCmd` payload type（livingWorldCommands.ts）
+- ✅ `planBiomeRecovery(biome, decision)` 純函數：decision='recover' 且 biome='forest' → true
+- ✅ runtime.ts Phase E2.3 recover branch：ECOSYSTEM_PRESSURE_RECOVERED 同 tick 發 BIOME_RECOVERED（forest tiles）
+- ✅ ECOSYSTEM_BOOT_EVENT_TYPES 加入 BIOME_RECOVERED — 重啟後歷史紀錄完整
+- ✅ §43.2「保護生態系統」判準：BIOME_RECOVERED 可觀測
+- ✅ §43.2「穩定一個區域」判準：BIOME_RECOVERED → history_chronicle 紀錄恢復弧線
+- ✅ +5 新測試；911 tests pass；build 乾淨
+
+---
+
 ## v0.55.0 ✅ shipped — 2026-05-25
 
 **主題：Forest Depletion Events（Phase E2.2）**

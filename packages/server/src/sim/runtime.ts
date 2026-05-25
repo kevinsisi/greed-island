@@ -123,6 +123,7 @@ import { planSpeciesExtinctionCheck } from '../ecosystem/extinctionPlanner.js'
 import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fishery.js'
 import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
 import { planForestDepletion } from '../ecosystem/forestDepletionPlanner.js'
+import { planBiomeRecovery } from '../ecosystem/biomeRecoveryPlanner.js'
 import { planDomestication } from '../ecosystem/domesticationPlanner.js'
 import { planBreeding } from '../ecosystem/breedingPlanner.js'
 import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
@@ -290,6 +291,7 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'ECOSYSTEM_PRESSURE_RECOVERED',
   'FOREST_DEPLETED',
   'FOREST_RECOVERED',
+  'BIOME_RECOVERED',
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
@@ -3055,6 +3057,13 @@ export class SimulationRuntime {
         if (forestDecision === 'recover') {
           commands.push(makeLivingWorldCommand('FOREST_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
             tileId, tick: nextTick,
+          }))
+        }
+        const tileBiome = TILE_BY_ID[tileId]?.biome ?? ''
+        if (planBiomeRecovery({ biome: tileBiome, decision: 'recover' })) {
+          commands.push(makeLivingWorldCommand('BIOME_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            tileId, biome: tileBiome, tick: nextTick,
+            narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的生態系統於第 ${nextTick} 轉恢復穩定`,
           }))
         }
       }

@@ -160,6 +160,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ECOSYSTEM_PRESSURE_RECOVERED',
   'FOREST_DEPLETED',
   'FOREST_RECOVERED',
+  'BIOME_RECOVERED',
   // Phase E3 — Domestication
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
@@ -957,6 +958,13 @@ export type ForestRecoveredCmd = Readonly<{
   tick: number
 }>
 
+export type BiomeRecoveredCmd = Readonly<{
+  tileId: string
+  biome: string
+  tick: number
+  narration: string
+}>
+
 // Phase E3 — Domestication
 export type AnimalDomesticatedCmd = Readonly<{
   animalId: string
@@ -1450,6 +1458,7 @@ export type LivingWorldCommandPayload =
   | EcosystemPressureRecoveredCmd
   | ForestDepletedCmd
   | ForestRecoveredCmd
+  | BiomeRecoveredCmd
   | GoodsExtractedCmd
   | GoodsStoredCmd
   | GoodsProcessedCmd
@@ -2513,6 +2522,14 @@ const VALIDATORS: Readonly<
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  BIOME_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.biome !== 'string' || p.biome.length === 0) return 'biome required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
   ANIMAL_DOMESTICATED: (p) => {

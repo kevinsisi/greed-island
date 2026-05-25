@@ -5,6 +5,51 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.56.0
+
+### Current Version
+`0.56.0` — TypeScript build clean. 911 tests pass across 121 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.55.0 → v0.56.0)
+
+**v0.56.0 — BIOME_RECOVERED Event (Phase E2.3)**
+
+BIOME_RECOVERED 事件上線。當森林 tile 的生態壓力因工作量降低而恢復（ECOSYSTEM_PRESSURE_RECOVERED），系統同時發出 `BIOME_RECOVERED` 事件，標誌整個生態區域已穩定。這關閉了 §43.2 兩個判準：「保護生態系統」（BIOME_RECOVERED 可觀測）和「穩定一個區域」（history_chronicle 紀錄恢復弧線）。
+
+**修改檔案：**
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 `BIOME_RECOVERED` command type、validator、`BiomeRecoveredCmd` payload type
+- `packages/server/src/ecosystem/biomeRecoveryPlanner.ts`：NEW — 純函數 `planBiomeRecovery(biome, decision)` → boolean
+- `packages/server/src/ecosystem/biomeRecoveryPlanner.test.ts`：NEW — 5 個測試
+- `packages/server/src/sim/runtime.ts`：import + ECOSYSTEM_BOOT_EVENT_TYPES + Phase E2.3 recover branch 在 FOREST_RECOVERED 後發 BIOME_RECOVERED
+
+**架構關鍵點：**
+- BIOME_RECOVERED 只對 forest biome 發出（'forest' === TILE_BY_ID[tileId]?.biome）
+- BIOME_RECOVERED 在 ECOSYSTEM_PRESSURE_RECOVERED 同一 tick 發出（不是延遲恢復）
+- 加入 ECOSYSTEM_BOOT_EVENT_TYPES — 歷史記錄在重啟後不丟失
+- planBiomeRecovery 純函數，decision='recover' 且 biome='forest' → true，其他均 false
+
+**測試：**
+- +5 新測試（biomeRecoveryPlanner.test.ts）
+- 911 passing tests / 121 files；build clean
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 911 pass
+npm run build                          # clean
+```
+
+**§43 Progress After v0.56.0:**
+- ✅ §43.2 Cause ecological collapse: FISHERY_COLLAPSED (v0.27.0) + FOREST_DEPLETED (v0.55.0)
+- ✅ §43.2 Protect an ecosystem: BIOME_RECOVERED (v0.56.0)
+- ✅ §43.2 Stabilize a region: BIOME_RECOVERED → history_chronicle arc (v0.56.0)
+
+**Next:** v0.57.0 — Faction dominance cascade (§43.1 criterion 3):
+- FACTION_DOMINANCE_SHIFTED when one faction controls majority of tiles
+- TERRITORY_CLAIM_CHANGED companion event
+- Consequences: TRADE_ROUTE_CLOSED for losing-faction trade routes
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.55.0
 
 ### Current Version
