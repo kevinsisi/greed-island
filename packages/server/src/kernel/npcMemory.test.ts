@@ -3,6 +3,11 @@ import Database from 'better-sqlite3'
 import { describe, expect, it, beforeEach } from 'vitest'
 import { SqliteNpcMemoryStore } from './npcMemory.js'
 import type { Event } from './types.js'
+import {
+  MEMORY_VERY_HIGH_DECAY_TICKS,
+  MEMORY_HIGH_DECAY_TICKS,
+  MEMORY_DIALOG_MAX_BULLETS,
+} from '../config/world.js'
 
 function makeStore() {
   const db = new Database(':memory:')
@@ -301,7 +306,7 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     }
     const result = store.formatMemoryContext('npc-guard', 500)
     const lines = result.split('\n').filter((l) => l.startsWith('-'))
-    expect(lines.length).toBeLessThanOrEqual(5)
+    expect(lines.length).toBeLessThanOrEqual(MEMORY_DIALOG_MAX_BULLETS)
   })
 
   it('importance-9 memory survives past MEMORY_VERY_HIGH_DECAY_TICKS', () => {
@@ -338,7 +343,7 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     store.projectWithLocality(ev, npcMap)
     // MEMORY_HIGH_DECAY_TICKS = 7 * 17280 = 120960
     // Use currentTick well past that threshold
-    const result = store.formatMemoryContext('npc-carrier', 200000)
+    const result = store.formatMemoryContext('npc-carrier', MEMORY_HIGH_DECAY_TICKS + 1)
     expect(result).toBe('')
   })
 
@@ -392,7 +397,7 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     store.projectWithLocality(ev, npcMap)
     // MEMORY_VERY_HIGH_DECAY_TICKS = 30 * 17280 = 518400
     // At exactly tick 518401, the importance-8 memory should be expired
-    const result = store.formatMemoryContext('npc-fisher', 518401)
+    const result = store.formatMemoryContext('npc-fisher', MEMORY_VERY_HIGH_DECAY_TICKS + 1)
     expect(result).toBe('')
   })
 })

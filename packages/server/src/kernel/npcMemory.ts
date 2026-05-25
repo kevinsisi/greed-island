@@ -735,6 +735,12 @@ function describeMemoryContent(content: Record<string, unknown>, emotionalTag: s
       return `在戰鬥中落敗${content.defeatedByActorId ? `（敗給 ${content.defeatedByActorId}）` : ''}，感到${emotionalTagZh(emotionalTag)}`
     case 'combat.defeat.witnessed':
       return `目睹 ${content.defeatedNpcId} 在戰鬥中落敗，感到${emotionalTagZh(emotionalTag)}`
+    case 'npc.heir_assigned':
+      return `繼承了 ${content.householdId} 家業，成為戶主${content.narration ? `（${content.narration}）` : ''}`
+    case 'npc.deceased':
+      return `得知 ${content.npcId} 已離世於 ${content.tileId}${content.narration ? `（${content.narration}）` : ''}`
+    case 'faction.loyalty_shifted':
+      return `效忠從 ${content.fromFaction} 轉向 ${content.toFaction}${content.narration ? `（${content.narration}）` : ''}`
     default: {
       if (typeof content.narration === 'string' && content.narration.length > 0) {
         return content.narration
