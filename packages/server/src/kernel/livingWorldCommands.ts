@@ -158,6 +158,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FISHERY_RECOVERED',
   'ECOSYSTEM_PRESSURE_RAISED',
   'ECOSYSTEM_PRESSURE_RECOVERED',
+  'FOREST_DEPLETED',
+  'FOREST_RECOVERED',
   // Phase E3 — Domestication
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
@@ -943,6 +945,18 @@ export type EcosystemPressureRecoveredCmd = Readonly<{
   narration: string | null
 }>
 
+export type ForestDepletedCmd = Readonly<{
+  tileId: string
+  pressureLevel: number
+  depletedAtTick: number
+  narration: string
+}>
+
+export type ForestRecoveredCmd = Readonly<{
+  tileId: string
+  tick: number
+}>
+
 // Phase E3 — Domestication
 export type AnimalDomesticatedCmd = Readonly<{
   animalId: string
@@ -1434,6 +1448,8 @@ export type LivingWorldCommandPayload =
   | SpeciesRecoveredCmd
   | EcosystemPressureRaisedCmd
   | EcosystemPressureRecoveredCmd
+  | ForestDepletedCmd
+  | ForestRecoveredCmd
   | GoodsExtractedCmd
   | GoodsStoredCmd
   | GoodsProcessedCmd
@@ -2480,6 +2496,20 @@ const VALIDATORS: Readonly<
     return null
   },
   ECOSYSTEM_PRESSURE_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  FOREST_DEPLETED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.pressureLevel !== 'number' || !Number.isInteger(p.pressureLevel) || p.pressureLevel < 0 || p.pressureLevel > 100) return 'pressureLevel must be integer 0–100'
+    if (!isNonNegativeInteger(p.depletedAtTick)) return 'depletedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  FOREST_RECOVERED: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'

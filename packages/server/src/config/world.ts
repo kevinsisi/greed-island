@@ -268,6 +268,11 @@ export const MEMORY_NORMAL_DECAY_TICKS = 2 * TICKS_PER_DAY       // importance 1
 export const MEMORY_URGENCY_BOOST_PERMANENT = 1.0
 export const MEMORY_URGENCY_BOOST_HIGH = 0.5
 
+// v0.55.0 — Forest Depletion (Phase E2.2). Forest tiles emit FOREST_DEPLETED when
+// ecosystem pressure reaches this level (pressureLevel steps of 20, so 60 = 3 raises).
+// Recovery: emit FOREST_RECOVERED when pressure returns to 0.
+export const FOREST_DEPLETION_PRESSURE_THRESHOLD = 60
+
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
   let h = 2166136261

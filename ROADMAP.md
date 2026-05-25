@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.55.0 ✅ shipped — 2026-05-25
+
+**主題：Forest Depletion Events（Phase E2.2）**
+
+- ✅ `FOREST_DEPLETION_PRESSURE_THRESHOLD = 60`（config/world.ts）
+- ✅ `FOREST_DEPLETED` + `FOREST_RECOVERED` command types + validators + payload types（livingWorldCommands.ts）
+- ✅ `planForestDepletion(biome, pressureLevel, isCurrentlyDepleted)`：純函數，只對 biome='forest' 起作用；壓力 ≥ 60 且未耗竭 → 'deplete'；壓力 = 0 且耗竭中 → 'recover'；其他 → null
+- ✅ `ForestDepletionProjection`：Set-based，event-sourced，rebuildable；ECOSYSTEM_BOOT_EVENT_TYPES 已加入
+- ✅ runtime.ts 完整接線：fan-out project、rebuildFromEvents（小log/大log兩路）、Phase E2.3 壓力 block 自動觸發 FOREST_DEPLETED / FOREST_RECOVERED
+- ✅ +13 新測試（forestDepletionPlanner.test.ts: 8；forestDepletionProjection.test.ts: 5）；906 tests pass；build 乾淨
+- ✅ §43.2「造成生態崩潰」— 森林部分關閉（漁場 FISHERY_COLLAPSED 已在 E2.1 完成）
+
+---
+
 ## v0.54.0 ✅ shipped — 2026-05-25
 
 **主題：記憶意圖提升（Memory Urgency Boost）**

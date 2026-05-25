@@ -5,6 +5,48 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.55.0
+
+### Current Version
+`0.55.0` — TypeScript build clean. 906 tests pass across 120 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.54.0 → v0.55.0)
+
+**v0.55.0 — Forest Depletion Events (Phase E2.2)**
+
+森林耗竭事件系統上線。當森林 tile（biome = 'forest'）的生態壓力達到 FOREST_DEPLETION_PRESSURE_THRESHOLD（60）時，系統自動發出 `FOREST_DEPLETED` 事件；壓力歸零後恢復發出 `FOREST_RECOVERED`。這關閉了 §43.2「造成生態崩潰」判準中關於森林的部分（漁場崩潰 FISHERY_COLLAPSED 已在 E2.1 完成）。
+
+**修改檔案：**
+- `packages/server/src/config/world.ts`：新增 `FOREST_DEPLETION_PRESSURE_THRESHOLD = 60`
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 `FOREST_DEPLETED` + `FOREST_RECOVERED` command types、validators、`ForestDepletedCmd` + `ForestRecoveredCmd` payload types
+- `packages/server/src/ecosystem/forestDepletionPlanner.ts`：NEW — 純函數 planForestDepletion（biome check + 壓力閾值邏輯）
+- `packages/server/src/ecosystem/forestDepletionPlanner.test.ts`：NEW — 8 個測試
+- `packages/server/src/projections/forestDepletionProjection.ts`：NEW — Set-based projection（FOREST_DEPLETED/RECOVERED 事件源）
+- `packages/server/src/projections/forestDepletionProjection.test.ts`：NEW — 5 個測試
+- `packages/server/src/sim/runtime.ts`：import + 初始化 ForestDepletionProjection；兩個 fan-out 位置 project(ev)；ECOSYSTEM_BOOT_EVENT_TYPES 加入兩個新事件；兩條 rebuildFromEvents 路徑；Phase E2.3 壓力 planner block 加入 planForestDepletion → FOREST_DEPLETED / FOREST_RECOVERED 命令
+
+**架構關鍵點：**
+- FOREST_DEPLETED 僅在壓力從 <60 升至 ≥60 且尚未耗竭時發出（無重複）
+- FOREST_RECOVERED 僅在壓力降至 0 且目前耗竭時發出
+- planForestDepletion 對非 forest biome 永遠回傳 null（desert/water/grass 不影響）
+- ForestDepletionProjection 加入 ECOSYSTEM_BOOT_EVENT_TYPES — 重啟後不丟失狀態
+
+**測試：**
+- +13 新測試（forestDepletionPlanner.test.ts: 8；forestDepletionProjection.test.ts: 5）
+- 906 passing tests / 120 files；build clean
+
+**Verification:**
+```
+cd packages/server && npx vitest run   # 906 pass
+npm run build                          # clean
+```
+
+**Next:** v0.56.0 — 建議繼續 §43 acceptance criteria gaps：
+- Faction dominance cascade（FACTION_DOMINANCE_SHIFTED → trade route closure，§43.1 criterion 3）
+- POLLUTION_INCREASED（工業化副作用，§43.2 ecological collapse）
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.54.0
 
 ### Current Version

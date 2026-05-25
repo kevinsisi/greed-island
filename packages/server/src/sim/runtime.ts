@@ -122,6 +122,7 @@ import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planSpeciesExtinctionCheck } from '../ecosystem/extinctionPlanner.js'
 import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fishery.js'
 import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
+import { planForestDepletion } from '../ecosystem/forestDepletionPlanner.js'
 import { planDomestication } from '../ecosystem/domesticationPlanner.js'
 import { planBreeding } from '../ecosystem/breedingPlanner.js'
 import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
@@ -200,6 +201,7 @@ import { planFestivalSeed, planRitualSeed, planNormSeed } from './culturalSeeder
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { SpeciesExtinctionProjection } from '../projections/speciesExtinction.js'
 import { EcosystemRegionProjection } from '../projections/ecosystemRegion.js'
+import { ForestDepletionProjection } from '../projections/forestDepletionProjection.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
 import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
 import { MarketPricesProjection, type MarketPriceRow } from '../projections/marketPrices.js'
@@ -286,6 +288,8 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'SPECIES_RECOVERED',
   'ECOSYSTEM_PRESSURE_RAISED',
   'ECOSYSTEM_PRESSURE_RECOVERED',
+  'FOREST_DEPLETED',
+  'FOREST_RECOVERED',
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
@@ -508,6 +512,7 @@ export class SimulationRuntime {
   private readonly fisheryDensityProjection = new FisheryDensityProjection()
   private readonly speciesExtinctionProjection = new SpeciesExtinctionProjection()
   private readonly ecosystemRegionProjection = new EcosystemRegionProjection()
+  private readonly forestDepletionProjection = new ForestDepletionProjection()
   private readonly livestockRegistryProjection = new LivestockRegistryProjection()
   private readonly worldEventProjection = new WorldEventProjection()
   private readonly legendaryHuntTracker = new LegendaryHuntTracker()
@@ -1587,6 +1592,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.project(ev)
       this.speciesExtinctionProjection.project(ev)
       this.ecosystemRegionProjection.project(ev)
+      this.forestDepletionProjection.project(ev)
       this.livestockRegistryProjection.project(ev)
       this.worldEventProjection.project(ev)
       this.playerCivilizationProjection.project(ev)
@@ -3026,10 +3032,31 @@ export class SimulationRuntime {
         commands.push(makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RAISED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
           tileId, pressureLevel: newLevel, tick: nextTick, narration: null,
         }))
+        const forestDecision = planForestDepletion({
+          biome: TILE_BY_ID[tileId]?.biome ?? '',
+          pressureLevel: newLevel,
+          isCurrentlyDepleted: this.forestDepletionProjection.isForestDepleted(tileId),
+        })
+        if (forestDecision === 'deplete') {
+          commands.push(makeLivingWorldCommand('FOREST_DEPLETED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            tileId, pressureLevel: newLevel, depletedAtTick: nextTick,
+            narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的森林於第 ${nextTick} 轉因過度開發而走向衰竭`,
+          }))
+        }
       } else if (decision === 'recover') {
         commands.push(makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
           tileId, tick: nextTick, narration: null,
         }))
+        const forestDecision = planForestDepletion({
+          biome: TILE_BY_ID[tileId]?.biome ?? '',
+          pressureLevel: 0,
+          isCurrentlyDepleted: this.forestDepletionProjection.isForestDepleted(tileId),
+        })
+        if (forestDecision === 'recover') {
+          commands.push(makeLivingWorldCommand('FOREST_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            tileId, tick: nextTick,
+          }))
+        }
       }
     }
     this.tileWorkActionCounts = new Map()
@@ -4413,6 +4440,7 @@ export class SimulationRuntime {
         this.fisheryDensityProjection.project(ev)
         this.speciesExtinctionProjection.project(ev)
         this.ecosystemRegionProjection.project(ev)
+        this.forestDepletionProjection.project(ev)
         this.livestockRegistryProjection.project(ev)
         this.goodsInventoryProjection.project(ev)
         this.logisticsProjection.project(ev)
@@ -5030,6 +5058,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(allEvents)
       this.speciesExtinctionProjection.rebuildFromEvents(allEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(allEvents)
+      this.forestDepletionProjection.rebuildFromEvents(allEvents)
       this.livestockRegistryProjection.rebuildFromEvents(allEvents)
       this.worldEventProjection.rebuildFromEvents(allEvents)
       this.playerCivilizationProjection.rebuildFromEvents(allEvents)
@@ -5055,6 +5084,7 @@ export class SimulationRuntime {
       this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
       this.speciesExtinctionProjection.rebuildFromEvents(ecoEvents)
       this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
+      this.forestDepletionProjection.rebuildFromEvents(ecoEvents)
       this.livestockRegistryProjection.rebuildFromEvents(ecoEvents)
       this.worldEventProjection.rebuildFromEvents(ecoEvents)
       const playerCivEvents = this.store.readEventsByTypes(PLAYER_CIVILIZATION_BOOT_EVENT_TYPES)
