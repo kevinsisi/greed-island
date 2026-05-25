@@ -5,6 +5,39 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.72.0
+
+### Current Version
+`0.72.0` — TypeScript build clean. 1092 tests pass (1 pre-existing timeout). Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.72.0)
+
+**v0.72.0 — WorldStateProjection closes §11.5 (weather/season/rareWindow/activeEvents)**
+- New `WorldStateProjection` in `projections/worldState.ts`: tracks weather, season, rare window, active world event seeds from typed EventLog events
+- Handles: `WEATHER_CHANGE` (→to field), `SEASON_CHANGE` (→to), `RARE_WINDOW_OPEN` (closesAtTick), `RARE_WINDOW_CLOSE`, `WORLD_EVENT_SPAWN` (worldEventId+templateId+tick), `WORLD_EVENT_END`
+- `WORLD_STATE_BOOT_EVENT_TYPES` constant for large-log selective replay
+- `isHydrated()` flag prevents false negatives (no events seen ≠ state is clear)
+- Wired into runtime.ts: incremental project() path, small-log rebuildFromEvents, large-log selective rebuild
+- Boot hydration prefers projection over FACT_SET when hydrated; FACT_SET kept as fallback for old logs
+- Active event seeds rebuilt via existing `rebuildActiveEvent(templateId, startedAtTick)` — same deterministic approach as FACT_SET boot
+- 11 new tests in `worldState.test.ts`
+- ARCHITECTURE.md §11.5 updated to "Substantially Closed v0.72.0"
+- Remaining §11.5 gap: `FACT_BUILDING_OCCUPANTS` (building occupant boot hydration)
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 final piece: `FACT_BUILDING_OCCUPANTS` building occupant boot hydration
+- Roads/bridges as map features
+- NPC household permanent migration
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.71.0
 
 ### Current Version

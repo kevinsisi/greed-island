@@ -221,6 +221,7 @@ import { FactionDominanceProjection } from '../projections/factionDominance.js'
 import { planFactionDominance } from './factionDominancePlanner.js'
 import { HistoryChronicleProjection, HISTORY_CHRONICLE_BOOT_EVENT_TYPES, type HistoryArc } from '../projections/historyChronicle.js'
 import { AreaStateProjection } from '../projections/areaState.js'
+import { WorldStateProjection, WORLD_STATE_BOOT_EVENT_TYPES } from '../projections/worldState.js'
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
@@ -548,6 +549,7 @@ export class SimulationRuntime {
   private previousSpeciesPopulationTotals = new Map<string, number>()
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
+  private readonly worldStateProjection = new WorldStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly beliefProjection = new BeliefProjection()
@@ -1659,6 +1661,7 @@ export class SimulationRuntime {
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)
       this.areaStateProjection.project(ev)
+      this.worldStateProjection.project(ev)
       this.bioNodeProjection.project(ev)
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
@@ -5311,6 +5314,7 @@ export class SimulationRuntime {
       this.factionControlProjection.rebuildFromEvents(allEvents)
       this.factionDominanceProjection.rebuildFromEvents(allEvents)
       this.areaStateProjection.rebuildFromEvents(allEvents)
+      this.worldStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
     } else {
@@ -5352,6 +5356,8 @@ export class SimulationRuntime {
       // FACT_SET area.state.<tileId> remains the boot fallback for older logs.
       const areaStateEvents = this.store.readEventsByTypes(AREA_STATE_BOOT_EVENT_TYPES)
       this.areaStateProjection.rebuildFromEvents(areaStateEvents)
+      const worldStateEvents = this.store.readEventsByTypes(WORLD_STATE_BOOT_EVENT_TYPES)
+      this.worldStateProjection.rebuildFromEvents(worldStateEvents)
       // BioNode projection — rebuild plant ecology substrate from typed
       // BIO_NODE_SEEDED / REGREW / HARVESTED events.
       const bioNodeEvents = this.store.readEventsByTypes(BIO_NODE_BOOT_EVENT_TYPES)
@@ -5417,27 +5423,54 @@ export class SimulationRuntime {
 
     this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
     this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
-    const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
-    if (Array.isArray(activeEventsFact)) {
-      const restored: ActiveWorldEvent[] = []
-      for (const item of activeEventsFact) {
-        if (!item || typeof item !== 'object') continue
-        const candidate = item as Partial<ActiveWorldEvent> & {
-          templateId?: unknown
-          startedAtTick?: unknown
-        }
-        if (
-          typeof candidate.templateId === 'string' &&
-          typeof candidate.startedAtTick === 'number'
-        ) {
-          const rebuilt = rebuildActiveEvent(candidate.templateId, candidate.startedAtTick, {
+
+    // §11.5 — prefer WorldStateProjection over FACT_SET for weather/season/rareWindow/activeEvents.
+    // If the projection has seen typed world-state events it is authoritative;
+    // fall back to FACT_SET for older event logs that predate these event types.
+    if (this.worldStateProjection.isHydrated()) {
+      const pw = this.worldStateProjection.getWeather()
+      if (pw) this.weather = pw
+      const ps = this.worldStateProjection.getSeason()
+      if (ps) this.season = ps
+      const prw = this.worldStateProjection.getRareWindow()
+      this.rareWindowOpen = prw.open
+      this.rareWindowClosesAtTick = prw.closesAt ?? 0
+      const seeds = this.worldStateProjection.getActiveEventSeeds()
+      if (seeds.length > 0) {
+        const restored: ActiveWorldEvent[] = []
+        for (const seed of seeds) {
+          const rebuilt = rebuildActiveEvent(seed.templateId, seed.startedAtTick, {
             weather: this.weather,
-            season: this.season
+            season: this.season,
           })
           if (rebuilt) restored.push(rebuilt)
         }
+        this.eventEngine.hydrate(restored, this.currentTick)
       }
-      this.eventEngine.hydrate(restored, this.currentTick)
+    } else {
+      // Legacy FACT_SET boot for event logs that predate typed world-state events.
+      const activeEventsFact = facts[FACT_ACTIVE_EVENTS]
+      if (Array.isArray(activeEventsFact)) {
+        const restored: ActiveWorldEvent[] = []
+        for (const item of activeEventsFact) {
+          if (!item || typeof item !== 'object') continue
+          const candidate = item as Partial<ActiveWorldEvent> & {
+            templateId?: unknown
+            startedAtTick?: unknown
+          }
+          if (
+            typeof candidate.templateId === 'string' &&
+            typeof candidate.startedAtTick === 'number'
+          ) {
+            const rebuilt = rebuildActiveEvent(candidate.templateId, candidate.startedAtTick, {
+              weather: this.weather,
+              season: this.season
+            })
+            if (rebuilt) restored.push(rebuilt)
+          }
+        }
+        this.eventEngine.hydrate(restored, this.currentTick)
+      }
     }
     for (const event of this.store.readRecentEvents(RECENT_EVENTS_BUFFER * 4)) {
       const narrative = readNarrativeFromAnyEvent(event, event.tick ?? 0)
