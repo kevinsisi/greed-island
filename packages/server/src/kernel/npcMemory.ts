@@ -127,6 +127,51 @@ export class SqliteNpcMemoryStore {
     insertMemoryRows(insert, rows, tick)
   }
 
+  /**
+   * Returns a formatted Chinese bullet list of active (non-decayed) NPC memories
+   * for injection into the AI dialog system prompt.
+   * Queries both personal (npc_id = npcId) and world-scoped (npc_id = 'world') rows.
+   * Returns '' when no active memories exist — callers must guard on empty string.
+   */
+  formatMemoryContext(npcId: string, currentTick: number): string {
+    const rows = this.db
+      .prepare(
+        `SELECT memory_type as memoryType, content_json as contentJson, tick, importance
+           FROM npc_memory
+          WHERE (npc_id = ? OR npc_id = 'world')
+            AND (
+              importance >= 9
+              OR (importance >= 7 AND ? - tick <= ?)
+              OR (importance >= 5 AND ? - tick <= ?)
+              OR (? - tick <= ?)
+            )
+          ORDER BY importance DESC, tick DESC
+          LIMIT ?`
+      )
+      .all(
+        npcId,
+        currentTick, MEMORY_VERY_HIGH_DECAY_TICKS,
+        currentTick, MEMORY_HIGH_DECAY_TICKS,
+        currentTick, MEMORY_NORMAL_DECAY_TICKS,
+        MEMORY_DIALOG_MAX_BULLETS
+      ) as Array<{
+      memoryType: NpcMemoryType
+      contentJson: string
+      tick: number
+      importance: number
+    }>
+
+    if (rows.length === 0) return ''
+
+    return rows
+      .map((r) => {
+        const c = JSON.parse(r.contentJson) as Record<string, unknown>
+        const emotionalTag = typeof c.emotionalTag === 'string' ? c.emotionalTag : 'neutral'
+        return `- [importance:${r.importance}] ${describeMemoryContent(c, emotionalTag)}`
+      })
+      .join('\n')
+  }
+
   rememberPlayerDialog(input: PlayerDialogMemoryInput): void {
     if (!Number.isFinite(input.tick)) return
     const insert = this.db.prepare(
@@ -663,6 +708,52 @@ function fanOutByLocality(
     }
   }
   return rows
+}
+
+function describeMemoryContent(content: Record<string, unknown>, emotionalTag: string): string {
+  const kind = content.kind as string
+  switch (kind) {
+    case 'faction.tile_seized':
+      return `目睹 ${content.tileId} 發生派系奪權（${content.factionId} 取代 ${content.previousFactionId ?? '無主'}），感到${emotionalTagZh(emotionalTag)}`
+    case 'animal.attacked_npc':
+      return `遭 ${content.speciesId} 攻擊於 ${content.tileId}，感到${emotionalTagZh(emotionalTag)}`
+    case 'animal.attacked_npc.witnessed':
+      return `目睹 ${content.victimNpcId} 在 ${content.tileId} 遭 ${content.speciesId} 攻擊，感到${emotionalTagZh(emotionalTag)}`
+    case 'animal.attacked_npc.heard':
+      return `聽聞 ${content.tileId} 附近有動物攻擊事件，感到${emotionalTagZh(emotionalTag)}`
+    case 'migration.wave_started':
+      return `目睹 ${content.speciesId} 大遷徙浪潮自 ${content.fromTileId} 啟動，感到${emotionalTagZh(emotionalTag)}`
+    case 'species.extinct':
+      return `得知 ${content.speciesId} 物種宣告滅絕，感到${emotionalTagZh(emotionalTag)}`
+    case 'settlement.formed':
+      return `目睹 ${content.tileId} 聚落正式成立，感到${emotionalTagZh(emotionalTag)}`
+    case 'settlement.declined':
+      return `目睹 ${content.tileId} 聚落走向衰敗，感到${emotionalTagZh(emotionalTag)}`
+    case 'goods.transport_lost':
+      return `貨物（${content.goodsId}）在 ${content.fromTileId}→${content.toTileId} 途中遺失，感到${emotionalTagZh(emotionalTag)}`
+    case 'combat.defeat':
+      return `在戰鬥中落敗${content.defeatedByActorId ? `（敗給 ${content.defeatedByActorId}）` : ''}，感到${emotionalTagZh(emotionalTag)}`
+    case 'combat.defeat.witnessed':
+      return `目睹 ${content.defeatedNpcId} 在戰鬥中落敗，感到${emotionalTagZh(emotionalTag)}`
+    default: {
+      if (typeof content.narration === 'string' && content.narration.length > 0) {
+        return content.narration
+      }
+      return `[${kind}]`
+    }
+  }
+}
+
+function emotionalTagZh(tag: string): string {
+  const MAP: Record<string, string> = {
+    fear: '恐懼',
+    grief: '悲傷',
+    relief: '欣慰',
+    anger: '憤怒',
+    awe: '驚嘆',
+    neutral: '平靜',
+  }
+  return MAP[tag] ?? tag
 }
 
 function insertMemoryRows(

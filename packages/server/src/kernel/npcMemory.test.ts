@@ -248,3 +248,130 @@ describe('SqliteNpcMemoryStore.projectWithLocality', () => {
     expect(rows).toHaveLength(1)
   })
 })
+
+describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
+  it('returns empty string when no memories exist', () => {
+    const { store } = makeStore()
+    const result = store.formatMemoryContext('npc-nobody', 1000)
+    expect(result).toBe('')
+  })
+
+  it('returns bullet list for active memories', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    const ev = makeEvent('FACTION_TILE_SEIZED', {
+      tileId: 't_forest',
+      factionId: 'tide_hunters',
+      previousFactionId: 'free_runners',
+      seizedAtTick: 100,
+      narration: '',
+    }, 100)
+    store.projectWithLocality(ev, npcMap)
+    const result = store.formatMemoryContext('npc-guard', 200)
+    expect(result).toContain('[importance:9]')
+    expect(result).toContain('t_forest')
+  })
+
+  it('includes world-scoped memories (SPECIES_EXTINCT)', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-hunter', 't_forest']])
+    const ev = makeEvent('SPECIES_EXTINCT', {
+      speciesId: 'forest_deer',
+      lastSeenTick: 100,
+      affectedTileIds: ['t_forest'],
+    }, 100)
+    store.projectWithLocality(ev, npcMap)
+    const result = store.formatMemoryContext('npc-hunter', 200)
+    expect(result).toContain('forest_deer')
+  })
+
+  it('caps output at MEMORY_DIALOG_MAX_BULLETS (5)', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    // Insert 7 memories at different ticks (importance 9, so all are permanent)
+    for (let i = 0; i < 7; i++) {
+      const ev = makeEvent('FACTION_TILE_SEIZED', {
+        tileId: 't_forest',
+        factionId: 'tide_hunters',
+        previousFactionId: null,
+        seizedAtTick: 100 + i,
+        narration: `event-${i}`,
+      }, 100 + i)
+      store.projectWithLocality(ev, npcMap)
+    }
+    const result = store.formatMemoryContext('npc-guard', 500)
+    const lines = result.split('\n').filter((l) => l.startsWith('-'))
+    expect(lines.length).toBeLessThanOrEqual(5)
+  })
+
+  it('importance-9 memory survives past MEMORY_VERY_HIGH_DECAY_TICKS', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    const ev = makeEvent('FACTION_TILE_SEIZED', {
+      tileId: 't_forest',
+      factionId: 'tide_hunters',
+      previousFactionId: null,
+      seizedAtTick: 0,
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // Way beyond decay threshold
+    const result = store.formatMemoryContext('npc-guard', 999999)
+    expect(result).not.toBe('')
+  })
+
+  it('importance-5 memory is excluded after MEMORY_HIGH_DECAY_TICKS', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-carrier', 't_dock']])
+    const ev = makeEvent('GOODS_TRANSPORT_LOST', {
+      transportId: 'trans-1',
+      routeId: 'route-1',
+      goodsId: 'fish',
+      quantity: 5,
+      carrierNpcId: 'npc-carrier',
+      fromTileId: 't_dock',
+      toTileId: 't_central',
+      reason: 'storm',
+      lostAtTick: 0,
+      narration: '',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // MEMORY_HIGH_DECAY_TICKS = 7 * 17280 = 120960
+    // Use currentTick well past that threshold
+    const result = store.formatMemoryContext('npc-carrier', 200000)
+    expect(result).toBe('')
+  })
+
+  it('orders by importance DESC then recency DESC', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-guard', 't_forest']])
+    // Low-importance event (importance 5, stored directly to npc-guard via carrier)
+    const evLow = makeEvent('GOODS_TRANSPORT_LOST', {
+      transportId: 'trans-2',
+      routeId: 'route-2',
+      goodsId: 'fish',
+      quantity: 5,
+      carrierNpcId: 'npc-guard',
+      fromTileId: 't_dock',
+      toTileId: 't_forest',
+      reason: 'storm',
+      lostAtTick: 200,
+      narration: '',
+    }, 200)
+    store.projectWithLocality(evLow, npcMap)
+    // High-importance event (importance 9)
+    const evHigh = makeEvent('FACTION_TILE_SEIZED', {
+      tileId: 't_forest',
+      factionId: 'tide_hunters',
+      previousFactionId: null,
+      seizedAtTick: 100,
+      narration: '',
+    }, 100)
+    store.projectWithLocality(evHigh, npcMap)
+    const result = store.formatMemoryContext('npc-guard', 300)
+    const lines = result.split('\n').filter((l) => l.startsWith('-'))
+    // High importance (9) should appear before low (5)
+    const firstImportance = lines[0]!.match(/\[importance:(\d+)\]/)?.[1]
+    expect(Number(firstImportance)).toBeGreaterThan(5)
+  })
+})
