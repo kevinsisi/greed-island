@@ -33,13 +33,15 @@ export interface BeliefRow {
 
 // World tile adjacency (borders).
 export const TILE_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
-  t_central: ['t_dock', 't_forest', 't_ruin', 't_temple', 't_dimai'],
-  t_dock:    ['t_central', 't_forest'],
-  t_forest:  ['t_central', 't_dock', 't_mountain'],
-  t_ruin:    ['t_central', 't_temple'],
-  t_temple:  ['t_central', 't_ruin', 't_dimai'],
-  t_dimai:   ['t_central', 't_temple', 't_mountain'],
-  t_mountain: ['t_forest', 't_dimai'],
+  t_central:   ['t_dock', 't_forest', 't_ruin', 't_temple', 't_dimai'],
+  t_dock:      ['t_central', 't_forest', 't_salt_marsh'],
+  t_forest:    ['t_central', 't_dock', 't_mountain'],
+  t_ruin:      ['t_central', 't_temple'],
+  t_temple:    ['t_central', 't_ruin', 't_dimai', 't_desert'],
+  t_dimai:     ['t_central', 't_temple', 't_mountain'],
+  t_mountain:  ['t_forest', 't_dimai', 't_desert'],
+  t_salt_marsh: ['t_dock'],
+  t_desert:    ['t_mountain', 't_temple'],
 }
 
 function subjectKey(subject: BeliefSubjectKind, qualifier: string): string {

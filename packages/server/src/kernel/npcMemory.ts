@@ -158,6 +158,11 @@ export class SqliteNpcMemoryStore {
   }
 
   rebuildFromEvents(events: readonly Event[]): void {
+    // NOTE: projectWithLocality() is intentionally not called here.
+    // Locality rows (written during live sim via projectWithLocality) depend on
+    // NPC tile positions at event time — state not stored in the EventLog.
+    // After restart, locality rows are absent; only project() rows are rebuilt.
+    // This is the same trade-off as BeliefProjection (no boot hydration).
     this.db.exec('DELETE FROM npc_memory')
     const tx = this.db.transaction(() => {
       for (const event of events) this.project(event)
@@ -598,7 +603,7 @@ function deriveLocalityRows(
       const goodsId = data.goodsId as string
       const fromTileId = data.fromTileId as string
       const toTileId = data.toTileId as string
-      const lostNarration = typeof data.narration === 'string' ? data.narration : null
+      const lostNarration = narration
       return [
         {
           npcId: carrierNpcId,
@@ -652,9 +657,9 @@ function fanOutByLocality(
   const rows: DerivedMemoryRow[] = []
   for (const [npcId, npcTile] of npcTileMap) {
     if (npcTile === eventTileId) {
-      rows.push({ npcId, memoryType, content: contentBase, importance: baseImportance })
+      rows.push({ npcId, memoryType, content: { ...contentBase }, importance: baseImportance })
     } else if ((TILE_ADJACENCY[npcTile] ?? []).includes(eventTileId)) {
-      rows.push({ npcId, memoryType, content: contentBase, importance: Math.max(1, baseImportance - 2) })
+      rows.push({ npcId, memoryType, content: { ...contentBase }, importance: Math.max(1, baseImportance - 2) })
     }
   }
   return rows
