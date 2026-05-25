@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.58.0 ✅ shipped — 2026-05-25
+
+**主題：Territory Claim Change + Building Abandonment（Phase 30.7 completion）**
+
+- ✅ `TERRITORY_CLAIM_CHANGED` command type + validator + `TerritoryClaimChangedCmd` payload type
+- ✅ 發出 TERRITORY_CLAIM_CHANGED（伴生 FACTION_DOMINANCE_SHIFTED，同 tick，tileCount = 失去的 tile 數）
+- ✅ 發出 BUILDING_ABANDONED（health ≤ 0 的建築，派系崩潰後同 tick）
+- ✅ §43.1 criterion 3 完整：FACTION_DOMINANCE_SHIFTED + TERRITORY_CLAIM_CHANGED + TRADE_ROUTE_CLOSED + BUILDING_ABANDONED 可觀測
+- ✅ 921 tests pass；build 乾淨
+
+---
+
 ## v0.57.0 ✅ shipped — 2026-05-25
 
 **主題：Faction Dominance Cascade（Phase 30.7）**

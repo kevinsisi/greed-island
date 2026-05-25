@@ -199,6 +199,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FACTION_TILE_SEIZED',
   'FACTION_NPC_LOYALTY_SHIFTED',
   'FACTION_DOMINANCE_SHIFTED',
+  'TERRITORY_CLAIM_CHANGED',
   // NPC Intention Layer (v0.51.0)
   'NPC_INTENT_RESOLVED',
 ] as const
@@ -381,6 +382,14 @@ export type FactionDominanceShiftedCmd = Readonly<{
   losingFactionId: string
   dominantFactionId: string | null
   lostTileCount: number
+  tick: number
+  narration: string
+}>
+
+export type TerritoryClaimChangedCmd = Readonly<{
+  fromFactionId: string
+  toFactionId: string | null
+  tileCount: number
   tick: number
   narration: string
 }>
@@ -1527,6 +1536,7 @@ export type LivingWorldCommandPayload =
   | FactionTileSeizedCmd
   | FactionNpcLoyaltyShiftedCmd
   | FactionDominanceShiftedCmd
+  | TerritoryClaimChangedCmd
   | NpcIntentResolvedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
@@ -2809,6 +2819,15 @@ const VALIDATORS: Readonly<
     if (typeof p.losingFactionId !== 'string' || p.losingFactionId.length === 0) return 'losingFactionId required'
     if (p.dominantFactionId !== null && typeof p.dominantFactionId !== 'string') return 'dominantFactionId must be string or null'
     if (!isNonNegativeInteger(p.lostTileCount)) return 'lostTileCount must be non-negative integer'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  TERRITORY_CLAIM_CHANGED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.fromFactionId !== 'string' || p.fromFactionId.length === 0) return 'fromFactionId required'
+    if (p.toFactionId !== null && typeof p.toFactionId !== 'string') return 'toFactionId must be string or null'
+    if (!isNonNegativeInteger(p.tileCount)) return 'tileCount must be non-negative integer'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null

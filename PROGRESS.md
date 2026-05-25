@@ -5,6 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.58.0
+
+### Current Version
+`0.58.0` — TypeScript build clean. 921 tests pass across 123 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.57.0 → v0.58.0)
+
+**v0.58.0 — Territory Claim Change + Building Abandonment (Phase 30.7 completion)**
+
+TERRITORY_CLAIM_CHANGED 事件上線，作為 FACTION_DOMINANCE_SHIFTED 的伴生事件：當派系失去所有領地時，同時發出領土宣告更動記錄，並自動放棄所有健康值降至 0 的建築（BUILDING_ABANDONED）。這完整關閉了 §43.1 criterion 3：「faction 戰敗 → 道路崩潰」的完整觀測鏈。
+
+**修改檔案：**
+- `packages/server/src/kernel/livingWorldCommands.ts`：新增 `TERRITORY_CLAIM_CHANGED` command type、validator、`TerritoryClaimChangedCmd` payload type；加入 FACTION_BOOT_EVENT_TYPES
+- `packages/server/src/sim/runtime.ts`：Phase 30.7 planner block 補發 TERRITORY_CLAIM_CHANGED + BUILDING_ABANDONED（health ≤ 0 的建築）
+
+**架構關鍵點：**
+- TERRITORY_CLAIM_CHANGED 在 FACTION_DOMINANCE_SHIFTED 同 tick 發出（tileCount = 失去的 tile 數）
+- BUILDING_ABANDONED 只對 health ≤ 0 的建築發出（buildingStateProjection.list() 過濾）
+- TERRITORY_CLAIM_CHANGED 加入 FACTION_BOOT_EVENT_TYPES
+
+**§43 Progress After v0.58.0:**
+- ✅ §43.1 criterion 3 完整：FACTION_DOMINANCE_SHIFTED + TERRITORY_CLAIM_CHANGED + TRADE_ROUTE_CLOSED + BUILDING_ABANDONED 可觀測
+- ✅ §43.2 多項：生態崩潰 (FISHERY_COLLAPSED + FOREST_DEPLETED) + 恢復 (BIOME_RECOVERED + SPECIES_RECOVERED) + NPC 對話（extinctionWarnings 已注入）
+
+**Next:** v0.59.0 — SPECIES_POPULATION_SHIFTED（補全 §6.5 缺失事件目錄）或 POLLUTION_INCREASED（工業化副作用）
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.57.0
 
 ### Current Version

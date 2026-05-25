@@ -343,6 +343,7 @@ const FACTION_BOOT_EVENT_TYPES = [
   'FACTION_TILE_SEIZED',
   'FACTION_NPC_LOYALTY_SHIFTED',
   'FACTION_DOMINANCE_SHIFTED',
+  'TERRITORY_CLAIM_CHANGED',
 ] as const
 
 export type NarrativeEventPayload = Readonly<{
@@ -3527,6 +3528,13 @@ export class SimulationRuntime {
         tick: nextTick,
         narration: `${losingLabel}失去所有領地控制，失去 ${lostCount} 個區域的主導權，領土版圖徹底崩潰。`,
       }))
+      commands.push(makeLivingWorldCommand('TERRITORY_CLAIM_CHANGED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+        fromFactionId: losingFaction,
+        toFactionId: dominantFaction ?? null,
+        tileCount: lostCount,
+        tick: nextTick,
+        narration: `${losingLabel}的 ${lostCount} 個區域主導權宣告終結，版圖移交${dominantFaction ? FACTION_LABEL_ZH[dominantFaction] : '各方勢力'}。`,
+      }))
       for (const route of this.logisticsProjection.snapshot().routes.filter(r => r.open)) {
         commands.push(makeLivingWorldCommand('TRADE_ROUTE_CLOSED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
           routeId: route.routeId,
@@ -3534,6 +3542,16 @@ export class SimulationRuntime {
           reason: 'faction_collapse',
           narration: `${losingLabel}崩潰後，物流通道 ${route.routeId} 因領土動盪而關閉。`,
         }))
+      }
+      // Abandon buildings with health ≤ 0 on any currently-contested tile
+      for (const row of this.buildingStateProjection.list()) {
+        if (row.health <= 0) {
+          commands.push(makeLivingWorldCommand('BUILDING_ABANDONED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            buildingId: row.buildingId,
+            tileId: row.tileId,
+            lastActivityTick: nextTick,
+          }))
+        }
       }
     }
     for (const f of FACTIONS) {
