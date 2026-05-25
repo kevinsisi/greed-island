@@ -249,6 +249,10 @@ export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
 
 // NPC Household Migration (v0.74.0)
 export const HOUSEHOLD_MIGRATION_CADENCE_TICKS = TICKS_PER_DAY * 2
+
+// Road Network (v0.75.0)
+export const ROAD_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 3
+export const ROAD_TRAVEL_SPEED_MULTIPLIER = 1.5  // roads reduce cross-tile travel to ceil(baseTicks/multiplier)
 export const MIGRATION_PUSH_SAFETY_THRESHOLD = 20   // home tile safety must be below this
 export const MIGRATION_PULL_SAFETY_MIN = 50          // target tile safety must be above this
 export const MIGRATION_MAX_PER_CADENCE = 1           // at most one NPC migrates per cadence tick

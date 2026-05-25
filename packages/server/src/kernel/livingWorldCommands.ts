@@ -211,6 +211,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_INTENT_RESOLVED',
   // NPC Household Migration (v0.74.0)
   'NPC_HOUSEHOLD_MIGRATED',
+  // Road Network (v0.75.0)
+  'ROAD_CONSTRUCTED',
+  'ROAD_DESTROYED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -420,6 +423,23 @@ export type NpcHouseholdMigratedCmd = Readonly<{
   fromTileId: string
   toTileId: string
   reason: string
+  narration: string
+}>
+
+export type RoadConstructedCmd = Readonly<{
+  roadId: string
+  fromTileId: string
+  toTileId: string
+  roadType: 'road' | 'bridge'
+  constructedAtTick: number
+  narration: string
+}>
+
+export type RoadDestroyedCmd = Readonly<{
+  roadId: string
+  fromTileId: string
+  toTileId: string
+  destroyedAtTick: number
   narration: string
 }>
 
@@ -1627,6 +1647,8 @@ export type LivingWorldCommandPayload =
   | TerritoryClaimChangedCmd
   | NpcIntentResolvedCmd
   | NpcHouseholdMigratedCmd
+  | RoadConstructedCmd
+  | RoadDestroyedCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3004,6 +3026,25 @@ const VALIDATORS: Readonly<
     if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
     if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
     if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ROAD_CONSTRUCTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.roadId !== 'string' || p.roadId.length === 0) return 'roadId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (p.roadType !== 'road' && p.roadType !== 'bridge') return 'roadType must be road or bridge'
+    if (!isNonNegativeInteger(p.constructedAtTick)) return 'constructedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  ROAD_DESTROYED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.roadId !== 'string' || p.roadId.length === 0) return 'roadId required'
+    if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
+    if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
+    if (!isNonNegativeInteger(p.destroyedAtTick)) return 'destroyedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

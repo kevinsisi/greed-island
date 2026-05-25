@@ -11,7 +11,7 @@ function makeProfile(id: string, defaultLocation = 't_central'): NpcProfile {
     defaultLocation,
     routine: [],
     triggers: [],
-    memory: { decayFn: 'linear', decayParam: 0.01 },
+    memory: { consultsEventTypes: [], decayFn: 'linear', decayParam: 0.01 },
     personality: {},
   }
 }

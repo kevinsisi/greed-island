@@ -5,6 +5,35 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.75.0
+
+### Current Version
+`0.75.0` — TypeScript build clean. 1128 tests pass. Commits pushed to `main`.
+
+### What Was Shipped (v0.75.0)
+
+**v0.75.0 — Roads / Bridges as Buildable Map Features**
+- New `RoadNetworkProjection` in `projections/roadNetwork.ts`: tracks `RoadRow` records from `ROAD_CONSTRUCTED` / `ROAD_DESTROYED` events; `hasRoad(from, to)` bidirectional; `getRoadSet()` returns `"fromTileId:toTileId"` string set for O(1) lookup; `ROAD_NETWORK_BOOT_EVENT_TYPES` for large-log selective rebuild
+- New `planRoadConstruction()` in `sim/roadConstructionPlanner.ts`: cadence-gated at `ROAD_CONSTRUCTION_CADENCE_TICKS = TICKS_PER_DAY * 3`; fires when ≥2 open trade routes share a tile pair AND no road exists yet; auto-construct uses `routeKey()` for canonical bidirectional road IDs
+- `ROAD_CONSTRUCTED` / `ROAD_DESTROYED` event types + `RoadConstructedCmd` / `RoadDestroyedCmd` payload types; Rule Engine validators added; both added to `LivingWorldCommandPayload` union
+- `ROAD_TRAVEL_SPEED_MULTIPLIER = 1.5` in `config/world.ts`; `roadSet?: ReadonlySet<string>` added to `NpcTickContext`; `nextNpcState()` applies multiplier to `crossTileRouteTicks` when the active `travelRoute` is in `roadSet`
+- Wired into `runtime.ts`: both incremental `project()` paths; small-log rebuild; large-log selective rebuild (`ROAD_NETWORK_BOOT_EVENT_TYPES`); road construction cadence block emits `ROAD_CONSTRUCTED` commands; `roadSet` passed to `npcEngine.tick()`
+- 10 tests in `roadNetwork.test.ts`, 8 tests in `roadConstruction.test.ts`
+- WORLD_CAPABILITIES.md Layer 3 gap "roads/bridges as map features" closed; summary sentence updated
+- `runtimeSettlementFamine.test.ts` timeout bumped to 15 000ms (pre-existing flaky test under full-suite contention)
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Carrier NPC autonomous routing (NPCs independently choosing trade routes based on market signals)
+- Cards as combat rule operators (Phase 4)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.74.0
 
 ### Current Version

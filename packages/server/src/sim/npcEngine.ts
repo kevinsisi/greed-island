@@ -18,7 +18,7 @@
 // 透過 hydrate() 餵回。
 
 import type { NpcProfile } from '../npcs/types.js'
-import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER } from '../config/world.js'
+import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER, ROAD_TRAVEL_SPEED_MULTIPLIER } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
 import type { IntentKind } from '../kernel/livingWorldCommands.js'
 
@@ -323,6 +323,8 @@ export type NpcTickContext = Readonly<{
   mountedNpcIds?: ReadonlySet<string>
   /** v0.49.0：當前所有建築狀態，用於 NPC 子格 walkable cell 計算（排除非 abandoned 建築佔格）。 */
   buildingStates?: readonly { buildingId: string; tileId: string; col: number; row: number; state: string }[]
+  /** v0.75.0：已建成道路集合（"fromTileId:toTileId" bidirectional）；有道路的跨區路線加速。 */
+  roadSet?: ReadonlySet<string>
 }>
 
 // schedule slot：profile 沒給 schedule 就從 routine 推導
@@ -952,9 +954,15 @@ function decideNextState(
   }
 
   const isMounted = context?.mountedNpcIds?.has(profile.id) ?? false
-  const crossTileRouteTicks = isMounted
+  const hasRoadOnRoute = before.travelRoute
+    ? (context?.roadSet?.has(`${before.travelRoute.fromTile}:${before.travelRoute.toTile}`) ?? false)
+    : false
+  const baseCrossTileTicks = isMounted
     ? Math.ceil(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS / MOUNT_SPEED_MULTIPLIER)
     : NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS
+  const crossTileRouteTicks = hasRoadOnRoute
+    ? Math.max(1, Math.ceil(baseCrossTileTicks / ROAD_TRAVEL_SPEED_MULTIPLIER))
+    : baseCrossTileTicks
 
   if (before.activity === 'move' && before.travelRoute) {
     const routeAge = currentTick - before.travelRoute.startedAtTick

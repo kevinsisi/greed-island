@@ -71,6 +71,7 @@ import {
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
+  ROAD_CONSTRUCTION_CADENCE_TICKS,
   INTENT_RECOMPUTE_INTERVAL,
   INTENT_OVERRIDE_DURATION_TICKS,
   INTENT_URGENCY_THRESHOLD,
@@ -218,6 +219,8 @@ import { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
 import { planHouseholdMigration } from './householdMigrationPlanner.js'
+import { planRoadConstruction } from './roadConstructionPlanner.js'
+import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { FactionDominanceProjection } from '../projections/factionDominance.js'
 import { planFactionDominance } from './factionDominancePlanner.js'
@@ -556,6 +559,7 @@ export class SimulationRuntime {
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
+  private readonly roadNetworkProjection = new RoadNetworkProjection()
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
 
@@ -1639,6 +1643,7 @@ export class SimulationRuntime {
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
       this.buildingOccupantsProjection.project(ev)
+      this.roadNetworkProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.intentProjection.project(ev)
       this.npcStateProjection.project(ev)
@@ -1780,7 +1785,8 @@ export class SimulationRuntime {
       activeNpcSet: npcPartition.active,
       npcsInsideBuildings,
       mountedNpcIds,
-      buildingStates
+      buildingStates,
+      roadSet: this.roadNetworkProjection.getRoadSet(),
     })
     // Phase E4: legendary hunt detection (per-tick, O(active world events))
     const activeWorldEvents = this.worldEventProjection.list()
@@ -3554,6 +3560,34 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Road Construction cadence (v0.75.0) ----
+    if (nextTick % ROAD_CONSTRUCTION_CADENCE_TICKS === 0) {
+      const roadIntents = planRoadConstruction({
+        currentTick: nextTick,
+        logisticsProjection: this.logisticsProjection,
+        roadNetworkProjection: this.roadNetworkProjection,
+      })
+      for (const intent of roadIntents) {
+        const fromName = TILE_BY_ID[intent.fromTileId]?.name ?? intent.fromTileId
+        const toName = TILE_BY_ID[intent.toTileId]?.name ?? intent.toTileId
+        commands.push(makeLivingWorldCommand(
+          'ROAD_CONSTRUCTED',
+          SIM_ACTOR_WORLD,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            roadId: intent.roadId,
+            fromTileId: intent.fromTileId,
+            toTileId: intent.toTileId,
+            roadType: intent.roadType,
+            constructedAtTick: nextTick,
+            narration: `繁榮的貿易往來促使${fromName}與${toName}之間的道路自然形成。`,
+          }
+        ))
+      }
+    }
+
     // BeliefProjection confidence decay — once per in-game day
     if (nextTick % TICKS_PER_DAY === 0) {
       this.beliefProjection.tick(nextTick)
@@ -4697,6 +4731,7 @@ export class SimulationRuntime {
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
         this.buildingOccupantsProjection.project(ev)
+        this.roadNetworkProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
@@ -5369,6 +5404,7 @@ export class SimulationRuntime {
       this.worldStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
+      this.roadNetworkProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
@@ -5420,6 +5456,9 @@ export class SimulationRuntime {
       // BuildingOccupants projection — rebuild NPC indoor presence from BUILDING_ENTER/LEAVE events.
       const buildingOccupantsEvents = this.store.readEventsByTypes(BUILDING_OCCUPANTS_BOOT_EVENT_TYPES)
       this.buildingOccupantsProjection.rebuildFromEvents(buildingOccupantsEvents)
+      // RoadNetwork projection — rebuild road/bridge map from ROAD_CONSTRUCTED/ROAD_DESTROYED events.
+      const roadNetworkEvents = this.store.readEventsByTypes(ROAD_NETWORK_BOOT_EVENT_TYPES)
+      this.roadNetworkProjection.rebuildFromEvents(roadNetworkEvents)
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)
