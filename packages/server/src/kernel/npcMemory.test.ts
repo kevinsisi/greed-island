@@ -374,4 +374,25 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     const firstImportance = lines[0]!.match(/\[importance:(\d+)\]/)?.[1]
     expect(Number(firstImportance)).toBeGreaterThan(5)
   })
+
+  it('importance-8 memory is excluded exactly at MEMORY_VERY_HIGH_DECAY_TICKS + 1', () => {
+    const { store } = makeStore()
+    const npcMap: NpcTileMap = new Map([['npc-fisher', 't_salt_marsh']])
+    // ANIMAL_ATTACKED_NPC victim row = importance 8
+    const ev = makeEvent('ANIMAL_ATTACKED_NPC', {
+      attackId: 'atk-boundary',
+      animalId: 'wolf-1',
+      speciesId: 'fog_wolf',
+      npcId: 'npc-fisher',
+      tileId: 't_salt_marsh',
+      attackedAtTick: 0,
+      damage: { mood: -10, health: -5 },
+      narration: 'A wolf attacked.',
+    }, 0)
+    store.projectWithLocality(ev, npcMap)
+    // MEMORY_VERY_HIGH_DECAY_TICKS = 30 * 17280 = 518400
+    // At exactly tick 518401, the importance-8 memory should be expired
+    const result = store.formatMemoryContext('npc-fisher', 518401)
+    expect(result).toBe('')
+  })
 })
