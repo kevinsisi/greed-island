@@ -233,6 +233,8 @@ import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
 const SIM_ACTOR_WORLD = 'system'
 const NARRATIVE_KEY_PREFIX = 'narrative.'
+const HIDE_BYPRODUCTS = new Set(['hide', 'pelt', 'eel_skin', 'lizard_skin', 'serpent_scale', 'crab_shell'])
+const BONE_BYPRODUCTS = new Set(['bone', 'fang', 'claw', 'tusk', 'horn', 'iron_fang', 'fish_bones'])
 const FACT_TICK = 'world.tick'
 const FACT_WEATHER = 'world.weather'
 const FACT_SEASON = 'world.season'
@@ -2154,6 +2156,21 @@ export class SimulationRuntime {
               }
             )
           )
+          const byps = species.byproducts as readonly string[]
+          const hideByp = byps.find((b) => HIDE_BYPRODUCTS.has(b))
+          if (hideByp) {
+            commands.push(makeLivingWorldCommand('HIDE_COLLECTED', event.npcId, 'npc', nextTick, submittedAt, {
+              huntId: hunt.huntId, carcassId: hunt.carcassId, speciesId: hunt.targetSpeciesId,
+              tileId: hunt.tileId, npcId: hunt.npcId, byproductId: hideByp, tick: nextTick, narration: null,
+            }))
+          }
+          const boneByp = byps.find((b) => BONE_BYPRODUCTS.has(b))
+          if (boneByp) {
+            commands.push(makeLivingWorldCommand('BONE_COLLECTED', event.npcId, 'npc', nextTick, submittedAt, {
+              huntId: hunt.huntId, carcassId: hunt.carcassId, speciesId: hunt.targetSpeciesId,
+              tileId: hunt.tileId, npcId: hunt.npcId, byproductId: boneByp, tick: nextTick, narration: null,
+            }))
+          }
         }
         if (profile) {
           const fishery = planFisheryHarvest({

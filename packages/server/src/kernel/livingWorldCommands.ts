@@ -112,6 +112,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'ANIMAL_MIGRATED',
   'CARCASS_CREATED',
   'MEAT_HARVESTED',
+  'HIDE_COLLECTED',
+  'BONE_COLLECTED',
   // Phase E0.4 — Fishery density
   'FISHERY_HARVESTED',
   'FISHERY_COLLAPSED',
@@ -904,6 +906,28 @@ export type MeatHarvestedCmd = Readonly<{
   narration: string
 }>
 
+export type HideCollectedCmd = Readonly<{
+  huntId: string
+  carcassId: string
+  speciesId: string
+  tileId: string
+  npcId: string
+  byproductId: string
+  tick: number
+  narration: string | null
+}>
+
+export type BoneCollectedCmd = Readonly<{
+  huntId: string
+  carcassId: string
+  speciesId: string
+  tileId: string
+  npcId: string
+  byproductId: string
+  tick: number
+  narration: string | null
+}>
+
 export type FisheryHarvestedCmd = Readonly<{
   tileId: string
   npcId: string
@@ -1491,6 +1515,8 @@ export type LivingWorldCommandPayload =
   | AnimalMigratedCmd
   | CarcassCreatedCmd
   | MeatHarvestedCmd
+  | HideCollectedCmd
+  | BoneCollectedCmd
   | FisheryHarvestedCmd
   | FisheryCollapsedCmd
   | FisheryRecoveredCmd
@@ -2194,6 +2220,28 @@ const VALIDATORS: Readonly<
     if (typeof p.goldValue !== 'number' || !Number.isFinite(p.goldValue) || p.goldValue < 0) return 'goldValue required'
     if (typeof p.harvestedAtTick !== 'number' || !Number.isInteger(p.harvestedAtTick) || p.harvestedAtTick < 0) return 'harvestedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  HIDE_COLLECTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.huntId !== 'string' || p.huntId.length === 0) return 'huntId required'
+    if (typeof p.carcassId !== 'string' || p.carcassId.length === 0) return 'carcassId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.byproductId !== 'string' || p.byproductId.length === 0) return 'byproductId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  BONE_COLLECTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.huntId !== 'string' || p.huntId.length === 0) return 'huntId required'
+    if (typeof p.carcassId !== 'string' || p.carcassId.length === 0) return 'carcassId required'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.byproductId !== 'string' || p.byproductId.length === 0) return 'byproductId required'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },
   FISHERY_HARVESTED: (p) => {
