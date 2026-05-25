@@ -65,6 +65,7 @@ export type AiDialogContext = Readonly<{
   ecologyContext?: readonly { speciesId: string; count: number }[]
   fisheryContext?: { density: string; collapsed: boolean } | null
   extinctionWarnings?: readonly string[]
+  pollutionLevel?: number
   plantContext?: readonly PlantContextRow[]
   recentLocalEvents?: readonly string[]
   skillLevels?: readonly { skillId: string; level: number }[]
@@ -188,7 +189,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     historyBlock,
     '',
     ...buildRumorsBlock(ctx.activeRumors),
-    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings, ctx.plantContext),
+    ...buildEcologyBlock(ctx.ecologyContext, ctx.fisheryContext, ctx.extinctionWarnings, ctx.plantContext, ctx.pollutionLevel),
     ...buildFactionBlock(ctx.dominantFaction),
     ...buildTileHistoryBlock(ctx.tileHistoryArcs),
     ...buildRecentEventsBlock(ctx.recentLocalEvents),
@@ -453,12 +454,14 @@ export function buildEcologyBlock(
   fishery: { density: string; collapsed: boolean } | null | undefined,
   extinctionWarnings?: readonly string[],
   plants?: readonly PlantContextRow[],
+  pollutionLevel?: number,
 ): string[] {
   const hasEcology = ecology && ecology.length > 0
   const hasFishery = fishery != null
   const hasWarnings = extinctionWarnings && extinctionWarnings.length > 0
   const hasPlants = plants && plants.length > 0
-  if (!hasEcology && !hasFishery && !hasWarnings && !hasPlants) return []
+  const hasPollution = pollutionLevel != null && pollutionLevel > 0
+  if (!hasEcology && !hasFishery && !hasWarnings && !hasPlants && !hasPollution) return []
   const lines: string[] = []
   if (hasEcology) {
     const sorted = [...ecology].sort(
@@ -474,6 +477,9 @@ export function buildEcologyBlock(
   }
   if (hasWarnings) {
     lines.push(`  · ⚠️ 瀕危物種警告：${extinctionWarnings!.join('、')} 數量極低，面臨滅絕`)
+  }
+  if (hasPollution) {
+    lines.push(`  · ⚠️ 環境污染指數：${pollutionLevel}（可見的環境惡化，可自然融入對話）`)
   }
   if (hasPlants) {
     const sorted = [...plants].sort((a, b) => b.saturationPct - a.saturationPct)

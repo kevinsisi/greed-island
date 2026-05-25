@@ -201,6 +201,7 @@ export function createNpcRouter(input: {
             saturationPct: Math.min(100, (n.density / n.capacity) * 100),
           }))
         const extinctionWarnings = input.runtime.getExtinctionWarningsOnTile(npcTile)
+        const tilePollutionLevel = input.runtime.getTilePollutionLevel(npcTile)
 
         // faction + history grounding (§11.9)
         const dominantFaction = input.runtime.getDominantFactionOnTile(npcTile)
@@ -249,6 +250,7 @@ export function createNpcRouter(input: {
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),
+          ...(tilePollutionLevel > 0 ? { pollutionLevel: tilePollutionLevel } : {}),
           ...(plantContext.length > 0 ? { plantContext } : {}),
           ...(dominantFaction ? { dominantFaction } : {}),
           ...(tileHistoryArcs ? { tileHistoryArcs } : {}),

@@ -1222,6 +1222,10 @@ export class SimulationRuntime {
       .map((row) => row.speciesId)
   }
 
+  getTilePollutionLevel(tileId: string): number {
+    return this.ecosystemRegionProjection.getForTile(tileId).pollutionLevel
+  }
+
   getManualNpcIds(): readonly string[] {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
