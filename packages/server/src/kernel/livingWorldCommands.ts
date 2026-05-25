@@ -214,6 +214,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   // Road Network (v0.75.0)
   'ROAD_CONSTRUCTED',
   'ROAD_DESTROYED',
+  // Cards as World Rule Operators (v0.76.0)
+  'CARD_RULE_OPERATOR_ACTIVATED',
+  'CARD_RULE_OPERATOR_EXPIRED',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -440,6 +443,28 @@ export type RoadDestroyedCmd = Readonly<{
   fromTileId: string
   toTileId: string
   destroyedAtTick: number
+  narration: string
+}>
+
+// Cards as World Rule Operators (v0.76.0)
+export type CardRuleOperatorActivatedCmd = Readonly<{
+  activationId: string
+  cardId: string
+  playerId: string
+  scope: string
+  scopeId: string
+  effectKind: string
+  effectValue: number
+  activatedAtTick: number
+  expiresAtTick: number
+  narration: string
+}>
+
+export type CardRuleOperatorExpiredCmd = Readonly<{
+  activationId: string
+  cardId: string
+  playerId: string
+  expiredAtTick: number
   narration: string
 }>
 
@@ -1649,6 +1674,8 @@ export type LivingWorldCommandPayload =
   | NpcHouseholdMigratedCmd
   | RoadConstructedCmd
   | RoadDestroyedCmd
+  | CardRuleOperatorActivatedCmd
+  | CardRuleOperatorExpiredCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -3045,6 +3072,27 @@ const VALIDATORS: Readonly<
     if (typeof p.fromTileId !== 'string' || p.fromTileId.length === 0) return 'fromTileId required'
     if (typeof p.toTileId !== 'string' || p.toTileId.length === 0) return 'toTileId required'
     if (!isNonNegativeInteger(p.destroyedAtTick)) return 'destroyedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  CARD_RULE_OPERATOR_ACTIVATED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.activationId !== 'string' || p.activationId.length === 0) return 'activationId required'
+    if (typeof p.cardId !== 'string' || p.cardId.length === 0) return 'cardId required'
+    if (typeof p.playerId !== 'string' || p.playerId.length === 0) return 'playerId required'
+    if (typeof p.effectKind !== 'string' || p.effectKind.length === 0) return 'effectKind required'
+    if (typeof p.effectValue !== 'number') return 'effectValue must be number'
+    if (!isNonNegativeInteger(p.activatedAtTick)) return 'activatedAtTick must be non-negative integer'
+    if (!isNonNegativeInteger(p.expiresAtTick)) return 'expiresAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  CARD_RULE_OPERATOR_EXPIRED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.activationId !== 'string' || p.activationId.length === 0) return 'activationId required'
+    if (typeof p.cardId !== 'string' || p.cardId.length === 0) return 'cardId required'
+    if (typeof p.playerId !== 'string' || p.playerId.length === 0) return 'playerId required'
+    if (!isNonNegativeInteger(p.expiredAtTick)) return 'expiredAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

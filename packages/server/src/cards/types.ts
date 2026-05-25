@@ -20,6 +20,26 @@
 // 術式卡（technique cards）走獨立檔（techniques.json + techniques.ts），
 // 不在 100 張定序卡裡，不會隨機掉，只能在天際百貨（霓港區）購買。
 
+export type CardRuleOperatorScope = 'goods' | 'tile' | 'global'
+
+export type CardRuleOperatorEffectKind = 'multiply_price' | 'multiply_production'
+
+/** Phase 4 — defines how a card modifies living-world rule evaluation for a bounded scope. */
+export type CardRuleOperatorDef = Readonly<{
+  /** What domain this operator targets. */
+  scope: CardRuleOperatorScope
+  /** The specific target id (goodsId for 'goods', tileId for 'tile', '*' for 'global'). */
+  scopeId: string
+  /** What the operator does to the target. */
+  effectKind: CardRuleOperatorEffectKind
+  /** Multiplicative factor. E.g. 0.7 = −30% price, 1.5 = +50% production. */
+  effectValue: number
+  /** How long the operator stays active (in simulation ticks). */
+  durationTicks: number
+  /** Which actor types are permitted to invoke this card as a world rule operator. */
+  permittedInvokers: readonly ('player' | 'npc' | 'faction')[]
+}>
+
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'
 
 export const CARD_RANKS: readonly CardRank[] = ['S', 'A', 'B', 'C', 'D']
@@ -101,6 +121,13 @@ export type CardCatalogEntry = Readonly<{
   discoveryRuleId: string
   /** Identifier of the restriction rule (anti-duplication, anti-trade, etc.). */
   restrictionRuleId: string
+  /**
+   * Phase 4 — optional world rule operator definition.
+   * When set, playing this card via PLAYER_PLAYED_CARD emits
+   * CARD_RULE_OPERATOR_ACTIVATED and modifies simulation rule evaluation
+   * for `durationTicks`.
+   */
+  ruleOperator?: CardRuleOperatorDef
 }>
 
 export type CardCatalog = Readonly<{

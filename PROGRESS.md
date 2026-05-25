@@ -5,6 +5,37 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.76.0
+
+### Current Version
+`0.76.0` — TypeScript build clean. 1138 tests pass (1028 server + 110 web). Commits pushed to `main`.
+
+### What Was Shipped (v0.76.0)
+
+**v0.76.0 — Cards as World Rule Operators (ARCHITECTURE.md §11.2 closed)**
+- New `CardRuleOperatorDef` type in `cards/types.ts`: `scope | scopeId | effectKind | effectValue | durationTicks | permittedInvokers`; optional `ruleOperator?` field on `CardCatalogEntry`
+- 3 catalog entries ship with `ruleOperator` definitions: ID 11 (魚價 ×0.7, 144 ticks), ID 31 (brine 產量 ×1.5, 72 ticks), ID 51 (魚價 ×1.2, 36 ticks)
+- New `CARD_RULE_OPERATOR_ACTIVATED` / `CARD_RULE_OPERATOR_EXPIRED` command+event types in `kernel/livingWorldCommands.ts`; Rule Engine validators for both
+- New `ActiveRuleOperatorsProjection` in `projections/activeRuleOperators.ts`: tracks active operators from those two events; `getPriceMultiplier(goodsId)`, `getProductionMultiplier(goodsId)` return products of all matching active operators; `getExpiredIds(tick)` for cadence expiry sweep
+- `discoverMarketPrices()` now accepts `priceMultipliers?: ReadonlyMap<string, number>` — applied as final multiplier step after base price calculation
+- Production chain output quantity now multiplied by `getProductionMultiplier(outputGoodsId)` in `runtime.ts` tick loop
+- `publishCommittedEvents()` hook: on `PLAYER_PLAYED_CARD`, looks up `ruleOperator` on the card; if present, emits `CARD_RULE_OPERATOR_ACTIVATED` with `activationId = rule.<cardId>.<playerId>.<tick>` (idempotency guard prevents double-activation)
+- Expiry cadence block in `runTick`: sweeps `getExpiredIds(nextTick)` and emits `CARD_RULE_OPERATOR_EXPIRED` for each
+- `ActiveRuleOperatorsProjection` wired into both incremental `project()` paths, small-log rebuild, large-log selective rebuild
+- 10 tests in `activeRuleOperators.test.ts`
+- WORLD_CAPABILITIES.md Layer 4 gap "Cards as combat rule operators" closed; summary sentence updated
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Carrier NPC autonomous routing (NPCs independently choosing trade routes based on market signals)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.75.0
 
 ### Current Version

@@ -162,9 +162,17 @@
       "maxCopies": 1,
       "acquisitionMethod": "side_quest",
       "acquisitionDetail": "夜市「阿姨的熱湯」三日支線。",
-      "effectDescription": "使用後恢復 30 energy；不限地點，每日一次。",
+      "effectDescription": "使用後恢復 30 energy；不限地點，每日一次。使用後 2 日內全島魚貨市場價格降低 30%。",
       "discoveryRuleId": "discovery.食飲系",
-      "restrictionRuleId": "restriction.s.食飲系"
+      "restrictionRuleId": "restriction.s.食飲系",
+      "ruleOperator": {
+        "scope": "goods",
+        "scopeId": "fish",
+        "effectKind": "multiply_price",
+        "effectValue": 0.7,
+        "durationTicks": 144,
+        "permittedInvokers": ["player"]
+      }
     },
     {
       "id": 12,
@@ -462,9 +470,17 @@
       "maxCopies": 1,
       "acquisitionMethod": "location_trigger",
       "acquisitionDetail": "大潮日退潮時刻訪退潮岩，停留 5 分鐘。",
-      "effectDescription": "探索深淵系時，地脈層第 1 層必現一處安全點。",
+      "effectDescription": "探索深淵系時，地脈層第 1 層必現一處安全點。使用後 1 日內鹵水生產量提升 50%（潮岩礦脈共鳴效應）。",
       "discoveryRuleId": "discovery.地景系",
-      "restrictionRuleId": "restriction.s.地景系"
+      "restrictionRuleId": "restriction.s.地景系",
+      "ruleOperator": {
+        "scope": "goods",
+        "scopeId": "brine",
+        "effectKind": "multiply_production",
+        "effectValue": 1.5,
+        "durationTicks": 72,
+        "permittedInvokers": ["player"]
+      }
     },
     {
       "id": 32,
@@ -762,9 +778,17 @@
       "maxCopies": 1,
       "acquisitionMethod": "location_trigger",
       "acquisitionDetail": "夜間訪潮聲漁港海底。",
-      "effectDescription": "使用後 1 小時內食飲系卡片效果 +20%。",
+      "effectDescription": "使用後 1 小時內食飲系卡片效果 +20%。使用後半日內全島魚貨市場價格上漲 20%（苔蝦群驅散魚群，漁獲供應量下降）。",
       "discoveryRuleId": "discovery.生靈系",
-      "restrictionRuleId": "restriction.s.生靈系"
+      "restrictionRuleId": "restriction.s.生靈系",
+      "ruleOperator": {
+        "scope": "goods",
+        "scopeId": "fish",
+        "effectKind": "multiply_price",
+        "effectValue": 1.2,
+        "durationTicks": 36,
+        "permittedInvokers": ["player"]
+      }
     },
     {
       "id": 52,

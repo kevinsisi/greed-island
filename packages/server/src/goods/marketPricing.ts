@@ -33,6 +33,8 @@ export function discoverMarketPrices(input: {
   inventory: readonly GoodsInventoryRow[]
   settlementId?: string
   marketId?: string
+  /** Optional per-goodsId price multipliers from active rule operators (Phase 4). */
+  priceMultipliers?: ReadonlyMap<string, number>
 }): MarketPriceDiscovery[] {
   const settlementId = input.settlementId ?? CENTRAL_SETTLEMENT_ID
   const marketId = input.marketId ?? CENTRAL_MARKET_ID
@@ -40,17 +42,18 @@ export function discoverMarketPrices(input: {
     const supplyQuantity = input.inventory
       .filter((row) => row.holderType === 'settlement' && row.holderId === settlementId && row.goodsId === metadata.goodsId)
       .reduce((sum, row) => sum + row.quantity, 0)
+    const multiplier = input.priceMultipliers?.get(metadata.goodsId) ?? 1
     return {
       marketId,
       settlementId,
       goodsId: metadata.goodsId,
       supplyQuantity,
       demandQuantity: metadata.baseDemand,
-      priceGold: calculateMarketPriceGold({
+      priceGold: Math.max(1, Math.round(calculateMarketPriceGold({
         basePriceGold: metadata.basePriceGold,
         demandQuantity: metadata.baseDemand,
         supplyQuantity,
-      }),
+      }) * multiplier)),
     }
   })
 }

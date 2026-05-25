@@ -92,7 +92,7 @@ import { enforceAtomicSettlementStateCommands, planSettlementCommands } from './
 import { SettlementsProjection, type SettlementRow } from '../projections/settlements.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
-import type { CardCatalog } from '../cards/types.js'
+import type { CardCatalog, CardRuleOperatorDef } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles, EXPANSION_TILES } from './mapGraph.js'
@@ -221,6 +221,7 @@ import { planMortality } from './mortalityPlanner.js'
 import { planHouseholdMigration } from './householdMigrationPlanner.js'
 import { planRoadConstruction } from './roadConstructionPlanner.js'
 import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
+import { ActiveRuleOperatorsProjection, ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES } from '../projections/activeRuleOperators.js'
 import { FactionControlProjection } from '../projections/factionControl.js'
 import { FactionDominanceProjection } from '../projections/factionDominance.js'
 import { planFactionDominance } from './factionDominancePlanner.js'
@@ -560,6 +561,7 @@ export class SimulationRuntime {
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
   private readonly roadNetworkProjection = new RoadNetworkProjection()
+  private readonly activeRuleOperatorsProjection = new ActiveRuleOperatorsProjection()
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
 
@@ -1644,6 +1646,7 @@ export class SimulationRuntime {
       this.buildingStateProjection.project(ev)
       this.buildingOccupantsProjection.project(ev)
       this.roadNetworkProjection.project(ev)
+      this.activeRuleOperatorsProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.intentProjection.project(ev)
       this.npcStateProjection.project(ev)
@@ -1673,6 +1676,45 @@ export class SimulationRuntime {
       this.areaStateProjection.project(ev)
       this.worldStateProjection.project(ev)
       this.bioNodeProjection.project(ev)
+      // Card rule operator activation — when a card with a ruleOperator is played (Phase 4)
+      if (ev.eventType === 'PLAYER_PLAYED_CARD') {
+        const d = (ev.payload as { data?: Record<string, unknown> })?.data
+        const cardIdStr = typeof d?.cardId === 'string' ? d.cardId : null
+        const playerId = typeof d?.playerAccountId === 'string' ? d.playerAccountId : null
+        if (cardIdStr && playerId) {
+          const cardIdNum = parseInt(cardIdStr, 10)
+          const entry = this.cards.entries.find(e => e.id === cardIdNum)
+          const op: CardRuleOperatorDef | undefined = entry?.ruleOperator
+          if (op) {
+            const activationId = `rule.${cardIdStr}.${playerId}.${this.currentTick}`
+            const alreadyActive = this.activeRuleOperatorsProjection.list().some(
+              r => r.activationId === activationId
+            )
+            if (!alreadyActive) {
+              const activationCmd = makeLivingWorldCommand(
+                'CARD_RULE_OPERATOR_ACTIVATED',
+                playerId,
+                'player',
+                this.currentTick,
+                Date.now(),
+                {
+                  activationId,
+                  cardId: cardIdStr,
+                  playerId,
+                  scope: op.scope,
+                  scopeId: op.scopeId,
+                  effectKind: op.effectKind,
+                  effectValue: op.effectValue,
+                  activatedAtTick: this.currentTick,
+                  expiresAtTick: this.currentTick + op.durationTicks,
+                  narration: `紋卡 ${entry?.nameZh ?? cardIdStr} 激活世界規則修改器：${op.effectKind} × ${op.effectValue} 對 ${op.scopeId}，持續 ${op.durationTicks} tick。`,
+                }
+              )
+              this.commitLivingWorldCommand(activationCmd)
+            }
+          }
+        }
+      }
       const narrativeEvent = readNarrativeFromAnyEvent(ev, this.currentTick)
       if (narrativeEvent) {
         this.pushRecent(narrativeEvent)
@@ -3560,6 +3602,28 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Card Rule Operator expiry (v0.76.0) ----
+    // Emit CARD_RULE_OPERATOR_EXPIRED for any operator whose durationTicks has elapsed.
+    for (const activationId of this.activeRuleOperatorsProjection.getExpiredIds(nextTick)) {
+      const op = this.activeRuleOperatorsProjection.list().find(r => r.activationId === activationId)
+      if (op) {
+        commands.push(makeLivingWorldCommand(
+          'CARD_RULE_OPERATOR_EXPIRED',
+          op.playerId,
+          'player',
+          nextTick,
+          submittedAt,
+          {
+            activationId: op.activationId,
+            cardId: op.cardId,
+            playerId: op.playerId,
+            expiredAtTick: nextTick,
+            narration: `紋卡規則修改器 ${op.activationId} 到期失效。`,
+          }
+        ))
+      }
+    }
+
     // ---- Road Construction cadence (v0.75.0) ----
     if (nextTick % ROAD_CONSTRUCTION_CADENCE_TICKS === 0) {
       const roadIntents = planRoadConstruction({
@@ -4014,6 +4078,10 @@ export class SimulationRuntime {
     })) {
       const recipe = production.recipe
       plannedProductionRecipeIds.add(recipe.recipeId)
+      const productionMultiplier = this.activeRuleOperatorsProjection.getProductionMultiplier(recipe.outputGoodsId)
+      const outputQuantity = productionMultiplier !== 1
+        ? Math.max(1, Math.round(recipe.outputQuantity * productionMultiplier))
+        : recipe.outputQuantity
       commands.push(
         makeLivingWorldCommand(
           'GOODS_PROCESSED',
@@ -4026,7 +4094,7 @@ export class SimulationRuntime {
             inputGoodsId: recipe.inputGoodsId,
             inputQuantity: recipe.inputQuantity,
             outputGoodsId: recipe.outputGoodsId,
-            outputQuantity: recipe.outputQuantity,
+            outputQuantity,
             holderType: recipe.holderType,
             holderId: recipe.holderId,
             tileId: recipe.tileId,
@@ -4035,13 +4103,23 @@ export class SimulationRuntime {
               `中央聚落已有足量 ${recipe.inputGoodsId}，生產鏈依固定配方 ${recipe.recipeId} 將原料轉成 ${recipe.outputGoodsId}。`,
               'Phase 2 §35.3 production chain'
             ),
-            narration: `${recipe.holderId}把 ${recipe.inputQuantity} 份 ${recipe.inputGoodsId} 加工成 ${recipe.outputQuantity} 份 ${recipe.outputGoodsId}。`
+            narration: `${recipe.holderId}把 ${recipe.inputQuantity} 份 ${recipe.inputGoodsId} 加工成 ${outputQuantity} 份 ${recipe.outputGoodsId}。`
           }
         )
       )
     }
 
-    for (const price of discoverMarketPrices({ inventory: this.goodsInventoryProjection.list() })) {
+    // Build per-goodsId price multipliers from active rule operators
+    const priceMultipliers = new Map<string, number>()
+    for (const op of this.activeRuleOperatorsProjection.list()) {
+      if (op.effectKind === 'multiply_price' && op.scope === 'goods') {
+        priceMultipliers.set(op.scopeId, (priceMultipliers.get(op.scopeId) ?? 1) * op.effectValue)
+      }
+    }
+    for (const price of discoverMarketPrices({
+      inventory: this.goodsInventoryProjection.list(),
+      ...(priceMultipliers.size > 0 ? { priceMultipliers } : {}),
+    })) {
       const currentPrice = this.marketPricesProjection.get({ settlementId: price.settlementId, goodsId: price.goodsId })
       if (
         currentPrice &&
@@ -4732,6 +4810,7 @@ export class SimulationRuntime {
         this.buildingStateProjection.project(ev)
         this.buildingOccupantsProjection.project(ev)
         this.roadNetworkProjection.project(ev)
+        this.activeRuleOperatorsProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
@@ -5405,6 +5484,7 @@ export class SimulationRuntime {
       this.bioNodeProjection.rebuildFromEvents(allEvents)
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.roadNetworkProjection.rebuildFromEvents(allEvents)
+      this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
@@ -5459,6 +5539,9 @@ export class SimulationRuntime {
       // RoadNetwork projection — rebuild road/bridge map from ROAD_CONSTRUCTED/ROAD_DESTROYED events.
       const roadNetworkEvents = this.store.readEventsByTypes(ROAD_NETWORK_BOOT_EVENT_TYPES)
       this.roadNetworkProjection.rebuildFromEvents(roadNetworkEvents)
+      // ActiveRuleOperators projection — rebuild active card rule operators from activation/expiry events.
+      const ruleOperatorEvents = this.store.readEventsByTypes(ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES)
+      this.activeRuleOperatorsProjection.rebuildFromEvents(ruleOperatorEvents)
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)
