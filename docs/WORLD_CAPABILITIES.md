@@ -1703,9 +1703,9 @@ The simulation is **deterministic, event-sourced, append-only**.
 
 ✅ **Simulation budget (Architecture §7)** — command hard cap (`MAX_COMMANDS_PER_TICK_HARD_CAP = 8000`), NPC partition (`NPC_PARTITION_PERIOD = 4`), and regional tile activation gate (`TILE_ACTIVITY_RECENCY_TICKS`) all enforced in `runtime.ts`. Soft cap warning at 5000. (ARCHITECTURE.md §11.6 closed)
 
-🟡 **ARCHITECTURE.md §11.5 FACT_SET** — NPC state now has typed projection (✅), but area state, building occupants, weather, season, rare windows still use FACT_SET.
+✅ **ARCHITECTURE.md §11.5 FACT_SET** — All runtime domains now have typed EventLog projections: NPC state (NpcStateProjection), area state (AreaStateProjection), weather/season/rare window/active events (WorldStateProjection v0.72.0), building occupants (BuildingOccupantsProjection v0.73.0). FACT_SET retained as backward-compatible fallback only.
 
-❌ **ARCHITECTURE.md §11.4** — combat session/log still partially outside canonical EventLog.
+✅ **ARCHITECTURE.md §11.4** — combat session/log fully in canonical EventLog (closed v0.25.0); CombatStore is a read-only EventLog projection.
 
 ---
 
@@ -1947,7 +1947,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **AI failure / latency cannot block tick**.
 - ✅ **Server-authored motivation payloads**.
 
-🟡 **ARCHITECTURE.md §11.9** — NPC dialog grounding: relationship graph (v0.67.0 — friend/rival/trust), household members (v0.68.0), dominant faction, history arcs, ecology context (animal population, fishery, extinction warnings, pollution, plant nodes, population shifts) all injected. Remaining gap: alias memory and full social history indexing.
+✅ **ARCHITECTURE.md §11.9** — NPC dialog grounding FULLY CLOSED v0.71.0: relationship graph (friend/rival/trust, v0.67.0), household members (v0.68.0), dominant faction, history arcs, ecology context (animal population, fishery, extinction warnings, pollution, plant nodes, population shifts), alias memory (8-tier 陌生旅人→摯友 scale, v0.70.0), social history indexing (trust trend + dominant intent, v0.71.0), NPC memory (locality + decay tiers, v0.53.0), belief context (v0.50.0), intent reflection (v0.52.0) — all injected into AiDialogContext and rendered into NPC system prompt.
 ✅ **Ecological perception** — animal population (`ecologyContext`), fishery density (`fisheryContext`), extinction warnings, population shifts (`recentPopulationShifts`), pollution level, and plant node density (`plantContext`) all injected into `AiDialogContext` and rendered into NPC system prompt.
 
 ---
@@ -2046,16 +2046,16 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 29. Layer-by-Layer Status (v0.68.0)
+## 29. Layer-by-Layer Status (v0.73.0)
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|
-| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~130 command types; budget gate (§11.6 ✅): command hard cap + NPC partitioning + regional tile activation; WorldStateProjection (v0.72.0 — weather/season/rareWindow/activeEvents from typed events) | ARCHITECTURE.md §11.5 remaining: FACT_BUILDING_OCCUPANTS; §11.7 (rebuild contract sweep) |
-| **2. Living World Runtime** | 🟡 Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction; Cognitive Runtime (belief, intent, reflection, memory, relationship graph, household context — v0.50–v0.68) | NPC migration (household moves tile permanently), NPC-to-NPC trade, ARCHITECTURE.md §11.9 (alias memory, full social history) |
-| **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, BioNode plant system (Phase E5: oak/pine/reed/wild_herb/salt_grass/mushroom/cactus/sand_grass), Forest Regrowth Engine, SPECIES_POPULATION_SHIFTED; faction ecological ideology; full §6.5 event catalog | None (BioNode + forest regrowth now ✅) |
+| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~130 command types; budget gate (§11.6 ✅): command hard cap + NPC partitioning + regional tile activation; WorldStateProjection (v0.72.0); BuildingOccupantsProjection (v0.73.0 — §11.5 FULLY CLOSED) | §11.7 (rebuild contract sweep for older projections) |
+| **2. Living World Runtime** | 🟡 Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction; Cognitive Runtime (belief, intent, reflection, memory, relationship graph, household context, alias memory, social history — v0.50–v0.73) | NPC household permanent migration (tile change), NPC-to-NPC trade |
+| **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, BioNode plant system, Forest Regrowth Engine, SPECIES_POPULATION_SHIFTED; faction ecological ideology; full §6.5 event catalog | None |
 | **3. Civilization Runtime** | 🟡 Substantial | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0); history chronicle projection (v0.64.0+) | Roads/bridges as map features; carrier NPC autonomous routing; NPC household permanent migration |
-| **4. Combat Runtime** | 🟡 Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences, combat outcomes feed history_chronicle (v0.69.0) | ARCHITECTURE.md §11.4 (combat log not fully in canonical EventLog); cards as combat rule operators (Phase 4) |
-| **5. Perception Runtime** | ✅ Strong | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard; NPC dialog grounded in: beliefs, intents, reflections, episodic memory, relationship graph (friend/rival/trust), household members, alias memory (v0.70.0), social history arc (v0.71.0 — trust trend + dominant intent), dominant faction, tile history arcs, ecology (animals, fishery, plants, extinction, pollution, population shifts), rumors, skills, local events | None (ARCHITECTURE.md §11.9 fully closed v0.71.0) |
+| **4. Combat Runtime** | ✅ Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences, combat outcomes feed history_chronicle (v0.69.0); CombatStore = read-only EventLog projection (§11.4 ✅ CLOSED v0.25.0) | Cards as combat rule operators (Phase 4 — not yet) |
+| **5. Perception Runtime** | ✅ Strong | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard; NPC dialog grounded in: beliefs, intents, reflections, episodic memory, relationship graph, household members, alias memory (v0.70.0), social history arc (v0.71.0), dominant faction, tile history arcs, ecology (animals, fishery, plants, extinction, pollution, population shifts), rumors, skills, local events | None (§11.9 FULLY CLOSED v0.71.0) |
 
 The "看起來像 civilization 的 placeholder" critique from Part I §4 is now substantially resolved: Layer 2.5 is real (not a placeholder), Layer 3 has genuine goods metabolism, Layer 2 has cultural + mortality depth, Layer 5 has deep AI dialog grounding, and Layer 4 now feeds combat arcs into the history chronicle. The remaining genuine gaps are: roads/bridges, NPC permanent migration.
 
