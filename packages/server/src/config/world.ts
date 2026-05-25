@@ -278,6 +278,11 @@ export const FOREST_DEPLETION_PRESSURE_THRESHOLD = 60
 // 0.25 = 25% decline triggers a shift event (provides NPC dialog grounding).
 export const POPULATION_SHIFT_MIN_PERCENT = 0.25
 
+// v0.60.0 — Pollution Threshold. POLLUTION_INCREASED fires when a tile's ecosystem
+// pressureLevel first reaches or exceeds this value (steps of 20, so 40 = 2nd raise).
+// POLLUTION_RECOVERED fires when pressure drops back below it.
+export const POLLUTION_THRESHOLD = 40
+
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
   let h = 2166136261

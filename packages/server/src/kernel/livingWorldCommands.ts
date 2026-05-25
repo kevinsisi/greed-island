@@ -162,6 +162,8 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FOREST_RECOVERED',
   'BIOME_RECOVERED',
   'SPECIES_POPULATION_SHIFTED',
+  'POLLUTION_INCREASED',
+  'POLLUTION_RECOVERED',
   // Phase E3 — Domestication
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
@@ -993,6 +995,19 @@ export type SpeciesPopulationShiftedCmd = Readonly<{
   narration: string | null
 }>
 
+export type PollutionIncreasedCmd = Readonly<{
+  tileId: string
+  pollutionLevel: number
+  tick: number
+  narration: string
+}>
+
+export type PollutionRecoveredCmd = Readonly<{
+  tileId: string
+  tick: number
+  narration: string | null
+}>
+
 // Phase E3 — Domestication
 export type AnimalDomesticatedCmd = Readonly<{
   animalId: string
@@ -1488,6 +1503,8 @@ export type LivingWorldCommandPayload =
   | ForestRecoveredCmd
   | BiomeRecoveredCmd
   | SpeciesPopulationShiftedCmd
+  | PollutionIncreasedCmd
+  | PollutionRecoveredCmd
   | GoodsExtractedCmd
   | GoodsStoredCmd
   | GoodsProcessedCmd
@@ -2569,6 +2586,20 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.previousTotal)) return 'previousTotal must be non-negative integer'
     if (!isNonNegativeInteger(p.currentTotal)) return 'currentTotal must be non-negative integer'
     if (typeof p.changePercent !== 'number' || !Number.isFinite(p.changePercent)) return 'changePercent must be a finite number'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    return null
+  },
+  POLLUTION_INCREASED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
+    if (typeof p.pollutionLevel !== 'number' || !Number.isInteger(p.pollutionLevel) || p.pollutionLevel < 0 || p.pollutionLevel > 100) return 'pollutionLevel must be integer 0–100'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  POLLUTION_RECOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },

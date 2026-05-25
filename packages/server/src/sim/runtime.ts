@@ -76,6 +76,7 @@ import {
   SETTLEMENT_FOOD_CONSUMPTION_CADENCE_TICKS,
   SETTLEMENT_FOOD_GOODS,
   SETTLEMENT_FOOD_UNITS_PER_NPC,
+  POLLUTION_THRESHOLD,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -125,6 +126,7 @@ import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
 import { planForestDepletion } from '../ecosystem/forestDepletionPlanner.js'
 import { planBiomeRecovery } from '../ecosystem/biomeRecoveryPlanner.js'
 import { planSpeciesPopulationShifts } from '../ecosystem/speciesPopulationPlanner.js'
+import { planPollution } from '../ecosystem/pollutionPlanner.js'
 import { planDomestication } from '../ecosystem/domesticationPlanner.js'
 import { planBreeding } from '../ecosystem/breedingPlanner.js'
 import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
@@ -296,6 +298,8 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'FOREST_RECOVERED',
   'BIOME_RECOVERED',
   'SPECIES_POPULATION_SHIFTED',
+  'POLLUTION_INCREASED',
+  'POLLUTION_RECOVERED',
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
@@ -3079,6 +3083,13 @@ export class SimulationRuntime {
             narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的森林於第 ${nextTick} 轉因過度開發而走向衰竭`,
           }))
         }
+        if (planPollution({ currentPressureLevel: newLevel, previousPressureLevel: row.pressureLevel }) === 'increased') {
+          const pollutionLevel = Math.round(newLevel / 2)
+          commands.push(makeLivingWorldCommand('POLLUTION_INCREASED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            tileId, pollutionLevel, tick: nextTick,
+            narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的環境污染於第 ${nextTick} 轉達到可觀測水準（污染指數 ${pollutionLevel}）`,
+          }))
+        }
       } else if (decision === 'recover') {
         commands.push(makeLivingWorldCommand('ECOSYSTEM_PRESSURE_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
           tileId, tick: nextTick, narration: null,
@@ -3091,6 +3102,11 @@ export class SimulationRuntime {
         if (forestDecision === 'recover') {
           commands.push(makeLivingWorldCommand('FOREST_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
             tileId, tick: nextTick,
+          }))
+        }
+        if (planPollution({ currentPressureLevel: 0, previousPressureLevel: row.pressureLevel }) === 'recovered') {
+          commands.push(makeLivingWorldCommand('POLLUTION_RECOVERED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+            tileId, tick: nextTick, narration: `${TILE_NAME_BY_ID[tileId] ?? tileId}的環境污染於第 ${nextTick} 轉消散`,
           }))
         }
         const tileBiome = TILE_BY_ID[tileId]?.biome ?? ''
