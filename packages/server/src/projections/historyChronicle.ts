@@ -33,6 +33,7 @@ export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'SETTLEMENT_FORMED',
   'SETTLEMENT_DECLINED',
   'FACTION_TILE_SEIZED',
+  'FACTION_DOMINANCE_SHIFTED',
   'NPC_DECEASED',
   'NPC_HEIR_ASSIGNED',
   'SPECIES_EXTINCTION_WARNING',
@@ -40,6 +41,8 @@ export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'SPECIES_RECOVERED',
   'FISHERY_COLLAPSED',
   'FISHERY_RECOVERED',
+  'FOREST_DEPLETED',
+  'BIOME_RECOVERED',
   'MIGRATION_WAVE_STARTED',
   'LEGENDARY_HUNT_STARTED',
   'LEGENDARY_HUNT_CONCLUDED',
@@ -271,6 +274,66 @@ export class HistoryChronicleProjection {
             lastSequence: event.sequence,
           })
         }
+        break
+      }
+
+      case 'FOREST_DEPLETED': {
+        const { tileId, depletedAtTick } = p as { tileId?: string; depletedAtTick?: number }
+        if (!str(tileId) || !int(depletedAtTick)) return
+        const arcId = `arc.ecological_collapse.forest.${tileId}`
+        const existing = this.arcs.get(arcId)
+        if (existing?.status === 'concluded') return
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'ecological_collapse',
+          status: 'active',
+          startTick: existing?.startTick ?? depletedAtTick!,
+          endTick: null,
+          tileId: tileId!,
+          involvedEntityIds: [`forest:${tileId}`],
+          narrationZh: `${tileId} 的森林於第 ${depletedAtTick} 刻因過度開發走向衰竭。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'BIOME_RECOVERED': {
+        const { tileId, tick } = p as { tileId?: string; tick?: number }
+        if (!str(tileId) || !int(tick)) return
+        const arcId = `arc.ecological_collapse.forest.${tileId}`
+        const arc = this.arcs.get(arcId)
+        if (arc?.status === 'active') {
+          this.arcs.set(arcId, {
+            ...arc,
+            status: 'concluded',
+            endTick: tick!,
+            narrationZh: `${tileId} 的生態系統於第 ${tick} 刻恢復穩定。`,
+            lastSequence: event.sequence,
+          })
+        }
+        break
+      }
+
+      case 'FACTION_DOMINANCE_SHIFTED': {
+        const { losingFactionId, dominantFactionId, tick } = p as {
+          losingFactionId?: string; dominantFactionId?: string | null; tick?: number
+        }
+        if (!str(losingFactionId) || !int(tick)) return
+        const arcId = `arc.faction_seizure.dominance.${losingFactionId}.${tick}`
+        const entities = [losingFactionId!, ...(dominantFactionId ? [dominantFactionId] : [])]
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'faction_seizure',
+          status: 'concluded',
+          startTick: tick!,
+          endTick: tick!,
+          tileId: null,
+          involvedEntityIds: entities,
+          narrationZh: dominantFactionId
+            ? `${losingFactionId} 在第 ${tick} 刻失去所有領地，${dominantFactionId} 取得主導地位。`
+            : `${losingFactionId} 在第 ${tick} 刻失去所有領地，退出歷史舞台。`,
+          lastSequence: event.sequence,
+        })
         break
       }
 
