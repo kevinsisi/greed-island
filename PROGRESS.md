@@ -5,6 +5,45 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — In-Progress Investigation: v0.83.0 + v0.84.0
+
+### Status
+v0.82.0 pushed. Two ❌ gaps remain in WORLD_CAPABILITIES.md. Investigation complete; implementation not yet started.
+
+### Remaining ❌ Gaps in WORLD_CAPABILITIES.md
+
+**Gap 1 — §21 Buildings not yet upgradeable or capturable**
+- Line 1895: `🟡 Buildings: damageable, repairable, abandonable all wired (v0.49.0+). ❌ Not yet upgradeable or capturable.`
+- **Implementation plan for v0.83.0:**
+  1. `kernel/livingWorldCommands.ts`: add `BUILDING_UPGRADED` + `BUILDING_CAPTURED` to command types; add `BuildingUpgradedCmd` `{ buildingId, tileId, fromLevel, toLevel, upgradedAtTick, narration }` and `BuildingCapturedCmd` `{ buildingId, tileId, capturingFactionId, previousFactionId: string | null, capturedAtTick, narration }`; add validators
+  2. `projections/buildingState.ts`: add `upgradeLevel: number` (default 1) + `controllingFactionId: string | null` (default null) to `BuildingStateRow`; handle `BUILDING_UPGRADED` (set `toLevel`, update `lastActivityTick`) + `BUILDING_CAPTURED` (set `controllingFactionId`); add both to `BUILDING_STATE_BOOT_EVENT_TYPES`
+  3. `config/world.ts`: add `BUILDING_UPGRADE_CADENCE_TICKS = TICKS_PER_DAY * 7`, `BUILDING_UPGRADE_MIN_AGE_TICKS = TICKS_PER_DAY * 14`, `BUILDING_MAX_UPGRADE_LEVEL = 3`, `BUILDING_CAPTURE_CADENCE_TICKS = TICKS_PER_DAY * 2`
+  4. `sim/buildingUpgradePlanner.ts` (new): `planBuildingUpgrades(input: { buildings: ReadonlyArray<{buildingId, tileId, upgradeLevel, state, lastActivityTick}>, currentTick, minAgeTicks, maxLevel })` — emits upgrade intents for operational buildings past age threshold
+  5. `sim/buildingCapturePlanner.ts` (new): `planBuildingCaptures(input: { buildings: ReadonlyArray<{buildingId, tileId, controllingFactionId: string | null}>, factionControlProjection })` — emits capture intents when tile's dominant faction ≠ building's controllingFactionId
+  6. `sim/runtime.ts`: import planners + constants; add upgrade cadence block (uses `listAllBuildings` + `buildingStateProjection.getState()` for each); add capture cadence block; both emit appropriate commands with narration
+
+**Gap 2 — §17 No new tile creation beyond predefined catalog**
+- Line 1817: `❌ No new tile creation beyond the predefined catalog.`
+- **Implementation plan for v0.84.0:**
+  1. `sim/mapGraph.ts`: add `FRONTIER_ZONES` — 3 coordinate slots NOT in MAP_TILES/EXPANSION_TILES, each with a biome + `adjacentTo: readonly string[]`; update `getMapAdjacency()` + `listMapTiles()` to accept optional `dynamicTiles?: ReadonlyArray<{id, x, y, biome, name, adjacentTileIds}>` parameter
+  2. `kernel/livingWorldCommands.ts`: add `TILE_GENERATED`; add `TileGeneratedCmd { tileId, biome, name, x, y, adjacentTileIds: readonly string[], generatedAtTick, narration }`; add validator
+  3. `projections/dynamicTile.ts` (new): `DynamicTileProjection` tracks `TILE_GENERATED` events; `list()` returns generated tiles; `getAdjacencyMap()` returns adjacency for merging into mapGraph; `DYNAMIC_TILE_BOOT_EVENT_TYPES = ['TILE_GENERATED']`
+  4. `config/world.ts`: add `TILE_GENERATION_CADENCE_TICKS = TICKS_PER_DAY * 30`, `TILE_GENERATION_MIN_TRADE_ROUTES = 2`, `TILE_GENERATION_MAX_WORLD_TILES = 12`
+  5. `sim/tileGenerationPlanner.ts` (new): `planTileGeneration(input: { currentTick, existingTileIds: readonly string[], openTradeRouteCount, frontierZones })` — returns at most 1 intent; picks first frontier zone not yet generated; requires `openTradeRouteCount >= MIN_TRADE_ROUTES`
+  6. `sim/runtime.ts`: add `dynamicTileProjection` field (new `DynamicTileProjection`); wire into `project()` + boot (small-log + large-log); pass `dynamicTileProjection.listTileIds()` alongside `unlockedTileIds` to all `getMapAdjacency()` + `listMapTiles()` calls; add tile generation cadence block; add `getDynamicTiles()` getter
+
+### Key Files to Read Before Implementing
+- `sim/mapGraph.ts` (lines 1–82): tile catalog, EXPANSION_TILES, adjacency
+- `projections/buildingState.ts` (full file): current BuildingStateRow shape
+- `projections/factionControl.ts` (line 53): `dominantFactionOf(tileId)`
+- `buildings/catalog.ts` (export `listAllBuildings`): catalog building iteration
+- `sim/runtime.ts` (around line 60–90): import section for constants; (around line 5695): large-log boot path
+
+### CI/CD State
+v0.82.0 on `main`. Pushed. All green.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.82.0
 
 ### Current Version
