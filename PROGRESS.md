@@ -5,10 +5,66 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-05-25 — Handoff Snapshot @ v0.61.0
+## 2026-05-25 — Handoff Snapshot @ v0.66.0
 
 ### Current Version
-`0.61.0` — TypeScript build clean. 937 tests pass across 125 test files. Commits pushed to `main`.
+`0.66.0` — TypeScript build clean. 937 tests pass across 125 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.62.0 → v0.66.0)
+
+**v0.62.0 — Pollution + Population Shift Dialog Grounding (§43.2 criterion 9)**
+- `getTilePollutionLevel(tileId)` on runtime → `pollutionLevel` in `AiDialogContext`
+- `buildEcologyBlock` renders pollution warning line
+
+**v0.63.0 — Population Shift Dialog Grounding**
+- `getRecentPopulationShifts(withinTicks)` scans recentEvents for SPECIES_POPULATION_SHIFTED
+- `recentPopulationShifts` injected into `AiDialogContext` for NPC dialog grounding
+
+**v0.64.0 — History Chronicle Arc Tracking (§43.1 criterion 4)**
+- FOREST_DEPLETED → `arc.ecological_collapse.forest.tileId` (active)
+- BIOME_RECOVERED → concludes forest collapse arc
+- FACTION_DOMINANCE_SHIFTED → `arc.faction_seizure.dominance` (concluded)
+- All added to HISTORY_CHRONICLE_BOOT_EVENT_TYPES
+
+**v0.65.0 — SETTLEMENT_EVACUATION_STARTED (§43.2 criteria 4 + 7)**
+- When settlement transitions to 'declining' AND food = 0 → SETTLEMENT_EVACUATION_STARTED fires as companion
+- NPC engine receives survival intent override (urgency=10) → NPCs flee to t_central
+- Chronicle records `famine_evacuation` arc
+- Closes: §43.2 criterion 4 (NPC migration from eco collapse) + criterion 7 (settlement famine)
+
+**v0.66.0 — FACTION_ECOLOGY_CONFLICT_STARTED (§43.2 criterion 8)**
+- FISHERY_COLLAPSED → `planFactionEcologyConflict` → tide_hunters contest fishery tile (if adjacent)
+- FOREST_DEPLETED → free_runners contest forest tile (if adjacent)
+- Both emit FACTION_ECOLOGY_CONFLICT_STARTED + FACTION_TILE_SEIZED in same tick block
+- Chronicle records `faction_seizure` arc scoped to the resource tile
+
+### §43 Criteria Status after v0.66.0
+
+**§43.1 Civilization** — all 4 criteria ✅
+- criterion 1: NPC death → descendants remember (v0.32.0)
+- criterion 2: Famine price spike chain — GOODS_TRANSPORT_LOST → MARKET_PRICE_DISCOVERED (chain complete)
+- criterion 3: Faction defeated → TRADE_ROUTE_CLOSED + BUILDING_ABANDONED (v0.33.0)
+- criterion 4: Player absence → chronicle shows arc deltas (v0.64.0)
+
+**§43.2 Ecosystem** — 10 of 11 criteria ✅, criterion 11 ("all co-occur") pending long-run observation
+- All individual ecosystem criteria now have complete event chains
+
+### Active Blockers
+None. All §43 criteria have working event chains. Criterion 11 ("all co-occur") requires long-run world observation.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET
+- §11.6 budget gate
+- §11.9 known-person graph for NPC dialog (hallucination guard beyond names)
+- BioNode / Forest Regrowth Engine
+- Roads/bridges as map features
+- NPC household permanent migration (move to new tile)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
 
 ### What Was Shipped This Session (v0.58.0 → v0.61.0)
 

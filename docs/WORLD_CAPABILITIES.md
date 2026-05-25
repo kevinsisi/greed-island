@@ -2053,7 +2053,7 @@ runtime hooks the implementation needs. Input for OpenSpec changes.
 | **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~121 command types | ARCHITECTURE.md §11.5 (area FACT_SET), §11.6 (budget gate), §11.7 (rebuild contract sweep) |
 | **2. Living World Runtime** | 🟡 Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction | NPC migration (household moves tile permanently), NPC-to-NPC trade, ARCHITECTURE.md §11.9 dialog grounding |
 | **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, 5 ecosystem projections, faction ecological ideology; §6.5 event catalog complete (FOREST_DEPLETED, BIOME_RECOVERED, SPECIES_POPULATION_SHIFTED, POLLUTION_INCREASED, POLLUTION_RECOVERED, HIDE_COLLECTED, BONE_COLLECTED — v0.55–v0.61) | BioNode (plant/fungal), Forest Regrowth Engine |
-| **3. Civilization Runtime** | 🟡 Substantial | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage | History chronicle projection; roads/bridges as map features; carrier NPC autonomous routing; §43 criterion 2 + 3 not yet verifiable end-to-end |
+| **3. Civilization Runtime** | 🟡 Substantial | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0) | History chronicle projection; roads/bridges as map features; carrier NPC autonomous routing |
 | **4. Combat Runtime** | 🟡 Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences | ARCHITECTURE.md §11.4 (combat log not fully in canonical EventLog); cards as combat rule operators (Phase 4); history chronicle feed |
 | **5. Perception Runtime** | 🟡 Partial | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard, server-authored motivation payloads, AI fire-and-forget | ARCHITECTURE.md §11.9 dialog grounding (known-person graph), ecological perception (ecosystem data not yet wired to AI prompts), history projection as interpreted arcs |
 
@@ -2462,28 +2462,28 @@ The program is **not done** when phases 0–6 + E0–E4 ship. It is done when th
 
 ### 43.1 Civilization criteria (Part I §12 ¶1)
 
-| Criterion | Verifiable by |
-|---|---|
-| 「當某個 NPC 死亡，後代會記得他。」 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. |
-| 「當某 settlement 飢荒，周邊價格會上升。」 | Disrupting a `salt_marsh_brine` supply route via `GOODS_TRANSPORT_LOST` causes neighbouring settlements' `MARKET_PRICE_DISCOVERED` events to shift upward within K ticks. |
-| 「當 faction 戰敗，道路與物流會崩潰。」 | A losing-faction settlement's roads and trade routes show `TRADE_ROUTE_CLOSED` + `BUILDING_DAMAGED`/`_ABANDONED` after `FACTION_DOMINANCE_SHIFTED` + `TERRITORY_CLAIM_CHANGED`. |
-| 「當玩家離開數個月，世界仍然繼續，甚至已經變成另一個文明時代。」 | After K weeks of no player activity, EventLog continues to accumulate civilization-level events; `history_chronicle` shows distinct arc deltas from before-absence to after-absence. |
+| Criterion | Status | Verifiable by |
+|---|---|---|
+| 「當某個 NPC 死亡，後代會記得他。」 | ✅ v0.32.0 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. |
+| 「當某 settlement 飢荒，周邊價格會上升。」 | ✅ chain complete | `GOODS_TRANSPORT_LOST` → supply drops in `goodsInventory` → `discoverMarketPrices` raises `MARKET_PRICE_DISCOVERED` price within K ticks. |
+| 「當 faction 戰敗，道路與物流會崩潰。」 | ✅ v0.33.0 | `FACTION_DOMINANCE_SHIFTED` → `TRADE_ROUTE_CLOSED` (all open routes) + `BUILDING_ABANDONED` (health ≤ 0 buildings) fire in the same tick block. |
+| 「當玩家離開數個月，世界仍然繼續，甚至已經變成另一個文明時代。」 | ✅ v0.64.0 | EventLog accumulates continuously; `/world/history-arcs` shows `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline` arc deltas from before- to after-absence. |
 
 ### 43.2 Ecosystem criteria (Part I §12 ¶2 + WITH_ECO §13)
 
-| Criterion | Verifiable by |
-|---|---|
-| Witness migration | Live observation of `MIGRATION_WAVE_STARTED` events surfaced in chronicle, with `ANIMAL_MIGRATED` events showing animals crossing tiles. |
-| Overhunt a species | Sustained `ANIMAL_KILLED` events on a single species emit `SPECIES_EXTINCTION_WARNING`, then `SPECIES_EXTINCT`. |
-| Protect an ecosystem | Reduced civilization pressure for K ticks emits `BIOME_RECOVERED` / `SPECIES_RECOVERED`. |
-| Cause ecological collapse | Player or faction behavior triggers `FISHERY_COLLAPSED` / `FOREST_DEPLETED` with cascading economic consequences (price spike, NPC migration). |
-| Stabilize a region | Conservation actions (e.g. card play, settlement policy) reverse a decline arc visible in `history_chronicle`. |
-| Domesticate creatures | `ANIMAL_DOMESTICATED` + `LIVESTOCK_BRED` events; livestock produces goods via Phase E3 ranches. |
-| Lose a settlement to famine | `SETTLEMENT_DECLINE` triggered by sustained food shortage caused by ecological collapse. |
-| Factions fight over biological resources | `FACTION_DOMINANCE_SHIFTED` + combat events scoped to a specific contested resource (fishery, forest, rare animal). |
-| NPCs discuss disappearing animals | Anti-hallucination-safe NPC dialog references `marsh_heron` / `fog_wolf` etc., grounded by recent `SPECIES_POPULATION_SHIFTED` / `_EXTINCTION_WARNING` events. |
-| Extinct species visible only in old chronicles | After `SPECIES_EXTINCT`, the species no longer spawns; `history_chronicle` retains the extinction arc as historical record. |
-| The world is a civilization trapped inside a living planet | All of the above co-occur in the same persistent EventLog without GM scripting. |
+| Criterion | Status | Verifiable by |
+|---|---|---|
+| Witness migration | ✅ Phase E1.3 | `MIGRATION_WAVE_STARTED` + `ANIMAL_MIGRATED` fire organically when population imbalance triggers migration planner. |
+| Overhunt a species | ✅ Phase E2.1 | Sustained `ANIMAL_KILLED` events on a single species emit `SPECIES_EXTINCTION_WARNING`, then `SPECIES_EXTINCT`. |
+| Protect an ecosystem | ✅ Phase E2.3 | Reduced civilization pressure for K ticks emits `BIOME_RECOVERED` / `SPECIES_RECOVERED`; chronicle concludes the ecological_collapse arc. |
+| Cause ecological collapse | ✅ v0.65.0 | `FISHERY_COLLAPSED` / `FOREST_DEPLETED` → `discoverMarketPrices` detects supply drop → `MARKET_PRICE_DISCOVERED` spikes; `SETTLEMENT_EVACUATION_STARTED` drives NPC flight. |
+| Stabilize a region | ✅ v0.56.0 | Reduce resource extraction → ecosystem pressure drops → `BIOME_RECOVERED` fires → `history_chronicle` concludes the active ecological_collapse arc. |
+| Domesticate creatures | ✅ Phase E3 | Building `b_salt_marsh_ranch` gives ranchCapacity; `planDomestication` → `ANIMAL_DOMESTICATED` → `planBreeding` → `LIVESTOCK_BRED` → `planSlaughter` produces goods. |
+| Lose a settlement to famine | ✅ v0.65.0 | `SETTLEMENT_DECLINED` (food=0) + `SETTLEMENT_EVACUATION_STARTED` fire when ecological collapse drains food supply and stability drops below threshold. |
+| Factions fight over biological resources | ✅ v0.66.0 | `FISHERY_COLLAPSED` / `FOREST_DEPLETED` → `FACTION_ECOLOGY_CONFLICT_STARTED` + `FACTION_TILE_SEIZED` scoped to the resource tile; chronicle records `faction_seizure` arc. |
+| NPCs discuss disappearing animals | ✅ v0.63.0 | `recentPopulationShifts` (SPECIES_POPULATION_SHIFTED within 3 days) injected into `AiDialogContext`; NPC dialog grounded without hallucination. |
+| Extinct species visible only in old chronicles | ✅ Phase E2.1 | After `SPECIES_EXTINCT`, species no longer spawns; `history_chronicle` retains the `species_extinction` arc as permanent historical record. |
+| The world is a civilization trapped inside a living planet | ⚠️ all systems present | All event chains ship; emergent co-occurrence observable when world runs long enough for ecosystem pressure + faction + settlement + player-absence to interact. |
 
 If any criterion still cannot be demonstrated after the full phase program ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
 
