@@ -5,6 +5,35 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.79.0
+
+### Current Version
+`0.79.0` — TypeScript build clean. All tests pass. Commits pushed to `main`.
+
+### What Was Shipped (v0.79.0)
+
+**v0.79.0 — Ecosystem Dashboard + Market Price Panel (frontend gaps closed)**
+- `EcologyPage.tsx` at `/ecology`: tile selector dropdown (all 9 tiles), per-tile animal population cards, fishery density bar (collapse indicator), plant node saturation grid, migration waves, predator warnings — all sourced from existing `/api/area/:tileId/ecology` endpoint
+- `MarketPage.tsx` at `/market`: sortable table of all settlement market prices with supply/demand columns, gold price, and surplus/shortage/balanced status derived from supply vs. demand ratio
+- `api/client.ts`: `MarketPriceEntry` and `GoodsInventoryEntry` types added; `api.marketPrices()` and `api.goodsInventory(ownerId)` functions added
+- i18n: `nav.ecology` / `nav.market` keys added to `types.ts`, `zh.ts`, `en.ts` (~30 keys total)
+- `App.tsx`: `/ecology` and `/market` routes wired
+- `GameShell.tsx`: `⬡ Ecology` and `⊛ Market` nav items added; PRIMARY_PATHS updated
+- WORLD_CAPABILITIES.md §26: both ❌ gaps converted to ✅; observability table updated with both new pages
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- Walls / defenses as buildable map features
+- Household joint decisions
+- Player carrying goods physically between tiles
+
+### CI/CD State
+Main branch. All changes committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.78.0
 
 ### Current Version

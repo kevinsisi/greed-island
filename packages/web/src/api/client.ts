@@ -1058,6 +1058,11 @@ export const api = {
   // Sprint 2A — per-tile ecology rollup (animals + fishery + migration + predator warnings)
   areaEcology: (tileId: string) =>
     jsonFetch<AreaEcologyView>(`/area/${encodeURIComponent(tileId)}/ecology`),
+  // Goods and market
+  marketPrices: () =>
+    jsonFetch<readonly MarketPriceEntry[]>('/goods/market-prices'),
+  goodsInventory: (ownerId: string) =>
+    jsonFetch<readonly GoodsInventoryEntry[]>(`/goods/inventory/${encodeURIComponent(ownerId)}`),
   // -- profile -------------------------------------------------------
   profile: (token: string) =>
     jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),
@@ -1387,6 +1392,23 @@ export type ServerTechniqueShopItem = {
   description: string
   effectDescription: string
   ownedCount: number
+}
+
+export type MarketPriceEntry = {
+  marketId: string
+  settlementId: string
+  goodsId: string
+  nameZh: string
+  supplyQuantity: number
+  demandQuantity: number
+  priceGold: number
+}
+
+export type GoodsInventoryEntry = {
+  goodsId: string
+  quantity: number
+  nameZh: string
+  unit: string
 }
 
 export function streamUrl(): string {

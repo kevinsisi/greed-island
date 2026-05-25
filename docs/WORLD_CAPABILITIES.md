@@ -1967,14 +1967,17 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 | `CodexPage.tsx` | Player's collected cards |
 | `TimelinePage.tsx` | Event chronicle |
 | `AdminNpcsPage.tsx` | GM: NPC origin, births, households, deaths |
+| `EcologyPage.tsx` (`/ecology`) | Per-tile ecosystem dashboard: animal populations, fishery density, plant nodes, migration waves, predator warnings (v0.79.0) |
+| `MarketPage.tsx` (`/market`) | All-settlement market price table: goods, supply/demand, gold price, surplus/shortage status (v0.79.0) |
 | `GET /api/area/:tileId/ecology` | Animal population counts, fishery density, ecosystem region state per tile |
+| `GET /api/goods/market-prices` | All market prices across settlements |
 | `GET /api/goods/inventory/:ownerId` | Per-owner goods inventory (non-zero only) |
 | `GET /api/world/player-state` | Player wallet, hired NPCs, faction memberships, claimed tiles |
 
 **APIs as data product**, **SSE stream** at `/api/events/stream`.
 
-❌ No **ecosystem dashboard frontend page** — `/api/area/:tileId/ecology` endpoint exists but no dedicated UI.
-❌ No **market price panel** or goods flow visualization.
+✅ **Ecosystem dashboard frontend page** — `EcologyPage.tsx` at `/ecology`: tile selector, animal population cards, fishery density, plant node saturation, migration waves, predator warnings (v0.79.0).
+✅ **Market price panel** — `MarketPage.tsx` at `/market`: supply/demand/price table across all settlements with surplus/shortage status indicators (v0.79.0).
 
 ---
 

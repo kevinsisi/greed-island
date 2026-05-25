@@ -25,6 +25,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',         labelKey: 'nav.hub',      glyph: '◈' },
   { to: '/codex',    labelKey: 'nav.codex',    glyph: '☷' },
   { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
+  { to: '/ecology',  labelKey: 'nav.ecology',  glyph: '⬡' },
+  { to: '/market',   labelKey: 'nav.market',   glyph: '⊛' },
   { to: '/social',   labelKey: 'nav.social',   glyph: '☍' },
   {
     to: '/profile',
@@ -334,7 +336,7 @@ function DesktopRail() {
 }
 
 // Primary 4 tabs always pinned; auth + admin items go into "⋯ More" when overflow exists.
-const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/social']
+const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/ecology', '/market', '/social']
 
 function MobileTabBar() {
   const { t } = useI18n()

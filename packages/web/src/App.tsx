@@ -17,6 +17,8 @@ import { SocialPage } from './pages/SocialPage'
 import { AdminPage } from './pages/AdminPage'
 import { AdminNpcsPage } from './pages/AdminNpcsPage'
 import { AdminWorldPage } from './pages/AdminWorldPage'
+import { EcologyPage } from './pages/EcologyPage'
+import { MarketPage } from './pages/MarketPage'
 
 export function App() {
   return (
@@ -35,6 +37,8 @@ export function App() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/ecology" element={<EcologyPage />} />
+              <Route path="/market" element={<MarketPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/world" element={<AdminWorldPage />} />
               <Route path="/admin/npcs" element={<AdminNpcsPage />} />
