@@ -161,6 +161,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'FOREST_DEPLETED',
   'FOREST_RECOVERED',
   'BIOME_RECOVERED',
+  'SPECIES_POPULATION_SHIFTED',
   // Phase E3 — Domestication
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
@@ -983,6 +984,15 @@ export type BiomeRecoveredCmd = Readonly<{
   narration: string
 }>
 
+export type SpeciesPopulationShiftedCmd = Readonly<{
+  speciesId: string
+  previousTotal: number
+  currentTotal: number
+  changePercent: number
+  tick: number
+  narration: string | null
+}>
+
 // Phase E3 — Domestication
 export type AnimalDomesticatedCmd = Readonly<{
   animalId: string
@@ -1477,6 +1487,7 @@ export type LivingWorldCommandPayload =
   | ForestDepletedCmd
   | ForestRecoveredCmd
   | BiomeRecoveredCmd
+  | SpeciesPopulationShiftedCmd
   | GoodsExtractedCmd
   | GoodsStoredCmd
   | GoodsProcessedCmd
@@ -2550,6 +2561,15 @@ const VALIDATORS: Readonly<
     if (typeof p.biome !== 'string' || p.biome.length === 0) return 'biome required'
     if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SPECIES_POPULATION_SHIFTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.speciesId !== 'string' || p.speciesId.length === 0) return 'speciesId required'
+    if (!isNonNegativeInteger(p.previousTotal)) return 'previousTotal must be non-negative integer'
+    if (!isNonNegativeInteger(p.currentTotal)) return 'currentTotal must be non-negative integer'
+    if (typeof p.changePercent !== 'number' || !Number.isFinite(p.changePercent)) return 'changePercent must be a finite number'
+    if (!isNonNegativeInteger(p.tick)) return 'tick must be non-negative integer'
     return null
   },
   ANIMAL_DOMESTICATED: (p) => {

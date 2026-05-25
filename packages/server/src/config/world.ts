@@ -273,6 +273,11 @@ export const MEMORY_URGENCY_BOOST_HIGH = 0.5
 // Recovery: emit FOREST_RECOVERED when pressure returns to 0.
 export const FOREST_DEPLETION_PRESSURE_THRESHOLD = 60
 
+// v0.59.0 — Species Population Shift. A SPECIES_POPULATION_SHIFTED event fires when a
+// species' global count drops by at least this fraction from the last reported total.
+// 0.25 = 25% decline triggers a shift event (provides NPC dialog grounding).
+export const POPULATION_SHIFT_MIN_PERCENT = 0.25
+
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
   let h = 2166136261

@@ -124,6 +124,7 @@ import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fisher
 import { planEcosystemPressure } from '../ecosystem/pressurePlanner.js'
 import { planForestDepletion } from '../ecosystem/forestDepletionPlanner.js'
 import { planBiomeRecovery } from '../ecosystem/biomeRecoveryPlanner.js'
+import { planSpeciesPopulationShifts } from '../ecosystem/speciesPopulationPlanner.js'
 import { planDomestication } from '../ecosystem/domesticationPlanner.js'
 import { planBreeding } from '../ecosystem/breedingPlanner.js'
 import { planSlaughter } from '../ecosystem/slaughterPlanner.js'
@@ -294,6 +295,7 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'FOREST_DEPLETED',
   'FOREST_RECOVERED',
   'BIOME_RECOVERED',
+  'SPECIES_POPULATION_SHIFTED',
   'ANIMAL_DOMESTICATED',
   'LIVESTOCK_BRED',
   'LIVESTOCK_SLAUGHTERED',
@@ -536,6 +538,7 @@ export class SimulationRuntime {
   private readonly factionControlProjection = new FactionControlProjection()
   private readonly factionDominanceProjection = new FactionDominanceProjection()
   private previousFactionTileCounts = new Map<FactionId, number>()
+  private previousSpeciesPopulationTotals = new Map<string, number>()
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
@@ -3018,6 +3021,30 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Phase E2.1b: species population shift ----
+    const currentAnimalPop = this.animalPopulationProjection.list()
+    for (const intent of planSpeciesPopulationShifts({
+      tick: nextTick,
+      animalPopulation: currentAnimalPop,
+      previousTotals: this.previousSpeciesPopulationTotals,
+    })) {
+      const changePercent = Math.round(((intent.currentTotal - intent.previousTotal) / intent.previousTotal) * 100)
+      commands.push(makeLivingWorldCommand('SPECIES_POPULATION_SHIFTED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+        speciesId: intent.speciesId,
+        previousTotal: intent.previousTotal,
+        currentTotal: intent.currentTotal,
+        changePercent,
+        tick: intent.tick,
+        narration: null,
+      }))
+    }
+    // Update snapshot for next tick
+    const newPopTotals = new Map<string, number>()
+    for (const row of currentAnimalPop) {
+      newPopTotals.set(row.speciesId, (newPopTotals.get(row.speciesId) ?? 0) + row.count)
+    }
+    this.previousSpeciesPopulationTotals = newPopTotals
+
     // ---- Phase E2.2: fishery passive regen ----
     for (const regen of planFisheryPassiveRegen({ tick: nextTick, fisheryRows: this.fisheryDensityProjection.list() })) {
       const hadCollapsed = this.fisheryDensityProjection.getByTile(regen.tileId)?.collapsed ?? false
@@ -5197,6 +5224,15 @@ export class SimulationRuntime {
     // so the dominance planner does not retroactively fire for past shifts.
     for (const f of FACTIONS) {
       this.previousFactionTileCounts.set(f, this.factionControlProjection.dominantTilesOf(f).length)
+    }
+
+    // Initialize previous species population totals from post-boot animal population
+    // so the population shift planner does not retroactively fire on restart.
+    for (const row of this.animalPopulationProjection.list()) {
+      this.previousSpeciesPopulationTotals.set(
+        row.speciesId,
+        (this.previousSpeciesPopulationTotals.get(row.speciesId) ?? 0) + row.count
+      )
     }
 
     // Phase 1 §33.2 — boot hydration now prefers the typed npc_state
