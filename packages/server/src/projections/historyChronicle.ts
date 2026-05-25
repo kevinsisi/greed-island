@@ -8,6 +8,7 @@ import type { Event } from '../kernel/types.js'
 export type HistoryArcType =
   | 'settlement_formation'
   | 'settlement_decline'
+  | 'famine_evacuation'
   | 'faction_seizure'
   | 'npc_mortality_lineage'
   | 'ecological_collapse'
@@ -32,6 +33,7 @@ export type HistoryArc = Readonly<{
 export const HISTORY_CHRONICLE_BOOT_EVENT_TYPES = [
   'SETTLEMENT_FORMED',
   'SETTLEMENT_DECLINED',
+  'SETTLEMENT_EVACUATION_STARTED',
   'FACTION_TILE_SEIZED',
   'FACTION_DOMINANCE_SHIFTED',
   'NPC_DECEASED',
@@ -98,6 +100,27 @@ export class HistoryChronicleProjection {
           tileId: tileId!,
           involvedEntityIds: [settlementId!],
           narrationZh: `${tileId} 的聚落「${settlementId}」在第 ${declinedAtTick} 刻陷入衰退。`,
+          lastSequence: event.sequence,
+        })
+        break
+      }
+
+      case 'SETTLEMENT_EVACUATION_STARTED': {
+        const { settlementId, tileId, fleeingNpcIds, evacuatedAtTick } = p as {
+          settlementId?: string; tileId?: string; fleeingNpcIds?: string[]; evacuatedAtTick?: number
+        }
+        if (!str(settlementId) || !str(tileId) || !int(evacuatedAtTick)) return
+        const npcIds = Array.isArray(fleeingNpcIds) ? fleeingNpcIds.filter((x): x is string => typeof x === 'string') : []
+        const arcId = `arc.famine_evacuation.${settlementId}.${evacuatedAtTick}`
+        this.arcs.set(arcId, {
+          arcId,
+          arcType: 'famine_evacuation',
+          status: 'active',
+          startTick: evacuatedAtTick!,
+          endTick: null,
+          tileId: tileId!,
+          involvedEntityIds: [settlementId!, ...npcIds],
+          narrationZh: `${tileId} 的聚落「${settlementId}」在第 ${evacuatedAtTick} 刻因飢荒爆發，${npcIds.length} 名居民開始逃離。`,
           lastSequence: event.sequence,
         })
         break

@@ -4603,6 +4603,25 @@ export class SimulationRuntime {
         this.historyChronicleProjection.project(ev)
         this.areaStateProjection.project(ev)
         this.bioNodeProjection.project(ev)
+        // Famine evacuation — set survival intent override for all fleeing NPCs
+        if (ev.eventType === 'SETTLEMENT_EVACUATION_STARTED') {
+          const d = (ev.payload as { data?: Record<string, unknown> })?.data
+          const fleeingNpcIds = Array.isArray(d?.fleeingNpcIds) ? (d!.fleeingNpcIds as string[]) : []
+          const targetTile = typeof d?.targetTileId === 'string' ? d.targetTileId : null
+          if (targetTile) {
+            for (const npcId of fleeingNpcIds) {
+              const npcState = this.npcEngine.getState(npcId)
+              if (!npcState || npcState.intentOverride) continue
+              this.npcEngine.setIntentOverride(npcId, {
+                targetTile,
+                expiresAtTick: nextTick + INTENT_OVERRIDE_DURATION_TICKS,
+                intentType: 'survival',
+                urgency: 10,
+                reason: 'settlement_famine_evacuation',
+              })
+            }
+          }
+        }
         const narrativeEvent = readNarrativeFromAnyEvent(ev, nextTick)
         if (narrativeEvent) {
           this.pushRecent(narrativeEvent)

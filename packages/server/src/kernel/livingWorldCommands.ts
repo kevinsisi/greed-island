@@ -97,6 +97,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'SETTLEMENT_STABILITY_CHANGED',
   'SETTLEMENT_DECLINED',
   'SETTLEMENT_RECOVERED',
+  'SETTLEMENT_EVACUATION_STARTED',
   // Phase E0.2 — Ecosystem Runtime (Layer 2.5)
   'ANIMAL_SPAWNED',
   // Phase E0.3 — Simple hunting
@@ -796,6 +797,16 @@ export type SettlementRecoveredCmd = Readonly<{
   stability: number
   status: 'stable' | 'recovering'
   recoveredAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type SettlementEvacuationStartedCmd = Readonly<{
+  settlementId: string
+  tileId: string
+  fleeingNpcIds: readonly string[]
+  targetTileId: string
+  evacuatedAtTick: number
   motivation?: EventMotivation
   narration: string
 }>
@@ -1505,6 +1516,7 @@ export type LivingWorldCommandPayload =
   | SettlementStabilityChangedCmd
   | SettlementDeclinedCmd
   | SettlementRecoveredCmd
+  | SettlementEvacuationStartedCmd
   | AnimalSpawnedCmd
   | AnimalHuntStartedCmd
   | AnimalHuntResolvedCmd
@@ -2099,6 +2111,16 @@ const VALIDATORS: Readonly<
     if (!isPressureScore(p.stability)) return 'stability must be integer 0-100'
     if (p.status !== 'stable' && p.status !== 'recovering') return 'status must be stable or recovering'
     if (!isNonNegativeInteger(p.recoveredAtTick)) return 'recoveredAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  SETTLEMENT_EVACUATION_STARTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    const err = validateSettlementCommon(p)
+    if (err) return err
+    if (!Array.isArray(p.fleeingNpcIds) || !(p.fleeingNpcIds as unknown[]).every((x) => typeof x === 'string')) return 'fleeingNpcIds must be string array'
+    if (typeof p.targetTileId !== 'string' || p.targetTileId.length === 0) return 'targetTileId required'
+    if (!isNonNegativeInteger(p.evacuatedAtTick)) return 'evacuatedAtTick required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

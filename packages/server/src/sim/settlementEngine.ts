@@ -148,6 +148,31 @@ export function planSettlementCommands(input: SettlementEngineInput): LivingWorl
             narration: `${settlement.id} 的穩定度跌破閾值，聚落陷入衰退。`,
           }
         ))
+        // Famine evacuation — fire when food is completely exhausted (genuine famine, not just instability)
+        if (populationNpcIds.length > 0) {
+          const holderIds = settlementHolderIds(settlement)
+          const heldFood = input.goodsInventory
+            .filter((row) => row.holderType === 'settlement' && holderIds.has(row.holderId))
+            .filter((row) => isFoodGoods(row.goodsId))
+            .reduce((sum, row) => sum + row.quantity, 0)
+          if (heldFood === 0) {
+            commands.push(makeLivingWorldCommand(
+              'SETTLEMENT_EVACUATION_STARTED',
+              `settlement.${settlement.id}`,
+              'system',
+              input.currentTick,
+              submittedAt,
+              {
+                settlementId: settlement.id,
+                tileId: settlement.tileId,
+                fleeingNpcIds: [...populationNpcIds],
+                targetTileId: 't_central',
+                evacuatedAtTick: input.currentTick,
+                narration: `${settlement.id} 糧食耗盡，${populationNpcIds.length} 名居民開始逃往中央聚落。`,
+              }
+            ))
+          }
+        }
       }
     }
   }
