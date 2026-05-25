@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow, type RelationshipContextRow } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow } from '../npcs/aiDialog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -205,6 +205,12 @@ export function createNpcRouter(input: {
             .filter((r): r is RelationshipContextRow => r !== null)
         })()
 
+        // household context — living family members for this NPC
+        const rawHouseholdMembers = input.runtime.getLivingHouseholdMembersFor(npcId)
+        const householdMembers: readonly HouseholdContextRow[] | undefined = rawHouseholdMembers.length > 0
+          ? rawHouseholdMembers.map((m) => ({ nameZh: m.nameZh, role: m.role }))
+          : undefined
+
         // ecology context
         const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
         const fisheryRow = input.runtime.getFisheryDensityOnTile(npcTile)
@@ -265,6 +271,7 @@ export function createNpcRouter(input: {
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
           ...(knownPersonNames ? { knownPersonNames } : {}),
           ...(relationshipContext ? { relationshipContext } : {}),
+          ...(householdMembers ? { householdMembers } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),
           ...(fisheryRow ? { fisheryContext: fisheryRow } : {}),
           ...(extinctionWarnings.length > 0 ? { extinctionWarnings } : {}),

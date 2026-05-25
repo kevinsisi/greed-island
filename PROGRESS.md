@@ -5,6 +5,38 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-25 — Handoff Snapshot @ v0.68.0
+
+### Current Version
+`0.68.0` — TypeScript build clean. 946 tests pass across 125 test files. Commits pushed to `main`.
+
+### What Was Shipped This Session (v0.68.0)
+
+**v0.68.0 — NPC Household State Dialog Injection (§11.9 partial)**
+- `HouseholdContextRow` type added to `AiDialogContext` (nameZh, role)
+- `buildHouseholdBlock()` in `aiDialog.ts`: renders living household family members into NPC system prompt
+- `getLivingHouseholdMembersFor(npcId)` on runtime: queries NpcLineageProjection + NpcMortalityProjection, returns living members excluding the NPC themselves
+- `npc.ts` dialog handler injects `householdMembers` into dialogCtx
+- NPCs can now naturally reference family members in dialog without hallucination
+- 4 new tests in `aiDialog.test.ts`
+
+### Active Blockers
+None.
+
+### Remaining Gaps (non-blocking)
+- §11.4 combat log not fully in canonical EventLog
+- §11.5 area FACT_SET still used for area state, building occupants, weather, season, rare windows
+- §11.6 budget gate (simulation budget specified but not enforced)
+- §11.9 dialog grounding — relationship + household now injected; remaining: alias memory, long-term social history
+- Roads/bridges as map features
+- NPC household permanent migration (move to new tile permanently)
+- WORLD_CAPABILITIES.md Part II stale (BioNode, Forest Regrowth marked ❌ but shipped as Phase E5)
+
+### CI/CD State
+Main branch; all commits pushed. No pending PRs.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.67.0
 
 ### Current Version

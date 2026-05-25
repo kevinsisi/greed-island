@@ -1215,6 +1215,19 @@ export class SimulationRuntime {
     return this.factionControlProjection.dominantFactionOf(tileId)
   }
 
+  /** v0.68.0 §11.9 — living household members for an NPC (excludes the NPC themselves). */
+  getLivingHouseholdMembersFor(npcId: string): readonly { npcId: string; nameZh: string; role: string }[] {
+    const hId = this.npcLineageProjection.householdId(npcId)
+    const allMembers = this.npcLineageProjection.membersOf(hId)
+    return allMembers
+      .filter((id) => id !== npcId && !this.npcMortalityProjection.isDeceased(id))
+      .map((id) => {
+        const p = this.profiles.find((pr) => pr.id === id)
+        return p ? { npcId: id, nameZh: p.name.zh, role: p.role.zh } : null
+      })
+      .filter((r): r is { npcId: string; nameZh: string; role: string } => r !== null)
+  }
+
   /** Phase 5 §11.9 — species with extinction warning whose warningTileIds include tileId. */
   getExtinctionWarningsOnTile(tileId: string): readonly string[] {
     return this.speciesExtinctionProjection

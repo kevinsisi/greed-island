@@ -54,6 +54,11 @@ export type RelationshipContextRow = Readonly<{
   interactionCount: number
 }>
 
+export type HouseholdContextRow = Readonly<{
+  nameZh: string
+  role: string
+}>
+
 export type AiDialogContext = Readonly<{
   profile: NpcProfile
   player: Readonly<{
@@ -80,6 +85,7 @@ export type AiDialogContext = Readonly<{
   skillLevels?: readonly { skillId: string; level: number }[]
   dominantFaction?: string | null
   tileHistoryArcs?: readonly TileHistoryArcContext[]
+  householdMembers?: readonly HouseholdContextRow[]
   beliefContext?: string
   reflectionContext?: string
   memoryContext?: string
@@ -188,6 +194,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     '',
     ...buildKnownPersonBlock(ctx.knownPersonNames),
     ...buildRelationshipBlock(ctx.relationshipContext),
+    ...buildHouseholdBlock(ctx.householdMembers),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
       [
@@ -455,6 +462,17 @@ export function buildRelationshipBlock(rows: readonly RelationshipContextRow[] |
   }
   lines.push(`這些關係影響你如何評論、信任或提防這些人，但不要主動提及這份資料本身。`, '')
   return lines
+}
+
+export function buildHouseholdBlock(members: readonly HouseholdContextRow[] | undefined): string[] {
+  if (!members || members.length === 0) return []
+  const memberLines = members.map((m) => `  · ${m.nameZh}（${m.role}）`).join('\n')
+  return [
+    `### 你的家人（同一個家庭的其他成員，目前仍在世）`,
+    memberLines,
+    `這些是你在這個世界裡的家人。你了解他們的日常、習慣、個性，但不要刻意每次都主動提及他們——只在對話自然帶到的時候用。`,
+    '',
+  ]
 }
 
 export function buildAntiHallucinationBlock(knownNames: readonly string[], knownSpecies: readonly string[]): string[] {

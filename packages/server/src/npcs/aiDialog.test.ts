@@ -3,6 +3,7 @@ import {
   buildRumorsBlock,
   buildKnownPersonBlock,
   buildRelationshipBlock,
+  buildHouseholdBlock,
   buildAntiHallucinationBlock,
   buildEcologyBlock,
   buildRecentEventsBlock,
@@ -200,6 +201,34 @@ describe('buildRelationshipBlock', () => {
     expect(joined).toContain('老王')
     expect(joined).toContain('刀疤李')
     expect(joined).toContain('小張')
+  })
+})
+
+describe('buildHouseholdBlock', () => {
+  it('returns empty array when members is undefined', () => {
+    expect(buildHouseholdBlock(undefined)).toEqual([])
+  })
+
+  it('returns empty array when members is empty', () => {
+    expect(buildHouseholdBlock([])).toEqual([])
+  })
+
+  it('includes member name and role in output', () => {
+    const lines = buildHouseholdBlock([
+      { nameZh: '王大嫂', role: '漁民妻子' },
+      { nameZh: '小虎', role: '學徒' },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('王大嫂')
+    expect(joined).toContain('漁民妻子')
+    expect(joined).toContain('小虎')
+    expect(joined).toContain('學徒')
+  })
+
+  it('includes family context instruction in output', () => {
+    const lines = buildHouseholdBlock([{ nameZh: '老李', role: '商人' }])
+    const joined = lines.join('\n')
+    expect(joined).toContain('家人')
   })
 })
 
