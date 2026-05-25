@@ -255,6 +255,13 @@ export const REFLECTION_DURATION_TICKS = TICKS_PER_DAY * 30
 export const MAX_REFLECTIONS_PER_NPC = 20
 export const MAX_REFLECTION_CONTEXT_BULLETS = 5
 
+export const MEMORY_DIALOG_MAX_BULLETS = 5
+// Decay thresholds: memories older than these tick counts are excluded from dialog context.
+// importance >= 9 (permanent) never expires.
+export const MEMORY_VERY_HIGH_DECAY_TICKS = 30 * TICKS_PER_DAY  // importance 7–8
+export const MEMORY_HIGH_DECAY_TICKS = 7 * TICKS_PER_DAY         // importance 5–6
+export const MEMORY_NORMAL_DECAY_TICKS = 2 * TICKS_PER_DAY       // importance 1–4
+
 /** Deterministic per-NPC lifespan using FNV-1a hash of npcId. Replay-safe. */
 export function npcLifespanTicks(npcId: string): number {
   let h = 2166136261
