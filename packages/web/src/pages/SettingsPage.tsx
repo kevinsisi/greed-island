@@ -4,7 +4,7 @@ import {
   api,
   ApiError,
   type ServerApiKeySummary,
-  type ServerOpenCodeModel,
+  type ServerOpenCodeModelGroup,
   type ServerOpenCodeStatus,
   type ServerSettingsHealth
 } from '../api/client'
@@ -114,8 +114,7 @@ export function SettingsPage() {
   const [ocStatus, setOcStatus] = useState<ServerOpenCodeStatus | null>(null)
   const [ocServersInput, setOcServersInput] = useState('')
   const [ocTextModel, setOcTextModel] = useState('')
-  const [ocTextVariant, setOcTextVariant] = useState('')
-  const [ocModels, setOcModels] = useState<ServerOpenCodeModel[]>([])
+  const [ocGroups, setOcGroups] = useState<ServerOpenCodeModelGroup[]>([])
   const [ocModelSearch, setOcModelSearch] = useState('')
   const [ocModelsLoading, setOcModelsLoading] = useState(false)
   const [ocSaving, setOcSaving] = useState(false)
@@ -129,7 +128,6 @@ export function SettingsPage() {
       setOcStatus(status)
       setOcServersInput(status.servers.map((s) => s.base_url).join('\n'))
       setOcTextModel(status.text_model_source === 'setting' ? status.text_model : '')
-      setOcTextVariant(status.text_variant_source === 'setting' ? status.text_variant : '')
     } catch {
       // non-fatal
     }
@@ -140,8 +138,8 @@ export function SettingsPage() {
     setOcModelsLoading(true)
     try {
       const result = await api.settingsGetOpenCodeModels(token)
-      setOcModels(result.models)
-      if (result.warning) setOcError(result.warning)
+      setOcGroups(result.groups)
+      if (result.error) setOcError(result.error)
     } catch (err) {
       setOcError(err instanceof Error ? err.message : 'Models 載入失敗')
     } finally {
@@ -162,7 +160,6 @@ export function SettingsPage() {
       const updated = await api.settingsUpdateOpenCode(token, {
         servers: ocServersInput,
         text_model: ocTextModel,
-        text_variant: ocTextVariant,
       })
       setOcStatus(updated)
       setOcFlash('OpenCode 設定已儲存')
@@ -172,7 +169,7 @@ export function SettingsPage() {
     } finally {
       setOcSaving(false)
     }
-  }, [token, ocServersInput, ocTextModel, ocTextVariant, loadOpenCodeModels])
+  }, [token, ocServersInput, ocTextModel, loadOpenCodeModels])
 
   const handleClearOpenCode = useCallback(async () => {
     if (!token) return
@@ -185,7 +182,6 @@ export function SettingsPage() {
       setOcStatus(updated)
       setOcServersInput(updated.servers.map((s) => s.base_url).join('\n'))
       setOcTextModel(updated.text_model_source === 'setting' ? updated.text_model : '')
-      setOcTextVariant(updated.text_variant_source === 'setting' ? updated.text_variant : '')
       setOcFlash('OpenCode DB 設定已清除')
     } catch (err) {
       setOcError(err instanceof Error ? err.message : 'OpenCode 清除失敗')
@@ -194,20 +190,16 @@ export function SettingsPage() {
     }
   }, [token])
 
-  const filteredModels = ocModelSearch
-    ? ocModels.filter(
-        (m) =>
-          m.id.toLowerCase().includes(ocModelSearch.toLowerCase()) ||
-          m.name.toLowerCase().includes(ocModelSearch.toLowerCase()),
-      )
-    : ocModels
-  const modelsByProvider = filteredModels.reduce<Record<string, ServerOpenCodeModel[]>>(
-    (acc, m) => {
-      ;(acc[m.provider] ??= []).push(m)
-      return acc
-    },
-    {},
-  )
+  const filteredGroups = ocGroups.map((g) => ({
+    ...g,
+    models: ocModelSearch
+      ? g.models.filter(
+          (m) =>
+            m.id.toLowerCase().includes(ocModelSearch.toLowerCase()) ||
+            m.name.toLowerCase().includes(ocModelSearch.toLowerCase()),
+        )
+      : g.models,
+  })).filter((g) => g.models.length > 0)
 
   if (!account) {
     return (
@@ -290,11 +282,6 @@ export function SettingsPage() {
               {ocStatus.text_model}{' '}
               <span className="text-ground-600">[{ocStatus.text_model_source}]</span>
             </span>
-            <span className="font-display uppercase tracking-tightest text-ground-500">品質</span>
-            <span className="font-mono text-ground-300">
-              {ocStatus.text_variant}{' '}
-              <span className="text-ground-600">[{ocStatus.text_variant_source}]</span>
-            </span>
           </div>
         )}
 
@@ -330,40 +317,23 @@ export function SettingsPage() {
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
-            <span className="text-[11px] text-ground-400 uppercase tracking-tightest">文字模型</span>
-            <select
-              value={ocTextModel}
-              onChange={(e) => setOcTextModel(e.target.value)}
-              className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
-            >
-              <option value="">— 使用預設（{ocStatus?.text_model ?? 'opencode/deepseek-v4-flash-free'}）—</option>
-              {Object.entries(modelsByProvider)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([provider, models]) => (
-                  <optgroup key={provider} label={provider}>
-                    {[...models].sort((a, b) => a.id.localeCompare(b.id)).map((m) => (
-                      <option key={m.id} value={m.id}>{m.name || m.id}</option>
-                    ))}
-                  </optgroup>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-ground-400 uppercase tracking-tightest">文字模型</span>
+          <select
+            value={ocTextModel}
+            onChange={(e) => setOcTextModel(e.target.value)}
+            className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
+          >
+            <option value="">— 使用預設（{ocStatus?.text_model ?? 'opencode/deepseek-v4-flash-free'}）—</option>
+            {filteredGroups.map((g) => (
+              <optgroup key={g.provider} label={`${g.name}${!g.authed ? ' 🔑' : ''}`}>
+                {g.models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name || m.id}{m.free ? ' (free)' : ''}</option>
                 ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 min-w-[140px]">
-            <span className="text-[11px] text-ground-400 uppercase tracking-tightest">品質等級</span>
-            <select
-              value={ocTextVariant}
-              onChange={(e) => setOcTextVariant(e.target.value)}
-              className="bg-ground-950 border border-ground-700 focus:border-ember-600 rounded-sharp px-3 py-2 text-[13px] text-ground-100 outline-none"
-            >
-              <option value="">— 使用預設（{ocStatus?.text_variant ?? 'medium'}）—</option>
-              <option value="default">預設</option>
-              <option value="medium">中等</option>
-              <option value="high">高品質</option>
-            </select>
-          </label>
-        </div>
+              </optgroup>
+            ))}
+          </select>
+        </label>
 
         {ocError && (
           <div className="border border-ember-700/60 rounded-sharp p-2 text-[11px] text-ember-300">

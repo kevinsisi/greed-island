@@ -351,14 +351,17 @@ export type ServerOpenCodeStatus = {
   servers_source: ServerOpenCodeSource
   text_model: string
   text_model_source: ServerOpenCodeSource
-  text_variant: string
-  text_variant_source: ServerOpenCodeSource
 }
-export type ServerOpenCodeModel = { id: string; name: string; provider: string }
+export type ServerOpenCodeModelGroup = {
+  provider: string
+  name: string
+  authed: boolean
+  models: Array<{ id: string; name: string; free: boolean }>
+}
 export type ServerOpenCodeModels = {
-  models: ServerOpenCodeModel[]
-  source_server_id: string | null
-  warning: string | null
+  groups: ServerOpenCodeModelGroup[]
+  server: ServerOpenCodeServerEntry | null
+  error?: string
 }
 
 export type ServerNpcHistoryEvent = {
@@ -916,15 +919,15 @@ export const api = {
       headers: authHeaders(token),
       body: JSON.stringify(body)
     }),
-  // v0.65.0 — contract-aligned OpenCode settings (servers, model select, variant).
+  // v0.65.0 — contract-aligned OpenCode settings (servers, model select).
   settingsGetOpenCode: (token: string) =>
     jsonFetch<ServerOpenCodeStatus>('/settings/opencode', { headers: authHeaders(token) }),
   settingsUpdateOpenCode: (
     token: string,
-    body: { servers?: string; text_model?: string; text_variant?: string }
+    body: { servers?: string; text_model?: string }
   ) =>
     jsonFetch<ServerOpenCodeStatus>('/settings/opencode', {
-      method: 'PUT',
+      method: 'POST',
       headers: authHeaders(token),
       body: JSON.stringify(body),
     }),

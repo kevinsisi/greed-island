@@ -16,7 +16,6 @@
 import type { SettingsStore } from '../http/settings.js'
 
 export const OPENCODE_DEFAULT_MODEL = 'opencode/deepseek-v4-flash-free'
-export const OPENCODE_DEFAULT_VARIANT = 'medium'
 export const OPENCODE_REQUEST_TIMEOUT_MS = 60_000
 
 export type OpenCodeGenerationOptions = Readonly<{
@@ -24,8 +23,6 @@ export type OpenCodeGenerationOptions = Readonly<{
   userPrompt: string
   /** Override the default model (e.g. `openai/gpt-4o-mini`). */
   model?: string
-  /** Quality variant passed to the session: 'default' | 'medium' | 'high'. */
-  variant?: string
 }>
 
 export class OpenCodeUnavailableError extends Error {
@@ -67,14 +64,6 @@ export function getOpenCodeModel(store: SettingsStore): string {
   )
 }
 
-export function getOpenCodeTextVariant(store: SettingsStore): string {
-  return (
-    store.getSetting('opencode_text_variant') ??
-    process.env.OPENCODE_TEXT_VARIANT?.trim() ??
-    OPENCODE_DEFAULT_VARIANT
-  )
-}
-
 function parseModel(raw: string): { providerID: string; modelID: string } {
   const sep = raw.indexOf('/')
   if (sep > 0 && sep < raw.length - 1) {
@@ -107,8 +96,7 @@ export async function generateWithOpenCode(
 ): Promise<string> {
   const rawModel = options.model ?? OPENCODE_DEFAULT_MODEL
   const model = parseModel(rawModel)
-  const variant = options.variant ?? OPENCODE_DEFAULT_VARIANT
-  const sessionModel = { providerID: model.providerID, id: model.modelID, variant }
+  const sessionModel = { providerID: model.providerID, id: model.modelID }
   const headers = { 'Content-Type': 'application/json' }
 
   // 1. Create session

@@ -18,7 +18,6 @@ import {
   generateWithOpenCode,
   getOpenCodeModel,
   getOpenCodeServers,
-  getOpenCodeTextVariant,
   OpenCodeUnavailableError,
 } from './openCodeClient.js'
 
@@ -63,7 +62,6 @@ export async function generateWithProviders(
           continue
         }
         const model = getOpenCodeModel(store)
-        const variant = getOpenCodeTextVariant(store)
         let lastErr: string | null = null
         for (const serverUrl of servers) {
           try {
@@ -71,7 +69,6 @@ export async function generateWithProviders(
               systemPrompt: options.systemPrompt,
               userPrompt: options.userPrompt,
               model,
-              variant,
             })
             return { text, provider }
           } catch (err) {

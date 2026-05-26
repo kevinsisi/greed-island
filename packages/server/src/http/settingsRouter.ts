@@ -24,7 +24,6 @@ import type { AccountStore } from './accounts.js'
 import {
   getOpenCodeModel,
   getOpenCodeServers,
-  getOpenCodeTextVariant,
 } from '../npcs/openCodeClient.js'
 
 export type SettingsRouterInput = Readonly<{
@@ -137,7 +136,7 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     })
   })
 
-  // v0.65.0 — contract-aligned OpenCode settings (servers textarea, model select, variant).
+  // v0.65.0 — contract-aligned OpenCode settings (servers textarea, model select).
   // Requires GM/admin role (game server deviation from opencode-settings-ui-contract §1).
   function buildOpenCodeStatus(store: SettingsStore) {
     const servers = getOpenCodeServers(store)
@@ -146,7 +145,6 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     const fromEnv = process.env.OPENCODE_SERVERS ?? process.env.OPENCODE_BASE_URL
     const modelFromDb =
       store.getSetting('opencode_text_model') ?? store.getSetting('opencode_model')
-    const variantFromDb = store.getSetting('opencode_text_variant')
     return {
       servers: servers.map((url, i) => ({
         id: `server-${i + 1}`,
@@ -156,12 +154,6 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
       servers_source: fromDb ? 'setting' : fromEnv ? 'env' : 'none',
       text_model: getOpenCodeModel(store),
       text_model_source: modelFromDb ? 'setting' : process.env.OPENCODE_MODEL ? 'env' : 'default',
-      text_variant: getOpenCodeTextVariant(store),
-      text_variant_source: variantFromDb
-        ? 'setting'
-        : process.env.OPENCODE_TEXT_VARIANT
-          ? 'env'
-          : 'default',
     }
   }
 
@@ -169,8 +161,8 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     res.json(buildOpenCodeStatus(input.store))
   })
 
-  router.put('/settings/opencode', requireGm, (req, res) => {
-    const body = req.body as { servers?: unknown; text_model?: unknown; text_variant?: unknown }
+  router.post('/settings/opencode', requireGm, (req, res) => {
+    const body = req.body as { servers?: unknown; text_model?: unknown }
     if (body.servers !== undefined) {
       const v = typeof body.servers === 'string' ? body.servers.trim() : ''
       input.store.setSetting('opencode_servers', v || null)
@@ -179,11 +171,6 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
       const v = typeof body.text_model === 'string' ? body.text_model.trim() : ''
       input.store.setSetting('opencode_text_model', v || null)
     }
-    if (body.text_variant !== undefined) {
-      const v = typeof body.text_variant === 'string' ? body.text_variant.trim() : ''
-      const valid = ['default', 'medium', 'high'].includes(v) ? v : null
-      input.store.setSetting('opencode_text_variant', valid)
-    }
     res.json(buildOpenCodeStatus(input.store))
   })
 
@@ -191,7 +178,6 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
     for (const key of [
       'opencode_servers',
       'opencode_text_model',
-      'opencode_text_variant',
       'opencode_base_url',
       'opencode_model',
     ]) {
@@ -203,59 +189,61 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
   router.get('/settings/opencode/models', requireGm, (_req, res) => {
     const servers = getOpenCodeServers(input.store)
     if (servers.length === 0) {
-      res.json({ models: [], source_server_id: null, warning: 'No OpenCode servers configured' })
+      res.status(400).json({ groups: [], server: null, error: 'No OpenCode servers configured' })
       return
     }
+    const serverUrl = servers[0]
+    const server = { id: 'server-1', label: 'Server 1', base_url: serverUrl }
     const password = process.env.OPENCODE_SERVER_PASSWORD ?? ''
-    const headers: Record<string, string> = {}
-    if (password) {
-      const encoded = Buffer.from(`opencode:${password}`).toString('base64')
-      headers['Authorization'] = `Basic ${encoded}`
-    }
+    const headers: Record<string, string> = password
+      ? { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
+      : {}
 
-    type RawProvider = { id: string; name?: string; models?: Array<{ id: string; name?: string }> }
-    type RawResponse = { providers?: RawProvider[] }
+    const SHOW_PROVIDERS = new Set(['opencode', 'openai', 'github-copilot', 'google', 'anthropic'])
 
-    const tryServer = async (serverUrl: string) => {
-      const ac = new AbortController()
-      const timer = setTimeout(() => ac.abort(), 10_000)
+    type ProviderModel = { id?: string; name?: string; cost?: { input?: number } }
+    type RawProvider = { id?: string; name?: string; models?: Record<string, ProviderModel> }
+
+    void (async () => {
+      const abort = new AbortController()
+      const timer = setTimeout(() => abort.abort(), 10_000)
       try {
-        const r = await fetch(`${serverUrl}/provider`, { headers, signal: ac.signal })
-        if (!r.ok) return null
-        const data = (await r.json()) as RawResponse
-        if (!Array.isArray(data.providers)) return null
-        const models = data.providers.flatMap((p) =>
-          (p.models ?? []).map((m) => ({
-            id: `${p.id}/${m.id}`,
-            name: m.name ?? m.id,
-            provider: p.id,
-          })),
-        )
-        return models.length > 0 ? { models, serverId: serverUrl } : null
-      } catch {
-        return null
+        const [provRes, authRes] = await Promise.all([
+          fetch(`${serverUrl}/provider`, { headers, signal: abort.signal }),
+          fetch(`${serverUrl}/provider/auth`, { headers, signal: abort.signal }).catch(() => null),
+        ])
+        if (!provRes.ok) {
+          res.status(502).json({ groups: [], server, error: `OpenCode /provider 回傳 ${provRes.status}` })
+          return
+        }
+        const providerData = (await provRes.json()) as { all?: unknown[]; providers?: unknown[] }
+        const authData: Record<string, unknown> = authRes?.ok ? (await authRes.json() as Record<string, unknown>) : {}
+        const authedProviders = new Set(Object.keys(authData))
+
+        const providerList = providerData.all ?? providerData.providers ?? []
+        const groups: Array<{ provider: string; name: string; authed: boolean; models: Array<{ id: string; name: string; free: boolean }> }> = []
+        for (const provider of providerList as RawProvider[]) {
+          if (!provider.id || !SHOW_PROVIDERS.has(provider.id)) continue
+          const models = Object.values(provider.models ?? {})
+          if (models.length === 0) continue
+          groups.push({
+            provider: provider.id,
+            name: provider.name ?? provider.id,
+            authed: !authedProviders.has(provider.id),
+            models: models.map((m) => ({
+              id: `${provider.id}/${m.id ?? ''}`,
+              name: m.name ?? m.id ?? '',
+              free: m.cost?.input === 0,
+            })),
+          })
+        }
+        res.json({ groups, server })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error'
+        res.status(502).json({ groups: [], server, error: `OpenCode models fetch failed: ${msg}` })
       } finally {
         clearTimeout(timer)
       }
-    }
-
-    void (async () => {
-      for (const [i, serverUrl] of servers.entries()) {
-        const result = await tryServer(serverUrl)
-        if (result) {
-          res.json({
-            models: result.models,
-            source_server_id: `server-${i + 1}`,
-            warning: null,
-          })
-          return
-        }
-      }
-      res.json({
-        models: [],
-        source_server_id: null,
-        warning: `All ${servers.length} OpenCode server(s) failed or returned no models`,
-      })
     })()
   })
 
