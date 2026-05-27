@@ -154,7 +154,7 @@ import { planAnimalMigration } from '../ecosystem/migration.js'
 import { planPredation } from '../ecosystem/predation.js'
 import { planAnimalReproduction } from '../ecosystem/reproduction.js'
 import { getSpecies, requireSpecies } from '../ecosystem/species.js'
-import { discoverMarketPrices } from '../goods/marketPricing.js'
+import { discoverMarketPrices, listMarketGoods } from '../goods/marketPricing.js'
 import { planGoodsProduction } from '../goods/productionChains.js'
 import { planCarrierDispatches, planCarrierArrivals } from './carrierPlanner.js'
 import { planLocalNpcTrades } from './localNpcTradePlanner.js'
@@ -4245,12 +4245,13 @@ export class SimulationRuntime {
       )
     }
 
-    // Build per-goodsId price multipliers from active rule operators
+    // Build per-goodsId price multipliers from active rule operators. The
+    // ActiveRuleOperatorsProjection.getPriceMultiplier helper is the single
+    // source of truth for combining 'multiply_price' operators (§11.2).
     const priceMultipliers = new Map<string, number>()
-    for (const op of this.activeRuleOperatorsProjection.list()) {
-      if (op.effectKind === 'multiply_price' && op.scope === 'goods') {
-        priceMultipliers.set(op.scopeId, (priceMultipliers.get(op.scopeId) ?? 1) * op.effectValue)
-      }
+    for (const goods of listMarketGoods()) {
+      const multiplier = this.activeRuleOperatorsProjection.getPriceMultiplier(goods.goodsId)
+      if (multiplier !== 1) priceMultipliers.set(goods.goodsId, multiplier)
     }
     for (const price of discoverMarketPrices({
       inventory: this.goodsInventoryProjection.list(),

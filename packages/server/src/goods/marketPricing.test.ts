@@ -24,6 +24,31 @@ describe('market pricing', () => {
       priceGold: 14,
     })
   })
+
+  it('applies a multiply_price rule operator multiplier to the discovered price', () => {
+    // Baseline refined_salt price at supply==demand is 14 (see test above).
+    const doubled = discoverMarketPrices({
+      inventory: [inventoryRow('refined_salt', 12)],
+      priceMultipliers: new Map([['refined_salt', 2]]),
+    })
+    expect(doubled.find((row) => row.goodsId === 'refined_salt')?.priceGold).toBe(28)
+
+    const halved = discoverMarketPrices({
+      inventory: [inventoryRow('refined_salt', 12)],
+      priceMultipliers: new Map([['refined_salt', 0.5]]),
+    })
+    expect(halved.find((row) => row.goodsId === 'refined_salt')?.priceGold).toBe(7)
+  })
+
+  it('leaves goods without a matching multiplier unchanged', () => {
+    const prices = discoverMarketPrices({
+      inventory: [inventoryRow('refined_salt', 12), inventoryRow('fish', 24)],
+      priceMultipliers: new Map([['refined_salt', 2]]),
+    })
+    // fish has no operator → unaffected; baseline fish at supply==demand is its basePrice (6).
+    expect(prices.find((row) => row.goodsId === 'fish')?.priceGold).toBe(6)
+    expect(prices.find((row) => row.goodsId === 'refined_salt')?.priceGold).toBe(28)
+  })
 })
 
 function inventoryRow(goodsId: string, quantity: number): GoodsInventoryRow {

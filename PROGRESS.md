@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-27 — Handoff Snapshot @ v0.84.2
+
+### Current Version
+`0.84.2` — TypeScript build clean. 1078 server tests pass (138 files). All version sources synced (`version.ts` `APP_VERSION`, root + server + web `package.json` were drifted at 0.84.0/0.84.1; now all 0.84.2).
+
+### What Was Shipped (v0.84.2)
+
+**§11.2 price-operator cleanup — dead-code removal + missing test coverage**
+- Context: investigating "is card combat integrated?" surfaced that `ActiveRuleOperatorsProjection.getPriceMultiplier()` was unit-tested but **never called** — `sim/runtime.ts` re-implemented the same `multiply_price` combining logic inline (duplication / divergence risk). The `multiply_price` feature itself was already functional (runtime inline loop → `discoverMarketPrices` → `marketPricing.ts` applies multiplier to `priceGold`), so this was NOT a missing feature, only a dead helper + untested path.
+- `sim/runtime.ts`: replaced the inline operator loop (built `priceMultipliers` by scanning `activeRuleOperatorsProjection.list()`) with a bounded loop over `listMarketGoods()` calling the tested `getPriceMultiplier(goodsId)` helper. Helper is now the single source of truth for §11.2 price operators. `listMarketGoods` added to the `marketPricing` import.
+- `goods/marketPricing.test.ts`: +2 characterization tests locking the previously-untested `priceMultipliers` application — `multiply_price` multiplier applied (×2 → 28, ×0.5 → 7 on refined_salt baseline 14); goods without a matching operator left unchanged.
+
+### Active Blockers
+None.
+
+### Remaining Gaps
+**None.** All ❌ markers in WORLD_CAPABILITIES.md Part II remain closed; §11.2 price path now consolidated + test-covered.
+
+### CI/CD State
+Main branch. Build clean (`tsc -p tsconfig.json` exit 0). Committed and pushed.
+
+---
+
 ## 2026-05-25 — Handoff Snapshot @ v0.84.0
 
 ### Current Version
