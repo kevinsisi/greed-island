@@ -57,7 +57,13 @@ export function AdminCardsPage() {
       setUploadState((prev) => ({ ...prev, [id]: 'uploading' }))
       try {
         const arrayBuffer = await file.arrayBuffer()
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+        const bytes = new Uint8Array(arrayBuffer)
+        let binary = ''
+        const chunk = 8192
+        for (let i = 0; i < bytes.byteLength; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+        }
+        const base64 = btoa(binary)
         await api.adminUploadCardImage(token, id, base64, file.type)
         setUploadState((prev) => ({ ...prev, [id]: 'done' }))
         await refresh()
