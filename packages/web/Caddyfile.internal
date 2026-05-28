@@ -33,6 +33,11 @@
 		reverse_proxy server:3000
 	}
 
+	handle /card-images/* {
+		header Cache-Control "no-store"
+		reverse_proxy server:3000
+	}
+
 	handle /assets/* {
 		encode zstd gzip
 		header Cache-Control "public, max-age=31536000, immutable"
