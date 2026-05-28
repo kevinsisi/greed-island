@@ -71,6 +71,8 @@ import {
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
   MATURATION_CADENCE_TICKS,
+  MIN_BIRTH_INTERVAL_TICKS,
+  MAX_CHILDREN_PER_HOUSEHOLD,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   WALL_CONSTRUCTION_CADENCE_TICKS,
@@ -1848,6 +1850,20 @@ export class SimulationRuntime {
       this.runTick()
     } catch (err) {
       console.error('[sim] tick failed', err)
+    }
+  }
+
+  /**
+   * Advance the simulation by `n` ticks synchronously. Used by the admin
+   * time-accelerator (`POST /admin/sim/advance`) to fast-forward the world
+   * for §43 acceptance-criterion observation. Per-tick processing is
+   * identical to the regular interval-driven path — same Commands, same
+   * Rule Engine, same Events emitted to EventLog. Bounded by the caller.
+   */
+  advanceTicks(n: number): void {
+    const ticks = Math.max(0, Math.floor(n))
+    for (let i = 0; i < ticks; i++) {
+      this.runTick()
     }
   }
 
@@ -5393,9 +5409,22 @@ export class SimulationRuntime {
     }
 
     for (const household of households) {
-      if (household.childIds.length > 0) continue
-      if (nextTick - household.formedAtTick < 90) continue
-      const childId = `${household.householdId}.child.1`
+      // v0.87.0 — allow multiple children with interval + cap.
+      if (household.childIds.length >= MAX_CHILDREN_PER_HOUSEHOLD) continue
+      // Determine the "last reproductive event" timestamp:
+      //   - no children yet → household formation tick
+      //   - has children → max child bornAtTick
+      let lastEventTick = household.formedAtTick
+      for (const cid of household.childIds) {
+        const child = this.lifeExpansion.children[cid]
+        if (child && child.bornAtTick > lastEventTick) lastEventTick = child.bornAtTick
+      }
+      const cooldown = household.childIds.length === 0 ? 90 : MIN_BIRTH_INTERVAL_TICKS
+      if (nextTick - lastEventTick < cooldown) continue
+      // Slot index is next-child-number — supports re-fill if a child was somehow lost,
+      // but for v1 we just count length+1.
+      const childSlot = household.childIds.length + 1
+      const childId = `${household.householdId}.child.${childSlot}`
       const { nameZh, nameEn } = generateChildName(childId, household.householdId)
       commands.push(
         makeLivingWorldCommand(
