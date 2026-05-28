@@ -40,7 +40,7 @@ function imageUrlForId(id: number, dir: string): string | null {
 
 export function createAdminCardsRouter(input: AdminCardsRouterInput): Router {
   const router = Router()
-  const requireGm = requireRole(input.authConfig, input.accounts, 'gm')
+  const requireGm = requireRole(input.authConfig, input.accounts, 'gm', 'admin')
   const imagesDir = cardImagesDir(input.dataDir)
 
   router.get('/admin/cards/images', requireGm, (_req: Request, res: Response) => {
