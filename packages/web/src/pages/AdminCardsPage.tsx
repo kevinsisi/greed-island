@@ -3,6 +3,7 @@ import { api, ApiError, type ServerCardCatalogEntry } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { PageHeader } from '../components/common/PageHeader'
 import { CardImage } from '../components/game/CardImage'
+import { CARD_ART_BASE_STYLE, getFullCardPrompt } from '../data/cardArtPrompts'
 
 const RANK_ORDER = ['S', 'A', 'B', 'C', 'D'] as const
 
@@ -128,6 +129,8 @@ export function AdminCardsPage() {
 
       {state.kind === 'ready' && (
         <div className="flex flex-col gap-8">
+          {/* base style prompt panel */}
+          <BaseStylePanel />
           {RANK_ORDER.map((rank) => {
             const rankCards = state.cards.filter((c) => c.rank === rank)
             return (
@@ -180,7 +183,7 @@ export function AdminCardsPage() {
                         )}
 
                         {/* actions */}
-                        <div className="flex gap-1 mt-auto">
+                        <div className="flex gap-1 mt-auto flex-wrap">
                           <button
                             onClick={() => triggerUpload(card.id)}
                             disabled={isUploading || isDeleting}
@@ -197,6 +200,7 @@ export function AdminCardsPage() {
                               刪
                             </button>
                           )}
+                          <CopyPromptButton cardId={card.id} />
                         </div>
                       </div>
                     )
@@ -208,5 +212,52 @@ export function AdminCardsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+function BaseStylePanel() {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(CARD_ART_BASE_STYLE).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <section className="gi-panel p-4 flex flex-col gap-2 border-amber-700/30">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-xs uppercase tracking-tightest text-ground-400">主要風格 Prompt（每張卡都要加）</h2>
+        <button
+          onClick={handleCopy}
+          className="shrink-0 rounded-sharp bg-ground-700 px-3 py-1 text-xs text-ground-200 hover:bg-ground-600 transition-colors"
+        >
+          {copied ? '已複製 ✓' : '複製'}
+        </button>
+      </div>
+      <p className="text-xs text-ground-300 font-mono leading-relaxed break-words">{CARD_ART_BASE_STYLE}</p>
+    </section>
+  )
+}
+
+function CopyPromptButton({ cardId }: { cardId: number }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(getFullCardPrompt(cardId)).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="複製完整 prompt（主要風格 + 卡片描述）"
+      className="rounded-sharp bg-ground-700 px-2 py-1 text-ground-400 hover:bg-ground-600 hover:text-ground-200 transition-colors"
+    >
+      {copied ? '✓' : 'P'}
+    </button>
   )
 }
