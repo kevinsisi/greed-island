@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, ApiError, type ServerNpcStats } from '../api/client'
+import { api, ApiError, type ServerNpcStats, type ServerNpcStatsDeath } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { useI18n, type TranslationKey } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
@@ -110,8 +110,7 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
         />
         <StatCard
           label={t('admin.npcs.statDeaths')}
-          value={t('admin.npcs.statDeathsValue')}
-          mute
+          value={stats.deaths.totalEventCount}
         />
       </section>
 
@@ -194,18 +193,46 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
         )}
       </section>
 
-      <section className="gi-panel p-4 flex flex-col gap-2 border-ground-800/60">
-        <h2 className="font-display text-sm uppercase tracking-tightest text-ground-500">
+      <section className="gi-panel p-4 flex flex-col gap-3">
+        <h2 className="font-display text-sm uppercase tracking-tightest text-ground-200">
           {t('admin.npcs.deathsHeading')}
         </h2>
-        <p className="text-[12px] text-ground-400">
-          <span className="text-ground-500">{t('admin.npcs.deathsReason')}:</span> {stats.deaths.reason}
-        </p>
-        <p className="text-[12px] text-ground-400">
-          <span className="text-ground-500">{t('admin.npcs.deathsPlannedAt')}:</span> {stats.deaths.plannedAt}
-        </p>
+        {stats.deaths.recent.length === 0 ? (
+          <p className="text-sm text-ground-400">{t('admin.npcs.deathsEmpty')}</p>
+        ) : (
+          <DeathsTable rows={stats.deaths.recent} t={t} />
+        )}
       </section>
     </>
+  )
+}
+
+function DeathsTable({ rows, t }: { rows: readonly ServerNpcStatsDeath[]; t: Translator }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colTick')}</th>
+            <th className="text-left py-2 pr-3">NPC</th>
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colHousehold')}</th>
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colMotivation')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.tick}-${row.npcId}`} className="border-t border-ground-800/40">
+              <td className="py-1.5 pr-3 text-ground-300 font-mono text-xs">{row.tick}</td>
+              <td className="py-1.5 pr-3 text-ground-100">
+                <div className="text-[11px] text-ground-500 font-mono">{row.npcId}</div>
+              </td>
+              <td className="py-1.5 pr-3 text-ground-400 font-mono text-xs">{row.householdId}</td>
+              <td className="py-1.5 pr-3 text-ground-400">{row.narration || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

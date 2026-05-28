@@ -260,12 +260,20 @@ export type ServerNpcStatsHousehold = {
   motivation: string | null
 }
 
+export type ServerNpcStatsDeath = {
+  tick: number
+  npcId: string
+  tileId: string
+  householdId: string
+  narration: string
+}
+
 export type ServerNpcStats = {
   totalNpcs: number
   byOrigin: { manual: number; born: number }
   births: { totalEventCount: number; recent: readonly ServerNpcStatsBirth[] }
   households: { totalEventCount: number; recent: readonly ServerNpcStatsHousehold[] }
-  deaths: { available: false; reason: string; plannedAt: string }
+  deaths: { totalEventCount: number; recent: readonly ServerNpcStatsDeath[] }
   generatedAtTick: number
 }
 

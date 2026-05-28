@@ -13,8 +13,6 @@ import type { AccountStore } from './accounts.js'
 import { requireRole, type AuthConfig } from './auth.js'
 
 const RECENT_FEED_LIMIT = 20
-const DEATHS_REASON = 'NPC_DECEASED command not yet implemented'
-const DEATHS_PLANNED_AT = 'WORLD_CAPABILITIES.md §35.2 (Phase 5 — Persistent Combat Consequences)'
 
 export type AdminNpcsRouterInput = Readonly<{
   runtime: SimulationRuntime
@@ -40,12 +38,20 @@ export type NpcStatsHousehold = Readonly<{
   motivation: string | null
 }>
 
+export type NpcStatsDeath = Readonly<{
+  tick: number
+  npcId: string
+  tileId: string
+  householdId: string
+  narration: string
+}>
+
 export type NpcStatsResponse = Readonly<{
   totalNpcs: number
   byOrigin: Readonly<{ manual: number; born: number }>
   births: Readonly<{ totalEventCount: number; recent: readonly NpcStatsBirth[] }>
   households: Readonly<{ totalEventCount: number; recent: readonly NpcStatsHousehold[] }>
-  deaths: Readonly<{ available: false; reason: string; plannedAt: string }>
+  deaths: Readonly<{ totalEventCount: number; recent: readonly NpcStatsDeath[] }>
   generatedAtTick: number
 }>
 
@@ -105,12 +111,27 @@ export function buildNpcStats(input: {
     .map(toHouseholdRow)
     .filter((row): row is NpcStatsHousehold => row !== null)
 
+  const deathsTotalEventCount = eventStore.countEventsByKind('NPC_DECEASED')
+  const deathRows =
+    generatedAtTick > 0
+      ? eventStore.readEventsByTickWindow({
+          eventTypes: ['NPC_DECEASED'],
+          sinceTick: 0,
+          untilTick: generatedAtTick,
+          limit: RECENT_FEED_LIMIT,
+        }).events
+      : []
+  const recentDeaths = [...deathRows]
+    .reverse()
+    .map(toDeathRow)
+    .filter((row): row is NpcStatsDeath => row !== null)
+
   return {
     totalNpcs,
     byOrigin: { manual, born },
     births: { totalEventCount: birthsTotalEventCount, recent: recentBirths },
     households: { totalEventCount: householdsTotalEventCount, recent: recentHouseholds },
-    deaths: { available: false, reason: DEATHS_REASON, plannedAt: DEATHS_PLANNED_AT },
+    deaths: { totalEventCount: deathsTotalEventCount, recent: recentDeaths },
     generatedAtTick,
   }
 }
@@ -169,4 +190,19 @@ function toHouseholdRow(event: EventLike): NpcStatsHousehold | null {
       ? payload.motivation.explanation
       : null
   return { tick, householdId, partnerNpcIds, homeTileId, motivation }
+}
+
+function toDeathRow(event: EventLike): NpcStatsDeath | null {
+  const tick = event.tick ?? 0
+  const payload = event.payload as
+    | { npcId?: unknown; tileId?: unknown; householdId?: unknown; narration?: unknown }
+    | null
+    | undefined
+  if (!payload || typeof payload !== 'object') return null
+  const npcId = typeof payload.npcId === 'string' ? payload.npcId : null
+  if (!npcId) return null
+  const tileId = typeof payload.tileId === 'string' ? payload.tileId : ''
+  const householdId = typeof payload.householdId === 'string' ? payload.householdId : ''
+  const narration = typeof payload.narration === 'string' ? payload.narration : ''
+  return { tick, npcId, tileId, householdId, narration }
 }
