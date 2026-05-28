@@ -143,7 +143,9 @@ type EventLike = Readonly<{
 
 function toBirthRow(event: EventLike): NpcStatsBirth | null {
   const tick = event.tick ?? 0
-  const payload = event.payload as
+  const outer = event.payload as { data?: unknown } | null | undefined
+  if (!outer || typeof outer !== 'object') return null
+  const payload = (outer.data ?? outer) as
     | {
         childId?: unknown
         householdId?: unknown
@@ -168,7 +170,9 @@ function toBirthRow(event: EventLike): NpcStatsBirth | null {
 
 function toHouseholdRow(event: EventLike): NpcStatsHousehold | null {
   const tick = event.tick ?? 0
-  const payload = event.payload as
+  const outer = event.payload as { data?: unknown } | null | undefined
+  if (!outer || typeof outer !== 'object') return null
+  const payload = (outer.data ?? outer) as
     | {
         householdId?: unknown
         partnerNpcIds?: unknown
@@ -194,7 +198,9 @@ function toHouseholdRow(event: EventLike): NpcStatsHousehold | null {
 
 function toDeathRow(event: EventLike): NpcStatsDeath | null {
   const tick = event.tick ?? 0
-  const payload = event.payload as
+  const outer = event.payload as { data?: unknown } | null | undefined
+  if (!outer || typeof outer !== 'object') return null
+  const payload = (outer.data ?? outer) as
     | { npcId?: unknown; tileId?: unknown; householdId?: unknown; narration?: unknown }
     | null
     | undefined
