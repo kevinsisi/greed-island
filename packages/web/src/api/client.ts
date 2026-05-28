@@ -277,6 +277,34 @@ export type ServerNpcStatsMatured = {
   nameEn: string
 }
 
+export type ServerLineageMember = {
+  npcId: string
+  nameZh: string
+  deceased: boolean
+}
+
+export type ServerLineageChild = {
+  childId: string
+  nameZh: string
+  nameEn: string
+  bornAtTick: number
+  matured: boolean
+  deceased: boolean
+}
+
+export type ServerLineageHousehold = {
+  householdId: string
+  homeTileId: string
+  formedAtTick: number
+  partners: readonly ServerLineageMember[]
+  children: readonly ServerLineageChild[]
+}
+
+export type ServerLineageResponse = {
+  generatedAtTick: number
+  households: readonly ServerLineageHousehold[]
+}
+
 export type ServerNpcStats = {
   totalNpcs: number
   byOrigin: { manual: number; born: number }
@@ -1073,6 +1101,17 @@ export const api = {
     }),
   adminNpcStats: (token: string) =>
     jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(token) }),
+  adminLineage: (token: string) =>
+    jsonFetch<ServerLineageResponse>('/admin/lineage', { headers: authHeaders(token) }),
+  adminSimAdvance: (token: string, ticks: number) =>
+    jsonFetch<{ ok: boolean; beforeTick: number; afterTick: number; requestedTicks: number; advancedTicks: number; elapsedMs: number; capped: boolean }>(
+      '/admin/sim/advance',
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ ticks }),
+      }
+    ),
   adminCardImages: (token: string) =>
     jsonFetch<{ images: Record<number, string> }>('/admin/cards/images', { headers: authHeaders(token) }),
   adminUploadCardImage: (token: string, id: number, imageBase64: string, mimeType: string) =>

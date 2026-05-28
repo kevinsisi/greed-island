@@ -69,12 +69,20 @@ export function AdminNpcsPage() {
         title={t('admin.npcs.title')}
         description={t('admin.npcs.description')}
         actions={
-          <Link
-            to={account.role === 'admin' ? '/admin' : '/admin/world'}
-            className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
-          >
-            {account.role === 'admin' ? t('admin.npcs.backToAdmin') : t('nav.gmWorld')}
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to="/admin/lineage"
+              className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+            >
+              家族樹
+            </Link>
+            <Link
+              to={account.role === 'admin' ? '/admin' : '/admin/world'}
+              className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+            >
+              {account.role === 'admin' ? t('admin.npcs.backToAdmin') : t('nav.gmWorld')}
+            </Link>
+          </div>
         }
       />
 

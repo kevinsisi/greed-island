@@ -71,6 +71,8 @@ import {
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
   MATURATION_CADENCE_TICKS,
+  MIN_BIRTH_INTERVAL_TICKS,
+  MAX_CHILDREN_PER_HOUSEHOLD,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   WALL_CONSTRUCTION_CADENCE_TICKS,
@@ -1849,6 +1851,35 @@ export class SimulationRuntime {
     } catch (err) {
       console.error('[sim] tick failed', err)
     }
+  }
+
+  /**
+   * Advance the simulation by `n` ticks synchronously. Used by the admin
+   * time-accelerator (`POST /admin/sim/advance`) to fast-forward the world
+   * for §43 acceptance-criterion observation. Per-tick processing is
+   * identical to the regular interval-driven path — same Commands, same
+   * Rule Engine, same Events emitted to EventLog. Bounded by the caller.
+   */
+  advanceTicks(n: number): void {
+    const ticks = Math.max(0, Math.floor(n))
+    for (let i = 0; i < ticks; i++) {
+      this.runTick()
+    }
+  }
+
+  /** Public read-only access to the household + children + civic graph. */
+  getLifeExpansion(): typeof this.lifeExpansion {
+    return this.lifeExpansion
+  }
+
+  /** Public read-only access to the matured born-NPC projection. */
+  getBornNpcsProjection(): typeof this.bornNpcsProjection {
+    return this.bornNpcsProjection
+  }
+
+  /** Public read-only access to the NPC mortality projection. */
+  getNpcMortalityProjection(): typeof this.npcMortalityProjection {
+    return this.npcMortalityProjection
   }
 
   private runTick(): void {
@@ -5354,6 +5385,19 @@ export class SimulationRuntime {
           const lifeA = deriveNpcLifeView({ profile: a.profile, state: a.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
           const lifeB = deriveNpcLifeView({ profile: b.profile, state: b.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
           if (lifeA.goal.kind !== 'form_family' && lifeB.goal.kind !== 'form_family') continue
+          // v0.87.0 — pair-bond requires mutual attraction ≥ 50 if relationships store
+          // is wired. When unwired (legacy/test paths), the gate is skipped so existing
+          // behavior is preserved. Without prior interactions, attraction stays at the
+          // 50 default — so even fresh worlds clear the bar; only NPCs whose past
+          // interactions DROVE attraction below 50 are blocked.
+          const relStore = this.npcRelationships
+          if (relStore) {
+            const aToB = relStore.readDirectional(a.profile.id, b.profile.id)
+            const bToA = relStore.readDirectional(b.profile.id, a.profile.id)
+            const aToBAttraction = aToB?.attraction ?? 50
+            const bToAAttraction = bToA?.attraction ?? 50
+            if (aToBAttraction < 50 || bToAAttraction < 50) continue
+          }
           const householdId = `household.${a.profile.id}.${b.profile.id}`.replace(/[^a-zA-Z0-9_.-]/g, '_')
           commands.push(
             makeLivingWorldCommand(
@@ -5380,9 +5424,22 @@ export class SimulationRuntime {
     }
 
     for (const household of households) {
-      if (household.childIds.length > 0) continue
-      if (nextTick - household.formedAtTick < 90) continue
-      const childId = `${household.householdId}.child.1`
+      // v0.87.0 — allow multiple children with interval + cap.
+      if (household.childIds.length >= MAX_CHILDREN_PER_HOUSEHOLD) continue
+      // Determine the "last reproductive event" timestamp:
+      //   - no children yet → household formation tick
+      //   - has children → max child bornAtTick
+      let lastEventTick = household.formedAtTick
+      for (const cid of household.childIds) {
+        const child = this.lifeExpansion.children[cid]
+        if (child && child.bornAtTick > lastEventTick) lastEventTick = child.bornAtTick
+      }
+      const cooldown = household.childIds.length === 0 ? 90 : MIN_BIRTH_INTERVAL_TICKS
+      if (nextTick - lastEventTick < cooldown) continue
+      // Slot index is next-child-number — supports re-fill if a child was somehow lost,
+      // but for v1 we just count length+1.
+      const childSlot = household.childIds.length + 1
+      const childId = `${household.householdId}.child.${childSlot}`
       const { nameZh, nameEn } = generateChildName(childId, household.householdId)
       commands.push(
         makeLivingWorldCommand(

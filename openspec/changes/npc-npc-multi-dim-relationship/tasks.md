@@ -1,38 +1,38 @@
 ## 1. Schema Migration & Type Definitions
 
-- [ ] 1.1 Add `dimensions_json TEXT NOT NULL DEFAULT '...'` and `direction TEXT NOT NULL DEFAULT 'a_to_b'` columns to `npc_relationships` schema in `initializeNpcRelationshipsSchema`
-- [ ] 1.2 Update primary key/unique index to include `direction` (one row per `(npcA, npcB, direction)`)
-- [ ] 1.3 Define `RelationshipDimensions` TypeScript type with all 8 fields
-- [ ] 1.4 Define default vector constant `DEFAULT_DIMENSIONS = { trust:50, fear:50, respect:50, attraction:50, loyalty:50, resentment:50, dependency:50, familiarity:0 }`
-- [ ] 1.5 Extend `RelationshipType` union: add `'lover' | 'mentor' | 'apprentice' | 'feared'`
-- [ ] 1.6 Update `RelationshipRow` type to include `dimensions: RelationshipDimensions` and `direction: 'a_to_b' | 'b_to_a'`
+- [x] 1.1 Add `dimensions_json TEXT NOT NULL DEFAULT '...'` and `direction TEXT NOT NULL DEFAULT 'a_to_b'` columns to `npc_relationships` schema in `initializeNpcRelationshipsSchema`
+- [x] 1.2 Update primary key/unique index to include `direction` (one row per `(npcA, npcB, direction)`)
+- [x] 1.3 Define `RelationshipDimensions` TypeScript type with all 8 fields
+- [x] 1.4 Define default vector constant `DEFAULT_DIMENSIONS = { trust:50, fear:50, respect:50, attraction:50, loyalty:50, resentment:50, dependency:50, familiarity:0 }`
+- [x] 1.5 Extend `RelationshipType` union: add `'lover' | 'mentor' | 'apprentice' | 'feared'`
+- [x] 1.6 Update `RelationshipRow` type to include `dimensions: RelationshipDimensions` and `direction: 'a_to_b' | 'b_to_a'`
 
 ## 2. Event Type Registry
 
-- [ ] 2.1 Add `NPC_RELATIONSHIP_DIMENSION_ADJUSTED` to event type literal union in `livingWorldCommands.ts`
-- [ ] 2.2 Define `NpcRelationshipDimensionAdjustedCmd` payload: `{ from, to, dimension, delta, reason, tick }`
-- [ ] 2.3 Add validator (delta is finite, dimension is one of 8 strings, from/to non-empty)
-- [ ] 2.4 Add to `LivingWorldCommandPayload` union
+- [x] 2.1 Add `NPC_RELATIONSHIP_DIMENSION_ADJUSTED` to event type literal union in `livingWorldCommands.ts`
+- [x] 2.2 Define `NpcRelationshipDimensionAdjustedCmd` payload: `{ from, to, dimension, delta, reason, tick }`
+- [x] 2.3 Add validator (delta is finite, dimension is one of 8 strings, from/to non-empty)
+- [x] 2.4 Add to `LivingWorldCommandPayload` union
 
 ## 3. Projection Core — Multi-Dim Logic
 
-- [ ] 3.1 Refactor `SqliteNpcRelationshipsStore.project(event)` into multiple per-event-type handlers
-- [ ] 3.2 Implement `applyDelta(from, to, dimension, delta)` — clamped 0..100 — used by all sources
-- [ ] 3.3 Implement `NPC_INTERACT` handler: dispatch to both directions; chat → `{ trust:+1, familiarity:+1, resentment:-1 }`; argue → `{ trust:-2, resentment:+2, familiarity:+1 }`
-- [ ] 3.4 Implement `NPC_HOUSEHOLD_FORMED` handler: both directions → `{ attraction:+30, dependency:+20, familiarity:+20, trust:+5 }`
-- [ ] 3.5 Implement `NPC_MENTORSHIP_COMPLETED` handler: apprentice→mentor `{ respect:+20, loyalty:+15, familiarity:+10 }`, mentor→apprentice `{ attraction:+10, respect:+5, familiarity:+10 }`
-- [ ] 3.6 Implement `NPC_DECEASED` handler: read affected NPCs; for each `w` where `dims(w→victim).respect ≥ 60`, apply `{ respect:+10, fear:-20 }`
-- [ ] 3.7 Implement `COMBAT_RESOLVE` handler: requires reading `COMBAT_WITNESS_RECORDED` for the same tile + tick window; each witness → winner: `fear:+20`; loser-side witness → winner: `resentment:+10`
-- [ ] 3.8 Implement `FACTION_TILE_SEIZED` handler: scan known relationship rows; for `(defenderFaction → seizerFaction)` named pairs: `fear:+15, resentment:+20`; for `(seizerFaction → seizerFaction)` cohorts: `respect:+10, loyalty:+10`
-- [ ] 3.9 Implement `NPC_RELATIONSHIP_DIMENSION_ADJUSTED` handler: apply the single-dimension delta from event payload
-- [ ] 3.10 Implement `rebuildFromEvents`: drop rows, replay all events in tick order
-- [ ] 3.11 After every delta application, re-evaluate `resolveRelationshipType` and update the `relationship_type` column
+- [x] 3.1 Refactor `SqliteNpcRelationshipsStore.project(event)` into multiple per-event-type handlers
+- [x] 3.2 Implement `applyDelta(from, to, dimension, delta)` — clamped 0..100 — used by all sources
+- [x] 3.3 Implement `NPC_INTERACT` handler: dispatch to both directions; chat → `{ trust:+1, familiarity:+1, resentment:-1 }`; argue → `{ trust:-2, resentment:+2, familiarity:+1 }`
+- [x] 3.4 Implement `NPC_HOUSEHOLD_FORMED` handler: both directions → `{ attraction:+30, dependency:+20, familiarity:+20, trust:+5 }`
+- [x] 3.5 Implement `NPC_MENTORSHIP_COMPLETED` handler: apprentice→mentor `{ respect:+20, loyalty:+15, familiarity:+10 }`, mentor→apprentice `{ attraction:+10, respect:+5, familiarity:+10 }`
+- [x] 3.6 Implement `NPC_DECEASED` handler: read affected NPCs; for each `w` where `dims(w→victim).respect ≥ 60`, apply `{ respect:+10, fear:-20 }`
+- [x] 3.7 Implement `COMBAT_RESOLVE` handler: requires reading `COMBAT_WITNESS_RECORDED` for the same tile + tick window; each witness → winner: `fear:+20`; loser-side witness → winner: `resentment:+10`
+- [x] 3.8 Implement `FACTION_TILE_SEIZED` handler: scan known relationship rows; for `(defenderFaction → seizerFaction)` named pairs: `fear:+15, resentment:+20`; for `(seizerFaction → seizerFaction)` cohorts: `respect:+10, loyalty:+10`
+- [x] 3.9 Implement `NPC_RELATIONSHIP_DIMENSION_ADJUSTED` handler: apply the single-dimension delta from event payload
+- [x] 3.10 Implement `rebuildFromEvents`: drop rows, replay all events in tick order
+- [x] 3.11 After every delta application, re-evaluate `resolveRelationshipType` and update the `relationship_type` column
 
 ## 4. Composite Type Resolver
 
-- [ ] 4.1 Create `packages/server/src/kernel/relationshipTypeResolver.ts` exporting `resolveRelationshipType(from, to, dims, isMentorOf, isApprenticeOf): RelationshipType`
-- [ ] 4.2 Implement precedence ladder per spec
-- [ ] 4.3 Unit tests: each scenario in `relationship-type-derivation/spec.md`
+- [x] 4.1 Create `packages/server/src/kernel/relationshipTypeResolver.ts` exporting `resolveRelationshipType(from, to, dims, isMentorOf, isApprenticeOf): RelationshipType`
+- [x] 4.2 Implement precedence ladder per spec
+- [x] 4.3 Unit tests: each scenario in `relationship-type-derivation/spec.md`
 
 ## 5. Familiarity Drift From Co-Presence (cadence-gated)
 
@@ -57,9 +57,9 @@
 
 ## 8. Pair-Bond Attraction Gate
 
-- [ ] 8.1 In `planHouseholdCommands`, after the existing co-location/threshold/lifeGoal filter, add `dimensions(a→b).attraction ≥ 50 AND dimensions(b→a).attraction ≥ 50` check
-- [ ] 8.2 If no pair clears, return without emitting `NPC_HOUSEHOLD_FORMED`
-- [ ] 8.3 Tests: low-attraction pair blocked; high-attraction pair forms household; existing household event semantics unchanged
+- [x] 8.1 In `planHouseholdCommands`, after the existing co-location/threshold/lifeGoal filter, add `dimensions(a→b).attraction ≥ 50 AND dimensions(b→a).attraction ≥ 50` check
+- [x] 8.2 If no pair clears, return without emitting `NPC_HOUSEHOLD_FORMED`
+- [x] 8.3 Tests: low-attraction pair blocked; high-attraction pair forms household; existing household event semantics unchanged
 
 ## 9. Frontend Types & UI
 
@@ -69,7 +69,7 @@
 
 ## 10. Verification
 
-- [ ] 10.1 `npm run build` clean
+- [x] 10.1 `npm run build` clean
 - [ ] 10.2 `npm test` — all existing tests pass; new tests cover every delta source and the type resolver
 - [ ] 10.3 Canonical-hash regression test: project a representative mixed event sequence and snapshot the resulting `npc_relationships` rows
 - [ ] 10.4 Manual integration: confirm two NPCs who have chatted 30+ times have higher familiarity than two unrelated NPCs

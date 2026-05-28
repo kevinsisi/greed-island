@@ -50,8 +50,12 @@ export type PlantContextRow = Readonly<{
 export type RelationshipContextRow = Readonly<{
   nameZh: string
   trust: number
-  type: 'friend' | 'rival' | 'neutral'
+  type: 'friend' | 'rival' | 'neutral' | 'lover' | 'mentor' | 'apprentice' | 'feared'
   interactionCount: number
+  /** Dominant non-trust dimension hint (e.g. "fear", "respect") for AI dialog directive injection. */
+  dominantDimension?: string | null
+  /** Optional directive lines like "你恐懼他", "你欽佩他" — see relationshipContext docs. */
+  directives?: readonly string[]
 }>
 
 export type HouseholdContextRow = Readonly<{

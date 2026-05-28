@@ -255,6 +255,14 @@ export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
 export const NPC_MATURATION_TICKS = TICKS_PER_DAY
 export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
 
+// Household reproduction (v0.87.0)
+// Households can produce multiple children, gated by `MIN_BIRTH_INTERVAL_TICKS`
+// after the most recent birth (or household formation if no children yet) and
+// capped at `MAX_CHILDREN_PER_HOUSEHOLD`. Prior to v0.87.0 each household was
+// hard-capped at one child via `if (childIds.length > 0) continue`.
+export const MIN_BIRTH_INTERVAL_TICKS = TICKS_PER_DAY  // ~24 in-game hours between births
+export const MAX_CHILDREN_PER_HOUSEHOLD = 4
+
 // NPC Household Migration (v0.74.0)
 export const HOUSEHOLD_MIGRATION_CADENCE_TICKS = TICKS_PER_DAY * 2
 

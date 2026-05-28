@@ -49,6 +49,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
   'NPC_MATURED',
+  'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
   'CONSTRUCTION_PROJECT_PROGRESS',
@@ -340,6 +341,17 @@ export type NpcMaturedCmd = Readonly<{
   homeTileId: string
   nameZh: string
   nameEn: string
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type NpcRelationshipDimensionAdjustedCmd = Readonly<{
+  from: string
+  to: string
+  dimension: 'trust' | 'fear' | 'respect' | 'attraction' | 'loyalty' | 'resentment' | 'dependency' | 'familiarity'
+  delta: number
+  reason: string
+  tick: number
   motivation?: EventMotivation
   narration: string
 }>
@@ -1666,6 +1678,7 @@ export type LivingWorldCommandPayload =
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
   | NpcMaturedCmd
+  | NpcRelationshipDimensionAdjustedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
   | ConstructionProjectProgressCmd
@@ -1953,6 +1966,18 @@ const VALIDATORS: Readonly<
     if (typeof p.homeTileId !== 'string' || p.homeTileId.length === 0) return 'homeTileId required'
     if (typeof p.nameZh !== 'string' || p.nameZh.length === 0) return 'nameZh required'
     if (typeof p.nameEn !== 'string' || p.nameEn.length === 0) return 'nameEn required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_RELATIONSHIP_DIMENSION_ADJUSTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.from !== 'string' || p.from.length === 0) return 'from required'
+    if (typeof p.to !== 'string' || p.to.length === 0) return 'to required'
+    if (p.from === p.to) return 'from and to must differ'
+    const validDims = ['trust', 'fear', 'respect', 'attraction', 'loyalty', 'resentment', 'dependency', 'familiarity']
+    if (typeof p.dimension !== 'string' || !validDims.includes(p.dimension)) return 'invalid dimension'
+    if (typeof p.delta !== 'number' || !Number.isFinite(p.delta)) return 'delta required'
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },

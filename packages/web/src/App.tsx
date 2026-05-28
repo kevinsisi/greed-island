@@ -16,6 +16,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { SocialPage } from './pages/SocialPage'
 import { AdminPage } from './pages/AdminPage'
 import { AdminNpcsPage } from './pages/AdminNpcsPage'
+import { AdminLineagePage } from './pages/AdminLineagePage'
 import { AdminWorldPage } from './pages/AdminWorldPage'
 import { AdminCardsPage } from './pages/AdminCardsPage'
 import { EcologyPage } from './pages/EcologyPage'
@@ -43,6 +44,7 @@ export function App() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/world" element={<AdminWorldPage />} />
               <Route path="/admin/npcs" element={<AdminNpcsPage />} />
+              <Route path="/admin/lineage" element={<AdminLineagePage />} />
               <Route path="/admin/cards" element={<AdminCardsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
