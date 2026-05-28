@@ -23,9 +23,16 @@ developer. Keep latest status at the top.
 - `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
 - `npx openspec validate --all --strict` — pass (45 passed, 0 failed)
 - `git diff --check` — pass (CRLF normalization warnings only)
+- GitHub Actions CI `26582974142` — pass (OpenSpec + build/typecheck/test; Node.js 20 deprecation annotation remains known non-blocking)
+- Deploy Dev `26583070910` — pass
+- Live `/healthz` — `0.87.2`, tick `339929 → 339930` over 5 seconds
+- Live `/api/world` — 200, ~545ms, ~209,916 bytes, `facts.logistics.transports = 200`
+- Live `/api/map` — 200, ~1.9KB; `/api/buildings?tileId=t_central` — 200, ~4.0KB
+- Recent server logs — no `SQLITE_CONSTRAINT_UNIQUE`, `[sim] tick failed`, fatal, uncaught, or unhandled matches after v0.87.2 became live
+- Recent web/proxy logs — no fresh 502 / connection-refused / broken-pipe matches after v0.87.2 smoke
 
 ### CI/CD State
-Local follow-up hotfix verified; pending commit, push, CI/CD, and live smoke verifying no fresh `[sim] tick failed` logs.
+Main branch pushed at `e499932`. CI/CD complete. Live v0.87.2 smoke passed.
 
 ---
 
