@@ -4689,11 +4689,20 @@ export class SimulationRuntime {
       else if (nextTick >= io.expiresAtTick) outcome = 'failure'
 
       if (outcome) {
-        typedDrafts.push(makeLivingWorldCommand(
+        const command = makeLivingWorldCommand(
           'NPC_INTENT_RESOLVED', profile.id, SIM_ACTOR_WORLD, nextTick, submittedAt,
           { npcId: profile.id, intentType: io.intentType, targetTile: io.targetTile,
             outcome, urgencyAtDispatch: io.urgency, resolvedAtTick: nextTick },
-        ) as unknown as EventDraft)
+        )
+        const result = this.livingWorldRuleEngine.evaluate(command)
+        if (result.accepted) {
+          for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        } else {
+          console.warn(
+            `[sim] rule engine rejected ${result.rejection.commandType} ` +
+              `from ${result.rejection.actorId}: ${result.rejection.reason}`
+          )
+        }
         this.npcEngine.clearIntentOverride(profile.id)
       }
     }

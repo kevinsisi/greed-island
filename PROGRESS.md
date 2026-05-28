@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-28 — Handoff Snapshot @ v0.87.2
+
+### Current Version
+`0.87.2` — Follow-up runtime hotfix after v0.87.1 deploy. Focused runtime/logistics tests pass; server/web build clean; OpenSpec validation clean.
+
+### What Was Fixed (v0.87.2)
+
+**Intent resolution event draft bug**
+- Live v0.87.1 fixed `/api/world` payload size, but post-deploy logs surfaced `[sim] tick failed Error: Failed to append deterministic eventId undefined`.
+- Root cause: `SimulationRuntime.runTick()` pushed a `LivingWorldCommand` for `NPC_INTENT_RESOLVED` directly into `typedDrafts` as if it were an `EventDraft`.
+- Fix: the intent-resolution command now goes through `LivingWorldRuleEngine.evaluate(...)`, so emitted drafts have deterministic `eventId` / `deterministicKey` and projection-compatible event payloads.
+- Added `runtimeIntentResolution.test.ts` to lock this path.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/runtimeIntentResolution.test.ts src/projections/logistics.test.ts` — pass (5 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (45 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local follow-up hotfix verified; pending commit, push, CI/CD, and live smoke verifying no fresh `[sim] tick failed` logs.
+
+---
+
 ## 2026-05-28 — Handoff Snapshot @ v0.87.1
 
 ### Current Version
