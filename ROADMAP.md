@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.87.0 ✅ shipped — 2026-05-28
+
+**主題：Multi-dim NPC↔NPC Relationships + Birth Interval + Time Accelerator + Family Tree UI**
+
+- ✅ Phase A core — 8-dim directional vector (trust/fear/respect/attraction/loyalty/resentment/dependency/familiarity)；`RelationshipType` 加 4 個新值（lover/mentor/apprentice/feared）；`resolveRelationshipType` 純函式 + precedence ladder
+- ✅ Phase B — `MIN_BIRTH_INTERVAL_TICKS`/`MAX_CHILDREN_PER_HOUSEHOLD = 4`，移除 one-child 上限
+- ✅ Phase F — grief reaction（NPC_DECEASED → 高 respect 倖存者 fear-20 respect+10）
+- ✅ Phase G — `/api/admin/lineage` + AdminLineagePage（家族樹 + 時間加速器按鈕）
+- ✅ Phase H — `POST /api/admin/sim/advance` 推進 N tick，安全封頂 50k tick/call
+- 📝 Phase C/D/E 延後（pregnancy / inheritance / minor sprite）— 已寫入 PROGRESS.md
+- ✅ 1118 server tests pass（+15 新），build 乾淨
+
+---
+
 ## v0.86.0 ✅ shipped — 2026-05-28
 
 **主題：Born NPCs Become Runtime Entities（§43.1 acceptance unlock）**

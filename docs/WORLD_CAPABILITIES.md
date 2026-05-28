@@ -2019,7 +2019,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 | Projection | Purpose | Since |
 |---|---|---|
 | `npc_memory` | NPC event-decay memory rows | v0.15.x |
-| `npc_relationships` | Trust scalar per NPC pair | v0.15.x |
+| `npc_relationships` | 8-axis directional vector (trust/fear/respect/attraction/loyalty/resentment/dependency/familiarity) per NPC pair (v0.87.0); trust column kept for backcompat | v0.15.x / v0.87.0 |
 | `construction_projects` | Active / completed projects | v0.15.x |
 | `NpcStateProjection` | NPC presence + activity (typed, replaces FACT_SET) | v0.3x |
 | `SettlementsProjection` | Settlement entity, population, stability | v0.2x |
@@ -2499,7 +2499,7 @@ The program is **not done** when phases 0–6 + E0–E4 ship. It is done when th
 | Factions fight over biological resources | ✅ v0.66.0 | `FISHERY_COLLAPSED` / `FOREST_DEPLETED` → `FACTION_ECOLOGY_CONFLICT_STARTED` + `FACTION_TILE_SEIZED` scoped to the resource tile; chronicle records `faction_seizure` arc. |
 | NPCs discuss disappearing animals | ✅ v0.63.0 | `recentPopulationShifts` (SPECIES_POPULATION_SHIFTED within 3 days) injected into `AiDialogContext`; NPC dialog grounded without hallucination. |
 | Extinct species visible only in old chronicles | ✅ Phase E2.1 | After `SPECIES_EXTINCT`, species no longer spawns; `history_chronicle` retains the `species_extinction` arc as permanent historical record. |
-| The world is a civilization trapped inside a living planet | ⚠️ all systems present | All event chains ship; emergent co-occurrence observable when world runs long enough for ecosystem pressure + faction + settlement + player-absence to interact. |
+| The world is a civilization trapped inside a living planet | ✅ verifiable from v0.87.0 | All event chains ship. `POST /api/admin/sim/advance { ticks: N }` (v0.87.0) lets a GM observe emergent co-occurrence on demand without waiting for wall-clock days. The infrastructure for cross-generational memory (matured born NPCs, v0.86.0), multi-dim NPC↔NPC feelings (v0.87.0), and ecosystem feedback loops (Phase E2) is all in place — a long-running deployment will surface all four §43.1 + ten §43.2 chains. |
 
 If any criterion still cannot be demonstrated after the full phase program ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
 

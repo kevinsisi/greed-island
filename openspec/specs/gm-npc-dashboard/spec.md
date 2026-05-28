@@ -5,7 +5,7 @@ TBD - created by archiving change gm-npc-dashboard. Update Purpose after archive
 ## Requirements
 ### Requirement: NPC stats endpoint SHALL aggregate origin + lifecycle counts
 
-The server SHALL expose `GET /api/admin/npc-stats` returning a JSON response describing total NPC count, origin breakdown (manual vs autonomously-born), event-driven birth and household counts, and an explicit deaths placeholder.
+The server SHALL expose `GET /api/admin/npc-stats` returning a JSON response describing total NPC count, origin breakdown (config-loaded vs autonomously-born and matured), event-driven birth and household counts, and an active deaths feed (the `NPC_DECEASED` command was implemented in v0.32.0; the placeholder previously documented here is removed).
 
 #### Scenario: Response shape
 
@@ -14,15 +14,16 @@ The server SHALL expose `GET /api/admin/npc-stats` returning a JSON response des
 - **AND** `byOrigin` MUST contain `manual` and `born`
 - **AND** `births` MUST contain `totalEventCount` and `recent`
 - **AND** `households` MUST contain `totalEventCount` and `recent`
-- **AND** `deaths` MUST contain `available`, `reason`, and `plannedAt`
+- **AND** `deaths` MUST contain `totalEventCount` and `recent` (with `recent` listing NPC death records — not a placeholder)
 
-#### Scenario: Manual-vs-born classification reflects profile loader
+#### Scenario: Manual-vs-born classification counts matured born NPCs
 
 - **GIVEN** the runtime was bootstrapped from N NPC profile JSON files
-- **AND** every NPC currently in `runtime.getNpcs()` carries an ID present in those profiles
+- **AND** K `NPC_MATURED` events have been committed (born children who have entered the runtime)
 - **WHEN** the endpoint is called
-- **THEN** `byOrigin.manual` MUST equal `totalNpcs`
-- **AND** `byOrigin.born` MUST equal `0`
+- **THEN** `byOrigin.manual` MUST equal N (the count of config-loaded NPCs still living)
+- **AND** `byOrigin.born` MUST equal K (the count of matured born NPCs still living)
+- **AND** `totalNpcs` MUST equal `byOrigin.manual + byOrigin.born`
 
 ### Requirement: NPC stats endpoint SHALL require GM or admin role
 
@@ -43,17 +44,6 @@ The endpoint MUST reject requests that do not present an authenticated session w
 - **WHEN** an authenticated user with role `gm` requests the endpoint
 - **THEN** the server MUST respond `200 OK` with the documented body
 - **AND** the same MUST hold for role `admin`
-
-### Requirement: Deaths surface SHALL be present but explicitly unavailable
-
-The endpoint MUST always include a `deaths` key whose `available` field is `false` until the `NPC_DECEASED` command is implemented. The field is informational so a GM client can render a placeholder rather than appearing broken.
-
-#### Scenario: Deaths placeholder is honest
-
-- **WHEN** the endpoint is called
-- **THEN** `deaths.available` MUST be `false`
-- **AND** `deaths.reason` MUST be a non-empty human-readable string naming the missing command
-- **AND** `deaths.plannedAt` MUST reference the WORLD_CAPABILITIES.md phase that introduces it
 
 ### Requirement: Birth and household feeds SHALL list recent events in descending tick order
 

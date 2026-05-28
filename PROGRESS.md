@@ -5,6 +5,53 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-28 — Handoff Snapshot @ v0.87.0
+
+### Current Version
+`0.87.0` — TypeScript build clean. 1118 server tests pass (was 1103, +15 multi-dim relationship tests). Web build clean. Merged from feat/npc-multidim-relationships at 8f0650e.
+
+### What Was Shipped (v0.87.0)
+
+**Multi-dim NPC↔NPC relationships (Phase A core of `npc-npc-multi-dim-relationship` OpenSpec change)**
+- `RelationshipDimensions` = 8 axes per direction (trust/fear/respect/attraction/loyalty/resentment/dependency/familiarity), stored in `dimensions_json` column on `npc_relationships`
+- `RelationshipType` union expanded: added `'lover' | 'mentor' | 'apprentice' | 'feared'`
+- `resolveRelationshipType` pure function with precedence ladder
+- Event sources: NPC_INTERACT chat/argue → trust+familiarity+resentment; NPC_HOUSEHOLD_FORMED → attraction/dep/fam/trust; NPC_MENTORSHIP_COMPLETED (asymmetric); NPC_DECEASED → grief for high-respect survivors; NPC_RELATIONSHIP_DIMENSION_ADJUSTED for explicit single-dim adjust
+- `planHouseholdCommands` gates on mutual attraction ≥ 50
+
+**Multiple children per household + birth interval (Phase B)**
+- `MIN_BIRTH_INTERVAL_TICKS = TICKS_PER_DAY`, `MAX_CHILDREN_PER_HOUSEHOLD = 4`
+- Removed the `if (childIds.length > 0) continue` one-child cap
+- Child slot id pattern `.child.{N}` increments
+
+**Family tree UI (Phase G)**
+- `GET /api/admin/lineage` — household graph with members + children + matured + deceased flags
+- `/admin/lineage` page in web shows the tree with time-accelerator buttons
+
+**Admin time accelerator (Phase H)**
+- `POST /api/admin/sim/advance { ticks }` — fast-forwards the world by N ticks synchronously, bounded at 50,000/call
+- Used to observe §43 acceptance criteria without wall-clock waits
+
+### Deferred (NOT shipped in v0.87.0)
+- **Phase A leftovers**: COMBAT_RESOLVE / FACTION_TILE_SEIZED delta sources (need cross-event correlation), familiarityDriftPlanner (per-tick co-presence), AI dialog directive injection — all designed in OpenSpec but skipped to ship the core
+- **Phase C — Pregnancy events**: gestation period as a state would need NPC_PREGNANCY_STARTED/ENDED. Skipped for v0.87.0; birth is still 24-in-game-hour cooldown after household formation
+- **Phase D — Matured child inheritance**: matured NPCs still start with `civic.gold=0, skillXp=0`. Skipped due to civic record API surface being non-trivial
+- **Phase E — Minor child sprite**: children remain abstract until matured. Skipped because rendering requires AreaPage extensions
+
+### Active Blockers
+None. Both OpenSpec changes can be archived after the verification run.
+
+### How to Verify Emergent Criteria
+1. Hit `POST /api/admin/sim/advance { "ticks": 50000 }` from an admin session two times — pushes the world ~6 in-game days
+2. Observe `/admin/npcs` for `byOrigin.born > 0` (matured children)
+3. Observe `/admin/lineage` for households with children flagged `已成熟`
+4. After enough advances, watch for first natural NPC death (lifespan ~120k ticks per NPC)
+
+### CI/CD State
+Main branch. Push 8f0650e. Build clean. 1118 server tests pass.
+
+---
+
 ## 2026-05-28 — Handoff Snapshot @ v0.86.0
 
 ### Current Version
