@@ -5,6 +5,35 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-28 — Handoff Snapshot @ v0.85.0
+
+### Current Version
+`0.85.0` — TypeScript build clean. 1078 server tests + 110 web tests pass. Pushed to main @ 91bcff5.
+
+### What Was Shipped (v0.85.0)
+
+**Card art pipeline — prompts + GM upload UI + image display**
+- `docs/card-art-prompts.md`: 100 AI image-gen prompts (per card, per rank/category), base style: painterly dark fantasy trading card illustration, HxH Greed Island aesthetic
+- `adminCardsRouter.ts`: GM-gated `GET/PUT/DELETE /admin/cards/:id/image`; base64 JSON body (≤5MB); stores under `{dataDir}/card-images/{id}.{ext}`; `getCardImageUrl()` standalone helper
+- Express serves `/card-images/` as static; vite dev proxy forwards `/card-images` to localhost:3000
+- `CardImage.tsx`: reusable `<img>` with `onError→rank-letter colored placeholder` fallback
+- `AdminCardsPage.tsx` at `/admin/cards`: 5-rank grid, upload/replace/delete per card, live preview
+- `AdminPage.tsx`: "卡片美術" link added to admin nav
+- `CardCatalogEntry` (server types + client api/client) gains `imageUrl?: string`
+- `WorldStateContext.tsx` `toCardEntry()` forwards `imageUrl` into the client state tree
+- `CardDropPanel.tsx`: both drop list and held list now show card art when available
+
+### Active Blockers
+None.
+
+### Remaining Gaps
+All WORLD_CAPABILITIES.md gaps remain closed. Card art system is now infrastructure-complete; user generates images externally (using `docs/card-art-prompts.md`) and uploads via `/admin/cards`.
+
+### CI/CD State
+Main branch. Build clean. All tests pass. Pushed 91bcff5.
+
+---
+
 ## 2026-05-27 — Handoff Snapshot @ v0.84.2
 
 ### Current Version
