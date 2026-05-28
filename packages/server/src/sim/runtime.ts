@@ -1867,6 +1867,21 @@ export class SimulationRuntime {
     }
   }
 
+  /** Public read-only access to the household + children + civic graph. */
+  getLifeExpansion(): typeof this.lifeExpansion {
+    return this.lifeExpansion
+  }
+
+  /** Public read-only access to the matured born-NPC projection. */
+  getBornNpcsProjection(): typeof this.bornNpcsProjection {
+    return this.bornNpcsProjection
+  }
+
+  /** Public read-only access to the NPC mortality projection. */
+  getNpcMortalityProjection(): typeof this.npcMortalityProjection {
+    return this.npcMortalityProjection
+  }
+
   private runTick(): void {
     const nextTick = this.currentTick + 1
     // Two parallel collections per Living Deterministic World law:

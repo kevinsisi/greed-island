@@ -18,6 +18,7 @@ import { createAdminRouter } from './adminRouter.js'
 import { createAdminNpcsRouter } from './adminNpcsRouter.js'
 import { createAdminCardsRouter } from './adminCardsRouter.js'
 import { createAdminSimRouter } from './adminSimRouter.js'
+import { createAdminLineageRouter } from './adminLineageRouter.js'
 import { createProfileRouter } from './profileRouter.js'
 import { PasswordResetStore } from './passwordResets.js'
 import { SocialStore } from './socialStore.js'
@@ -226,6 +227,14 @@ export function createHttpApp(options: HttpAppOptions): Express {
   app.use(
     '/api',
     createAdminSimRouter({
+      runtime: options.runtime,
+      accounts: accountStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createAdminLineageRouter({
       runtime: options.runtime,
       accounts: accountStore,
       authConfig: options.auth,
