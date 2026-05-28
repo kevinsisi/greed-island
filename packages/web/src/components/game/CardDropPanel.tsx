@@ -17,6 +17,7 @@ import { useAuth } from '../../state/AuthContext'
 import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
 import type { AreaMapDrop } from '../../game/AreaScene'
+import { CardImage } from './CardImage'
 
 // 5 秒一 tick；前端以 4 秒 poll，跟 server tick 大致對齊
 const POLL_MS = 4_000
@@ -124,9 +125,9 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
   )
 
   const catalogById = useMemo(() => {
-    const m = new Map<number, { rank: string; name: string }>()
+    const m = new Map<number, { rank: string; name: string; imageUrl?: string }>()
     for (const c of catalog) {
-      m.set(c.id, { rank: c.rank, name: c.name })
+      m.set(c.id, { rank: c.rank, name: c.name, ...(c.imageUrl ? { imageUrl: c.imageUrl } : {}) })
     }
     return m
   }, [catalog])
@@ -198,7 +199,7 @@ interface CardSectionProps {
   tileId: string
   drops: ServerCardDrop[]
   held: ServerCardDrop[]
-  catalogById: Map<number, { rank: string; name: string }>
+  catalogById: Map<number, { rank: string; name: string; imageUrl?: string }>
   onPickup: (dropId: number) => void
   onStore: (dropId: number, slotType: ServerCardSlotType) => void
   onRelease: (dropId: number) => void
@@ -264,9 +265,12 @@ function CardSection({
             return (
               <li key={d.id} className="gi-panel p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-3">
-                  <span className="w-10 h-10 inline-flex items-center justify-center rounded-sharp border border-ember-600/60 bg-ground-900 text-[15px] text-ember-300 font-display font-extrabold">
-                    {c?.rank ?? '?'}
-                  </span>
+                  <CardImage
+                    {...(c?.imageUrl ? { imageUrl: c.imageUrl } : {})}
+                    rank={c?.rank ?? 'D'}
+                    nameZh={c?.name ?? `#${d.cardId}`}
+                    className="w-10 h-10 rounded-sharp"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-extrabold text-base text-ground-100 truncate">
                       {c?.name ?? `#${d.cardId}`}
@@ -304,9 +308,12 @@ function CardSection({
             return (
               <li key={d.id} className="gi-panel border-ember-700/40 p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-3">
-                  <span className="w-10 h-10 inline-flex items-center justify-center rounded-sharp border border-ember-600/60 bg-ember-500/10 text-[15px] text-ember-300 font-display font-extrabold">
-                    {c?.rank ?? '?'}
-                  </span>
+                  <CardImage
+                    {...(c?.imageUrl ? { imageUrl: c.imageUrl } : {})}
+                    rank={c?.rank ?? 'D'}
+                    nameZh={c?.name ?? `#${d.cardId}`}
+                    className="w-10 h-10 rounded-sharp"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-extrabold text-base text-ground-100 truncate">
                       {c?.name ?? `#${d.cardId}`}

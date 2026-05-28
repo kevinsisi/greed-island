@@ -121,6 +121,8 @@ export type CardCatalogEntry = Readonly<{
   discoveryRuleId: string
   /** Identifier of the restriction rule (anti-duplication, anti-trade, etc.). */
   restrictionRuleId: string
+  /** Optional card art image URL. Populated at runtime from dataDir/card-images/. */
+  imageUrl?: string
   /**
    * Phase 4 — optional world rule operator definition.
    * When set, playing this card via PLAYER_PLAYED_CARD emits

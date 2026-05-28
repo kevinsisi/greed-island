@@ -100,6 +100,7 @@ async function main(): Promise<void> {
     bcryptCost: config.bcryptCost,
     adminEmails: config.adminEmails,
     geminiApiKeys: config.geminiApiKeys,
+    dataDir: config.dataDir,
   })
 
   const server = app.listen(config.port, config.host, () => {

@@ -141,6 +141,12 @@ export function AdminPage() {
             >
               {t('admin.npcs.link')}
             </a>
+            <a
+              href="/admin/cards"
+              className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
+            >
+              卡片美術
+            </a>
           </div>
         }
       />

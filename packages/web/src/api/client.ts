@@ -201,6 +201,7 @@ export type ServerCardCatalogEntry = {
   effectDescription: string
   discoveryRuleId: string
   restrictionRuleId: string
+  imageUrl?: string
 }
 
 export type ServerCardCatalog = {
@@ -1054,6 +1055,19 @@ export const api = {
     }),
   adminNpcStats: (token: string) =>
     jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(token) }),
+  adminCardImages: (token: string) =>
+    jsonFetch<{ images: Record<number, string> }>('/admin/cards/images', { headers: authHeaders(token) }),
+  adminUploadCardImage: (token: string, id: number, imageBase64: string, mimeType: string) =>
+    jsonFetch<{ ok: boolean; imageUrl: string }>(`/admin/cards/${id}/image`, {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify({ imageBase64, mimeType }),
+    }),
+  adminDeleteCardImage: (token: string, id: number) =>
+    jsonFetch<{ ok: boolean }>(`/admin/cards/${id}/image`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    }),
   settlements: () =>
     jsonFetch<{ settlements: readonly ServerSettlement[] }>('/settlements'),
   settlementById: (id: string) =>

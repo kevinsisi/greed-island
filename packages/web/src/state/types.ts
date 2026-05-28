@@ -121,6 +121,7 @@ export interface CardCatalogEntry {
   acquisitionMethod?: CardAcquisitionMethod
   acquisitionDetail?: string
   effectDescription?: string
+  imageUrl?: string
   owned: boolean
   discoveredAtTick?: number
 }

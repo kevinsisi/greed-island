@@ -411,6 +411,7 @@ function toCardEntry(
     acquisitionMethod?: string
     acquisitionDetail?: string
     effectDescription?: string
+    imageUrl?: string
   },
   locale: Locale
 ): CardCatalogEntry {
@@ -434,6 +435,7 @@ function toCardEntry(
   }
   if (card.acquisitionDetail) result.acquisitionDetail = card.acquisitionDetail
   if (card.effectDescription) result.effectDescription = card.effectDescription
+  if (card.imageUrl) result.imageUrl = card.imageUrl
   return result
 }
 

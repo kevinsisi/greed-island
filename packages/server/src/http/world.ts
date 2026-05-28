@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import { optionalAuth, type AuthConfig } from './auth.js'
 import { type PlayerStateStore, clampTrust } from './playerState.js'
+import { getCardImageUrl } from './adminCardsRouter.js'
 
 const RECENT_EVENT_LIMIT = 100
 const DASHBOARD_RECENT_EVENTS = 5
@@ -18,6 +19,7 @@ export function createWorldRouter(input: {
   runtime: SimulationRuntime
   store: PlayerStateStore
   authConfig: AuthConfig
+  dataDir?: string
 }): Router {
   const router = Router()
   const overlay = optionalAuth(input.authConfig)
@@ -56,7 +58,17 @@ export function createWorldRouter(input: {
   })
 
   router.get('/cards', (_req: Request, res: Response) => {
-    res.json(input.runtime.getCardCatalog())
+    const catalog = input.runtime.getCardCatalog()
+    if (!input.dataDir) {
+      res.json(catalog)
+      return
+    }
+    const dataDir = input.dataDir
+    const entries = catalog.entries.map((e) => {
+      const imageUrl = getCardImageUrl(dataDir, e.id)
+      return imageUrl ? { ...e, imageUrl } : e
+    })
+    res.json({ ...catalog, entries })
   })
 
   router.get('/map', (_req: Request, res: Response) => {

@@ -3,6 +3,8 @@
 // at /healthz.
 
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
+import { mkdirSync } from 'fs'
+import { resolve } from 'path'
 import cors from 'cors'
 import { AccountStore } from './accounts.js'
 import { createAuthRouter, type AuthConfig } from './auth.js'
@@ -14,6 +16,7 @@ import { SettingsStore } from './settings.js'
 import { createSettingsRouter } from './settingsRouter.js'
 import { createAdminRouter } from './adminRouter.js'
 import { createAdminNpcsRouter } from './adminNpcsRouter.js'
+import { createAdminCardsRouter } from './adminCardsRouter.js'
 import { createProfileRouter } from './profileRouter.js'
 import { PasswordResetStore } from './passwordResets.js'
 import { SocialStore } from './socialStore.js'
@@ -55,13 +58,19 @@ export type HttpAppOptions = Readonly<{
   bcryptCost: number
   adminEmails: readonly string[]
   geminiApiKeys: readonly string[]
+  dataDir: string
 }>
 
 export function createHttpApp(options: HttpAppOptions): Express {
   const app = express()
   app.disable('x-powered-by')
   app.use(cors())
-  app.use(express.json({ limit: '64kb' }))
+  app.use(express.json({ limit: '10mb' }))
+
+  // Serve uploaded card art images as static files.
+  const cardImagesDir = resolve(options.dataDir, 'card-images')
+  mkdirSync(cardImagesDir, { recursive: true })
+  app.use('/card-images', express.static(cardImagesDir))
 
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, version: APP_VERSION, tick: options.runtime.getSnapshot().tick })
@@ -162,6 +171,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       runtime: options.runtime,
       store: playerStore,
       authConfig: options.auth,
+      dataDir: options.dataDir,
     })
   )
   app.use(
@@ -200,6 +210,14 @@ export function createHttpApp(options: HttpAppOptions): Express {
     createAdminNpcsRouter({
       runtime: options.runtime,
       eventStore,
+      accounts: accountStore,
+      authConfig: options.auth,
+    })
+  )
+  app.use(
+    '/api',
+    createAdminCardsRouter({
+      dataDir: options.dataDir,
       accounts: accountStore,
       authConfig: options.auth,
     })
