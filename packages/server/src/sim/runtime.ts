@@ -5354,6 +5354,19 @@ export class SimulationRuntime {
           const lifeA = deriveNpcLifeView({ profile: a.profile, state: a.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
           const lifeB = deriveNpcLifeView({ profile: b.profile, state: b.state, areaState: area, lifeExpansion: this.lifeExpansion, tick: nextTick })
           if (lifeA.goal.kind !== 'form_family' && lifeB.goal.kind !== 'form_family') continue
+          // v0.87.0 — pair-bond requires mutual attraction ≥ 50 if relationships store
+          // is wired. When unwired (legacy/test paths), the gate is skipped so existing
+          // behavior is preserved. Without prior interactions, attraction stays at the
+          // 50 default — so even fresh worlds clear the bar; only NPCs whose past
+          // interactions DROVE attraction below 50 are blocked.
+          const relStore = this.npcRelationships
+          if (relStore) {
+            const aToB = relStore.readDirectional(a.profile.id, b.profile.id)
+            const bToA = relStore.readDirectional(b.profile.id, a.profile.id)
+            const aToBAttraction = aToB?.attraction ?? 50
+            const bToAAttraction = bToA?.attraction ?? 50
+            if (aToBAttraction < 50 || bToAAttraction < 50) continue
+          }
           const householdId = `household.${a.profile.id}.${b.profile.id}`.replace(/[^a-zA-Z0-9_.-]/g, '_')
           commands.push(
             makeLivingWorldCommand(
