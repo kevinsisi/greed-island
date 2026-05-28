@@ -225,7 +225,7 @@ import { SpeciesExtinctionProjection } from '../projections/speciesExtinction.js
 import { EcosystemRegionProjection } from '../projections/ecosystemRegion.js'
 import { ForestDepletionProjection } from '../projections/forestDepletionProjection.js'
 import { GoodsInventoryProjection, type GoodsInventoryRow } from '../projections/goodsInventory.js'
-import { LogisticsProjection, type LogisticsSnapshot } from '../projections/logistics.js'
+import { LogisticsProjection, compactLogisticsSnapshot, type LogisticsSnapshot } from '../projections/logistics.js'
 import { MarketPricesProjection, type MarketPriceRow } from '../projections/marketPrices.js'
 import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../projections/productionChains.js'
 import { HouseholdEconomyProjection, type HouseholdEconomyRow } from '../projections/householdEconomy.js'
@@ -930,7 +930,7 @@ export class SimulationRuntime {
         ],
         settlements: this.getSettlements(),
         goodsInventory: this.goodsInventoryProjection.list(),
-        logistics: this.logisticsProjection.snapshot(),
+        logistics: compactLogisticsSnapshot(this.logisticsProjection.snapshot()),
         marketPrices: this.marketPricesProjection.list(),
         householdEconomy: this.householdEconomyProjection.list(),
         productionChains: this.productionChainsProjection.snapshot(),

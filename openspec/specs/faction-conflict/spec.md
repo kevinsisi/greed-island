@@ -3,7 +3,7 @@
 ## Purpose
 Defines faction territorial dominance: when a faction's control score crosses the dominance threshold on a tile, a `FACTION_TILE_SEIZED` event is committed to the EventLog. NPC loyalty shifts are recorded via `FACTION_NPC_LOYALTY_SHIFTED`. A `FactionControlProjection` makes dominance state replayable, and the player snapshot exposes which tiles their faction controls.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: FACTION_TILE_SEIZED SHALL be emitted when a faction crosses the dominance threshold
 When `areaStateEngine.tick()` produces a new `dominantFaction` different from the previous dominant faction on a tile, the runtime SHALL emit `FACTION_TILE_SEIZED` with `tileId`, `factionId`, `previousFactionId | null`, `seizedAtTick`. The dominance threshold is control ≥ 60 with a hysteresis buffer of 5 points over all rivals.

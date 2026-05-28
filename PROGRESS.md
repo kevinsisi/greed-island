@@ -5,6 +5,36 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-28 — Handoff Snapshot @ v0.87.1
+
+### Current Version
+`0.87.1` — Hotfix for live mobile bootstrap stall. Server/web build clean; focused logistics projection regression tests pass; OpenSpec validation clean.
+
+### What Was Fixed (v0.87.1)
+
+**Bound public logistics snapshot size**
+- Root cause: `/api/world` published `facts.logistics.transports` with every historical goods transport. On the live world this made the initial bootstrap JSON roughly 8.7MB, causing mobile Safari clients to abort while the service tick/health endpoints still looked healthy.
+- `LogisticsProjection.snapshot()` remains full-fidelity for simulation, canonical hashes, and internal callers.
+- `SimulationRuntime.getSnapshot()` now publishes `compactLogisticsSnapshot(...)`, preserving all routes plus started transports and the newest resolved transport history, capped by `PUBLIC_LOGISTICS_TRANSPORT_LIMIT = 200`.
+- Added `projections/logistics.test.ts` coverage to lock the cap and ensure active started transports are retained.
+
+**OpenSpec validation cleanup**
+- Fixed canonical `openspec/specs/faction-conflict/spec.md` header from delta-only `## ADDED Requirements` to canonical `## Requirements`, restoring strict validation.
+
+### Active Blockers
+- Deploy v0.87.1 to live and verify `/api/world` response size/latency drops from the observed ~8.7MB / ~5s mobile bootstrap failure mode.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/projections/logistics.test.ts` — pass (4 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (45 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Hotfix verified locally; live smoke is required after CI/CD deploys the commit.
+
+---
+
 ## 2026-05-28 — Handoff Snapshot @ v0.87.0
 
 ### Current Version

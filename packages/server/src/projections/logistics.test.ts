@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LogisticsProjection } from './logistics.js'
+import { LogisticsProjection, compactLogisticsSnapshot, type GoodsTransportRow, type LogisticsSnapshot } from './logistics.js'
 import type { Event } from '../kernel/types.js'
 
 describe('LogisticsProjection', () => {
@@ -41,6 +41,40 @@ describe('LogisticsProjection', () => {
     a.rebuildFromEvents(events)
     b.rebuildFromEvents(events)
     expect(a.canonicalHash()).toBe(b.canonicalHash())
+  })
+})
+
+describe('compactLogisticsSnapshot', () => {
+  it('keeps started transports and caps resolved transport history', () => {
+    const snapshot: LogisticsSnapshot = {
+      routes: [
+        {
+          routeId: 'route.b',
+          fromTileId: 't_dock',
+          toTileId: 't_central',
+          goodsId: 'fish',
+          open: true,
+          openedAtTick: 1,
+          closedAtTick: null,
+          lastSequence: 1,
+        },
+      ],
+      transports: [
+        makeTransport('resolved-old', 'arrived', 10, 11, 11),
+        makeTransport('started-new', 'started', 15, null, 15),
+        makeTransport('resolved-new', 'lost', 20, 21, 21),
+        makeTransport('started-old', 'started', 5, null, 5),
+      ],
+    }
+
+    const compacted = compactLogisticsSnapshot(snapshot, 3)
+
+    expect(compacted.transports.map((row) => row.transportId).sort()).toEqual([
+      'resolved-new',
+      'started-new',
+      'started-old',
+    ])
+    expect(compacted.transports).toHaveLength(3)
   })
 })
 
@@ -104,6 +138,33 @@ function transportPayload(transportId: string, routeId: string, quantity: number
     toTileId: 't_central',
     narration: 'transport started',
     ...extra,
+  }
+}
+
+function makeTransport(
+  transportId: string,
+  status: GoodsTransportRow['status'],
+  startedAtTick: number,
+  resolvedAtTick: number | null,
+  lastSequence: number
+): GoodsTransportRow {
+  return {
+    transportId,
+    routeId: 'route.b',
+    goodsId: 'fish',
+    quantity: 1,
+    carrierNpcId: 'npc.carrier',
+    fromHolderType: 'npc',
+    fromHolderId: 'npc.carrier',
+    fromTileId: 't_dock',
+    toHolderType: 'settlement',
+    toHolderId: 'settlement.t_central',
+    toTileId: 't_central',
+    status,
+    startedAtTick,
+    resolvedAtTick,
+    lossReason: status === 'lost' ? 'storm' : null,
+    lastSequence,
   }
 }
 

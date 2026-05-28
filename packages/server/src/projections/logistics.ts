@@ -39,6 +39,8 @@ export type LogisticsSnapshot = Readonly<{
   transports: readonly GoodsTransportRow[]
 }>
 
+export const PUBLIC_LOGISTICS_TRANSPORT_LIMIT = 200
+
 const TRADE_ROUTE_OPENED = 'TRADE_ROUTE_OPENED'
 const TRADE_ROUTE_CLOSED = 'TRADE_ROUTE_CLOSED'
 const GOODS_TRANSPORT_STARTED = 'GOODS_TRANSPORT_STARTED'
@@ -149,6 +151,41 @@ export class LogisticsProjection {
       lossReason,
       lastSequence: sequence,
     })
+  }
+}
+
+export function compactLogisticsSnapshot(
+  snapshot: LogisticsSnapshot,
+  transportLimit = PUBLIC_LOGISTICS_TRANSPORT_LIMIT
+): LogisticsSnapshot {
+  const routes = [...snapshot.routes].sort((a, b) => a.routeId.localeCompare(b.routeId))
+  if (snapshot.transports.length <= transportLimit) {
+    return {
+      routes,
+      transports: [...snapshot.transports].sort((a, b) => a.transportId.localeCompare(b.transportId)),
+    }
+  }
+
+  const newestFirst = (a: GoodsTransportRow, b: GoodsTransportRow): number => {
+    const aTick = a.resolvedAtTick ?? a.startedAtTick
+    const bTick = b.resolvedAtTick ?? b.startedAtTick
+    return bTick - aTick || b.lastSequence - a.lastSequence || a.transportId.localeCompare(b.transportId)
+  }
+  const started = snapshot.transports.filter((row) => row.status === 'started').sort(newestFirst)
+  const resolvedLimit = Math.max(transportLimit - started.length, 0)
+  const transports = started.length >= transportLimit
+    ? started.slice(0, transportLimit)
+    : [
+        ...started,
+        ...snapshot.transports
+          .filter((row) => row.status !== 'started')
+          .sort(newestFirst)
+          .slice(0, resolvedLimit),
+      ]
+
+  return {
+    routes,
+    transports: transports.sort((a, b) => a.transportId.localeCompare(b.transportId)),
   }
 }
 
