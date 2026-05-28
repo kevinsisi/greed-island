@@ -268,11 +268,21 @@ export type ServerNpcStatsDeath = {
   narration: string
 }
 
+export type ServerNpcStatsMatured = {
+  tick: number
+  npcId: string
+  householdId: string
+  homeTileId: string
+  nameZh: string
+  nameEn: string
+}
+
 export type ServerNpcStats = {
   totalNpcs: number
   byOrigin: { manual: number; born: number }
   births: { totalEventCount: number; recent: readonly ServerNpcStatsBirth[] }
   households: { totalEventCount: number; recent: readonly ServerNpcStatsHousehold[] }
+  matured: { totalEventCount: number; recent: readonly ServerNpcStatsMatured[] }
   deaths: { totalEventCount: number; recent: readonly ServerNpcStatsDeath[] }
   generatedAtTick: number
 }

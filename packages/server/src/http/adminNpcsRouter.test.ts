@@ -92,6 +92,8 @@ describe('admin npcs router — buildNpcStats', () => {
       expect(stats.households.recent).toEqual([])
       expect(stats.deaths.totalEventCount).toBe(0)
       expect(stats.deaths.recent).toEqual([])
+      expect(stats.matured.totalEventCount).toBe(0)
+      expect(stats.matured.recent).toEqual([])
       expect(stats.generatedAtTick).toBe(100)
     } finally {
       db.close()

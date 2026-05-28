@@ -955,6 +955,29 @@ describe('NpcEngine', () => {
       expect(engine.getState('intent.clear')!.intentOverride).toBeNull()
     })
 
+    it('registerDynamicNpc admits a new NPC and seeds its runtime state', () => {
+      const engine = new NpcEngine([makeProfile({ id: 'config.npc' })])
+      expect(engine.getState('dyn.npc')).toBeNull()
+      engine.registerDynamicNpc(makeProfile({ id: 'dyn.npc', defaultLocation: 't_dock' }))
+      const state = engine.getState('dyn.npc')
+      expect(state).not.toBeNull()
+      expect(state!.tile).toBe('t_dock')
+      expect(state!.activity).toBe('idle')
+      expect(state!.mood).toBe(60)
+      expect(engine.listProfiles().map((p) => p.id).sort()).toEqual(['config.npc', 'dyn.npc'])
+    })
+
+    it('registerDynamicNpc is idempotent — second call does not reset state', () => {
+      const engine = new NpcEngine([])
+      engine.registerDynamicNpc(makeProfile({ id: 'idem' }))
+      engine.hydrate('idem', { tile: 't_forest', mood: 99, activity: 'work' })
+      engine.registerDynamicNpc(makeProfile({ id: 'idem' }))
+      const state = engine.getState('idem')!
+      // The mood was set by hydrate; re-registration must not overwrite it.
+      expect(state.mood).toBe(99)
+      expect(state.tile).toBe('t_forest')
+    })
+
     it('intentOverride.targetTile takes priority over personalityOverride.targetTile after ticking', () => {
       // Both intentOverride and personalityOverride point to different tiles.
       // After one tick, the NPC should be heading toward intentOverride.targetTile.

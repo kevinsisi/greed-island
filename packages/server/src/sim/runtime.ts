@@ -70,6 +70,7 @@ import {
   LEGENDARY_WORLD_EVENT_SEVERITY,
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
+  MATURATION_CADENCE_TICKS,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
   ROAD_CONSTRUCTION_CADENCE_TICKS,
   WALL_CONSTRUCTION_CADENCE_TICKS,
@@ -228,8 +229,11 @@ import { ProductionChainsProjection, type ProductionChainsSnapshot } from '../pr
 import { HouseholdEconomyProjection, type HouseholdEconomyRow } from '../projections/householdEconomy.js'
 import { deriveWorldAgendaDirective, roleInterpretationZh, type WorldAgendaDirective } from './worldAgenda.js'
 import { NpcMortalityProjection } from '../projections/npcMortality.js'
+import { BornNpcsProjection, BORN_NPC_BOOT_EVENT_TYPES } from '../projections/bornNpcs.js'
 import { NpcLineageProjection } from '../projections/npcLineage.js'
 import { planMortality } from './mortalityPlanner.js'
+import { planMaturation } from './maturationPlanner.js'
+import { generateChildName } from '../data/npcChildNamePool.js'
 import { planHouseholdMigration } from './householdMigrationPlanner.js'
 import { planRoadConstruction } from './roadConstructionPlanner.js'
 import { RoadNetworkProjection, ROAD_NETWORK_BOOT_EVENT_TYPES } from '../projections/roadNetwork.js'
@@ -573,6 +577,9 @@ export class SimulationRuntime {
   private readonly npcMortalityProjection = new NpcMortalityProjection()
   // NpcLineageProjection is initialized in the constructor once profiles are available.
   private npcLineageProjection!: NpcLineageProjection
+  // BornNpcsProjection is initialized in the constructor once profile ids are known
+  // (collision guard against runtime-born ids clashing with config profile ids).
+  private bornNpcsProjection!: BornNpcsProjection
   private readonly factionControlProjection = new FactionControlProjection()
   private readonly factionDominanceProjection = new FactionDominanceProjection()
   private previousFactionTileCounts = new Map<FactionId, number>()
@@ -605,7 +612,13 @@ export class SimulationRuntime {
     this.buildingRuntime = new BuildingRuntime()
     this.npcFactionLean = buildNpcFactionLean(profiles)
     this.npcLineageProjection = new NpcLineageProjection(profiles)
+    this.bornNpcsProjection = new BornNpcsProjection(new Set(profiles.map((p) => p.id)))
     this.hydrateFromEventLog()
+    // After hydration, admit any matured born NPCs into NpcEngine so they participate
+    // in subsequent tick processing from tick 0 of this run.
+    for (const profile of this.bornNpcsProjection.listMaturedProfiles()) {
+      this.npcEngine.registerDynamicNpc(profile)
+    }
   }
 
   /**
@@ -1304,7 +1317,9 @@ export class SimulationRuntime {
   }
 
   getNpcs(): SimNpcState[] {
-    return this.profiles.map((profile) => {
+    // Iterate the NpcEngine's profile registry so matured born NPCs (registered
+    // via NpcEngine.registerDynamicNpc) appear alongside config-loaded profiles.
+    return this.npcEngine.listProfiles().map((profile) => {
       const s =
         this.npcEngine.getState(profile.id) ??
         ({
@@ -1704,6 +1719,17 @@ export class SimulationRuntime {
       this.settlementsProjection.project(ev)
       this.npcMortalityProjection.project(ev)
       this.npcLineageProjection.project(ev)
+      this.bornNpcsProjection.project(ev)
+      // After matured-NPC projection updates, admit the newcomer into NpcEngine
+      // so subsequent tick processing treats them as a first-class actor.
+      if (ev.eventType === 'NPC_MATURED') {
+        const data = (ev.payload as { data?: { npcId?: unknown } })?.data
+        const npcId = typeof data?.npcId === 'string' ? data.npcId : null
+        if (npcId) {
+          const profile = this.bornNpcsProjection.getProfile(npcId)
+          if (profile) this.npcEngine.registerDynamicNpc(profile)
+        }
+      }
       this.factionControlProjection.project(ev)
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)
@@ -3651,6 +3677,40 @@ export class SimulationRuntime {
       }
     }
 
+    // ---- Born NPC Maturation cadence (v0.86.0) ----
+    if (nextTick % MATURATION_CADENCE_TICKS === 0) {
+      const maturationIntents = planMaturation({
+        currentTick: nextTick,
+        lifeExpansion: this.lifeExpansion,
+        bornNpcsProjection: this.bornNpcsProjection,
+        mortalityProjection: this.npcMortalityProjection,
+      })
+      for (const intent of maturationIntents) {
+        const tileLabel = TILE_BY_ID[intent.homeTileId]?.name ?? intent.homeTileId
+        commands.push(makeLivingWorldCommand(
+          'NPC_MATURED',
+          intent.npcId,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            npcId: intent.npcId,
+            maturedAtTick: nextTick,
+            bornAtTick: intent.bornAtTick,
+            householdId: intent.householdId,
+            parentNpcIds: intent.parentNpcIds,
+            homeTileId: intent.homeTileId,
+            nameZh: intent.nameZh,
+            nameEn: intent.nameEn,
+            motivation: makeMotivation(
+              '一個在家戶裡長大的孩子，已經能獨立行動、思考、被世界記憶。'
+            ),
+            narration: `${intent.nameZh} 在 ${tileLabel} 長成一個獨立的人。`,
+          }
+        ))
+      }
+    }
+
     // ---- NPC Household Migration cadence (v0.74.0) ----
     if (nextTick % HOUSEHOLD_MIGRATION_CADENCE_TICKS === 0) {
       const npcHomeTiles = new Map(
@@ -5122,6 +5182,15 @@ export class SimulationRuntime {
         this.settlementsProjection.project(ev)
         this.npcMortalityProjection.project(ev)
         this.npcLineageProjection.project(ev)
+        this.bornNpcsProjection.project(ev)
+        if (ev.eventType === 'NPC_MATURED') {
+          const data = (ev.payload as { data?: { npcId?: unknown } })?.data
+          const npcId = typeof data?.npcId === 'string' ? data.npcId : null
+          if (npcId) {
+            const profile = this.bornNpcsProjection.getProfile(npcId)
+            if (profile) this.npcEngine.registerDynamicNpc(profile)
+          }
+        }
         this.factionControlProjection.project(ev)
         this.factionDominanceProjection.project(ev)
         this.historyChronicleProjection.project(ev)
@@ -5314,6 +5383,7 @@ export class SimulationRuntime {
       if (household.childIds.length > 0) continue
       if (nextTick - household.formedAtTick < 90) continue
       const childId = `${household.householdId}.child.1`
+      const { nameZh, nameEn } = generateChildName(childId, household.householdId)
       commands.push(
         makeLivingWorldCommand(
           'NPC_CHILD_BORN',
@@ -5324,10 +5394,10 @@ export class SimulationRuntime {
           {
             householdId: household.householdId,
             childId,
-            nameZh: '潮生',
-            nameEn: 'Tideborn',
+            nameZh,
+            nameEn,
             motivation: makeMotivation('既有家庭經過足夠時間後新增被照顧者，讓人口壓力與家庭責任進入世界狀態。'),
-            narration: '一個孩子在新的家庭裡出生，潮鳴市多了一份必須被照顧的未來。'
+            narration: `${nameZh}在新的家庭裡出生，潮鳴市多了一份必須被照顧的未來。`
           }
         )
       )
@@ -5808,6 +5878,9 @@ export class SimulationRuntime {
       const mortalityEvents = this.store.readEventsByTypes(MORTALITY_BOOT_EVENT_TYPES)
       this.npcMortalityProjection.rebuildFromEvents(mortalityEvents)
       this.npcLineageProjection.rebuildFromEvents(mortalityEvents)
+      // BornNpcs projection — rebuild matured born NPC roster from NPC_CHILD_BORN/NPC_MATURED.
+      const bornNpcEvents = this.store.readEventsByTypes(BORN_NPC_BOOT_EVENT_TYPES)
+      this.bornNpcsProjection.rebuildFromEvents(bornNpcEvents)
       // Faction control projection — rebuild from faction seizure/loyalty events.
       const factionEvents = this.store.readEventsByTypes(FACTION_BOOT_EVENT_TYPES)
       this.factionControlProjection.rebuildFromEvents(factionEvents)

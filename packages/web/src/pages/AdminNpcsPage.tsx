@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, ApiError, type ServerNpcStats, type ServerNpcStatsDeath } from '../api/client'
+import { api, ApiError, type ServerNpcStats, type ServerNpcStatsDeath, type ServerNpcStatsMatured } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { useI18n, type TranslationKey } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
@@ -97,7 +97,7 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
   return (
     <>
       <section
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3"
+        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3"
         aria-label={t('admin.npcs.title')}
       >
         <StatCard label={t('admin.npcs.statTotal')} value={stats.totalNpcs} />
@@ -107,6 +107,10 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
         <StatCard
           label={t('admin.npcs.statHouseholdsEvents')}
           value={stats.households.totalEventCount}
+        />
+        <StatCard
+          label={t('admin.npcs.statMatured')}
+          value={stats.matured.totalEventCount}
         />
         <StatCard
           label={t('admin.npcs.statDeaths')}
@@ -195,6 +199,17 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
 
       <section className="gi-panel p-4 flex flex-col gap-3">
         <h2 className="font-display text-sm uppercase tracking-tightest text-ground-200">
+          {t('admin.npcs.maturedHeading')}
+        </h2>
+        {stats.matured.recent.length === 0 ? (
+          <p className="text-sm text-ground-400">{t('admin.npcs.maturedEmpty')}</p>
+        ) : (
+          <MaturedTable rows={stats.matured.recent} t={t} />
+        )}
+      </section>
+
+      <section className="gi-panel p-4 flex flex-col gap-3">
+        <h2 className="font-display text-sm uppercase tracking-tightest text-ground-200">
           {t('admin.npcs.deathsHeading')}
         </h2>
         {stats.deaths.recent.length === 0 ? (
@@ -204,6 +219,36 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
         )}
       </section>
     </>
+  )
+}
+
+function MaturedTable({ rows, t }: { rows: readonly ServerNpcStatsMatured[]; t: Translator }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colTick')}</th>
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colName')}</th>
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colHousehold')}</th>
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colTile')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.tick}-${row.npcId}`} className="border-t border-ground-800/40">
+              <td className="py-1.5 pr-3 text-ground-300 font-mono text-xs">{row.tick}</td>
+              <td className="py-1.5 pr-3 text-ground-100">
+                <div>{row.nameZh || row.npcId}</div>
+                <div className="text-[11px] text-ground-500 font-mono">{row.npcId}</div>
+              </td>
+              <td className="py-1.5 pr-3 text-ground-400 font-mono text-xs">{row.householdId}</td>
+              <td className="py-1.5 pr-3 text-ground-400 font-mono text-xs">{row.homeTileId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

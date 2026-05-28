@@ -5,6 +5,41 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-28 — Handoff Snapshot @ v0.86.0
+
+### Current Version
+`0.86.0` — TypeScript build clean. 1103 server tests pass (was 1078, +25 from this change). Web build clean. Both OpenSpec changes implemented for first one; second one (multi-dim relationships) remains as design-only.
+
+### What Was Shipped (v0.86.0)
+
+**Born NPCs become runtime entities — closes §43.1 first acceptance criterion verification path**
+- WORLD_CAPABILITIES.md §43.1 «當某個 NPC 死亡，後代會記得他」had no verification path because descendants didn't exist as runtime entities. Children were event-only records inside `LifeExpansionState.households[].childIds`. This change makes them real.
+- New event type `NPC_MATURED` with `npcId / maturedAtTick / bornAtTick / householdId / parentNpcIds / homeTileId / nameZh / nameEn` payload (in `kernel/livingWorldCommands.ts`).
+- New projection `BornNpcsProjection` (`projections/bornNpcs.ts`): records `NPC_CHILD_BORN` candidates, projects `NPC_MATURED` into derived `NpcProfile` (personality archetype + role + routine all deterministic via `hashSeed(npcId, ...)`); collision guard against config profile ids.
+- New planner `MaturationPlanner` (`sim/maturationPlanner.ts`): cadence-gated every `MATURATION_CADENCE_TICKS = 720` (in-game hour); emits `NPC_MATURED` for children past `NPC_MATURATION_TICKS = 17_280` (24 in-game hours); orphan guard skips children whose all parents are deceased.
+- `NpcEngine.registerDynamicNpc(profile)` admits matured NPCs at runtime (Map-backed profile registry; existing runtime state preserved on re-registration).
+- `runtime.getNpcs()` now iterates `npcEngine.listProfiles()` so matured NPCs appear alongside config profiles.
+- Boot hydration: `BORN_NPC_BOOT_EVENT_TYPES = ['NPC_CHILD_BORN', 'NPC_MATURED']`; matured roster restored from EventLog on restart, then registered into NpcEngine before first tick.
+- `NPC_CHILD_BORN` no longer hardcodes `nameZh: '潮生'` — uses `generateChildName(childId, householdId)` from new `data/npcChildNamePool.ts` (36 bilingual entries, deterministic hash-pool selection).
+- Admin `/api/admin/npc-stats` now includes `matured: { totalEventCount, recent }`; `AdminNpcsPage` shows new "近期成長" section + "已成長" stat card.
+- All 25 new tests + existing 1078 pass.
+
+**Two OpenSpec changes proposed (commit 107e20b):**
+- `born-npc-becomes-runtime-entity` — implemented in this release.
+- `npc-npc-multi-dim-relationship` — proposed but not yet implemented (8-dimensional relationship vector per §12.5.12).
+
+### Active Blockers
+None for §43.1 first criterion. Multi-dim relationship implementation is the next major task per the OpenSpec change.
+
+### Remaining Gaps
+- `npc-npc-multi-dim-relationship` OpenSpec change still needs implementation (proposal/design/specs/tasks committed; ~25 implementation steps).
+- The world still needs to actually run for `NPC_MATURATION_TICKS + N` ticks to observe matured NPCs in production; current world is at tick ~11k.
+
+### CI/CD State
+Main branch. Build clean. All tests pass. Push pending (this entry).
+
+---
+
 ## 2026-05-28 — Handoff Snapshot @ v0.85.0
 
 ### Current Version

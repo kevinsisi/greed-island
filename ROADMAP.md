@@ -5,6 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.86.0 ✅ shipped — 2026-05-28
+
+**主題：Born NPCs Become Runtime Entities（§43.1 acceptance unlock）**
+
+- ✅ `NPC_MATURED` event type + payload + validator（`kernel/livingWorldCommands.ts`）
+- ✅ `BornNpcsProjection`：deriveProfile 用 `hashSeed(npcId)` 派生 archetype / patience / greed / talkativeness / faction lean；collision guard against config profile ids
+- ✅ `MaturationPlanner`：cadence-gated（`MATURATION_CADENCE_TICKS = 720`）；threshold `NPC_MATURATION_TICKS = 17_280` (24 in-game hours)；orphan guard（雙親皆死亡的孩子不成熟）
+- ✅ `NpcEngine.registerDynamicNpc(profile)`：matured NPCs admitted to cognition runtime; Map-backed profile registry; idempotent re-registration
+- ✅ `runtime.getNpcs()` 現在 iterate `npcEngine.listProfiles()`，matured NPCs 與 config NPCs 同列
+- ✅ Boot hydration via `BORN_NPC_BOOT_EVENT_TYPES`：matured roster 從 EventLog 重建後 register 進 NpcEngine，再開始 tick 0
+- ✅ `data/npcChildNamePool.ts`：36 個雙語名字 + `generateChildName(childId, householdId)`；replaces hardcoded `nameZh: '潮生'` in `planHouseholdCommands`
+- ✅ `/admin/npc-stats` 增加 `matured: { totalEventCount, recent }`；AdminNpcsPage 新增「近期成長」section + 「已成長」stat card
+- ✅ WORLD_CAPABILITIES.md §43.1 第一條 verification path 解鎖（後代有 npc_memory 行可指向已死的祖先）
+- ✅ 1103 server tests pass（+25 from v0.85.0）；server + web build 乾淨
+- 📝 OpenSpec change `born-npc-becomes-runtime-entity` 已完成 implementation；`npc-npc-multi-dim-relationship` 已 propose 但尚未 implement
+
+---
+
 ## v0.58.0 ✅ shipped — 2026-05-25
 
 **主題：Territory Claim Change + Building Abandonment（Phase 30.7 completion）**

@@ -48,6 +48,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_LIFE_GOAL_SET',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
+  'NPC_MATURED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
   'CONSTRUCTION_PROJECT_PROGRESS',
@@ -324,6 +325,19 @@ export type NpcHouseholdFormedCmd = Readonly<{
 export type NpcChildBornCmd = Readonly<{
   householdId: string
   childId: string
+  nameZh: string
+  nameEn: string
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type NpcMaturedCmd = Readonly<{
+  npcId: string
+  maturedAtTick: number
+  bornAtTick: number
+  householdId: string
+  parentNpcIds: readonly string[]
+  homeTileId: string
   nameZh: string
   nameEn: string
   motivation?: EventMotivation
@@ -1651,6 +1665,7 @@ export type LivingWorldCommandPayload =
   | NpcLifeGoalSetCmd
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
+  | NpcMaturedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
   | ConstructionProjectProgressCmd
@@ -1920,6 +1935,22 @@ const VALIDATORS: Readonly<
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
     if (typeof p.childId !== 'string' || p.childId.length === 0) return 'childId required'
+    if (typeof p.nameZh !== 'string' || p.nameZh.length === 0) return 'nameZh required'
+    if (typeof p.nameEn !== 'string' || p.nameEn.length === 0) return 'nameEn required'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_MATURED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.maturedAtTick !== 'number' || !Number.isFinite(p.maturedAtTick)) return 'maturedAtTick required'
+    if (typeof p.bornAtTick !== 'number' || !Number.isFinite(p.bornAtTick)) return 'bornAtTick required'
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (!Array.isArray(p.parentNpcIds) || p.parentNpcIds.length === 0) return 'parentNpcIds required'
+    for (const id of p.parentNpcIds) {
+      if (typeof id !== 'string' || id.length === 0) return 'parentNpcIds must be non-empty strings'
+    }
+    if (typeof p.homeTileId !== 'string' || p.homeTileId.length === 0) return 'homeTileId required'
     if (typeof p.nameZh !== 'string' || p.nameZh.length === 0) return 'nameZh required'
     if (typeof p.nameEn !== 'string' || p.nameEn.length === 0) return 'nameEn required'
     if (typeof p.narration !== 'string') return 'narration required'

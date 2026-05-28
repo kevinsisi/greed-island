@@ -1998,6 +1998,8 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **Legendary ecology** (`ecosystem/legendarySpawnPlanner.ts`, `legendaryHuntPlanner.ts`, `factionEcologyPlanner.ts`): mythic species behavior, legendary hunt arc, faction ecological ideology (Phase E4).
 - ✅ **Defense coordination** (`ecosystem/defenseParty.ts`): NPC defense party formation when animal attacks.
 
+✅ **Born NPC runtime entity** (v0.86.0) — `NPC_MATURED` event promotes born children (recorded via `NPC_CHILD_BORN`) into full runtime NPC entities after `NPC_MATURATION_TICKS = 17_280` (~24 in-game hours). `BornNpcsProjection` derives `NpcProfile` deterministically from `hashSeed(npcId, ...)`; `NpcEngine.registerDynamicNpc` admits them into Cognitive Runtime; orphan guard skips children whose all parents are deceased. Closes §43.1 first criterion verification path — descendants now exist as runtime entities holding `npc_memory` rows that can reference deceased ancestors without AI invention.
+
 ✅ **BioNode** — `BioNodeProjection` + plant species catalog (oak, pine, reed, wild_herb, salt_grass, mushroom, cactus, sand_grass) + `plantRegrowth.ts` engine implemented (Phase E5). `getBioNodesOnTile` wired to dialog context (`plantContext`). `BIO_NODE_SEEDED` idempotently seeds tiles on first tick; `BIO_NODE_REGREW` runs every `TICKS_PER_HOUR` to restore depleted nodes.
 ✅ **Forest Regrowth Engine** — `planPlantRegrowth()` runs every hour-tick; `BIO_NODE_REGREW` events restore density toward capacity. Wired in `runtime.ts` Phase E5 block.
 ✅ `SPECIES_POPULATION_SHIFTED` — implemented v0.59.0; fires when global species count drops ≥25% vs previous snapshot; wired to dialog `recentPopulationShifts`.
@@ -2478,7 +2480,7 @@ The program is **not done** when phases 0–6 + E0–E4 ship. It is done when th
 
 | Criterion | Status | Verifiable by |
 |---|---|---|
-| 「當某個 NPC 死亡，後代會記得他。」 | ✅ v0.32.0 | `NPC_DECEASED` event produces inheritance + memory transfer to descendants; descendant dialog can reference the deceased ancestor without AI invention. |
+| 「當某個 NPC 死亡，後代會記得他。」 | ✅ v0.32.0 + v0.86.0 | `NPC_DECEASED` (v0.32.0) produces inheritance + memory transfer to descendants. v0.86.0 closes the verification path: `NPC_MATURED` promotes born children into runtime NPC entities with their own `npc_memory` rows; matured descendants can now factually reference the deceased ancestor in dialog (the dialog grounding pipeline injects `parentNpcIds` from `BornNpcsProjection`). |
 | 「當某 settlement 飢荒，周邊價格會上升。」 | ✅ chain complete | `GOODS_TRANSPORT_LOST` → supply drops in `goodsInventory` → `discoverMarketPrices` raises `MARKET_PRICE_DISCOVERED` price within K ticks. |
 | 「當 faction 戰敗，道路與物流會崩潰。」 | ✅ v0.33.0 | `FACTION_DOMINANCE_SHIFTED` → `TRADE_ROUTE_CLOSED` (all open routes) + `BUILDING_ABANDONED` (health ≤ 0 buildings) fire in the same tick block. |
 | 「當玩家離開數個月，世界仍然繼續，甚至已經變成另一個文明時代。」 | ✅ v0.64.0 | EventLog accumulates continuously; `/world/history-arcs` shows `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline` arc deltas from before- to after-absence. |

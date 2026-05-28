@@ -360,34 +360,63 @@ export class NpcEngine {
     return cells
   }
 
-  constructor(private readonly profiles: readonly NpcProfile[]) {
-    for (const profile of profiles) {
-      this.schedules.set(profile.id, deriveSchedule(profile))
-      const fac =
-        typeof profile.personality.factionLean === 'string'
-          ? profile.personality.factionLean
-          : 'neutral'
-      this.factions.set(profile.id, fac)
-      // 初始 state — 等 hydrate 補上正確值
-      const initSub = initialSubTile(profile.id, profile.defaultLocation)
-      const agent = initialAgentState(profile)
-      this.state.set(profile.id, {
-        tile: profile.defaultLocation,
-        mood: 60,
-        health: 80,
-        activity: 'idle',
-        faction: fac,
-        targetTile: profile.defaultLocation,
-        lastActedTick: 0,
-        subCol: initSub.col,
-        subRow: initSub.row,
-        subZ: 0,
-        personalityOverride: null,
-        intentOverride: null,
-        travelRoute: null,
-        agent
-      })
+  // Profiles are stored in a mutable Map so `registerDynamicNpc` can admit
+  // runtime-born NPCs after the constructor has run (see `BornNpcsProjection`).
+  // The `profiles` getter preserves the readonly-array shape for legacy callers.
+  private readonly profileMap = new Map<string, NpcProfile>()
+
+  /** Read-only array view over the current profile registry (config + dynamic). */
+  get profiles(): readonly NpcProfile[] {
+    return Array.from(this.profileMap.values())
+  }
+
+  listProfiles(): readonly NpcProfile[] {
+    return this.profiles
+  }
+
+  constructor(initialProfiles: readonly NpcProfile[]) {
+    for (const profile of initialProfiles) {
+      this.installProfile(profile)
     }
+  }
+
+  /**
+   * Admit a new NPC profile at runtime (e.g., a matured born NPC). Idempotent —
+   * if a profile with this id already exists, the call is a no-op (existing
+   * runtime state is preserved).
+   */
+  registerDynamicNpc(profile: NpcProfile): void {
+    if (this.profileMap.has(profile.id)) return
+    this.installProfile(profile)
+  }
+
+  private installProfile(profile: NpcProfile): void {
+    this.profileMap.set(profile.id, profile)
+    this.schedules.set(profile.id, deriveSchedule(profile))
+    const fac =
+      typeof profile.personality.factionLean === 'string'
+        ? profile.personality.factionLean
+        : 'neutral'
+    this.factions.set(profile.id, fac)
+    // 初始 state — 等 hydrate 補上正確值
+    const initSub = initialSubTile(profile.id, profile.defaultLocation)
+    const agent = initialAgentState(profile)
+    this.state.set(profile.id, {
+      tile: profile.defaultLocation,
+      mood: 60,
+      health: 80,
+      activity: 'idle',
+      faction: fac,
+      targetTile: profile.defaultLocation,
+      lastActedTick: 0,
+      subCol: initSub.col,
+      subRow: initSub.row,
+      subZ: 0,
+      personalityOverride: null,
+      intentOverride: null,
+      travelRoute: null,
+      agent
+    })
   }
 
   /** 由 SimulationRuntime 在 hydrate 階段呼叫，把 typed npc-state projection（或 legacy FACT_SET fallback）還原回 state map。 */
@@ -395,7 +424,7 @@ export class NpcEngine {
     if (!raw || typeof raw !== 'object') return
     const r = raw as Partial<NpcRuntimeState>
     const fac = this.factions.get(npcId) ?? 'neutral'
-    const profile = this.profiles.find((p) => p.id === npcId)
+    const profile = this.profileMap.get(npcId)
     const fallbackTile = profile?.defaultLocation ?? 't_central'
     const tile = typeof r.tile === 'string' ? r.tile : fallbackTile
     const fallbackSub = initialSubTile(npcId, tile)
@@ -645,7 +674,7 @@ export class NpcEngine {
         if (!best || roll < best.roll) best = { npcId, roll }
       }
       if (!best) continue
-      const profile = this.profiles.find((p) => p.id === best.npcId)
+      const profile = this.profileMap.get(best.npcId)
       const state = this.state.get(best.npcId)
       if (!profile || !state) continue
       const action = composeProductiveActionNarration(
@@ -706,8 +735,8 @@ export class NpcEngine {
       const pairKey = `${a}|${b}`
       this.lastInteractTickByPair.set(pairKey, currentTick)
 
-      const profileA = this.profiles.find((p) => p.id === a)
-      const profileB = this.profiles.find((p) => p.id === b)
+      const profileA = this.profileMap.get(a)
+      const profileB = this.profileMap.get(b)
       if (!profileA || !profileB) continue
       const factionA = this.factions.get(a) ?? 'neutral'
       const factionB = this.factions.get(b) ?? 'neutral'

@@ -247,6 +247,14 @@ export const NPC_BASE_LIFESPAN_TICKS = 120_960
 export const NPC_LIFESPAN_VARIANCE_TICKS = 60_480
 export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
 
+// Born NPC Maturation (v0.86.0)
+// A child becomes a full runtime NPC entity after `NPC_MATURATION_TICKS` ticks
+// since the NPC_CHILD_BORN event. At 17,280 ticks = 1 in-game day = ~1 real day
+// of continuous server uptime. Cadence is one in-game hour, aligning with
+// MORTALITY_CADENCE_TICKS.
+export const NPC_MATURATION_TICKS = TICKS_PER_DAY
+export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
+
 // NPC Household Migration (v0.74.0)
 export const HOUSEHOLD_MIGRATION_CADENCE_TICKS = TICKS_PER_DAY * 2
 

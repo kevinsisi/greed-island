@@ -46,11 +46,21 @@ export type NpcStatsDeath = Readonly<{
   narration: string
 }>
 
+export type NpcStatsMatured = Readonly<{
+  tick: number
+  npcId: string
+  householdId: string
+  homeTileId: string
+  nameZh: string
+  nameEn: string
+}>
+
 export type NpcStatsResponse = Readonly<{
   totalNpcs: number
   byOrigin: Readonly<{ manual: number; born: number }>
   births: Readonly<{ totalEventCount: number; recent: readonly NpcStatsBirth[] }>
   households: Readonly<{ totalEventCount: number; recent: readonly NpcStatsHousehold[] }>
+  matured: Readonly<{ totalEventCount: number; recent: readonly NpcStatsMatured[] }>
   deaths: Readonly<{ totalEventCount: number; recent: readonly NpcStatsDeath[] }>
   generatedAtTick: number
 }>
@@ -111,6 +121,21 @@ export function buildNpcStats(input: {
     .map(toHouseholdRow)
     .filter((row): row is NpcStatsHousehold => row !== null)
 
+  const maturedTotalEventCount = eventStore.countEventsByKind('NPC_MATURED')
+  const maturedRows =
+    generatedAtTick > 0
+      ? eventStore.readEventsByTickWindow({
+          eventTypes: ['NPC_MATURED'],
+          sinceTick: 0,
+          untilTick: generatedAtTick,
+          limit: RECENT_FEED_LIMIT,
+        }).events
+      : []
+  const recentMatured = [...maturedRows]
+    .reverse()
+    .map(toMaturedRow)
+    .filter((row): row is NpcStatsMatured => row !== null)
+
   const deathsTotalEventCount = eventStore.countEventsByKind('NPC_DECEASED')
   const deathRows =
     generatedAtTick > 0
@@ -131,9 +156,34 @@ export function buildNpcStats(input: {
     byOrigin: { manual, born },
     births: { totalEventCount: birthsTotalEventCount, recent: recentBirths },
     households: { totalEventCount: householdsTotalEventCount, recent: recentHouseholds },
+    matured: { totalEventCount: maturedTotalEventCount, recent: recentMatured },
     deaths: { totalEventCount: deathsTotalEventCount, recent: recentDeaths },
     generatedAtTick,
   }
+}
+
+function toMaturedRow(event: EventLike): NpcStatsMatured | null {
+  const tick = event.tick ?? 0
+  const outer = event.payload as { data?: unknown } | null | undefined
+  if (!outer || typeof outer !== 'object') return null
+  const payload = (outer.data ?? outer) as
+    | {
+        npcId?: unknown
+        householdId?: unknown
+        homeTileId?: unknown
+        nameZh?: unknown
+        nameEn?: unknown
+      }
+    | null
+    | undefined
+  if (!payload || typeof payload !== 'object') return null
+  const npcId = typeof payload.npcId === 'string' ? payload.npcId : null
+  if (!npcId) return null
+  const householdId = typeof payload.householdId === 'string' ? payload.householdId : ''
+  const homeTileId = typeof payload.homeTileId === 'string' ? payload.homeTileId : ''
+  const nameZh = typeof payload.nameZh === 'string' ? payload.nameZh : ''
+  const nameEn = typeof payload.nameEn === 'string' ? payload.nameEn : ''
+  return { tick, npcId, householdId, homeTileId, nameZh, nameEn }
 }
 
 type EventLike = Readonly<{
