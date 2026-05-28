@@ -9,6 +9,7 @@ import {
   type ServerCodexResponse
 } from '../api/client'
 import type { CardCatalogEntry } from '../state/types'
+import { CardImage } from '../components/game/CardImage'
 
 const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['S', 'A', 'B', 'C', 'D']
 
@@ -287,18 +288,31 @@ export function CodexPage() {
                 onClick={() => setSelectedId(card.id)}
                 title={card.name}
                 className={[
-                  'aspect-[3/4] flex flex-col items-center justify-between p-1.5 border rounded-sharp transition-colors text-[10px] font-display tracking-tightest',
+                  'aspect-[3/4] relative overflow-hidden border rounded-sharp transition-colors',
                   card.owned
                     ? RANK_TONE[card.rank]
-                    : 'border-ground-800 text-ground-700 bg-ground-900',
+                    : 'border-ground-800 bg-ground-900',
                   selectedId === card.id ? 'ring-2 ring-ember-500 ring-offset-1 ring-offset-ground-900' : ''
                 ].join(' ')}
               >
-                <span className="text-[10px]">#{String(card.id).padStart(3, '0')}</span>
-                <span className="font-extrabold text-base">{card.rank}</span>
-                <span className={card.owned ? 'text-current' : 'text-ground-700'}>
-                  {card.owned ? '●' : '○'}
-                </span>
+                {card.imageUrl ? (
+                  <img
+                    src={card.imageUrl}
+                    alt={card.name}
+                    className={`h-full w-full object-cover ${card.owned ? '' : 'opacity-25 grayscale'}`}
+                  />
+                ) : (
+                  <div className="h-full w-full flex flex-col items-center justify-between p-1 text-[10px] font-display tracking-tightest">
+                    <span className="text-[9px]">#{String(card.id).padStart(3, '0')}</span>
+                    <span className={`font-extrabold text-sm ${card.owned ? '' : 'text-ground-700'}`}>{card.rank}</span>
+                    <span className={card.owned ? 'text-current' : 'text-ground-700'}>{card.owned ? '●' : '○'}</span>
+                  </div>
+                )}
+                {!card.owned && card.imageUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="font-display font-extrabold text-sm text-ground-600">{card.rank}</span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -306,17 +320,30 @@ export function CodexPage() {
           <aside className="gi-panel p-5 flex flex-col gap-3 lg:sticky lg:top-20 self-start min-h-[200px]">
             {selected ? (
               <>
-                <div className="flex items-baseline justify-between">
-                  <span className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
-                    #{String(selected.id).padStart(3, '0')}
-                  </span>
-                  <span className={`gi-tag ${RANK_TONE[selected.rank]}`}>
-                    {selected.rank}
-                  </span>
+                <div className="flex items-start gap-3">
+                  <div className="w-16 shrink-0 aspect-[3/4] overflow-hidden rounded-sharp bg-ground-800">
+                    <CardImage
+                      rank={selected.rank}
+                      nameZh={selected.name}
+                      {...(selected.imageUrl ? { imageUrl: selected.imageUrl } : {})}
+                      className="w-full h-full object-cover"
+                      placeholderSize={32}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-display text-[11px] uppercase tracking-tightest text-ground-500">
+                        #{String(selected.id).padStart(3, '0')}
+                      </span>
+                      <span className={`gi-tag ${RANK_TONE[selected.rank]}`}>
+                        {selected.rank}
+                      </span>
+                    </div>
+                    <h2 className="font-display font-extrabold text-xl tracking-tightest text-ground-100 leading-tight">
+                      {selected.name}
+                    </h2>
+                  </div>
                 </div>
-                <h2 className="font-display font-extrabold text-2xl tracking-tightest text-ground-100">
-                  {selected.name}
-                </h2>
                 <p className="text-sm text-ground-400 leading-relaxed">{selected.description}</p>
                 <div className="gi-divider" />
                 <div className="font-display text-[11px] uppercase tracking-tightest text-ember-500">
