@@ -159,6 +159,14 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
           void refreshHistory()
         }
       } catch (err) {
+        // v0.87.3 — server returns 410 NPC_DECEASED when the NPC has died.
+        // Show a transient deceased message, then auto-close the dialog. The
+        // user can still see the message during the hold.
+        if (err instanceof ApiError && err.status === 410 && err.code === 'NPC_DECEASED') {
+          setError('這位 NPC 已經不在了。')
+          window.setTimeout(() => onCloseRef.current(), 1500)
+          return
+        }
         const msg =
           err instanceof ApiError && err.code
             ? `${err.code} · ${err.message}`

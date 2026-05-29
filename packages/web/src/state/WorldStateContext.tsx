@@ -263,9 +263,12 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
         ? serverEvents.map(toEventSummary)
         : fixtureEvents
 
+    // v0.87.3 — server already filters deceased from /api/npcs. Client filter
+    // here is defense in depth against an SSE/poll race window where a snapshot
+    // emitted before the death is rendered alongside the deceased projection.
     const npcs: NpcSummary[] =
       serverNpcs !== null
-        ? serverNpcs.map((n) => toNpcSummary(n, locale))
+        ? serverNpcs.map((n) => toNpcSummary(n, locale)).filter((n) => !n.deceased)
         : fixtureNpcs
 
     const cards: CardCatalogEntry[] =

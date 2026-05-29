@@ -72,6 +72,9 @@ export function AreaPage() {
   const [drawerTab, setDrawerTab] = useState<DrawerTab | null>(null)
   const [nearbyNpcIds, setNearbyNpcIds] = useState<Set<string>>(new Set())
   const [tooFarFlash, setTooFarFlash] = useState<string | null>(null)
+  // v0.87.3 — surfaces when a player tries to interact with a deceased NPC that
+  // slipped through the world-state filter via an SSE/poll race.
+  const [deceasedFlash, setDeceasedFlash] = useState<string | null>(null)
   const [actionFeedback, setActionFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
   const [areaState, setAreaState] = useState<ServerAreaState | null>(null)
   const [ambient, setAmbient] = useState<ServerAmbient | null>(null)
@@ -290,7 +293,17 @@ export function AreaPage() {
     (npcId: string) => {
       if (!token) return
       const npc = npcs.find((n) => n.id === npcId)
-      if (npc) setActiveNpc(npc)
+      if (!npc) return
+      // v0.87.3 — race-window protection. Server already 410s, but blocking the
+      // open before the request avoids opening an immediately-failing drawer.
+      if (npc.deceased) {
+        setDeceasedFlash(npcId)
+        window.setTimeout(() => {
+          setDeceasedFlash((prev) => (prev === npcId ? null : prev))
+        }, 2000)
+        return
+      }
+      setActiveNpc(npc)
     },
     [npcs, token]
   )
@@ -655,6 +668,12 @@ export function AreaPage() {
       {tooFarFlash && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sharp bg-rust-900/95 border border-rust-600 text-rust-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-none">
           {t('npc.tooFarHint')}
+        </div>
+      )}
+
+      {deceasedFlash && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-sharp bg-rust-900/95 border border-rust-600 text-rust-100 text-[12px] font-display tracking-tight shadow-lg pointer-events-none">
+          這位 NPC 已經不在了。
         </div>
       )}
 
