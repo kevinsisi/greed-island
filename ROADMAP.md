@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.87.3 ✅ shipped — 2026-05-29
+
+**主題：Deceased NPC Leaves Active World（live hotfix）**
+
+- ✅ Sim tick gate — `NpcEngine.tick` 接 `NpcTickContext.deceasedNpcIds`；Phase 1 / 1.5 / 2 / 3 + crowdByTile 全部跳過死亡 NPC；state 凍結在死亡前最後快照
+- ✅ Runtime API 拆分 — `runtime.getNpcs()` 預設過濾死人；新 `getNpcsIncludingDeceased()` 給 admin / lineage / chronicle 用；3 個內部 caller switched
+- ✅ HTTP `410 Gone NPC_DECEASED` — `/interact`、`/dialog-hold`、`/greet`、`/intervene`（雙方檢查）全擋；`/history` 保留唯讀以兌現 §43.1 「後代會記得他」
+- ✅ 前端三層型別 — `ServerNpc.deceased?`、`NpcSummary.deceased`、`toNpcSummary` 帶過；`WorldStateContext` 進場前再過濾一次；`AreaPage` / `NpcDialog` toast + 410 自動關閉
+- ✅ **Boot 修補** — 小 log 分支補上 `npcMortalityProjection` / `npcLineageProjection` / `bornNpcsProjection` 的 `rebuildFromEvents`（v0.25.3 ecosystem-boot-bug 同型 bug，導致每次重啟死人復活）
+- ✅ CLAUDE.md 增加 §「NPC 死亡狀態必須全鏈路傳遞」rule，鎖定 4 surface 契約 + 兩條 boot 分支同步加 projection 規則
+- ✅ 新增 17 tests：`runtimeDeceasedFilter` (+2)、`npcEngine` deceased gate (+3)、`npcDeceasedGate` HTTP (+7)、`worldStateNpcDeceased` (+3)、`runtimeDeceasedReplay` (+2)
+
+---
+
 ## v0.87.0 ✅ shipped — 2026-05-28
 
 **主題：Multi-dim NPC↔NPC Relationships + Birth Interval + Time Accelerator + Family Tree UI**

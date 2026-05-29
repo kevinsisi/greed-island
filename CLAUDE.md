@@ -46,6 +46,19 @@ AI 旁白（ambient + worldEvent + dialog）只能引用 user prompt 中明確�
 
 NPC 是人，不是固定地圖裝飾。商人、工匠、守衛、祭司、公務 NPC 都可以跨區；職責只能是 movement policy 的強權重，不能是永久 hard lock，除非未來有明確 story immobility rule。NPC 同一時間只能有一個權威 presence tuple：`tileId`、`buildingId | null`、`subCol/subRow/subZ`、`activity`、`travelRoute | null`、未來 `intent`。Area / Building / Hub 必須從同一份 server-authoritative presence 派生，禁止用不同 projection 讓同一 NPC 在室內與室外分身。`activity = move` 的 NPC 只能由 Hub 依 `travelRoute` 表示在路上，不可同時被 Area 當成本地戶外 NPC 渲染。
 
+## NPC 死亡狀態必須全鏈路傳遞（v0.87.3+）
+
+死亡是一等狀態變更，不是顯示層 flag。任何新的 NPC consumer 必須**顯式選擇**呼叫 `runtime.getNpcs()`（活著的世界）或 `runtime.getNpcsIncludingDeceased()`（含死人，僅 admin / lineage / chronicle / 歷史敘事用）。不可以假設「getNpcs 預設含全部」— 預設就是只回傳活著的。
+
+死亡狀態必須在以下四個 surface 全部同步生效：
+
+1. **Sim tick gate**：`NpcEngine.tick()` 透過 `NpcTickContext.deceasedNpcIds` 跳過死亡 NPC 的所有決策 phase；死人 state 凍結在死亡前最後快照。
+2. **API 預設**：公開 `/api/npcs` 必過濾死人；admin 端 API 顯式用 `getNpcsIncludingDeceased`。
+3. **互動 endpoint**：`/api/npc/:id/{interact,dialog-hold,greet}` + `/api/npc/intervene`（雙方檢查）對死人一律 `HTTP 410 Gone { error: 'NPC_DECEASED' }`。`/history` 唯讀路徑為**例外**，保留可查死人歷史對話以兌現 §43.1「後代會記得他」。
+4. **前端**：`ServerNpc.deceased` / `NpcSummary.deceased` 必帶；`AreaScene` / `AreaPage` / `NpcDialog` 對 `deceased === true` 不開 dialog 並顯示「這位 NPC 已經不在了。」。
+
+新增 projection 時，務必同時把 `rebuildFromEvents` 加進 `runtime.ts` 的**小 log 與大 log 兩條 boot 分支**（v0.25.3 ecosystem-boot-bug 與 v0.87.3 mortality-boot-bug 都是「只接上其中一條」造成的）。
+
 ## Global Working Rules
 
 - Read the current code, files, and runtime context before deciding on a change.

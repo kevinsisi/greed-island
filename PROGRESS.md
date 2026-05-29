@@ -5,6 +5,49 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.3
+
+### Current Version
+`0.87.3` — Hotfix: deceased NPCs no longer behave like living NPCs. Server + web build clean; 9 task groups complete; new server tests + web tests included; OpenSpec validation clean.
+
+### What Was Broken (pre-0.87.3)
+Death existed in the EventLog but stopped there. Seven independent surfaces never checked `npcMortalityProjection.isDeceased`, so:
+- `NpcEngine.tick()` kept moving / working / interacting dead NPCs every tick
+- `runtime.getNpcs()` returned them indistinguishable from the living
+- `ServerNpc` / `NpcSummary` / `toNpcSummary` all dropped the `deceased` flag
+- `AreaScene` painted dead sprites identically
+- `/api/npc/:id/{interact,dialog-hold,greet}` and `/api/npc/intervene` happily routed conversations with the deceased
+- Server **small-log boot branch** never re-ran `npcMortalityProjection.rebuildFromEvents` — every restart on a small world resurrected every deceased NPC (the v0.25.3 ecosystem-boot-bug pattern, repeated)
+
+### What Was Shipped (v0.87.3)
+- **Runtime** (`getNpcs` / `getNpcsIncludingDeceased`): `runtime.getNpcs()` now filters deceased; explicit full-set method for admin / lineage / chronicle callers; 3 internal call sites switched (admin lineage, admin npc-stats, chronicle actorNames).
+- **Sim tick gate**: `NpcTickContext.deceasedNpcIds?: ReadonlySet<string>`; `NpcEngine.tick` skips deceased in Phases 1 / 1.5 / 2 / 3 and crowdByTile; runtime injects `npcMortalityProjection.deceasedIds` every tick.
+- **HTTP 410 gate**: new `requireLivingNpc(runtime, npcId, res)` helper in `http/npc.ts`; applied to `POST /interact`, `POST /dialog-hold`, `GET /greet`, both partners of `POST /intervene`. `GET /history` deliberately exempt to preserve §43.1 「後代會記得他」. Error body: `{ error: 'NPC_DECEASED', message: '這位 NPC 已經不在世上。' }`.
+- **Frontend types**: `ServerNpc.deceased?: boolean`; `NpcSummary.deceased: boolean` (required); `toNpcSummary` copies it; `WorldStateContext` filters `n.deceased` after mapping (defense in depth against SSE / poll race); `AreaPage` click on a deceased sprite shows `「這位 NPC 已經不在了。」` toast instead of opening dialog; `NpcDialog` catches `ApiError status:410 code:NPC_DECEASED` and auto-closes 1.5 s after showing the same message.
+- **Boot rebuild fix**: small-log boot branch now also rebuilds `npcMortalityProjection`, `npcLineageProjection`, `bornNpcsProjection` — closes the resurrection-on-restart bug.
+- **CLAUDE.md rule §「NPC 死亡狀態必須全鏈路傳遞 (v0.87.3+)」**: locks the four-surface contract + the both-boot-branches rule for future projections.
+
+### Files Touched
+- `packages/server/src/sim/runtime.ts` — split `getNpcs`, wire `deceasedNpcIds`, fix small-log boot
+- `packages/server/src/sim/npcEngine.ts` — `deceasedNpcIds` gate in 5 loops
+- `packages/server/src/http/npc.ts` — `requireLivingNpc` + 4 endpoint refactors
+- `packages/server/src/http/adminLineageRouter.ts`, `adminNpcsRouter.ts`, `livingWorldRouter.ts` — switch to `getNpcsIncludingDeceased`
+- `packages/web/src/api/client.ts`, `packages/web/src/state/types.ts`, `WorldStateContext.tsx`, `fixtures.ts`, `pages/AreaPage.tsx`, `components/game/NpcDialog.tsx`
+- Tests: `runtimeDeceasedFilter.test.ts` (+2), `npcEngine.test.ts` (+3), `npcDeceasedGate.test.ts` (+7), `worldStateNpcDeceased.test.ts` (+3), `runtimeDeceasedReplay.test.ts` (+2), legacy NpcSummary helpers + `npc.test.ts` mocks patched
+- Docs: `CLAUDE.md`, `PROGRESS.md`, `ROADMAP.md`, this file
+- Version: `package.json` `0.87.2 → 0.87.3`
+
+### Verification Evidence
+- _Pending Group 9_: full server vitest + web vitest + `npm run build` + `openspec validate --all --strict`; then push; CI/CD; live smoke (admin sim accelerate → kill an NPC → confirm `/api/npcs` filter, `/interact` 410, `/admin/lineage` still shows the dead member).
+
+### Active Blockers
+- _None for the code path_. Live verification needs CI/CD to deploy, then a tick of admin smoke testing to confirm the four contract checkpoints.
+
+### CI/CD State
+Pre-push. Once Group 9 passes the verification matrix, push to main and capture deploy ID + healthz output here.
+
+---
+
 ## 2026-05-28 — Handoff Snapshot @ v0.87.2
 
 ### Current Version
