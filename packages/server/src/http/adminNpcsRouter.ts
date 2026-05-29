@@ -82,7 +82,8 @@ export function buildNpcStats(input: {
 }): NpcStatsResponse {
   const { runtime, eventStore } = input
 
-  const npcs = runtime.getNpcs()
+  // Admin npc-stats counts the full roster (living + deceased) for byOrigin reporting.
+  const npcs = runtime.getNpcsIncludingDeceased()
   const totalNpcs = npcs.length
   const manualNpcIds = new Set<string>(runtime.getManualNpcIds())
   const manual = npcs.reduce((acc, npc) => (manualNpcIds.has(npc.id) ? acc + 1 : acc), 0)

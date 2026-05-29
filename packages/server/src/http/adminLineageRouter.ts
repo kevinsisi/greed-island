@@ -53,7 +53,8 @@ export function createAdminLineageRouter(input: AdminLineageRouterInput): Router
     const lifeExpansion = runtime.getLifeExpansion()
     const bornNpcs = runtime.getBornNpcsProjection()
     const mortality = runtime.getNpcMortalityProjection()
-    const allNpcs = runtime.getNpcs()
+    // Admin lineage MUST display deceased members (§43.1 「後代會記得他」).
+    const allNpcs = runtime.getNpcsIncludingDeceased()
     const npcNameById = new Map<string, string>()
     for (const n of allNpcs) npcNameById.set(n.id, n.name.zh)
 

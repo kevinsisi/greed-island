@@ -1318,7 +1318,34 @@ export class SimulationRuntime {
     return Object.freeze(this.profiles.map((profile) => profile.id))
   }
 
+  /**
+   * Living-world NPC snapshot — filters out deceased NPCs.
+   *
+   * Use this for any public-facing or simulation-active path:
+   *   - `/api/npcs`, dialog endpoints, intervene, greet, chronicle actor lookups
+   *     that need "people alive right now"
+   *   - Per-tick internal planners that decide movement / belief / intent /
+   *     memory locality — dead NPCs are frozen and MUST NOT influence those
+   *   - Any cognition-runtime fan-out
+   *
+   * For chronicle / lineage / admin paths that must still SEE the dead (so
+   * §43.1 「後代會記得他」 holds), call `getNpcsIncludingDeceased()` instead.
+   */
   getNpcs(): SimNpcState[] {
+    return this.getNpcsIncludingDeceased().filter((npc) => !npc.deceased)
+  }
+
+  /**
+   * Full NPC snapshot INCLUDING deceased entries (frozen at the last state
+   * snapshot before death). Reserved for:
+   *   - `/api/admin/lineage`, `/api/admin/npc-stats`
+   *   - `/world/chronicle` actor-name lookup (dead npcs still get narrated)
+   *   - Any future "memorial" / "historical" view
+   *
+   * MUST NOT be used by the live simulation tick, public `/api/npcs`, or
+   * player interaction endpoints — those see only the living.
+   */
+  getNpcsIncludingDeceased(): SimNpcState[] {
     // Iterate the NpcEngine's profile registry so matured born NPCs (registered
     // via NpcEngine.registerDynamicNpc) appear alongside config-loaded profiles.
     return this.npcEngine.listProfiles().map((profile) => {
