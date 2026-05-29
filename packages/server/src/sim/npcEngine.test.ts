@@ -1011,4 +1011,84 @@ describe('NpcEngine', () => {
       expect(effectiveTarget).toBe('t_dock')
     })
   })
+
+  describe('deceasedNpcIds tick gate (v0.87.3)', () => {
+    it('freezes a deceased NPC across many ticks', () => {
+      const alive = makeProfile({
+        id: 'alive_1',
+        defaultLocation: 't_dock',
+        routine: [
+          { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'work' },
+        ],
+      })
+      const dead = makeProfile({
+        id: 'dead_1',
+        defaultLocation: 't_dock',
+        routine: [
+          { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'work' },
+        ],
+      })
+      const engine = new NpcEngine([alive, dead])
+      const deceasedNpcIds = new Set(['dead_1'])
+      const initialDeadState = engine.getState('dead_1')!
+      const initialDeadSnapshot = { ...initialDeadState }
+
+      for (let t = 1; t <= 100; t += 1) {
+        engine.tick(t, { ...tickContext(), deceasedNpcIds })
+      }
+
+      const finalDeadState = engine.getState('dead_1')!
+      expect(finalDeadState.tile).toBe(initialDeadSnapshot.tile)
+      expect(finalDeadState.activity).toBe(initialDeadSnapshot.activity)
+      expect(finalDeadState.targetTile).toBe(initialDeadSnapshot.targetTile)
+      expect(finalDeadState.travelRoute).toEqual(initialDeadSnapshot.travelRoute)
+
+      // Alive NPC must have advanced (moved or started a route)
+      const finalAliveState = engine.getState('alive_1')!
+      const aliveMoved =
+        finalAliveState.tile !== 't_dock' ||
+        finalAliveState.activity === 'move' ||
+        finalAliveState.travelRoute !== undefined
+      expect(aliveMoved).toBe(true)
+    })
+
+    it('does not emit any decision events for deceased NPCs', () => {
+      const alive = makeProfile({ id: 'alive_2' })
+      const dead = makeProfile({ id: 'dead_2' })
+      const engine = new NpcEngine([alive, dead])
+      const deceasedNpcIds = new Set(['dead_2'])
+
+      const events: NpcDecisionEvent[] = []
+      for (let t = 1; t <= 50; t += 1) {
+        const result = engine.tick(t, { ...tickContext(), deceasedNpcIds })
+        events.push(...result.events)
+      }
+
+      const deadReferencedEvent = events.find((e) => {
+        if (e.kind === 'move' || e.kind === 'activity') return e.npcId === 'dead_2'
+        if (e.kind === 'productive') return e.npcId === 'dead_2'
+        if (e.kind === 'interact') return e.participants.includes('dead_2')
+        return false
+      })
+      expect(deadReferencedEvent).toBeUndefined()
+    })
+
+    it('preserves legacy behavior when deceasedNpcIds is omitted', () => {
+      const profile = makeProfile({
+        id: 'walker_legacy',
+        defaultLocation: 't_dock',
+        routine: [
+          { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'work' },
+        ],
+      })
+      const engine = new NpcEngine([profile])
+      engine.tick(1, tickContext()) // no deceasedNpcIds
+      const state = engine.getState('walker_legacy')!
+      const advanced =
+        state.tile !== 't_dock' ||
+        state.activity === 'move' ||
+        state.travelRoute !== undefined
+      expect(advanced).toBe(true)
+    })
+  })
 })

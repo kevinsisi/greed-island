@@ -2001,6 +2001,8 @@ export class SimulationRuntime {
       mountedNpcIds,
       buildingStates,
       roadSet: this.roadNetworkProjection.getRoadSet(),
+      // v0.87.3：死亡 NPC 不再被 NpcEngine 任何 phase 推進；state 凍結在死亡前最後快照。
+      deceasedNpcIds: this.npcMortalityProjection.deceasedIds,
     })
     // Phase E4: legendary hunt detection (per-tick, O(active world events))
     const activeWorldEvents = this.worldEventProjection.list()

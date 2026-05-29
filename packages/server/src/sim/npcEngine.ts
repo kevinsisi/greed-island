@@ -325,6 +325,11 @@ export type NpcTickContext = Readonly<{
   buildingStates?: readonly { buildingId: string; tileId: string; col: number; row: number; state: string }[]
   /** v0.75.0：已建成道路集合（"fromTileId:toTileId" bidirectional）；有道路的跨區路線加速。 */
   roadSet?: ReadonlySet<string>
+  /**
+   * v0.87.3：已逝 NPC 的 id 集合。tick 主迴圈會 `continue` 跳過這些 profile，
+   * 死亡 NPC 的 NpcRuntimeState 凍結在死亡前的最後快照，不再被決策更新。
+   */
+  deceasedNpcIds?: ReadonlySet<string>
 }>
 
 // schedule slot：profile 沒給 schedule 就從 routine 推導
@@ -537,9 +542,14 @@ export class NpcEngine {
     const initial = new Map<string, NpcRuntimeState>()
     for (const [id, s] of this.state) initial.set(id, s)
 
+    // v0.87.3：deceased NPC 不影響 crowd / Phase 1 / Phase 1.5 / Phase 2 / Phase 3 任何路徑。
+    // 死亡狀態凍結在最後快照，不再被決策、不在 crowd 計數、不被選為互動對象。
+    const deceasedSet = context?.deceasedNpcIds ?? null
+
     // 算每 tile 上的 NPC 數量（移動中不算「在場」）給 entertainer 找人用
     const crowdByTile = new Map<string, number>()
-    for (const [, s] of this.state) {
+    for (const [npcId, s] of this.state) {
+      if (deceasedSet?.has(npcId)) continue
       if (s.activity === 'move') continue
       crowdByTile.set(s.tile, (crowdByTile.get(s.tile) ?? 0) + 1)
     }
@@ -555,6 +565,7 @@ export class NpcEngine {
 
     // ---- Phase 1: 每個 NPC 自己的決策 ----
     for (const profile of this.profiles) {
+      if (deceasedSet?.has(profile.id)) continue
       const before = this.state.get(profile.id)
       if (!before) continue
       const next = decideNextState(
@@ -619,6 +630,7 @@ export class NpcEngine {
     const groups = new Map<string, string[]>()
     const indoorSet15 = context?.npcsInsideBuildings ?? null
     for (const [npcId, s] of this.state) {
+      if (deceasedSet?.has(npcId)) continue
       if (s.activity === 'move') continue
       if (indoorSet15 && indoorSet15.has(npcId)) continue
       const k = `${s.tile}::${s.activity}`
@@ -655,6 +667,7 @@ export class NpcEngine {
     const indoorSet = context?.npcsInsideBuildings ?? null
     const activeNpcSet = context?.activeNpcSet ?? null
     for (const [npcId, s] of this.state) {
+      if (deceasedSet?.has(npcId)) continue
       if (!isBudgetActiveNpc(npcId, s, activeNpcSet)) continue
       if (!canEmitProductiveAction(s)) continue
       if (indoorSet && indoorSet.has(npcId)) continue
@@ -698,6 +711,7 @@ export class NpcEngine {
     //   - 每個 tile 每 tick 最多 1 個互動事件，挑 pairRoll 最低的 pair
     const byTile = new Map<string, string[]>()
     for (const [npcId, s] of this.state) {
+      if (deceasedSet?.has(npcId)) continue
       if (!isBudgetActiveNpc(npcId, s, activeNpcSet)) continue
       if (s.activity === 'move') continue // 路上不算「在場」
       if (indoorSet && indoorSet.has(npcId)) continue // 在建築內 → 主地圖看不到
