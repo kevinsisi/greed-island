@@ -20,6 +20,9 @@ function fakeRuntime(input: {
 }): SimulationRuntime {
   return {
     getNpcs: () => input.npcIds.map((id) => ({ id } as unknown)) as never,
+    // v0.87.3: admin npc-stats switched to getNpcsIncludingDeceased so the
+    // origin counts include deceased entries. Tests model an all-living roster.
+    getNpcsIncludingDeceased: () => input.npcIds.map((id) => ({ id } as unknown)) as never,
     getManualNpcIds: () => input.manualIds,
     getSnapshot: () => ({ tick: input.tick } as never),
   } as unknown as SimulationRuntime

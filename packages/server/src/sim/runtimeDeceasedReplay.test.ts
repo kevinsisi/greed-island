@@ -10,8 +10,7 @@ import { loadCardCatalog } from '../cards/loader.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
-import { SimulationRuntime } from './runtime.js'
-import type { SimNpcState } from '../npcs/types.js'
+import { SimulationRuntime, type SimNpcState } from './runtime.js'
 
 function snapshotByNpcId(npcs: readonly SimNpcState[]): Record<string, SimNpcState> {
   const result: Record<string, SimNpcState> = {}
