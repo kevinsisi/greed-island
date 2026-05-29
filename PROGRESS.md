@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.4
+
+### Current Version
+`0.87.4` — Hotfix: orphaned born children can mature, restoring playability after live's initial NPC generation died at tick 183600.
+
+### What Was Broken (live v0.87.3)
+- Live `/api/npcs` returned 0 because EventLog contains 50 distinct `NPC_DECEASED` events, all at tick `183600`; v0.87.3 correctly filters deceased NPCs from the public roster.
+- Live EventLog also contains 76 `NPC_CHILD_BORN` events and 0 `NPC_MATURED` events. The old `MaturationPlanner` orphan guard skipped children forever when both parents were deceased.
+- Because pre-v0.87.3 dead NPCs kept participating in simulation, some `NPC_CHILD_BORN` events were emitted after the parent death tick. They are still canonical EventLog facts and are the only available next generation in this live world.
+
+### What Was Fixed (v0.87.4)
+- `MaturationPlanner` now treats committed `NPC_CHILD_BORN` as canonical: eligible children mature even if both parents are deceased.
+- `parentNpcIds` remain intact on `NPC_MATURED` for lineage/inheritance consumers.
+- Canonical `born-npc-maturation` OpenSpec updated from "skip orphaned children" to "mature orphaned children".
+- Active `matured-child-inheritance` design note updated so future inheritance work reads last-known parent civic records rather than relying on a living-parent guard.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/maturationPlanner.test.ts src/sim/runtimeDeceasedFilter.test.ts src/sim/runtimeDeceasedReplay.test.ts` — pass (10 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (47 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified; pending commit, push, CI/CD, and live smoke. Expected live recovery: after the next maturation cadence, existing born children should emit `NPC_MATURED` and repopulate `/api/npcs`.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.3
 
 ### Current Version

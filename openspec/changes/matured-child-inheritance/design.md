@@ -8,7 +8,7 @@ Current state at v0.87.2:
 - `NpcEngine.registerDynamicNpc(profile)` admits the profile into cognition runtime.
 - `lifeExpansion.npcCivicRecords[npcId]` is created lazily by `cityLife.ts` on first productive action via `createNpcCivicRecord(npcId)` returning `{ gold: 0, skillXp: { ...all zeros }, lastProductiveTick: null }`. Matured NPCs hit this cold path.
 - `HOUSEHOLD_INHERITANCE_ASSIGNED` substrate exists in `kernel/livingWorldCommands.ts`, `projections/householdEconomy.ts`, and `openspec/specs/household-shared-economy/spec.md`. Its payload requires `deceasedNpcId`, so it cannot model maturation with both parents alive without semantic abuse.
-- Parents may be alive, both deceased, or mixed at maturation. The orphan guard in `MaturationPlanner` already rejects the "both deceased" case before this code runs, so the planner sees only `≥1 living parent` or `exactly 1 living + 1 deceased`.
+- Parents may be alive, both deceased, or mixed at maturation. `MaturationPlanner` now still matures children whose parents are both deceased because `NPC_CHILD_BORN` is already canonical EventLog state; inheritance planning should read last-known parent civic records when available and return `null` when no parent record exists.
 
 ## Goals / Non-Goals
 

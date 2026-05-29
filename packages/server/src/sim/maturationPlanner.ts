@@ -4,7 +4,7 @@
 //   - `LifeExpansionState.children` (childId → bornAtTick + householdId)
 //   - `LifeExpansionState.households` (householdId → partnerNpcIds + homeTileId)
 //   - `BornNpcsProjection.isMatured` (skip already-promoted children)
-//   - `NpcMortalityProjection.isDeceased` (skip orphans where both parents are dead)
+//   - `NpcMortalityProjection` (kept in the input shape for inheritance/mortality integrations)
 //
 // Cadence-gated: only runs when `currentTick % MATURATION_CADENCE_TICKS === 0`.
 //
@@ -33,7 +33,7 @@ export function planMaturation(input: {
   bornNpcsProjection: BornNpcsProjection
   mortalityProjection: NpcMortalityProjection
 }): readonly MaturationIntent[] {
-  const { currentTick, lifeExpansion, bornNpcsProjection, mortalityProjection } = input
+  const { currentTick, lifeExpansion, bornNpcsProjection } = input
   if (currentTick % MATURATION_CADENCE_TICKS !== 0) return []
 
   const intents: MaturationIntent[] = []
@@ -42,12 +42,11 @@ export function planMaturation(input: {
     if (bornNpcsProjection.isMatured(child.childId)) continue
     // Skip if not yet old enough.
     if (currentTick - child.bornAtTick < NPC_MATURATION_TICKS) continue
-    // Skip if both parents are deceased (orphan guard).
+    // Children are already canonical EventLog entities once NPC_CHILD_BORN is
+    // committed. They must still mature if their parents die before cadence.
     const household = lifeExpansion.households[child.householdId]
     if (!household) continue
     const parentNpcIds = household.partnerNpcIds
-    const anyParentAlive = parentNpcIds.some((id) => !mortalityProjection.isDeceased(id))
-    if (!anyParentAlive) continue
 
     intents.push({
       npcId: child.childId,

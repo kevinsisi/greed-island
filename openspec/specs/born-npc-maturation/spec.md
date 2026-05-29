@@ -50,14 +50,15 @@ The `NPC_MATURED` event payload MUST contain `npcId: string`, `maturedAtTick: nu
 - **WHEN** `BornNpcsProjection.rebuildFromEvents(events)` runs
 - **THEN** the projection's matured roster MUST contain `'household.a.b.child.1'`
 
-### Requirement: Maturation planner SHALL skip orphaned children
-If all `parentNpcIds` of a child are deceased at the maturation check tick (verified against `NpcMortalityProjection`), the planner MUST NOT emit `NPC_MATURED` for that child. The child remains abstract in `LifeExpansionState.childIds`.
+### Requirement: Maturation planner SHALL mature orphaned children
+Once an `NPC_CHILD_BORN` event is committed, that child is a canonical EventLog entity. If all `parentNpcIds` are deceased at the maturation check tick, the planner MUST still emit `NPC_MATURED` when the deterministic maturation threshold is satisfied. The deceased parents remain in `parentNpcIds` for lineage and inheritance consumers.
 
 #### Scenario: Both parents deceased before maturation
 - **GIVEN** `NPC_CHILD_BORN` at tick 100 with `parentNpcIds = ['alice', 'bob']`
 - **AND** `NPC_DECEASED` for both `alice` and `bob` committed before `currentTick`
 - **WHEN** `MaturationPlanner.plan()` runs at `currentTick = 100 + NPC_MATURATION_TICKS`
-- **THEN** no `NPC_MATURED` event MUST be emitted for that child
+- **THEN** `NPC_MATURED` MUST be emitted for that child
+- **AND** the payload's `parentNpcIds` MUST remain `['alice', 'bob']`
 
 #### Scenario: At least one parent alive — child matures normally
 - **GIVEN** `NPC_CHILD_BORN` at tick 100, `parentNpcIds = ['alice', 'bob']`

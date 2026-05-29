@@ -123,7 +123,7 @@ describe('planMaturation', () => {
     expect(intents).toHaveLength(0)
   })
 
-  it('skips orphans (both parents deceased)', () => {
+  it('matures orphaned children when both parents are deceased', () => {
     const life = makeLifeExpansion(
       { id: 'h1', partners: ['alice', 'bob'], homeTile: 't_central', formedAt: 50 },
       { id: 'c1', bornAt: 0 }
@@ -144,7 +144,9 @@ describe('planMaturation', () => {
       bornNpcsProjection: born,
       mortalityProjection: mort,
     })
-    expect(intents).toHaveLength(0)
+    expect(intents).toHaveLength(1)
+    expect(intents[0]!.npcId).toBe('c1')
+    expect(intents[0]!.parentNpcIds).toEqual(['alice', 'bob'])
   })
 
   it('matures with at least one parent alive', () => {
