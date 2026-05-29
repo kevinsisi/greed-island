@@ -183,6 +183,7 @@ import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
 import type { SettingsStore } from '../http/settings.js'
 import {
   LIFE_EXPANSION_FACT_KEY,
+  LIFE_EXPANSION_BOOT_EVENT_TYPES,
   CIV_EVO_MAX_AUTONOMOUS_BUILDINGS_PER_TILE,
   SALT_MARSH_BUILDING_ID,
   SALT_MARSH_PROJECT_ID,
@@ -195,6 +196,7 @@ import {
   householdIdForNpc,
   NPC_PRODUCTIVE_GOLD_BY_DOMAIN,
   productiveDeltaWithNpcSkill,
+  rebuildLifeExpansionFromEvents,
   withMeatHarvestedRecorded,
   withChildBorn,
   withConstructionInitiated,
@@ -5909,8 +5911,10 @@ export class SimulationRuntime {
       this.rareWindowOpen = !!r.open
       this.rareWindowClosesAtTick = r.closesAt ?? 0
     }
+    let rebuiltLifeExpansion: LifeExpansionState | null = null
     if (state.eventCount <= BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
       const allEvents = this.store.readEvents()
+      rebuiltLifeExpansion = rebuildLifeExpansionFromEvents(allEvents)
       this.hydrateCombatRuntimeFromEvents(allEvents)
       this.npcStateProjection.rebuildFromEvents(allEvents)
       this.animalPopulationProjection.rebuildFromEvents(allEvents)
@@ -6024,6 +6028,8 @@ export class SimulationRuntime {
       // Intent projection — rebuild NPC learning weights from intent resolution history.
       const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
       this.intentProjection.rebuildFromEvents(intentEvents)
+      const lifeExpansionEvents = this.store.readEventsByTypes(LIFE_EXPANSION_BOOT_EVENT_TYPES)
+      rebuiltLifeExpansion = rebuildLifeExpansionFromEvents(lifeExpansionEvents)
     }
 
     // Initialize previous faction tile counts from post-boot projection state
@@ -6085,7 +6091,7 @@ export class SimulationRuntime {
       if (buildingFact) this.buildingRuntime.hydrate(buildingFact)
     }
 
-    this.lifeExpansion = hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
+    this.lifeExpansion = rebuiltLifeExpansion ?? hydrateLifeExpansionState(facts[LIFE_EXPANSION_FACT_KEY])
     this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
 
     // §11.5 — prefer WorldStateProjection over FACT_SET for weather/season/rareWindow/activeEvents.

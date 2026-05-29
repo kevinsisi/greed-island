@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Event } from '../kernel/types.js'
 import type { NpcProfile } from '../npcs/types.js'
 import type { AreaState } from './areaStateEngine.js'
 import type { NpcRuntimeState } from './npcEngine.js'
@@ -14,6 +15,7 @@ import {
   deriveNpcLifeView,
   hydrateLifeExpansionState,
   productiveDeltaWithNpcSkill,
+  rebuildLifeExpansionFromEvents,
   withChildBorn,
   withConstructionInitiated,
   withConstructionProgress,
@@ -22,6 +24,22 @@ import {
   withNpcProductiveActionRecorded,
   withUnlockedExpansion
 } from './cityLife.js'
+
+function event(sequence: number, eventType: string, tick: number, data: Record<string, unknown>): Event {
+  return {
+    sequence,
+    eventId: `event.${sequence}`,
+    eventType,
+    occurredAt: tick,
+    actorId: 'test',
+    commandId: `command.${sequence}`,
+    tick,
+    payload: { data },
+    deterministicKey: `deterministic.${sequence}`,
+    rulesetVersion: 'test',
+    version: 1,
+  }
+}
 
 function profile(overrides: Partial<NpcProfile> = {}): NpcProfile {
   return {
@@ -104,6 +122,31 @@ describe('city life projection', () => {
     expect(replayed.unlockedBuildingIds).toContain(SALT_MARSH_BUILDING_ID)
     expect(replayed.households['household.a.b']!.childIds).toEqual(['child.1'])
     expect(replayed.children['child.1']!.nameEn).toBe('Tideborn')
+  })
+
+  it('rebuilds households and children from typed events when lifeExpansion facts are stale', () => {
+    const rebuilt = rebuildLifeExpansionFromEvents([
+      event(1, 'NPC_HOUSEHOLD_FORMED', 10, {
+        householdId: 'household.a.b',
+        partnerNpcIds: ['npc.a', 'npc.b'],
+        homeTileId: 't_central',
+      }),
+      event(2, 'NPC_CHILD_BORN', 100, {
+        householdId: 'household.a.b',
+        childId: 'household.a.b.child.1',
+        nameZh: '潮生',
+        nameEn: 'Tideborn',
+      }),
+    ])
+
+    expect(rebuilt.households['household.a.b']!.childIds).toEqual(['household.a.b.child.1'])
+    expect(rebuilt.children['household.a.b.child.1']).toEqual({
+      childId: 'household.a.b.child.1',
+      householdId: 'household.a.b',
+      nameZh: '潮生',
+      nameEn: 'Tideborn',
+      bornAtTick: 100,
+    })
   })
 
   it('records NPC productive work into replayable gold and skill XP', () => {

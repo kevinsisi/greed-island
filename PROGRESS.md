@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.5
+
+### Current Version
+`0.87.5` — Follow-up hotfix: large-log boot now rebuilds `LifeExpansionState` from typed events so born children survive restart and can mature.
+
+### What Was Broken (live v0.87.4)
+- v0.87.4 deployed and `/healthz` returned `version=0.87.4`, but `/api/npcs` stayed at 0.
+- Live EventLog still had `NPC_CHILD_BORN=76`, `NPC_MATURED=0`, `NPC_DECEASED=50`; tick advanced normally.
+- Server logs showed `[boot] skipped full runtime hydration for 12864839 events; booting from defaults to keep HTTP available`.
+- The latest `world.lifeExpansion` FACT_SET rows had `households=0`, `children=0`, because a previous fast boot had persisted default life-expansion state after skipping full replay.
+- Result: `MaturationPlanner` had no `lifeExpansion.children` to inspect even though canonical `NPC_CHILD_BORN` events existed.
+
+### What Was Fixed (v0.87.5)
+- Added `rebuildLifeExpansionFromEvents(...)` and `LIFE_EXPANSION_BOOT_EVENT_TYPES` to replay household, child, construction, civic, unlock, and meat-harvest reducers from typed events.
+- Wired both small-log and large-log runtime boot paths to prefer the typed-event rebuild over `world.lifeExpansion` FACT_SET fallback.
+- Added regression coverage proving households/children rebuild from typed events when the fact snapshot is stale.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/cityLife.test.ts src/sim/maturationPlanner.test.ts` — pass (34 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (47 passed, 0 failed)
+
+### CI/CD State
+Local hotfix verified; pending `git diff --check`, commit, push, CI/CD, and live smoke. Expected live recovery: after deploy and the next maturation cadence, `NPC_MATURED` should appear and `/api/npcs` should repopulate.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.4
 
 ### Current Version

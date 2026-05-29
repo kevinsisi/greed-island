@@ -1,6 +1,7 @@
 import type { NpcProfile } from '../npcs/types.js'
 import type { AreaState } from './areaStateEngine.js'
 import type { NpcRuntimeState } from './npcEngine.js'
+import type { Event } from '../kernel/types.js'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import { DEFAULT_RULESET_VERSION } from '../kernel/types.js'
 
@@ -94,6 +95,17 @@ export type LifeExpansionState = Readonly<{
   unlockedTileIds: readonly string[]
   unlockedBuildingIds: readonly string[]
 }>
+
+export const LIFE_EXPANSION_BOOT_EVENT_TYPES = [
+  'CONSTRUCTION_INITIATE',
+  'NPC_PRODUCTIVE_ACTION',
+  'CONSTRUCTION_PROJECT_PROGRESS',
+  'MAP_TILE_UNLOCKED',
+  'BUILDING_CONSTRUCTED',
+  'NPC_HOUSEHOLD_FORMED',
+  'NPC_CHILD_BORN',
+  'MEAT_HARVESTED',
+] as const
 
 export function createInitialLifeExpansionState(): LifeExpansionState {
   return {
@@ -440,6 +452,88 @@ export function decideCivEvoConstructionInitiate(input: {
   }
 }
 
+export function rebuildLifeExpansionFromEvents(events: readonly Event[]): LifeExpansionState {
+  let state = createInitialLifeExpansionState()
+  for (const event of events) {
+    const data = readEventData(event.payload)
+    if (!data) continue
+    const tick = typeof event.tick === 'number' ? event.tick : 0
+    if (event.eventType === 'CONSTRUCTION_INITIATE') {
+      const npcId = readString(data.npcId)
+      const tileId = readString(data.tileId)
+      const buildingId = readString(data.buildingId)
+      const duration = readFiniteNumber(data.duration)
+      const goldCost = readFiniteNumber(data.goldCost)
+      if (!npcId || !tileId || !buildingId || duration === null) continue
+      state = withConstructionInitiated(state, {
+        npcId,
+        tileId,
+        buildingId,
+        duration,
+        ...(goldCost !== null ? { goldCost } : {}),
+        ...(event.rulesetVersion !== undefined ? { rulesetVersion: event.rulesetVersion } : {}),
+        tick,
+      })
+      continue
+    }
+    if (event.eventType === 'NPC_PRODUCTIVE_ACTION') {
+      const npcId = readString(data.npcId)
+      const domain = readString(data.domain)
+      const delta = readFiniteNumber(data.delta)
+      if (!npcId || !isProductiveDomain(domain) || delta === null) continue
+      state = withNpcProductiveActionRecorded(state, { npcId, domain, delta, tick })
+      continue
+    }
+    if (event.eventType === 'CONSTRUCTION_PROJECT_PROGRESS') {
+      const delta = readFiniteNumber(data.delta)
+      if (delta === null) continue
+      const projectId = readString(data.projectId)
+      state = withConstructionProgress(state, {
+        delta,
+        ...(projectId ? { projectId } : {}),
+        tick,
+      })
+      continue
+    }
+    if (event.eventType === 'MAP_TILE_UNLOCKED' || event.eventType === 'BUILDING_CONSTRUCTED') {
+      state = withUnlockedExpansion(state)
+      continue
+    }
+    if (event.eventType === 'NPC_HOUSEHOLD_FORMED') {
+      const householdId = readString(data.householdId)
+      const homeTileId = readString(data.homeTileId)
+      const partnerNpcIds = Array.isArray(data.partnerNpcIds)
+        ? data.partnerNpcIds.filter((id): id is string => typeof id === 'string')
+        : []
+      if (!householdId || !homeTileId || partnerNpcIds.length !== 2) continue
+      state = withHouseholdFormed(state, {
+        householdId,
+        partnerNpcIds: [partnerNpcIds[0]!, partnerNpcIds[1]!],
+        homeTileId,
+        tick,
+      })
+      continue
+    }
+    if (event.eventType === 'NPC_CHILD_BORN') {
+      const householdId = readString(data.householdId)
+      const childId = readString(data.childId)
+      const nameZh = readString(data.nameZh)
+      const nameEn = readString(data.nameEn)
+      if (!householdId || !childId || nameZh === null || nameEn === null) continue
+      state = withChildBorn(state, { householdId, childId, nameZh, nameEn, tick })
+      continue
+    }
+    if (event.eventType === 'MEAT_HARVESTED') {
+      const npcId = readString(data.npcId)
+      const quantity = readFiniteNumber(data.quantity)
+      const goldValue = readFiniteNumber(data.goldValue)
+      if (!npcId || quantity === null || goldValue === null) continue
+      state = withMeatHarvestedRecorded(state, { npcId, quantity, goldValue, tick })
+    }
+  }
+  return state
+}
+
 export function withUnlockedExpansion(state: LifeExpansionState): LifeExpansionState {
   return {
     ...state,
@@ -628,6 +722,27 @@ export function productiveSkillKeyForDomain(domain: NpcProductiveDomain): NpcSki
     case 'trade': return 'commerce'
     case 'service': return 'civic'
   }
+}
+
+function readEventData(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const outer = payload as { data?: unknown }
+  if (outer.data && typeof outer.data === 'object' && !Array.isArray(outer.data)) {
+    return outer.data as Record<string, unknown>
+  }
+  return payload as Record<string, unknown>
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function isProductiveDomain(value: string | null): value is NpcProductiveDomain {
+  return value === 'build' || value === 'learn' || value === 'trade' || value === 'service'
 }
 
 function readSkillXp(value: unknown): NpcCivicRecord['skillXp'] {
