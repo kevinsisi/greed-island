@@ -56,6 +56,27 @@ const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
 const PLAYER_MESSAGE_MAX_CHARS = 800
 
+// v0.87.3 — deceased NPC gate. Used by /interact, /dialog-hold, /greet, /intervene.
+// Returns the profile when the NPC exists and is alive; otherwise writes the proper
+// HTTP error to `res` and returns null so the caller can short-circuit. /history
+// intentionally does NOT use this — historical dialog stays readable after death.
+function requireLivingNpc(
+  runtime: SimulationRuntime,
+  npcId: string,
+  res: Response,
+): NpcProfile | null {
+  const profile = runtime.findProfile(npcId)
+  if (!profile) {
+    res.status(404).json({ error: 'NPC_NOT_FOUND', message: `Unknown NPC id: ${npcId}` })
+    return null
+  }
+  if (runtime.getNpcMortalityProjection().isDeceased(npcId)) {
+    res.status(410).json({ error: 'NPC_DECEASED', message: '這位 NPC 已經不在世上。' })
+    return null
+  }
+  return profile
+}
+
 // greet 冷卻：每位玩家對每個 NPC 在這個 tick 視窗內最多 +1，避免連點 quick intent 灌好感
 const GREET_COOLDOWN_TICKS = TICKS_PER_HOUR
 // AI trust-delta clamp constants kept for backward reference only;
@@ -83,11 +104,7 @@ export function createNpcRouter(input: {
       return
     }
     const npcId = String(req.params.npcId ?? '')
-    const profile = input.runtime.findProfile(npcId)
-    if (!profile) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND', message: `Unknown NPC id: ${npcId}` })
-      return
-    }
+    if (requireLivingNpc(input.runtime, npcId, res) === null) return
     const hold = input.runtime.holdNpcForPlayerDialog(String(claims.sub), npcId)
     res.json({
       npcId,
@@ -104,11 +121,8 @@ export function createNpcRouter(input: {
       return
     }
     const npcId = String(req.params.npcId ?? '')
-    const profile = input.runtime.findProfile(npcId)
-    if (!profile) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND', message: `Unknown NPC id: ${npcId}` })
-      return
-    }
+    const profile = requireLivingNpc(input.runtime, npcId, res)
+    if (!profile) return
     const body = (req.body ?? {}) as { message?: unknown; intent?: unknown }
     const message = readMessage(body.message)
     const explicitIntent = isInteractIntent(body.intent) ? body.intent : null
@@ -450,12 +464,10 @@ export function createNpcRouter(input: {
       return
     }
 
-    const profileA = input.runtime.findProfile(npcA)
-    const profileB = input.runtime.findProfile(npcB)
-    if (!profileA || !profileB) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND' })
-      return
-    }
+    const profileA = requireLivingNpc(input.runtime, npcA, res)
+    if (!profileA) return
+    const profileB = requireLivingNpc(input.runtime, npcB, res)
+    if (!profileB) return
     const npcs = input.runtime.getNpcs()
     const npcAState = npcs.find((n) => n.id === npcA)
     const npcBState = npcs.find((n) => n.id === npcB)
@@ -647,11 +659,8 @@ export function createNpcRouter(input: {
       return
     }
     const npcId = String(req.params.npcId ?? '')
-    const profile = input.runtime.findProfile(npcId)
-    if (!profile) {
-      res.status(404).json({ error: 'NPC_NOT_FOUND' })
-      return
-    }
+    const profile = requireLivingNpc(input.runtime, npcId, res)
+    if (!profile) return
     const baseTrust =
       typeof profile.personality.trustBase === 'number'
         ? clampTrust(profile.personality.trustBase)

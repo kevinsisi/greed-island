@@ -35,6 +35,8 @@ describe('npc router', () => {
     const runtime = {
       findProfile: (npcId: string) => (npcId === profile.id ? profile : null),
       getCurrentTick: () => 1,
+      // v0.87.3 deceased gate: this mock NPC is alive.
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
     } as unknown as SimulationRuntime
 
     const app = express()
@@ -93,6 +95,8 @@ describe('npc router', () => {
         held.push(npcId)
         return { npcId, tick: 7, expiresAtTick: 19 }
       },
+      // v0.87.3 deceased gate: this mock NPC is alive.
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
     } as unknown as SimulationRuntime
 
     const app = express()
