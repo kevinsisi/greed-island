@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.6
+
+### Current Version
+`0.87.6` — Availability follow-up: large-log life-expansion boot replays only small structural events needed for households, children, construction, unlocks, and maturation.
+
+### What Was Broken (live v0.87.5)
+- v0.87.5 fixed the stale `world.lifeExpansion` FACT_SET root cause, but the large-log boot event set included `NPC_PRODUCTIVE_ACTION` and `MEAT_HARVESTED`.
+- Live has ~616k `NPC_PRODUCTIVE_ACTION` events, so the server stayed unavailable behind Caddy (`502`) for minutes while replaying civic history before HTTP listen.
+
+### What Was Fixed (v0.87.6)
+- `LIFE_EXPANSION_BOOT_EVENT_TYPES` now excludes high-volume civic-productivity events and replays only the small structural subset needed to restore households/children and allow `MaturationPlanner` to emit `NPC_MATURED`.
+- `rebuildLifeExpansionFromEvents(...)` still supports civic event replay for bounded full-event rebuild paths and tests.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/cityLife.test.ts src/sim/maturationPlanner.test.ts` — pass (34 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (47 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified; pending commit, push, CI/CD, and live smoke.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.5
 
 ### Current Version

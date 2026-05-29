@@ -98,13 +98,11 @@ export type LifeExpansionState = Readonly<{
 
 export const LIFE_EXPANSION_BOOT_EVENT_TYPES = [
   'CONSTRUCTION_INITIATE',
-  'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_PROJECT_PROGRESS',
   'MAP_TILE_UNLOCKED',
   'BUILDING_CONSTRUCTED',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
-  'MEAT_HARVESTED',
 ] as const
 
 export function createInitialLifeExpansionState(): LifeExpansionState {
