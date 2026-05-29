@@ -26,7 +26,12 @@ developer. Keep latest status at the top.
 - `git diff --check` — pass (CRLF normalization warnings only)
 
 ### CI/CD State
-Local hotfix verified; pending commit, push, CI/CD, and live smoke.
+Main branch commit `fec2dd0`. CI `26631233629` passed. Deploy Dev `26631307607` passed. Live v0.87.7 smoke passed:
+- `/healthz`: `version=0.87.7`, tick `353533 → 353534`
+- `/api/npcs`: 26 living born NPCs after maturation cadence
+- EventLog lifecycle counts: `NPC_CHILD_BORN=83`, `NPC_DECEASED=50`, `NPC_MATURED=26`; matured batch at tick `353520`
+- `/api/world`: 200, ~215,380 bytes, ~189ms
+- Recent server logs: no `[sim] tick failed`, `SQLITE_CONSTRAINT_UNIQUE`, fatal, uncaught, or unhandled matches after maturation; ambient AI key failures remain known non-blocking
 
 ---
 
