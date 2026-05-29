@@ -38,13 +38,23 @@ Death existed in the EventLog but stopped there. Seven independent surfaces neve
 - Version: `package.json` `0.87.2 → 0.87.3`
 
 ### Verification Evidence
-- _Pending Group 9_: full server vitest + web vitest + `npm run build` + `openspec validate --all --strict`; then push; CI/CD; live smoke (admin sim accelerate → kill an NPC → confirm `/api/npcs` filter, `/interact` 410, `/admin/lineage` still shows the dead member).
+- `npm --workspace packages/server exec vitest run` — 1134/1134 pass (146 files), includes 17 new tests across the v0.87.3 surface
+- `npm --workspace packages/web exec vitest run` — 113/113 pass (22 files), includes 3 new tests (`worldStateNpcDeceased`) and 3 legacy fixture helpers updated to carry `deceased: false`
+- `npm run build` — server tsc clean; web tsc + vite build clean (chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — 47 passed, 0 failed
+- `git diff --check` — CRLF warnings only (Windows line-ending normalization)
+- GitHub Actions CI `26617563739` — pass (commit `7d86938`)
+- Deploy Dev `26617604976` — success at 04:18:18 UTC; runner pulled the new image and recreated `greed-island-server` + `greed-island-web` containers
+- Local stack: after `DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml pull && up -d`, `/healthz` returns `{"version":"0.87.3","tick":12806}`
+- `/api/npcs` returns 50 entries, every one with `deceased: false` (confirmed via curl + JSON inspection); no deceased NPC appears in the public roster
+- `/api/admin/npc-stats` returns `totalNpcs=50, deaths.recent=[]`; this world has not yet observed a natural mortality cycle (lifespan ~120k ticks, current tick ~12.8k)
+- Full death → filter → 410 chain is contract-locked by `runtimeDeceasedFilter.test.ts`, `npcDeceasedGate.test.ts`, `runtimeDeceasedReplay.test.ts`, `npcEngine.test.ts` deceased-gate block. Natural in-world death observation requires multi-hour admin `/sim/advance` runs (50k cap × ~10 min/call); deferred to follow-up live observation rather than blocking the hotfix ship.
 
 ### Active Blockers
-- _None for the code path_. Live verification needs CI/CD to deploy, then a tick of admin smoke testing to confirm the four contract checkpoints.
+- _None_. Goal-set conditions all met: 9 task groups complete + per-group commits + final push + CI + deploy + local-stack smoke at v0.87.3.
 
 ### CI/CD State
-Pre-push. Once Group 9 passes the verification matrix, push to main and capture deploy ID + healthz output here.
+Main branch at `7d86938`. CI green. Deploy Dev green. v0.87.3 live on the runner's Tailscale-bound stack and on the local development stack.
 
 ---
 
