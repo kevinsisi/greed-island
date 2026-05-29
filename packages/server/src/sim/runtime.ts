@@ -5464,6 +5464,7 @@ export class SimulationRuntime {
     }
 
     for (const household of households) {
+      if (household.partnerNpcIds.some((npcId) => this.npcMortalityProjection.isDeceased(npcId))) continue
       // v0.87.0 — allow multiple children with interval + cap.
       if (household.childIds.length >= MAX_CHILDREN_PER_HOUSEHOLD) continue
       // Determine the "last reproductive event" timestamp:

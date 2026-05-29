@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.7
+
+### Current Version
+`0.87.7` — Follow-up guard: deceased-parent households no longer produce new `NPC_CHILD_BORN` events after life-expansion boot restores household state.
+
+### What Was Broken (live v0.87.6)
+- v0.87.6 restored household/child state and live became healthy, but restored households whose parents were already deceased could still pass the birth planner.
+- Live `NPC_CHILD_BORN` count increased from 76 to 83 before the next maturation cadence, proving the birth planner needed a mortality guard separate from the orphan-maturation rule.
+
+### What Was Fixed (v0.87.7)
+- `planHouseholdCommands` now skips birth planning for any household with a deceased partner NPC.
+- Existing committed `NPC_CHILD_BORN` events still remain canonical and can mature; this only stops new births from deceased-parent households.
+- Added regression coverage that a formed household whose two parents die emits no new `NPC_CHILD_BORN` events after 120 ticks.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/runtimeDeceasedReplay.test.ts src/sim/cityLife.test.ts src/sim/maturationPlanner.test.ts` — pass (37 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (47 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified; pending commit, push, CI/CD, and live smoke.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.6
 
 ### Current Version

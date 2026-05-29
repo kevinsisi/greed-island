@@ -137,4 +137,56 @@ describe('SimulationRuntime replay stability with deceased NPCs (v0.87.3)', () =
       db.close()
     }
   })
+
+  it('does not birth new children from households whose parents are deceased', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const profiles = loadNpcProfiles().slice(0, 2)
+    const cards = loadCardCatalog()
+    const runtime = new SimulationRuntime(eventStore, profiles, cards)
+    try {
+      const [a, b] = runtime.getNpcs()
+      expect(a).toBeDefined()
+      expect(b).toBeDefined()
+      const tick = runtime.getCurrentTick()
+      runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+        'NPC_HOUSEHOLD_FORMED',
+        'household.test.dead.parents',
+        'system',
+        tick,
+        Date.now(),
+        {
+          householdId: 'household.test.dead.parents',
+          partnerNpcIds: [a!.id, b!.id],
+          homeTileId: a!.location,
+          narration: 'test household',
+        },
+      ))
+      for (const npc of [a!, b!]) {
+        runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+          'NPC_DECEASED',
+          npc.id,
+          'system',
+          tick,
+          Date.now(),
+          {
+            npcId: npc.id,
+            tileId: npc.location,
+            householdId: 'household.test.dead.parents',
+            deceasedAtTick: tick,
+            narration: `${npc.name.zh} test death`,
+          },
+        ))
+      }
+
+      for (let i = 0; i < 120; i += 1) {
+        ;(runtime as unknown as { runTick: () => void }).runTick()
+      }
+
+      expect(eventStore.readEvents().filter((event) => event.eventType === 'NPC_CHILD_BORN')).toHaveLength(0)
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
 })
