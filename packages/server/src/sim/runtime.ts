@@ -5945,6 +5945,14 @@ export class SimulationRuntime {
       this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
+      // v0.87.3 boot-bug fix: mortality / lineage / born-npc projections were
+      // wired into the large-log else-branch but NOT here. Result was that
+      // every small-world restart resurrected every deceased NPC (the very
+      // class of bug the v0.25.3 ecosystem boot fix documented in memory
+      // project_ecosystem_boot_bug.md). Adding them here closes that gap.
+      this.npcMortalityProjection.rebuildFromEvents(allEvents)
+      this.npcLineageProjection.rebuildFromEvents(allEvents)
+      this.bornNpcsProjection.rebuildFromEvents(allEvents)
     } else {
       this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
       // Ecosystem projections are small relative to the full event log —
