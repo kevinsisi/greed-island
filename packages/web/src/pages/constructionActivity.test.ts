@@ -22,7 +22,8 @@ function npc(id: string, name = id): NpcSummary {
     location: 't_dock',
     relationshipScore: 50,
     lastActedTick: 0,
-    internalState: {}
+    internalState: {},
+    deceased: false
   }
 }
 

@@ -33,6 +33,8 @@ export const fixtureNpcs: NpcSummary[] = NPC_NAMES.map((entry, index) => ({
     pendingDesire: ['完成交易', '尋找線索', '招募同伴', '清查存貨', '前往神殿'][index % 5],
     knownPlayerActions: 12 - index,
   },
+  // v0.87.3 fixture: all fixture NPCs are alive by default.
+  deceased: false,
 }))
 
 const cardSeeds: Array<{ rank: CardCatalogEntry['rank']; name: string; story: string }> = [

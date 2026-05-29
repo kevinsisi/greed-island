@@ -357,6 +357,8 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     relationshipScore: npc.relationshipScore,
     lastActedTick: npc.lastActedTick,
     internalState: { ...npc.internalState },
+    // v0.87.3+: undefined from legacy servers means alive; only `=== true` blocks dialog.
+    deceased: npc.deceased === true,
     ...(npc.activity ? { activity: npc.activity } : {}),
     ...(typeof npc.mood === 'number' ? { mood: npc.mood } : {}),
     ...(typeof npc.health === 'number' ? { health: npc.health } : {}),
@@ -459,3 +461,7 @@ function toWorldMap(map: ServerMap): WorldMap {
 function pickLocaleString(value: { zh: string; en: string }, locale: Locale): string {
   return locale === 'zh' ? value.zh : value.en
 }
+
+// v0.87.3 — exposed for unit tests that verify the ServerNpc → NpcSummary mapping
+// (e.g. deceased flag propagation). Not for production callers.
+export const __testHooks__ = { toNpcSummary }

@@ -163,6 +163,11 @@ export type ServerNpc = {
     goal: { kind: string; pressure: number; narration: string }
     householdId: string | null
   }
+  // v0.87.3+：server may include `deceased: true` for entries returned via
+  // admin / lineage / chronicle paths. The public `/api/npcs` endpoint filters
+  // deceased NPCs out, so this field is typically false or absent there. UI
+  // treats `undefined` as `false` for back-compat with pre-0.87.3 servers.
+  deceased?: boolean
 }
 
 export type ServerCardCategory =

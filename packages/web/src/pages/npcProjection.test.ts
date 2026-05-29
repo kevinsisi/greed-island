@@ -10,6 +10,7 @@ function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
     relationshipScore: input.relationshipScore ?? 50,
     lastActedTick: input.lastActedTick ?? 0,
     internalState: input.internalState ?? {},
+    deceased: input.deceased ?? false,
     ...input,
     id: input.id
   }

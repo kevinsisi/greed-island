@@ -84,6 +84,12 @@ export interface NpcSummary {
     skillXp: Record<'construction' | 'knowledge' | 'commerce' | 'civic', number>
     lastProductiveTick: number | null
   } | null
+  /**
+   * v0.87.3+：death-state propagation. The public `/api/npcs` endpoint excludes
+   * deceased NPCs, so `deceased` is `false` in steady state. Frontend treats
+   * a true value as an SSE/poll race and refuses to open a dialog (defense in depth).
+   */
+  deceased: boolean
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'
