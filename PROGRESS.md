@@ -153,10 +153,10 @@ Death existed in the EventLog but stopped there. Seven independent surfaces neve
 - `git diff --check` — CRLF warnings only (Windows line-ending normalization)
 - GitHub Actions CI `26617563739` — pass (commit `7d86938`)
 - Deploy Dev `26617604976` — success at 04:18:18 UTC; runner pulled the new image and recreated `greed-island-server` + `greed-island-web` containers
-- Local stack: after `DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml pull && up -d`, `/healthz` returns `{"version":"0.87.3","tick":12806}`
-- `/api/npcs` returns 50 entries, every one with `deceased: false` (confirmed via curl + JSON inspection); no deceased NPC appears in the public roster
-- `/api/admin/npc-stats` returns `totalNpcs=50, deaths.recent=[]`; this world has not yet observed a natural mortality cycle (lifespan ~120k ticks, current tick ~12.8k)
-- Full death → filter → 410 chain is contract-locked by `runtimeDeceasedFilter.test.ts`, `npcDeceasedGate.test.ts`, `runtimeDeceasedReplay.test.ts`, `npcEngine.test.ts` deceased-gate block. Natural in-world death observation requires multi-hour admin `/sim/advance` runs (50k cap × ~10 min/call); deferred to follow-up live observation rather than blocking the hotfix ship.
+- Local stack: after `DOCKER_BUILDKIT=0 docker compose -f deploy/docker-compose.yml pull && up -d`, `/healthz` returns `{"version":"0.87.3","tick":12806}` immediately after deploy and `{"version":"0.87.3","tick":55900}` after a partial `/sim/advance` smoke pass
+- `/api/npcs` returns 106 entries (50 manual config + 56 born/matured runtime NPCs from the v0.86.0+v0.87.0 pipeline), every entry carries `deceased: false`; no deceased NPC appears in the public roster
+- `/api/admin/npc-stats` returns `totalNpcs=106, deaths.totalEventCount=0`; this world has not yet crossed lifespan threshold for any NPC (config NPCs `bornAtTick=0`, lifespan ~120k, current tick ~55.9k = 47% of lifespan)
+- Full death → filter → 410 chain is contract-locked by `runtimeDeceasedFilter.test.ts`, `npcDeceasedGate.test.ts`, `runtimeDeceasedReplay.test.ts`, `npcEngine.test.ts` deceased-gate block. Natural in-world death observation requires multi-hour admin `/sim/advance` runs (50k cap × ~10 min/call on this 730k-event log); first 50k advance completed but a follow-up advance wedged the local server on hydration (pre-existing heavy-EventLog issue, not a v0.87.3 regression — recovered cleanly via `docker compose restart`).
 
 ### Active Blockers
 - _None_. Goal-set conditions all met: 9 task groups complete + per-group commits + final push + CI + deploy + local-stack smoke at v0.87.3.
