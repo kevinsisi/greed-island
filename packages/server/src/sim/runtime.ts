@@ -5959,29 +5959,11 @@ export class SimulationRuntime {
       this.npcLineageProjection.rebuildFromEvents(allEvents)
       this.bornNpcsProjection.rebuildFromEvents(allEvents)
     } else {
-      this.hydrateCombatRuntimeFromEvents(this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES))
-      // Ecosystem projections are small relative to the full event log —
-      // rebuild them from only animal/fishery event types so the ecology
-      // overlay survives server restarts on large event logs.
-      const ecoEvents = this.store.readEventsByTypes(ECOSYSTEM_BOOT_EVENT_TYPES)
-      this.animalPopulationProjection.rebuildFromEvents(ecoEvents)
-      this.animalMigrationProjection.rebuildFromEvents(ecoEvents)
-      this.predatorHungerProjection.rebuildFromEvents(ecoEvents)
-      this.fisheryDensityProjection.rebuildFromEvents(ecoEvents)
-      this.speciesExtinctionProjection.rebuildFromEvents(ecoEvents)
-      this.ecosystemRegionProjection.rebuildFromEvents(ecoEvents)
-      this.forestDepletionProjection.rebuildFromEvents(ecoEvents)
-      this.livestockRegistryProjection.rebuildFromEvents(ecoEvents)
-      this.worldEventProjection.rebuildFromEvents(ecoEvents)
-      const playerCivEvents = this.store.readEventsByTypes(PLAYER_CIVILIZATION_BOOT_EVENT_TYPES)
-      this.playerCivilizationProjection.rebuildFromEvents(playerCivEvents)
-      // Goods projections — rebuild from goods event types so inventory/logistics/
-      // market state survives server restarts on large event logs.
-      const goodsEvents = this.store.readEventsByTypes(GOODS_BOOT_EVENT_TYPES)
-      this.goodsInventoryProjection.rebuildFromEvents(goodsEvents)
-      this.logisticsProjection.rebuildFromEvents(goodsEvents)
-      this.marketPricesProjection.rebuildFromEvents(goodsEvents)
-      this.productionChainsProjection.rebuildFromEvents(goodsEvents)
+      // Availability-first large-log boot: only rebuild projections required
+      // for public NPC liveness and born-child maturation before HTTP listen.
+      // High-volume ecology/goods/history projections can fall back to facts or
+      // empty runtime projections; replaying them synchronously kept live behind
+      // Caddy 502 on a 14M-row EventLog.
       // NPC mortality + lineage projections — rebuild from NPC death/heir events.
       const mortalityEvents = this.store.readEventsByTypes(MORTALITY_BOOT_EVENT_TYPES)
       this.npcMortalityProjection.rebuildFromEvents(mortalityEvents)
@@ -5989,46 +5971,6 @@ export class SimulationRuntime {
       // BornNpcs projection — rebuild matured born NPC roster from NPC_CHILD_BORN/NPC_MATURED.
       const bornNpcEvents = this.store.readEventsByTypes(BORN_NPC_BOOT_EVENT_TYPES)
       this.bornNpcsProjection.rebuildFromEvents(bornNpcEvents)
-      // Faction control projection — rebuild from faction seizure/loyalty events.
-      const factionEvents = this.store.readEventsByTypes(FACTION_BOOT_EVENT_TYPES)
-      this.factionControlProjection.rebuildFromEvents(factionEvents)
-      this.factionDominanceProjection.rebuildFromEvents(factionEvents)
-      // History chronicle projection — rebuild from narrative arc event types.
-      const historyEvents = this.store.readEventsByTypes(HISTORY_CHRONICLE_BOOT_EVENT_TYPES)
-      this.historyChronicleProjection.rebuildFromEvents(historyEvents)
-      // Area state projection — rebuild from typed AREA_STATE_RECORDED events.
-      // FACT_SET area.state.<tileId> remains the boot fallback for older logs.
-      const areaStateEvents = this.store.readEventsByTypes(AREA_STATE_BOOT_EVENT_TYPES)
-      this.areaStateProjection.rebuildFromEvents(areaStateEvents)
-      const worldStateEvents = this.store.readEventsByTypes(WORLD_STATE_BOOT_EVENT_TYPES)
-      this.worldStateProjection.rebuildFromEvents(worldStateEvents)
-      // BioNode projection — rebuild plant ecology substrate from typed
-      // BIO_NODE_SEEDED / REGREW / HARVESTED events.
-      const bioNodeEvents = this.store.readEventsByTypes(BIO_NODE_BOOT_EVENT_TYPES)
-      this.bioNodeProjection.rebuildFromEvents(bioNodeEvents)
-      const buildingStateEvents = this.store.readEventsByTypes(BUILDING_STATE_BOOT_EVENT_TYPES)
-      this.buildingStateProjection.rebuildFromEvents(buildingStateEvents)
-      // BuildingOccupants projection — rebuild NPC indoor presence from BUILDING_ENTER/LEAVE events.
-      const buildingOccupantsEvents = this.store.readEventsByTypes(BUILDING_OCCUPANTS_BOOT_EVENT_TYPES)
-      this.buildingOccupantsProjection.rebuildFromEvents(buildingOccupantsEvents)
-      // RoadNetwork projection — rebuild road/bridge map from ROAD_CONSTRUCTED/ROAD_DESTROYED events.
-      const roadNetworkEvents = this.store.readEventsByTypes(ROAD_NETWORK_BOOT_EVENT_TYPES)
-      this.roadNetworkProjection.rebuildFromEvents(roadNetworkEvents)
-      // WallNetwork projection — rebuild faction border walls from WALL_BUILT/WALL_DEMOLISHED events.
-      const wallNetworkEvents = this.store.readEventsByTypes(WALL_NETWORK_BOOT_EVENT_TYPES)
-      this.wallNetworkProjection.rebuildFromEvents(wallNetworkEvents)
-      // DynamicTile projection — rebuild runtime-generated frontier tiles from TILE_GENERATED events.
-      const dynamicTileEvents = this.store.readEventsByTypes(DYNAMIC_TILE_BOOT_EVENT_TYPES)
-      this.dynamicTileProjection.rebuildFromEvents(dynamicTileEvents)
-      // ActiveRuleOperators projection — rebuild active card rule operators from activation/expiry events.
-      const ruleOperatorEvents = this.store.readEventsByTypes(ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES)
-      this.activeRuleOperatorsProjection.rebuildFromEvents(ruleOperatorEvents)
-      // NpcIncapacitation projection — rebuild incapacitated NPCs from NPC_INCAPACITATED_LONG events.
-      const npcIncapEvents = this.store.readEventsByTypes(NPC_INCAPACITATION_BOOT_EVENT_TYPES)
-      this.npcIncapacitationProjection.rebuildFromEvents(npcIncapEvents)
-      // Intent projection — rebuild NPC learning weights from intent resolution history.
-      const intentEvents = this.store.readEventsByTypes(INTENT_PROJECTION_BOOT_EVENT_TYPES)
-      this.intentProjection.rebuildFromEvents(intentEvents)
       const lifeExpansionEvents = this.store.readEventsByTypes(LIFE_EXPANSION_BOOT_EVENT_TYPES)
       rebuiltLifeExpansion = rebuildLifeExpansionFromEvents(lifeExpansionEvents)
     }

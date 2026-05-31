@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-31 — Handoff Snapshot @ v0.87.10
+
+### Current Version
+`0.87.10` — Availability hotfix: large-log boot skips optional high-volume projection replay before HTTP listen.
+
+### What Was Broken (live v0.87.9 deploy)
+- v0.87.9 removed cross-type SQLite sorts, but live still stayed at `502` after restart.
+- Server remained running but not listening; logs still stopped after the large-log fast-boot warning.
+- Root cause: the large-log branch still synchronously replayed many optional projection event sets before HTTP listen. On the 14M-row live EventLog, even indexed per-type reads plus projection rebuilds were too much for an availability-first boot.
+
+### What Was Fixed (v0.87.10)
+- Large-log boot now rebuilds only the small projections required for public NPC liveness and born-child maturation before HTTP listen: mortality/lineage, born NPCs, and life expansion.
+- High-volume ecology/goods/history/building/intent projections are no longer replayed synchronously on large-log boot; existing FACT_SET fallbacks or empty runtime projections are used until future async/materialized hydration work.
+- This preserves the v0.87.8 NPC visual/name fixes and prioritizes restoring live HTTP availability.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/runtimeDeceasedReplay.test.ts src/projections/bornNpcs.test.ts src/sim/cityLife.test.ts` — pass (43 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified after v0.87.9 deploy still returned 502; pending commit, push, CI/CD, Deploy Dev, and live smoke.
+
+---
+
 ## 2026-05-31 — Handoff Snapshot @ v0.87.9
 
 ### Current Version
