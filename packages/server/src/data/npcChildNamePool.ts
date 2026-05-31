@@ -77,7 +77,8 @@ export function displayChildName(input: {
   nameEn: string
 }): ChildName {
   if (input.nameZh === '潮生' && input.nameEn === 'Tideborn') {
-    return generateChildName(input.childId, input.householdId)
+    const idx = 1 + (hashSeed(input.childId, 'legacy-display-name', input.householdId) % (NPC_CHILD_NAME_POOL.length - 1))
+    return NPC_CHILD_NAME_POOL[idx]!
   }
   return { nameZh: input.nameZh, nameEn: input.nameEn }
 }

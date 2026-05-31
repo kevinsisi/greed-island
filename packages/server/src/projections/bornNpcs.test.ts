@@ -101,6 +101,24 @@ describe('BornNpcsProjection', () => {
     expect(profile?.name.en).not.toBe('Tideborn')
   })
 
+  it('does not repair legacy placeholders back to the placeholder pool entry', () => {
+    const p = new BornNpcsProjection(new Set())
+    p.project(maturedEvent(
+      'household.central.busker.huang_yu_cheng.central.commuter.zheng_wei_xiang.child.2',
+      'household.central.busker.huang_yu_cheng.central.commuter.zheng_wei_xiang',
+      ['central.busker.huang_yu_cheng', 'central.commuter.zheng_wei_xiang'],
+      't_central',
+      382_080,
+      260_640,
+      '潮生',
+      'Tideborn',
+    ))
+
+    const profile = p.getProfile('household.central.busker.huang_yu_cheng.central.commuter.zheng_wei_xiang.child.2')
+    expect(profile?.name.zh).not.toBe('潮生')
+    expect(profile?.name.en).not.toBe('Tideborn')
+  })
+
   it('listCandidates excludes already-matured', () => {
     const p = new BornNpcsProjection(new Set())
     p.project(bornEvent('c1', 'h1', 100))

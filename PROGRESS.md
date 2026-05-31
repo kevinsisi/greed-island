@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-31 — Handoff Snapshot @ v0.87.11
+
+### Current Version
+`0.87.11` — Name-display follow-up: legacy `潮生 / Tideborn` display repair never maps back to the placeholder pool entry.
+
+### What Was Broken (live v0.87.10)
+- v0.87.10 restored HTTP availability and `/api/npcs` returned 52 living NPCs, but 3 born NPCs still displayed exact `潮生 / Tideborn`.
+- The v0.87.8 display repair was wired correctly, but it called `generateChildName(...)`; that deterministic pool still includes `潮生 / Tideborn` at index 0 for append-only compatibility, so a few legacy placeholders hashed back to the same placeholder.
+
+### What Was Fixed (v0.87.11)
+- `displayChildName(...)` now uses a separate deterministic legacy-display hash that selects only from pool entries `1..N-1`, preserving EventLog immutability and the append-only name pool while guaranteeing repaired legacy placeholders do not render as `潮生 / Tideborn`.
+- Added regression coverage for one live child id that previously hashed back to the placeholder.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/projections/bornNpcs.test.ts src/sim/maturationPlanner.test.ts` — pass (19 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified after v0.87.10 live smoke found 3 remaining placeholders; pending commit, push, CI/CD, Deploy Dev, and live smoke.
+
+---
+
 ## 2026-05-31 — Handoff Snapshot @ v0.87.10
 
 ### Current Version
