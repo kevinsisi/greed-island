@@ -24,7 +24,11 @@ developer. Keep latest status at the top.
 - `git diff --check` — pass (CRLF normalization warnings only)
 
 ### CI/CD State
-Local hotfix verified after v0.87.10 live smoke found 3 remaining placeholders; pending commit, push, CI/CD, Deploy Dev, and live smoke.
+Main branch commit `9b4c674`. CI `26702609908` passed. Deploy Dev `26702638854` passed. Live v0.87.11 smoke passed:
+- `/healthz`: `version=0.87.11`, tick `382167 → 382169`
+- `/api/npcs`: 52 living NPCs, 26 unique display names, `placeholderCount=0`, no exact `潮生 / Tideborn` display names
+- `/api/world`: 200, 77,833 bytes, ~64ms
+- Recent server logs: HTTP reached listen after large-log fast boot (`14367572` events); no `[sim] tick failed`, `SQLITE_CONSTRAINT_UNIQUE`, fatal, uncaught, or unhandled matches in the checked tail; `opencode=not configured` remains known non-blocking
 
 ---
 
