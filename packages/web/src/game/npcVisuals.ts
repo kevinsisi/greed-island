@@ -15,7 +15,7 @@ export const ACTIVITY_GLYPH: Readonly<Record<NpcActivity, string>> = {
   move: '👣',
   work: '🛠️',
   eat: '🍴',
-  sleep: '💤',
+  sleep: '',
   trade: '💰',
   patrol: '👁️'
 }

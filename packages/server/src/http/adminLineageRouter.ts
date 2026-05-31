@@ -8,6 +8,7 @@ import { Router, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type { AccountStore } from './accounts.js'
 import { requireRole, type AuthConfig } from './auth.js'
+import { displayChildName } from '../data/npcChildNamePool.js'
 
 export type AdminLineageRouterInput = Readonly<{
   runtime: SimulationRuntime
@@ -69,10 +70,11 @@ export function createAdminLineageRouter(input: AdminLineageRouterInput): Router
       for (const cid of h.childIds) {
         const c = lifeExpansion.children[cid]
         if (!c) continue
+        const { nameZh, nameEn } = displayChildName(c)
         children.push({
           childId: c.childId,
-          nameZh: c.nameZh,
-          nameEn: c.nameEn,
+          nameZh,
+          nameEn,
           bornAtTick: c.bornAtTick,
           matured: bornNpcs.isMatured(c.childId),
           deceased: mortality.isDeceased(c.childId),

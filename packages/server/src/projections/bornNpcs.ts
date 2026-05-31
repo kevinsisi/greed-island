@@ -19,6 +19,7 @@ import type { NpcProfile, NpcRoutineSlot } from '../npcs/types.js'
 import type { Event } from '../kernel/types.js'
 import type { LivingWorldEventPayload, NpcMaturedCmd } from '../kernel/livingWorldCommands.js'
 import { hashSeed } from '../combat/commands.js'
+import { displayChildName } from '../data/npcChildNamePool.js'
 
 export const BORN_NPC_BOOT_EVENT_TYPES = ['NPC_CHILD_BORN', 'NPC_MATURED'] as const
 
@@ -108,13 +109,14 @@ export class BornNpcsProjection {
       }
       const householdId = typeof payload.householdId === 'string' ? payload.householdId : ''
       const homeTileId = typeof payload.homeTileId === 'string' ? payload.homeTileId : 't_central'
-      const nameZh = typeof payload.nameZh === 'string' ? payload.nameZh : npcId
-      const nameEn = typeof payload.nameEn === 'string' ? payload.nameEn : npcId
+      const rawNameZh = typeof payload.nameZh === 'string' ? payload.nameZh : npcId
+      const rawNameEn = typeof payload.nameEn === 'string' ? payload.nameEn : npcId
       const bornAtTick = typeof payload.bornAtTick === 'number' ? payload.bornAtTick : 0
       const maturedAtTick = typeof payload.maturedAtTick === 'number' ? payload.maturedAtTick : 0
       const parentNpcIds = Array.isArray(payload.parentNpcIds)
         ? payload.parentNpcIds.filter((p): p is string => typeof p === 'string' && p.length > 0)
         : []
+      const { nameZh, nameEn } = displayChildName({ childId: npcId, householdId, nameZh: rawNameZh, nameEn: rawNameEn })
       const profile = deriveProfile({ npcId, householdId, homeTileId, nameZh, nameEn })
       this.matured.set(npcId, {
         profile,

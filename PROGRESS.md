@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-29 — Handoff Snapshot @ v0.87.8
+
+### Current Version
+`0.87.8` — Visual/name hotfix: sleeping/resting NPCs no longer render like corpses, and legacy born NPC placeholder names no longer show as a wall of 「潮生」.
+
+### What Was Broken (live v0.87.7)
+- The restored born NPCs could enter `sleep` activity, and the area sprite renderer rotated the humanoid 90 degrees with a Zzz glyph.
+- On the mobile map this looked like multiple corpses lying in the street even though `/api/npcs` contains living NPCs.
+- Legacy child events from before the name-pool release used the hardcoded placeholder `潮生 / Tideborn`, so many matured born NPCs displayed the same name and exposed long household ids underneath.
+
+### What Was Fixed (v0.87.8)
+- Frontend maps authoritative `sleep` activity to a standing `idle` pose for area sprites.
+- Removed the sleep glyph from map sprites to avoid corpse/knockout visual language.
+- Added deterministic display repair for legacy `潮生 / Tideborn` born NPC names based on child id and household id; EventLog remains immutable.
+- Simulation semantics are unchanged; these are display/name-projection fixes.
+
+### Verification Evidence
+- `npm --workspace packages/web exec vitest run src/game/characterVisualState.test.ts` — pass (8 tests)
+- `npm --workspace packages/server exec vitest run src/projections/bornNpcs.test.ts src/sim/maturationPlanner.test.ts` — pass (18 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified; pending commit, push, CI/CD, and live smoke.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.7
 
 ### Current Version

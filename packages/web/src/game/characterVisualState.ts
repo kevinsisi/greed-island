@@ -75,7 +75,7 @@ export function characterActionForNpcActivity(activity: NpcActivity | undefined)
     case 'eat':
       return 'eat'
     case 'sleep':
-      return 'sleep'
+      return 'idle'
     case 'trade':
       return 'trade'
     case 'patrol':

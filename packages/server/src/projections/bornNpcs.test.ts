@@ -83,6 +83,24 @@ describe('BornNpcsProjection', () => {
     expect(profiles[0]!.defaultLocation).toBe('t_central')
   })
 
+  it('repairs legacy Tideborn placeholder names deterministically for display', () => {
+    const p = new BornNpcsProjection(new Set())
+    p.project(maturedEvent(
+      'household.central.broker.gui.ruin.archivist.zhuo_min.child.1',
+      'household.central.broker.gui.ruin.archivist.zhuo_min',
+      ['central.broker.gui', 'ruin.archivist.zhuo_min'],
+      't_ruin',
+      353_520,
+      91_591,
+      '潮生',
+      'Tideborn',
+    ))
+
+    const profile = p.getProfile('household.central.broker.gui.ruin.archivist.zhuo_min.child.1')
+    expect(profile?.name.zh).not.toBe('潮生')
+    expect(profile?.name.en).not.toBe('Tideborn')
+  })
+
   it('listCandidates excludes already-matured', () => {
     const p = new BornNpcsProjection(new Set())
     p.project(bornEvent('c1', 'h1', 100))

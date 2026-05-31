@@ -16,6 +16,7 @@ import type { LifeExpansionState } from './cityLife.js'
 import type { BornNpcsProjection } from '../projections/bornNpcs.js'
 import type { NpcMortalityProjection } from '../projections/npcMortality.js'
 import { NPC_MATURATION_TICKS, MATURATION_CADENCE_TICKS } from '../config/world.js'
+import { displayChildName } from '../data/npcChildNamePool.js'
 
 export type MaturationIntent = Readonly<{
   npcId: string
@@ -47,6 +48,12 @@ export function planMaturation(input: {
     const household = lifeExpansion.households[child.householdId]
     if (!household) continue
     const parentNpcIds = household.partnerNpcIds
+    const { nameZh, nameEn } = displayChildName({
+      childId: child.childId,
+      householdId: child.householdId,
+      nameZh: child.nameZh,
+      nameEn: child.nameEn,
+    })
 
     intents.push({
       npcId: child.childId,
@@ -54,8 +61,8 @@ export function planMaturation(input: {
       householdId: child.householdId,
       parentNpcIds,
       homeTileId: household.homeTileId,
-      nameZh: child.nameZh,
-      nameEn: child.nameEn,
+      nameZh,
+      nameEn,
     })
   }
   return intents

@@ -69,3 +69,15 @@ export function generateChildName(childId: string, householdId: string): ChildNa
   const idx = hashSeed(childId, 'name', householdId) % NPC_CHILD_NAME_POOL.length
   return NPC_CHILD_NAME_POOL[idx]!
 }
+
+export function displayChildName(input: {
+  childId: string
+  householdId: string
+  nameZh: string
+  nameEn: string
+}): ChildName {
+  if (input.nameZh === '潮生' && input.nameEn === 'Tideborn') {
+    return generateChildName(input.childId, input.householdId)
+  }
+  return { nameZh: input.nameZh, nameEn: input.nameEn }
+}

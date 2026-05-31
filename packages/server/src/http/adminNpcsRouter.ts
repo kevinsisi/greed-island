@@ -11,6 +11,7 @@ import type { SimulationRuntime } from '../sim/runtime.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
 import type { AccountStore } from './accounts.js'
 import { requireRole, type AuthConfig } from './auth.js'
+import { displayChildName } from '../data/npcChildNamePool.js'
 
 const RECENT_FEED_LIMIT = 20
 
@@ -182,8 +183,9 @@ function toMaturedRow(event: EventLike): NpcStatsMatured | null {
   if (!npcId) return null
   const householdId = typeof payload.householdId === 'string' ? payload.householdId : ''
   const homeTileId = typeof payload.homeTileId === 'string' ? payload.homeTileId : ''
-  const nameZh = typeof payload.nameZh === 'string' ? payload.nameZh : ''
-  const nameEn = typeof payload.nameEn === 'string' ? payload.nameEn : ''
+  const rawNameZh = typeof payload.nameZh === 'string' ? payload.nameZh : ''
+  const rawNameEn = typeof payload.nameEn === 'string' ? payload.nameEn : ''
+  const { nameZh, nameEn } = displayChildName({ childId: npcId, householdId, nameZh: rawNameZh, nameEn: rawNameEn })
   return { tick, npcId, householdId, homeTileId, nameZh, nameEn }
 }
 
@@ -210,8 +212,9 @@ function toBirthRow(event: EventLike): NpcStatsBirth | null {
   const childId = typeof payload.childId === 'string' ? payload.childId : null
   const householdId = typeof payload.householdId === 'string' ? payload.householdId : null
   if (!childId || !householdId) return null
-  const nameZh = typeof payload.nameZh === 'string' ? payload.nameZh : ''
-  const nameEn = typeof payload.nameEn === 'string' ? payload.nameEn : ''
+  const rawNameZh = typeof payload.nameZh === 'string' ? payload.nameZh : ''
+  const rawNameEn = typeof payload.nameEn === 'string' ? payload.nameEn : ''
+  const { nameZh, nameEn } = displayChildName({ childId, householdId, nameZh: rawNameZh, nameEn: rawNameEn })
   const motivation =
     payload.motivation && typeof payload.motivation === 'object' && typeof payload.motivation.explanation === 'string'
       ? payload.motivation.explanation

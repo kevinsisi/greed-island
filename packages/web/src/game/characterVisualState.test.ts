@@ -29,7 +29,7 @@ describe('characterVisualState NPC mapping', () => {
       ['move', 'walk'],
       ['work', 'work'],
       ['eat', 'eat'],
-      ['sleep', 'sleep'],
+      ['sleep', 'idle'],
       ['trade', 'trade'],
       ['patrol', 'patrol'],
     ]
