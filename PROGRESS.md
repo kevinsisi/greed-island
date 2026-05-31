@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-05-31 — Handoff Snapshot @ v0.87.9
+
+### Current Version
+`0.87.9` — Availability hotfix: large-log boot reads selected EventLog types through per-type indexed scans instead of cross-type SQLite sorts.
+
+### What Was Broken (live v0.87.8 deploy)
+- v0.87.8 CI and Deploy Dev passed, but live `/healthz`, `/api/world`, and `/api/npcs` stayed at `502` after restart.
+- Docker showed `greed-island-server` running but not listening on port 3000; Caddy logged `connect: connection refused`.
+- Server logs stopped after `[boot] skipped full runtime hydration for 14355844 events; booting from defaults to keep HTTP available`, indicating large-log boot was still stuck before HTTP listen.
+- The boot path calls `readEventsByTypes(...)` repeatedly for projection rebuilds; the previous implementation used `WHERE event_type IN (...) ORDER BY sequence`, which can force large cross-type sorts on a 14M-row EventLog.
+
+### What Was Fixed (v0.87.9)
+- `SqliteEventStore.readEventsByTypes(...)` now performs one indexed read per event type and merges rows by `sequence` in memory.
+- Event ordering and completeness are preserved, but SQLite no longer has to build one large cross-type ordered result during boot.
+- Added regression coverage for interleaved selected event types and duplicate requested types.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/kernel/kernel.test.ts` — pass (20 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified; pending commit, push, CI/CD, Deploy Dev, and live smoke. Expected live recovery: `/healthz` should return `version=0.87.9` quickly after deploy, then `/api/npcs` should remain populated with repaired display names from v0.87.8.
+
+---
+
 ## 2026-05-29 — Handoff Snapshot @ v0.87.8
 
 ### Current Version

@@ -143,6 +143,27 @@ describe('simulation kernel', () => {
     expect(window.events.map((event) => event.eventId)).toEqual(['event-move-2', 'event-interact-3'])
   })
 
+  it('reads selected event types in sequence order across per-type scans', () => {
+    const { store } = createKernelHarness()
+    store.appendEvents([
+      createEventDraft('event-move-1', 'NPC_MOVE', 1, { actorType: 'npc', data: { npcId: 'npc-a' } }),
+      createEventDraft('event-fact-2', 'FACT_SET', 2, { key: 'world.tick', value: 2 }),
+      createEventDraft('event-interact-3', 'NPC_INTERACT', 3, {
+        actorType: 'npc',
+        data: { participants: ['npc-a', 'npc-b'] }
+      }),
+      createEventDraft('event-move-4', 'NPC_MOVE', 4, { actorType: 'npc', data: { npcId: 'npc-b' } })
+    ])
+
+    const events = store.readEventsByTypes(['NPC_INTERACT', 'NPC_MOVE', 'NPC_MOVE'])
+
+    expect(events.map((event) => event.eventId)).toEqual([
+      'event-move-1',
+      'event-interact-3',
+      'event-move-4'
+    ])
+  })
+
   it('preserves chronological order across interleaved event types', () => {
     const { store } = createKernelHarness()
     store.appendEvents([

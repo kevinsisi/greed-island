@@ -177,10 +177,12 @@ export class SqliteEventStore {
   readEventsByTypes(eventTypes: readonly string[]): Event[] {
     const types = [...new Set(eventTypes.filter((type) => type.length > 0))]
     if (types.length === 0) return []
-    const placeholders = types.map(() => '?').join(', ')
-    const rows = this.db
-      .prepare(`SELECT * FROM event_log WHERE event_type IN (${placeholders}) ORDER BY sequence ASC`)
-      .all(...types) as EventRow[]
+    const rows: EventRow[] = []
+    const statement = this.db.prepare('SELECT * FROM event_log WHERE event_type = ? ORDER BY sequence ASC')
+    for (const type of types) {
+      rows.push(...(statement.all(type) as EventRow[]))
+    }
+    rows.sort((a, b) => a.sequence - b.sequence)
     return rows.map(rowToEvent)
   }
 
