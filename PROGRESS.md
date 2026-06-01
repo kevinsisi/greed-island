@@ -5,6 +5,38 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-01 — Handoff Snapshot @ v0.87.11 docs audit
+
+### Current Version
+`0.87.11` — Documentation truthfulness pass: `docs/WORLD_CAPABILITIES.md` now matches current code/runtime behavior more closely instead of overstating completion.
+
+### What Was Broken
+- `WORLD_CAPABILITIES.md` mixed old baseline headers (`v0.68.0` / `v0.73.0`) with newer feature notes up through `v0.87.x`, so the "current verified baseline" metadata itself was no longer trustworthy.
+- Part II / Part III / §43 overstated several capabilities: full boot hydration on large logs, FACT_SET being fallback-only, roads/bridges both being shipped as runtime features, and the end-to-end claim that descendants can remember deceased ancestors in grounded dialog.
+- The born-NPC section still described the pre-v0.87.4 orphan guard even though runtime/tests now mature orphaned children from canonical `NPC_CHILD_BORN` events.
+
+### What Was Fixed
+- Updated `WORLD_CAPABILITIES.md` Part II / Part III / Part V to reflect the real state of the codebase:
+- Large-log boot is documented as availability-first partial hydration rather than full projection replay.
+- FACT_SET is documented as still co-existing on several live world-state write paths and in boot fallback behavior.
+- Roads are documented as shipped; automatic bridge planning and road-destruction consequences are documented as not yet wired.
+- The born-NPC baseline now reflects v0.87.4 orphan maturation behavior.
+- §43.1 descendant-memory and faction-collapse-road criteria are downgraded from complete to partial where the end-to-end path is not yet demonstrable.
+
+### Verification Evidence
+- Manual doc-vs-code audit against:
+  - `packages/server/src/sim/runtime.ts` (large-log partial hydration, FACT_SET write paths, faction-collapse consequences)
+  - `packages/server/src/sim/roadConstructionPlanner.ts` (road-only runtime construction)
+  - `packages/server/src/npcs/aiDialog.ts` + `packages/server/src/http/npc.ts` (no ancestor lineage fields in dialog context)
+  - `packages/server/src/kernel/npcMemory.ts` (death/heir memory projection scope)
+  - `packages/server/src/sim/maturationPlanner.test.ts` (orphaned children now mature)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Documentation-only correction; no runtime behavior changed, no release bump, CI/CD not yet run for this docs audit commit.
+
+---
+
 ## 2026-05-31 — Handoff Snapshot @ v0.87.11
 
 ### Current Version
