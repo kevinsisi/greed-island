@@ -402,6 +402,35 @@ describe('SqliteNpcMemoryStore.formatMemoryContext', () => {
     const result = store.formatMemoryContext('npc-fisher', MEMORY_VERY_HIGH_DECAY_TICKS + 1)
     expect(result).toBe('')
   })
+
+  it('filters deceased household memory for unrelated NPCs', () => {
+    const { store } = makeStore()
+    store.project(makeEvent('NPC_DECEASED', {
+      npcId: 'npc_elder',
+      tileId: 't_central',
+      householdId: 'h_family',
+      deceasedAtTick: 100,
+      narration: 'elder died',
+    }, 100))
+    const result = store.formatMemoryContext('npc_stranger', 200, { householdId: 'h_other' })
+    expect(result).not.toContain('npc_elder')
+  })
+
+  it('includes deceased parent memory for descendant allowlist', () => {
+    const { store } = makeStore()
+    store.project(makeEvent('NPC_DECEASED', {
+      npcId: 'npc_parent',
+      tileId: 't_central',
+      householdId: 'h_family',
+      deceasedAtTick: 100,
+      narration: 'parent died',
+    }, 100))
+    const result = store.formatMemoryContext('npc_child', 200, {
+      householdId: 'h_other',
+      allowedDeceasedNpcIds: ['npc_parent'],
+    })
+    expect(result).toContain('npc_parent')
+  })
 })
 
 describe('SqliteNpcMemoryStore.getMemoryUrgencyBoost', () => {

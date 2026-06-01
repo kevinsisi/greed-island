@@ -78,6 +78,11 @@ export type PlayerDialogMemoryInput = Readonly<{
   trustAfter: number
 }>
 
+export type MemoryContextFilter = Readonly<{
+  householdId?: string | null
+  allowedDeceasedNpcIds?: readonly string[]
+}>
+
 export class SqliteNpcMemoryStore {
   constructor(private readonly db: DatabaseConnection) {
     initializeNpcMemorySchema(db)
@@ -137,7 +142,7 @@ export class SqliteNpcMemoryStore {
    * Queries both personal (npc_id = npcId) and world-scoped (npc_id = 'world') rows.
    * Returns '' when no active memories exist — callers must guard on empty string.
    */
-  formatMemoryContext(npcId: string, currentTick: number): string {
+  formatMemoryContext(npcId: string, currentTick: number, filter?: MemoryContextFilter): string {
     const rows = this.db
       .prepare(
         `SELECT memory_type as memoryType, content_json as contentJson, tick, importance
@@ -149,15 +154,15 @@ export class SqliteNpcMemoryStore {
               OR (importance >= 5 AND ? - tick <= ?)
               OR (? - tick <= ?)
             )
-          ORDER BY importance DESC, tick DESC
-          LIMIT ?`
+           ORDER BY importance DESC, tick DESC
+           LIMIT ?`
       )
       .all(
         npcId,
         currentTick, MEMORY_VERY_HIGH_DECAY_TICKS,
         currentTick, MEMORY_HIGH_DECAY_TICKS,
         currentTick, MEMORY_NORMAL_DECAY_TICKS,
-        MEMORY_DIALOG_MAX_BULLETS
+        MEMORY_DIALOG_MAX_BULLETS * 4
       ) as Array<{
       memoryType: NpcMemoryType
       contentJson: string
@@ -165,9 +170,12 @@ export class SqliteNpcMemoryStore {
       importance: number
     }>
 
-    if (rows.length === 0) return ''
+    const filteredRows = rows.filter((row) => this.memoryAllowedInContext(row.contentJson, filter))
 
-    return rows
+    if (filteredRows.length === 0) return ''
+
+    return filteredRows
+      .slice(0, MEMORY_DIALOG_MAX_BULLETS)
       .map((r) => {
         const c = JSON.parse(r.contentJson) as Record<string, unknown>
         const emotionalTag = typeof c.emotionalTag === 'string' ? c.emotionalTag : 'neutral'
@@ -332,6 +340,22 @@ export class SqliteNpcMemoryStore {
         importance: r.importance
       }))
     )
+  }
+
+  private memoryAllowedInContext(contentJson: string, filter: MemoryContextFilter | undefined): boolean {
+    if (!filter) return true
+    let content: Record<string, unknown>
+    try {
+      content = JSON.parse(contentJson) as Record<string, unknown>
+    } catch {
+      return true
+    }
+    if (content.kind !== 'npc.deceased') return true
+    const householdId = typeof content.householdId === 'string' ? content.householdId : null
+    const deceasedNpcId = typeof content.npcId === 'string' ? content.npcId : null
+    if (filter.householdId && householdId === filter.householdId) return true
+    if (deceasedNpcId && (filter.allowedDeceasedNpcIds ?? []).includes(deceasedNpcId)) return true
+    return false
   }
 }
 

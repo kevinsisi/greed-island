@@ -1,6 +1,7 @@
 import type { LogisticsProjection } from '../projections/logistics.js'
 import type { RoadNetworkProjection } from '../projections/roadNetwork.js'
 import { ROAD_CONSTRUCTION_CADENCE_TICKS } from '../config/world.js'
+import { getMapEdgeCrossingType } from './mapGraph.js'
 
 export type RoadConstructionIntent = Readonly<{
   roadId: string
@@ -17,8 +18,10 @@ export function planRoadConstruction(input: {
   currentTick: number
   logisticsProjection: LogisticsProjection
   roadNetworkProjection: RoadNetworkProjection
+  unlockedTileIds?: readonly string[]
+  generatedTileIds?: readonly string[]
 }): readonly RoadConstructionIntent[] {
-  const { currentTick, logisticsProjection, roadNetworkProjection } = input
+  const { currentTick, logisticsProjection, roadNetworkProjection, unlockedTileIds = [], generatedTileIds = [] } = input
 
   if (currentTick % ROAD_CONSTRUCTION_CADENCE_TICKS !== 0) return []
 
@@ -46,7 +49,9 @@ export function planRoadConstruction(input: {
       roadId: `road.${routeKey(pair.fromTileId, pair.toTileId)}.${currentTick}`,
       fromTileId: pair.fromTileId,
       toTileId: pair.toTileId,
-      roadType: 'road',
+      roadType: getMapEdgeCrossingType(pair.fromTileId, pair.toTileId, unlockedTileIds, generatedTileIds) === 'water-crossing'
+        ? 'bridge'
+        : 'road',
     })
   }
 

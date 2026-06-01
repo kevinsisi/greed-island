@@ -179,7 +179,7 @@ export function deriveProfile(input: {
   nameZh: string
   nameEn: string
 }): NpcProfile {
-  const { npcId, homeTileId, nameZh, nameEn } = input
+  const { npcId, householdId, homeTileId, nameZh, nameEn } = input
   const archetype = ARCHETYPE_POOL[hashSeed(npcId, 'archetype') % ARCHETYPE_POOL.length]!
   const role = ROLE_BY_ARCHETYPE[archetype]
   const factionLean = FACTION_POOL[hashSeed(npcId, 'faction') % FACTION_POOL.length]!
@@ -202,6 +202,7 @@ export function deriveProfile(input: {
       trustBase: 40 + (hashSeed(npcId, 'trustBase') % 30), // 40..69
       talkativeness: hashSeed(npcId, 'talkativeness') % 100,
       factionLean,
+      householdId,
     },
   }
 }

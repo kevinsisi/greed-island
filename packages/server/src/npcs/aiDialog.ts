@@ -63,6 +63,13 @@ export type HouseholdContextRow = Readonly<{
   role: string
 }>
 
+export type LineageContextRow = Readonly<{
+  nameZh: string
+  role: string
+  relation: string
+  deceased: boolean
+}>
+
 export type SocialHistoryContext = Readonly<{
   totalInteractions: number
   trustTrend: 'rising' | 'falling' | 'stable'
@@ -142,6 +149,7 @@ export type AiDialogContext = Readonly<{
   dominantFaction?: string | null
   tileHistoryArcs?: readonly TileHistoryArcContext[]
   householdMembers?: readonly HouseholdContextRow[]
+  parentLineage?: readonly LineageContextRow[]
   playerAlias?: string
   socialHistoryContext?: SocialHistoryContext
   beliefContext?: string
@@ -253,6 +261,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildKnownPersonBlock(ctx.knownPersonNames),
     ...buildRelationshipBlock(ctx.relationshipContext),
     ...buildHouseholdBlock(ctx.householdMembers),
+    ...buildLineageBlock(ctx.parentLineage),
     ...buildPlayerAliasBlock(ctx.playerAlias),
     ...buildSocialHistoryBlock(ctx.socialHistoryContext),
     ...buildAntiHallucinationBlock(
@@ -531,6 +540,20 @@ export function buildHouseholdBlock(members: readonly HouseholdContextRow[] | un
     `### 你的家人（同一個家庭的其他成員，目前仍在世）`,
     memberLines,
     `這些是你在這個世界裡的家人。你了解他們的日常、習慣、個性，但不要刻意每次都主動提及他們——只在對話自然帶到的時候用。`,
+    '',
+  ]
+}
+
+export function buildLineageBlock(lineage: readonly LineageContextRow[] | undefined): string[] {
+  if (!lineage || lineage.length === 0) return []
+  const lines = lineage.map((row) => {
+    const status = row.deceased ? '，已故' : ''
+    return `  · ${row.nameZh}（${row.role}，${row.relation}${status}）`
+  }).join('\n')
+  return [
+    `### 你的血緣與家族前輩（僅以下人物可被當成你的真實父母／祖輩脈絡）`,
+    lines,
+    `如果玩家問到你的父母、家人過世、家族來歷，你只能引用這裡和記憶區塊內已提供的事實，不可虛構更多親屬。`,
     '',
   ]
 }

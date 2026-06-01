@@ -84,8 +84,6 @@ async function main(): Promise<void> {
   const eventStore = new SqliteEventStore(db)
 
   const runtime = new SimulationRuntime(eventStore, profiles, cards)
-  runtime.start()
-  console.log(`[boot] simulation runtime started — tick=${runtime.getSnapshot().tick}`)
 
   if (config.adminEmails.length > 0) {
     console.log(`[boot] admin email allow-list: ${config.adminEmails.join(', ')}`)
@@ -105,6 +103,18 @@ async function main(): Promise<void> {
 
   const server = app.listen(config.port, config.host, () => {
     console.log(`[boot] HTTP listening on http://${config.host}:${config.port}`)
+    const startTickLoop = () => {
+      runtime.start()
+      console.log(`[boot] simulation runtime started — tick=${runtime.getSnapshot().tick}`)
+    }
+    startTickLoop()
+    if (!runtime.needsDeferredHydration()) return
+    console.log('[boot] scheduling deferred large-log hydration in background (30s delay)')
+    setTimeout(() => {
+      runtime.startDeferredHydration().catch((err) => {
+        console.error('[boot] deferred hydration failed', err)
+      })
+    }, 30_000).unref()
   })
 
   const shutdown = (signal: string) => {

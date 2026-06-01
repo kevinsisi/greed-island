@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.87.12 ✅ shipped — 2026-06-01
+
+**主題：Close World Capability Gaps（ancestor memory + roads/bridges + deferred large-log hydration）**
+
+- ✅ Matured born NPC lineage now grounds real parent/deceased-ancestor names in AI dialog; household-scoped death memory no longer leaks to unrelated NPCs
+- ✅ `BornNpcsProjection` derived profiles now carry `householdId`; `NpcLineageProjection` admits `NPC_MATURED` descendants as first-class household members
+- ✅ Road construction now classifies `road` vs `bridge` from explicit server-side map edge metadata
+- ✅ Faction collapse now destroys built road/bridge infrastructure via `ROAD_DESTROYED`, in addition to closing logistics and abandoning zero-health buildings
+- ✅ Large-log startup keeps HTTP availability, then completes deferred projection hydration before the tick loop starts; omitted read models are rebuilt automatically, including `buildingStateProjection`
+- ✅ New regression coverage: lineage admission, deceased-memory filtering, lineage prompt rendering, bridge construction classification, deferred large-log hydration
+
+---
+
 ## v0.87.3 ✅ shipped — 2026-05-29
 
 **主題：Deceased NPC Leaves Active World（live hotfix）**

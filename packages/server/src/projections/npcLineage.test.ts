@@ -28,6 +28,17 @@ function makeHeirEvent(householdId: string, deceasedNpcId: string, heirNpcId: st
   } as unknown as Event
 }
 
+function makeMaturedEvent(npcId: string, householdId: string, seq = 1): Event {
+  return {
+    id: `evt-m${seq}`,
+    eventType: 'NPC_MATURED',
+    sequence: seq,
+    tick: 100,
+    createdAt: '2024-01-01T00:00:00Z',
+    payload: { data: { npcId, householdId } },
+  } as unknown as Event
+}
+
 function makeDeceasedEvent(npcId: string, tick: number, seq = 1): Event {
   return {
     id: `evt-d${seq}`,
@@ -95,5 +106,12 @@ describe('NpcLineageProjection', () => {
     const events = [makeHeirEvent('h_x', 'npc_x', 'npc_y', 50, 1)]
     lineage.rebuildFromEvents(events)
     expect(lineage.heirHistory('h_x')).toHaveLength(1)
+  })
+
+  it('adds matured born npc into household membership', () => {
+    const lineage = new NpcLineageProjection([makeProfile('npc_parent_a', 'h_family'), makeProfile('npc_parent_b', 'h_family')])
+    lineage.project(makeMaturedEvent('household.h_family.child.1', 'h_family'))
+    expect(lineage.householdId('household.h_family.child.1')).toBe('h_family')
+    expect(lineage.membersOf('h_family')).toContain('household.h_family.child.1')
   })
 })

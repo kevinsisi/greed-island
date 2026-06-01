@@ -245,9 +245,6 @@ export class SqliteEventStore {
     latestTick: number
     facts: Record<string, unknown>
   } {
-    const countRow = this.db.prepare('SELECT COUNT(*) as eventCount FROM event_log').get() as {
-      eventCount: number
-    }
     const sequenceRow = this.db
       .prepare('SELECT sequence FROM event_log ORDER BY sequence DESC LIMIT 1')
       .get() as { sequence: number } | undefined
@@ -255,7 +252,7 @@ export class SqliteEventStore {
       .prepare('SELECT tick FROM event_log WHERE tick IS NOT NULL ORDER BY sequence DESC LIMIT 1')
       .get() as { tick: number } | undefined
     return {
-      eventCount: countRow.eventCount,
+      eventCount: sequenceRow?.sequence ?? 0,
       lastSequence: sequenceRow?.sequence ?? 0,
       latestTick: tickRow?.tick ?? 0,
       facts: {}
@@ -283,8 +280,10 @@ export class SqliteEventStore {
   }
 
   countEvents(): number {
-    const row = this.db.prepare('SELECT COUNT(*) as count FROM event_log').get() as { count: number }
-    return row.count
+    const row = this.db
+      .prepare('SELECT sequence FROM event_log ORDER BY sequence DESC LIMIT 1')
+      .get() as { sequence: number } | undefined
+    return row?.sequence ?? 0
   }
 
   countEventsByKind(kind: string): number {

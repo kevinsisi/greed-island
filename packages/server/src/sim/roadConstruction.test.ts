@@ -145,4 +145,20 @@ describe('planRoadConstruction', () => {
     })
     expect(result[0]?.roadId).toContain(String(ROAD_CONSTRUCTION_CADENCE_TICKS))
   })
+
+  it('emits bridge on configured water-crossing edge', () => {
+    const logistics = makeLogistics([
+      { fromTileId: 't_central', toTileId: 't_dock', open: true },
+      { fromTileId: 't_central', toTileId: 't_dock', open: true },
+    ])
+    const road = new RoadNetworkProjection()
+    const result = planRoadConstruction({
+      currentTick: ROAD_CONSTRUCTION_CADENCE_TICKS,
+      logisticsProjection: logistics,
+      roadNetworkProjection: road,
+      unlockedTileIds: ['t_salt_marsh'],
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0]?.roadType).toBe('bridge')
+  })
 })

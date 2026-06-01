@@ -9,7 +9,7 @@
 >   user-authored): non-negotiable world laws + civilization vision +
 >   ecosystem vision + Cognitive Runtime architecture (§12.5) +
 >   engineering priorities + recommended phase order.
-> - **Part II — Current Verified Baseline** (§13–§28, v0.87.11):
+> - **Part II — Current Verified Baseline** (§13–§28, v0.87.12):
 >   what the world actually does today, verified against
 >   `packages/server/src/` and `packages/web/src/`. ❌ marks are real
 >   gaps, not aspirations.
@@ -1664,7 +1664,7 @@ And becomes:
 ---
 
 ═══════════════════════════════════════════════════════════════
-## Part II — Current Verified Baseline (v0.87.11, 2026-06-01)
+## Part II — Current Verified Baseline (v0.87.12, 2026-06-01)
 
 Verified against `packages/server/src/` and `packages/web/src/`.
 ✅ = shipped. ❌ = real gap. 🟡 = partial.
@@ -1785,7 +1785,7 @@ The simulation is **deterministic, event-sourced, append-only**.
 - ✅ **Market price discovery** — `discoverMarketPrices()` runs each tick; `MarketPricesProjection` active.
 - ✅ **Ecological substrate** — wildlife engine runs per tick; species populations affect area food/safety pressure.
 
-✅ **Roads as buildable map features** (v0.75.0) — `RoadNetworkProjection` + `planRoadConstruction()` fires every 3 in-game days; ≥2 open trade routes on a tile pair auto-construct a road; `ROAD_TRAVEL_SPEED_MULTIPLIER = 1.5` reduces NPC cross-tile travel ticks; `ROAD_CONSTRUCTED` events are produced in runtime. `ROAD_DESTROYED` exists in the command/projection surface, but no automatic runtime producer removes roads today; automatic bridge planning is also not wired.
+✅ **Roads / bridges as buildable map features** (v0.75.0 + v0.87.12) — `RoadNetworkProjection` + `planRoadConstruction()` fires every 3 in-game days; ≥2 open trade routes on a tile pair auto-construct infrastructure; explicit server-side edge metadata now classifies `road` vs `bridge`; `ROAD_TRAVEL_SPEED_MULTIPLIER = 1.5` reduces NPC cross-tile travel ticks; both `ROAD_CONSTRUCTED` and `ROAD_DESTROYED` are produced in runtime.
 ✅ Area state `{ food, safety, economy }` — `AreaStateProjection` via `AREA_STATE_RECORDED` events (§11.5 largely closed as typed projection coverage), while FACT_SET snapshots still co-exist on the live write path and remain part of the current boot fallback story.
 
 ---
@@ -1998,7 +1998,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **Legendary ecology** (`ecosystem/legendarySpawnPlanner.ts`, `legendaryHuntPlanner.ts`, `factionEcologyPlanner.ts`): mythic species behavior, legendary hunt arc, faction ecological ideology (Phase E4).
 - ✅ **Defense coordination** (`ecosystem/defenseParty.ts`): NPC defense party formation when animal attacks.
 
-✅ **Born NPC runtime entity** (v0.86.0 + v0.87.4) — `NPC_MATURED` event promotes born children (recorded via `NPC_CHILD_BORN`) into full runtime NPC entities after `NPC_MATURATION_TICKS = 17_280` (~24 in-game hours). `BornNpcsProjection` derives `NpcProfile` deterministically from `hashSeed(npcId, ...)`; `NpcEngine.registerDynamicNpc` admits them into Cognitive Runtime; v0.87.4 treats committed `NPC_CHILD_BORN` events as canonical and allows orphaned children to mature even when both parents are deceased. This closes the runtime-entity substrate, but does **not** by itself complete the full §43.1 ancestor-memory acceptance path: descendant memory transfer and ancestor dialog grounding remain partial.
+✅ **Born NPC runtime entity** (v0.86.0 + v0.87.4 + v0.87.12) — `NPC_MATURED` event promotes born children (recorded via `NPC_CHILD_BORN`) into full runtime NPC entities after `NPC_MATURATION_TICKS = 17_280` (~24 in-game hours). `BornNpcsProjection` derives `NpcProfile` deterministically from `hashSeed(npcId, ...)`; `NpcEngine.registerDynamicNpc` admits them into Cognitive Runtime; v0.87.4 treats committed `NPC_CHILD_BORN` events as canonical and allows orphaned children to mature even when both parents are deceased. v0.87.12 closes the remaining §43.1 dialog gap by grounding factual parent identities plus household-scoped deceased-parent memory for descendants.
 
 ✅ **BioNode** — `BioNodeProjection` + plant species catalog (oak, pine, reed, wild_herb, salt_grass, mushroom, cactus, sand_grass) + `plantRegrowth.ts` engine implemented (Phase E5). `getBioNodesOnTile` wired to dialog context (`plantContext`). `BIO_NODE_SEEDED` idempotently seeds tiles on first tick; `BIO_NODE_REGREW` runs every `TICKS_PER_HOUR` to restore depleted nodes.
 ✅ **Forest Regrowth Engine** — `planPlantRegrowth()` runs every hour-tick; `BIO_NODE_REGREW` events restore density toward capacity. Wired in `runtime.ts` Phase E5 block.
@@ -2011,7 +2011,7 @@ What a logged-in player can do (verified in `packages/server/src/http/`):
 - ✅ **`event_log`** — canonical SQLite table; single source of world truth.
 - ✅ **`rejected_command_log`** — audit log.
 - ✅ **FACT_SET snapshots** — transitional, still used on several live world-state write paths (area state, weather, season, rare window) and as part of current availability-first boot fallback behavior.
-- 🟡 **Hydration on boot** — small-log boot rebuilds projections from EventLog; large-log boot currently rebuilds only the subset required for HTTP availability, deceased-NPC correctness, and born-child maturation before listen. Full large-log hydration/materialized replay remains a real gap.
+- ✅ **Hydration on boot** — small-log boot rebuilds projections from EventLog synchronously; large-log boot now restores HTTP availability first, then automatically completes deferred projection hydration from EventLog in the background after startup. Omitted projections no longer require a second restart to recover; `buildingStateProjection` is included.
 - ✅ **Orthogonal stores**: accounts, password resets, friend graph, messages, alliances, player codex, card trades, player jobs, wallet, settings.
 
 **In-memory projections (all with `rebuildFromEvents` + canonical-hash):**
@@ -2056,18 +2056,18 @@ Mapping Part I principles to specific Commands / projections /
 runtime hooks the implementation needs. Input for OpenSpec changes.
 ═══════════════════════════════════════════════════════════════
 
-## 29. Layer-by-Layer Status (v0.87.11)
+## 29. Layer-by-Layer Status (v0.87.12)
 
 | Layer | Status | Already shipped | Major missing pieces |
 |---|---|---|---|
-| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~130 command types; budget gate (§11.6 ✅): command hard cap + NPC partitioning + regional tile activation; WorldStateProjection (v0.72.0); BuildingOccupantsProjection (v0.73.0) | §11.7 rebuild contract sweep for older projections; full large-log hydration/materialized replay path |
+| **1. Simulation Kernel** | ✅ Strongest | Command/Event/State separation, EventLog, deterministic replay, 10-step tick, hashSeed randomness, tick atomicity, ~130 command types; budget gate (§11.6 ✅): command hard cap + NPC partitioning + regional tile activation; WorldStateProjection (v0.72.0); BuildingOccupantsProjection (v0.73.0); deferred full large-log hydration completion (v0.87.12) | FACT_SET retirement remains transitional, but projection completeness is restored |
 | **2. Living World Runtime** | ✅ Strong | Weather, season, rare windows, world events, NPC routine / interaction / memory / relationships / mortality / lineage / household, rumor propagation, mentorship, cultural festivals, world agenda, productive actions, skill XP, autonomous construction; Cognitive Runtime (belief, intent, reflection, memory, relationship graph, household context, alias memory, social history — v0.50–v0.73); NPC household permanent migration (v0.74.0 — `NPC_HOUSEHOLD_MIGRATED` + `homeTileOverride`); NPC-to-NPC local market trade (v0.78.0 — `NPC_GOODS_TRADED`) | None |
 | **2.5. Ecosystem Runtime** | ✅ **Fully implemented** | 23 species catalog, animal entity runtime, Wildlife / Predation / Fishery / Migration / Reproduction / Extinction / Domestication / Legendary Ecology engines, BioNode plant system, Forest Regrowth Engine, SPECIES_POPULATION_SHIFTED; faction ecological ideology; full §6.5 event catalog | None |
-| **3. Civilization Runtime** | ✅ Strong | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0); history chronicle projection (v0.64.0+); NPC household permanent migration (v0.74.0); roads as buildable map features (v0.75.0); carrier NPC autonomous trade dispatch (v0.48.0) | Automatic bridge planning and road-destruction consequences are not wired |
+| **3. Civilization Runtime** | ✅ Strong | Settlement entity + lifecycle; goods primitives; logistics (trade routes + transport); production chains; market price discovery; faction territory + loyalty; NPC mortality + lineage; settlement evacuation from famine (v0.65.0); faction ecology conflict (v0.66.0); history chronicle projection (v0.64.0+); NPC household permanent migration (v0.74.0); roads/bridges as buildable map features (v0.75.0 + v0.87.12); carrier NPC autonomous trade dispatch (v0.48.0) | None |
 | **4. Combat Runtime** | ✅ Strong | Phase B + C (real-time sub-tick, 5-phase pipeline, 紋卡 priority), wildlife combat, faction consequences, combat outcomes feed history_chronicle (v0.69.0); CombatStore = read-only EventLog projection (§11.4 ✅ CLOSED v0.25.0); cards as world rule operators (§11.2 ✅ CLOSED v0.76.0) | None |
-| **5. Perception Runtime** | 🟡 Strong with one lineage gap | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard; NPC dialog grounded in: beliefs, intents, reflections, episodic memory, relationship graph, household members, alias memory (v0.70.0), social history arc (v0.71.0), dominant faction, tile history arcs, ecology (animals, fishery, plants, extinction, pollution, population shifts), rumors, skills, local events | Descendant/ancestor lineage memory grounding is not yet wired end-to-end for §43.1 |
+| **5. Perception Runtime** | ✅ Strong | Gemini dialog, ambient narrator, chronicle renderer, anti-hallucination guard; NPC dialog grounded in: beliefs, intents, reflections, episodic memory, relationship graph, household members, alias memory (v0.70.0), social history arc (v0.71.0), dominant faction, tile history arcs, ecology (animals, fishery, plants, extinction, pollution, population shifts), rumors, skills, local events, factual parent lineage, household-scoped deceased-ancestor memory (v0.87.12) | None |
 
-The "看起來像 civilization 的 placeholder" critique from Part I §4 is **mostly** resolved: Layer 2.5 is real (not a placeholder), Layer 3 has genuine goods metabolism with carrier trade dispatch (v0.48.0) and road construction (v0.75.0), Layer 2 has cultural + mortality depth including permanent household migration (v0.74.0) and NPC-to-NPC local market trade (v0.78.0), Layer 5 has deep AI dialog grounding across the cognitive stack, and Layer 4 feeds combat arcs into the history chronicle while cards operate as world rule operators (v0.76.0). The remaining honest gaps are operational and end-to-end: large-log boot still trades full replay for availability, and descendant/ancestor memory grounding is not yet complete.
+The "看起來像 civilization 的 placeholder" critique from Part I §4 is now resolved at the capability level: Layer 2.5 is real (not a placeholder), Layer 3 has genuine goods metabolism with carrier trade dispatch (v0.48.0) plus roads/bridges and collapse consequences (v0.87.12), Layer 2 has cultural + mortality depth including permanent household migration (v0.74.0) and NPC-to-NPC local market trade (v0.78.0), Layer 5 has deep AI dialog grounding across the cognitive stack including descendant lineage memory, and Layer 4 feeds combat arcs into the history chronicle while cards operate as world rule operators (v0.76.0). FACT_SET remains a transitional persistence aid, but the world-capability gaps called out by the 2026-06-01 doc audit are closed.
 
 ---
 
@@ -2480,9 +2480,9 @@ The program is **not done** when phases 0–6 + E0–E4 ship. It is done when th
 
 | Criterion | Status | Verifiable by |
 |---|---|---|
-| 「當某個 NPC 死亡，後代會記得他。」 | 🟡 partial substrate through v0.87.4 | `NPC_DECEASED` exists, `NPC_MATURED` promotes born children into runtime NPC entities, and `BornNpcsProjection` retains `parentNpcIds`. But descendant memory transfer and ancestor-aware dialog grounding are not fully wired: the dialog context does not yet inject lineage/ancestor fields, and death memory is not projected directly into descendants' `npc_memory` rows. |
+| 「當某個 NPC 死亡，後代會記得他。」 | ✅ v0.87.12 | `NPC_DECEASED` remains the canonical death fact; `NPC_MATURED` promotes born children into runtime NPC entities; `BornNpcsProjection` retains `parentNpcIds`; descendant dialog grounding now injects factual parent lineage and household-scoped deceased-memory context so descendants can reference the deceased ancestor without hallucination. |
 | 「當某 settlement 飢荒，周邊價格會上升。」 | ✅ chain complete | `GOODS_TRANSPORT_LOST` → supply drops in `goodsInventory` → `discoverMarketPrices` raises `MARKET_PRICE_DISCOVERED` price within K ticks. |
-| 「當 faction 戰敗，道路與物流會崩潰。」 | 🟡 logistics yes, roads not yet | `FACTION_DOMINANCE_SHIFTED` currently drives `TRADE_ROUTE_CLOSED` (all open routes) + `BUILDING_ABANDONED` (health ≤ 0 buildings) in the same tick block. That demonstrates logistics collapse, but road-network destruction is not yet produced automatically. |
+| 「當 faction 戰敗，道路與物流會崩潰。」 | ✅ v0.87.12 | `FACTION_DOMINANCE_SHIFTED` drives `TRADE_ROUTE_CLOSED` (all open routes) + `ROAD_DESTROYED` (all currently built road/bridge segments) + `BUILDING_ABANDONED` (health ≤ 0 buildings) in the same tick block. |
 | 「當玩家離開數個月，世界仍然繼續，甚至已經變成另一個文明時代。」 | ✅ v0.64.0 | EventLog accumulates continuously; `/world/history-arcs` shows `faction_seizure`, `ecological_collapse`, `famine_evacuation`, `settlement_decline` arc deltas from before- to after-absence. |
 
 ### 43.2 Ecosystem criteria (Part I §12 ¶2 + WITH_ECO §13)
@@ -2499,7 +2499,7 @@ The program is **not done** when phases 0–6 + E0–E4 ship. It is done when th
 | Factions fight over biological resources | ✅ v0.66.0 | `FISHERY_COLLAPSED` / `FOREST_DEPLETED` → `FACTION_ECOLOGY_CONFLICT_STARTED` + `FACTION_TILE_SEIZED` scoped to the resource tile; chronicle records `faction_seizure` arc. |
 | NPCs discuss disappearing animals | ✅ v0.63.0 | `recentPopulationShifts` (SPECIES_POPULATION_SHIFTED within 3 days) injected into `AiDialogContext`; NPC dialog grounded without hallucination. |
 | Extinct species visible only in old chronicles | ✅ Phase E2.1 | After `SPECIES_EXTINCT`, species no longer spawns; `history_chronicle` retains the `species_extinction` arc as permanent historical record. |
-| The world is a civilization trapped inside a living planet | 🟡 mostly verifiable from v0.87.11 | Most major event chains ship, and `POST /api/admin/sim/advance { ticks: N }` (v0.87.0) lets a GM observe emergent co-occurrence on demand without waiting for wall-clock days. But this umbrella criterion cannot be called fully complete while the §43.1 descendant-memory path remains partial and faction-collapse road destruction is not yet demonstrable end-to-end. |
+| The world is a civilization trapped inside a living planet | ✅ verifiable from v0.87.12 | The major §43.1 + §43.2 event chains now ship together, including descendant lineage memory grounding, bridge/road infrastructure consequences, and automatic large-log hydration completion after startup. `POST /api/admin/sim/advance { ticks: N }` still lets a GM observe emergent co-occurrence on demand without waiting for wall-clock days. |
 
 If any criterion still cannot be demonstrated after the full phase program ships, the program is **not complete** — return to whichever phase failed to land the missing piece.
 

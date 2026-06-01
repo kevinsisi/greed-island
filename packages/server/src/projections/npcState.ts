@@ -41,6 +41,11 @@ export type NpcLastProductiveAction = Readonly<{
 const NPC_STATE_RECORDED = 'NPC_STATE_RECORDED'
 const NPC_PRODUCTIVE_ACTION = 'NPC_PRODUCTIVE_ACTION'
 
+export const NPC_STATE_BOOT_EVENT_TYPES = [
+  NPC_STATE_RECORDED,
+  NPC_PRODUCTIVE_ACTION,
+] as const
+
 export class NpcStateProjection {
   private rows = new Map<string, NpcStateRow>()
   private lastProductiveActions = new Map<string, NpcLastProductiveAction>()

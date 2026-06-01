@@ -103,7 +103,7 @@ import {
   type DetectedSettlementFormation,
 } from './settlementDetection.js'
 import { enforceAtomicSettlementStateCommands, planSettlementCommands } from './settlementEngine.js'
-import { SettlementsProjection, type SettlementRow } from '../projections/settlements.js'
+import { SettlementsProjection, SETTLEMENTS_BOOT_EVENT_TYPES, type SettlementRow } from '../projections/settlements.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog, CardRuleOperatorDef } from '../cards/types.js'
@@ -209,18 +209,18 @@ import {
   type NpcLifeView
 } from './cityLife.js'
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
-import { NpcStateProjection } from '../projections/npcState.js'
+import { NpcStateProjection, NPC_STATE_BOOT_EVENT_TYPES } from '../projections/npcState.js'
 import { AnimalPopulationProjection, filterWildPopulation, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { LivestockRegistryProjection } from '../projections/livestockRegistry.js'
 import { PlayerCivilizationProjection } from '../projections/playerCivilization.js'
 import { AnimalMigrationProjection, type AnimalMigrationWaveRow } from '../projections/animalMigration.js'
 import { PredatorHungerProjection, type PredatorHungerRow } from '../projections/predatorHunger.js'
-import { RumorProjection, type RumorRow } from '../projections/rumor.js'
+import { RumorProjection, RUMOR_BOOT_EVENT_TYPES, type RumorRow } from '../projections/rumor.js'
 import { seedRumorsFromEvent } from './rumorSeeder.js'
 import { planSkillObservations } from './skillObservationSeeder.js'
 import { planMentorshipTick } from './mentorshipEngine.js'
-import { SkillXpProjection } from '../projections/skillXp.js'
-import { CulturalElementProjection } from '../projections/culturalElement.js'
+import { SkillXpProjection, SKILL_XP_BOOT_EVENT_TYPES } from '../projections/skillXp.js'
+import { CulturalElementProjection, CULTURAL_ELEMENT_BOOT_EVENT_TYPES } from '../projections/culturalElement.js'
 import { planFestivalSeed, planRitualSeed, planNormSeed } from './culturalSeeders.js'
 import { FisheryDensityProjection, type FisheryDensityRow } from '../projections/fisheryDensity.js'
 import { SpeciesExtinctionProjection } from '../projections/speciesExtinction.js'
@@ -499,6 +499,7 @@ export type NarrativeEvent = Readonly<{
 
 type Listener = (event: NarrativeEvent) => void
 type TickListener = (tick: number) => void
+type DeferredHydrationState = 'not_needed' | 'pending' | 'running' | 'complete' | 'failed'
 
 const RECENT_EVENTS_BUFFER = 200
 
@@ -512,6 +513,9 @@ export class SimulationRuntime {
   private readonly listeners = new Set<Listener>()
   private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
+  private deferredHydrationState: DeferredHydrationState = 'not_needed'
+  private deferredHydrationPromise: Promise<void> | null = null
+  private deferredHydrationError: string | null = null
   private lastSequence = 0
   private eventCount = 0
   // Per-tick budget gate (simulation-budget-enforcement).
@@ -1254,7 +1258,10 @@ export class SimulationRuntime {
   /** v0.53.0 — NPC's episodic memory (formatted string for AI dialog prompt). */
   getFormattedMemoryContext(npcId: string): string {
     if (!this.npcMemory) return ''
-    return this.npcMemory.formatMemoryContext(npcId, this.currentTick)
+    return this.npcMemory.formatMemoryContext(npcId, this.currentTick, {
+      householdId: this.npcLineageProjection.householdId(npcId),
+      allowedDeceasedNpcIds: this.bornNpcsProjection.getParentNpcIds(npcId),
+    })
   }
 
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
@@ -1282,10 +1289,45 @@ export class SimulationRuntime {
     return allMembers
       .filter((id) => id !== npcId && !this.npcMortalityProjection.isDeceased(id))
       .map((id) => {
-        const p = this.profiles.find((pr) => pr.id === id)
+        const p = this.findProfile(id)
         return p ? { npcId: id, nameZh: p.name.zh, role: p.role.zh } : null
       })
       .filter((r): r is { npcId: string; nameZh: string; role: string } => r !== null)
+  }
+
+  getLineageDialogContextFor(npcId: string): readonly {
+    npcId: string
+    nameZh: string
+    role: string
+    relation: string
+    deceased: boolean
+  }[] {
+    const parentIds = new Set(this.bornNpcsProjection.getParentNpcIds(npcId))
+    const householdId = this.npcLineageProjection.householdId(npcId)
+    const lineageIds = new Set<string>([...parentIds])
+    for (const memberId of this.npcLineageProjection.membersOf(householdId)) {
+      if (memberId === npcId || parentIds.has(memberId)) continue
+      if (this.npcMortalityProjection.isDeceased(memberId)) lineageIds.add(memberId)
+    }
+    return [...lineageIds]
+      .map((id) => {
+        const profile = this.findProfile(id)
+        if (!profile) return null
+        return {
+          npcId: id,
+          nameZh: profile.name.zh,
+          role: profile.role.zh,
+          relation: parentIds.has(id) ? '父母' : '家族前輩',
+          deceased: this.npcMortalityProjection.isDeceased(id),
+        }
+      })
+      .filter((row): row is {
+        npcId: string
+        nameZh: string
+        role: string
+        relation: string
+        deceased: boolean
+      } => row !== null)
   }
 
   /** Phase 5 §11.9 — species with extinction warning whose warningTileIds include tileId. */
@@ -1448,10 +1490,37 @@ export class SimulationRuntime {
 
   /** 回傳 NPC 的顯示名稱與目前 activity，供建築佔用者列表用。 */
   getNpcActivityAndName(npcId: string): { nameZh: string; activity: string } | null {
-    const profile = this.profiles.find((p) => p.id === npcId)
+    const profile = this.findProfile(npcId)
     if (!profile) return null
     const state = this.npcEngine.getState(npcId)
     return { nameZh: profile.name.zh, activity: state?.activity ?? 'idle' }
+  }
+
+  needsDeferredHydration(): boolean {
+    return this.deferredHydrationState === 'pending'
+  }
+
+  getDeferredHydrationState(): DeferredHydrationState {
+    return this.deferredHydrationState
+  }
+
+  getDeferredHydrationError(): string | null {
+    return this.deferredHydrationError
+  }
+
+  async startDeferredHydration(): Promise<void> {
+    if (this.deferredHydrationState === 'not_needed' || this.deferredHydrationState === 'complete') return
+    if (this.deferredHydrationPromise) {
+      await this.deferredHydrationPromise
+      return
+    }
+    this.deferredHydrationState = 'running'
+    this.deferredHydrationPromise = this.runDeferredHydration().catch((err) => {
+      this.deferredHydrationState = 'failed'
+      this.deferredHydrationError = err instanceof Error ? err.message : String(err)
+      throw err
+    })
+    await this.deferredHydrationPromise
   }
 
   isRareWindowOpen(): boolean {
@@ -1521,7 +1590,7 @@ export class SimulationRuntime {
   }
 
   findProfile(npcId: string): NpcProfile | null {
-    for (const profile of this.profiles) {
+    for (const profile of this.npcEngine.listProfiles()) {
       if (profile.id === npcId) return profile
     }
     return null
@@ -3840,10 +3909,13 @@ export class SimulationRuntime {
         currentTick: nextTick,
         logisticsProjection: this.logisticsProjection,
         roadNetworkProjection: this.roadNetworkProjection,
+        unlockedTileIds: this.lifeExpansion.unlockedTileIds,
+        generatedTileIds: this.dynamicTileProjection.listTileIds(),
       })
       for (const intent of roadIntents) {
         const fromName = TILE_BY_ID[intent.fromTileId]?.name ?? intent.fromTileId
         const toName = TILE_BY_ID[intent.toTileId]?.name ?? intent.toTileId
+        const structureLabel = intent.roadType === 'bridge' ? '橋樑' : '道路'
         commands.push(makeLivingWorldCommand(
           'ROAD_CONSTRUCTED',
           SIM_ACTOR_WORLD,
@@ -3856,7 +3928,7 @@ export class SimulationRuntime {
             toTileId: intent.toTileId,
             roadType: intent.roadType,
             constructedAtTick: nextTick,
-            narration: `繁榮的貿易往來促使${fromName}與${toName}之間的道路自然形成。`,
+            narration: `繁榮的貿易往來促使${fromName}與${toName}之間的${structureLabel}自然形成。`,
           }
         ))
       }
@@ -4095,6 +4167,19 @@ export class SimulationRuntime {
           closedAtTick: nextTick,
           reason: 'faction_collapse',
           narration: `${losingLabel}崩潰後，物流通道 ${route.routeId} 因領土動盪而關閉。`,
+        }))
+      }
+      for (const road of this.roadNetworkProjection.list()) {
+        const fromName = TILE_NAME_BY_ID[road.fromTileId] ?? road.fromTileId
+        const toName = TILE_NAME_BY_ID[road.toTileId] ?? road.toTileId
+        const structureLabel = road.roadType === 'bridge' ? '橋樑' : '道路'
+        commands.push(makeLivingWorldCommand('ROAD_DESTROYED', SIM_ACTOR_WORLD, 'system', nextTick, submittedAt, {
+          roadId: road.roadId,
+          fromTileId: road.fromTileId,
+          toTileId: road.toTileId,
+          roadType: road.roadType,
+          destroyedAtTick: nextTick,
+          narration: `${losingLabel}崩潰後，${fromName}與${toName}之間的${structureLabel}失去維護而毀壞。`,
         }))
       }
       // Abandon buildings with health ≤ 0 on any currently-contested tile
@@ -5943,6 +6028,7 @@ export class SimulationRuntime {
       this.areaStateProjection.rebuildFromEvents(allEvents)
       this.worldStateProjection.rebuildFromEvents(allEvents)
       this.bioNodeProjection.rebuildFromEvents(allEvents)
+      this.buildingStateProjection.rebuildFromEvents(allEvents)
       this.buildingOccupantsProjection.rebuildFromEvents(allEvents)
       this.roadNetworkProjection.rebuildFromEvents(allEvents)
       this.wallNetworkProjection.rebuildFromEvents(allEvents)
@@ -5960,19 +6046,11 @@ export class SimulationRuntime {
       this.bornNpcsProjection.rebuildFromEvents(allEvents)
     } else {
       // Availability-first large-log boot: only rebuild projections required
-      // for public NPC liveness and born-child maturation before HTTP listen.
-      // High-volume ecology/goods/history projections can fall back to facts or
-      // empty runtime projections; replaying them synchronously kept live behind
-      // Caddy 502 on a 14M-row EventLog.
-      // NPC mortality + lineage projections — rebuild from NPC death/heir events.
-      const mortalityEvents = this.store.readEventsByTypes(MORTALITY_BOOT_EVENT_TYPES)
-      this.npcMortalityProjection.rebuildFromEvents(mortalityEvents)
-      this.npcLineageProjection.rebuildFromEvents(mortalityEvents)
-      // BornNpcs projection — rebuild matured born NPC roster from NPC_CHILD_BORN/NPC_MATURED.
-      const bornNpcEvents = this.store.readEventsByTypes(BORN_NPC_BOOT_EVENT_TYPES)
-      this.bornNpcsProjection.rebuildFromEvents(bornNpcEvents)
-      const lifeExpansionEvents = this.store.readEventsByTypes(LIFE_EXPANSION_BOOT_EVENT_TYPES)
-      rebuiltLifeExpansion = rebuildLifeExpansionFromEvents(lifeExpansionEvents)
+      // for HTTP availability before any typed replay begins. On very large
+      // local/live logs even the previously "small" typed subsets can still
+      // block constructor-time boot on Windows bind mounts, so the remaining
+      // replay work is deferred until after listen.
+      this.deferredHydrationState = 'pending'
     }
 
     // Initialize previous faction tile counts from post-boot projection state
@@ -6089,6 +6167,184 @@ export class SimulationRuntime {
       const narrative = readNarrativeFromAnyEvent(event, event.tick ?? 0)
       if (!narrative) continue
       this.pushRecent(narrative)
+    }
+  }
+
+  private async runDeferredHydration(): Promise<void> {
+    const batches: ReadonlyArray<{
+      label: string
+      eventTypes: readonly string[]
+      apply: (events: readonly Event[]) => void
+    }> = [
+      {
+        label: 'mortality-lineage',
+        eventTypes: MORTALITY_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.npcMortalityProjection.rebuildFromEvents(events)
+          this.npcLineageProjection.rebuildFromEvents(events)
+        },
+      },
+      {
+        label: 'born-npcs',
+        eventTypes: BORN_NPC_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.bornNpcsProjection.rebuildFromEvents(events)
+          for (const profile of this.bornNpcsProjection.listMaturedProfiles()) {
+            this.npcEngine.registerDynamicNpc(profile)
+          }
+        },
+      },
+      {
+        label: 'life-expansion',
+        eventTypes: LIFE_EXPANSION_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.lifeExpansion = rebuildLifeExpansionFromEvents(events)
+          this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
+        },
+      },
+      { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
+      { label: 'npc-state', eventTypes: NPC_STATE_BOOT_EVENT_TYPES, apply: (events) => this.npcStateProjection.rebuildFromEvents(events) },
+      { label: 'rumors', eventTypes: RUMOR_BOOT_EVENT_TYPES, apply: (events) => this.rumorProjection.rebuildFromEvents(events) },
+      { label: 'skills', eventTypes: SKILL_XP_BOOT_EVENT_TYPES, apply: (events) => this.skillXpProjection.rebuildFromEvents(events) },
+      { label: 'culture', eventTypes: CULTURAL_ELEMENT_BOOT_EVENT_TYPES, apply: (events) => this.culturalElementProjection.rebuildFromEvents(events) },
+      { label: 'settlements', eventTypes: SETTLEMENTS_BOOT_EVENT_TYPES, apply: (events) => this.settlementsProjection.rebuildFromEvents(events) },
+      {
+        label: 'ecosystem',
+        eventTypes: ECOSYSTEM_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.animalPopulationProjection.rebuildFromEvents(events)
+          this.animalMigrationProjection.rebuildFromEvents(events)
+          this.predatorHungerProjection.rebuildFromEvents(events)
+          this.fisheryDensityProjection.rebuildFromEvents(events)
+          this.speciesExtinctionProjection.rebuildFromEvents(events)
+          this.ecosystemRegionProjection.rebuildFromEvents(events)
+          this.forestDepletionProjection.rebuildFromEvents(events)
+          this.livestockRegistryProjection.rebuildFromEvents(events)
+          this.worldEventProjection.rebuildFromEvents(events)
+          this.bioNodeProjection.rebuildFromEvents(events)
+        },
+      },
+      { label: 'player-civilization', eventTypes: PLAYER_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.playerCivilizationProjection.rebuildFromEvents(events) },
+      {
+        label: 'goods',
+        eventTypes: GOODS_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.goodsInventoryProjection.rebuildFromEvents(events)
+          this.logisticsProjection.rebuildFromEvents(events)
+          this.marketPricesProjection.rebuildFromEvents(events)
+          this.householdEconomyProjection.rebuildFromEvents(events)
+          this.productionChainsProjection.rebuildFromEvents(events)
+        },
+      },
+      {
+        label: 'faction',
+        eventTypes: FACTION_BOOT_EVENT_TYPES,
+        apply: (events) => {
+          this.factionControlProjection.rebuildFromEvents(events)
+          this.factionDominanceProjection.rebuildFromEvents(events)
+        },
+      },
+      {
+        label: 'area-world-building',
+        eventTypes: [
+          ...AREA_STATE_BOOT_EVENT_TYPES,
+          ...WORLD_STATE_BOOT_EVENT_TYPES,
+          ...BUILDING_STATE_BOOT_EVENT_TYPES,
+          ...BUILDING_OCCUPANTS_BOOT_EVENT_TYPES,
+          ...ROAD_NETWORK_BOOT_EVENT_TYPES,
+          ...WALL_NETWORK_BOOT_EVENT_TYPES,
+          ...DYNAMIC_TILE_BOOT_EVENT_TYPES,
+          ...ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES,
+          ...NPC_INCAPACITATION_BOOT_EVENT_TYPES,
+        ],
+        apply: (events) => {
+          this.areaStateProjection.rebuildFromEvents(events)
+          this.worldStateProjection.rebuildFromEvents(events)
+          this.buildingStateProjection.rebuildFromEvents(events)
+          this.buildingOccupantsProjection.rebuildFromEvents(events)
+          this.roadNetworkProjection.rebuildFromEvents(events)
+          this.wallNetworkProjection.rebuildFromEvents(events)
+          this.dynamicTileProjection.rebuildFromEvents(events)
+          this.activeRuleOperatorsProjection.rebuildFromEvents(events)
+          this.npcIncapacitationProjection.rebuildFromEvents(events)
+        },
+      },
+      { label: 'intent', eventTypes: INTENT_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.intentProjection.rebuildFromEvents(events) },
+      { label: 'history', eventTypes: HISTORY_CHRONICLE_BOOT_EVENT_TYPES, apply: (events) => this.historyChronicleProjection.rebuildFromEvents(events) },
+    ]
+
+    await this.yieldToEventLoop()
+    for (const batch of batches) {
+      const events = this.store.readEventsByTypes(batch.eventTypes)
+      batch.apply(events)
+      console.log(`[boot] deferred hydration complete: ${batch.label} (${events.length} events)`)
+      await this.yieldToEventLoop()
+    }
+
+    this.hydrateNpcEngineFromProjectionFacts()
+    this.hydrateAreaEngineFromProjectionFacts()
+    this.hydrateBuildingRuntimeFromProjectionFacts()
+    this.hydrateWorldStateFromProjectionFacts()
+    this.reinitializePreviousProjectionCounts()
+    this.deferredHydrationState = 'complete'
+    console.log('[boot] deferred large-log hydration fully complete')
+  }
+
+  private hydrateNpcEngineFromProjectionFacts(): void {
+    for (const profile of this.npcEngine.listProfiles()) {
+      const projected = this.npcStateProjection.getByNpcId(profile.id)
+      if (projected) this.npcEngine.hydrate(profile.id, projected.state)
+    }
+  }
+
+  private hydrateAreaEngineFromProjectionFacts(): void {
+    for (const tile of listMapTiles(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds())) {
+      const typed = this.areaStateProjection.getByTileId(tile.id)
+      if (typed) this.areaEngine.hydrate(tile.id, typed.state)
+    }
+  }
+
+  private hydrateBuildingRuntimeFromProjectionFacts(): void {
+    if (this.buildingOccupantsProjection.isHydrated()) {
+      this.buildingRuntime.hydrate(this.buildingOccupantsProjection.toJSON())
+    }
+  }
+
+  private hydrateWorldStateFromProjectionFacts(): void {
+    if (!this.worldStateProjection.isHydrated()) return
+    const projectedWeather = this.worldStateProjection.getWeather()
+    if (projectedWeather) this.weather = projectedWeather
+    const projectedSeason = this.worldStateProjection.getSeason()
+    if (projectedSeason) this.season = projectedSeason
+    const rareWindow = this.worldStateProjection.getRareWindow()
+    this.rareWindowOpen = rareWindow.open
+    this.rareWindowClosesAtTick = rareWindow.closesAt ?? 0
+    const restored: ActiveWorldEvent[] = []
+    for (const seed of this.worldStateProjection.getActiveEventSeeds()) {
+      const rebuilt = rebuildActiveEvent(seed.templateId, seed.startedAtTick, {
+        weather: this.weather,
+        season: this.season,
+      })
+      if (rebuilt) restored.push(rebuilt)
+    }
+    this.eventEngine.hydrate(restored, this.currentTick)
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+
+  private reinitializePreviousProjectionCounts(): void {
+    this.previousFactionTileCounts = new Map()
+    for (const faction of FACTIONS) {
+      this.previousFactionTileCounts.set(faction, this.factionControlProjection.dominantTilesOf(faction).length)
+    }
+    this.previousSpeciesPopulationTotals = new Map()
+    for (const row of this.animalPopulationProjection.list()) {
+      this.previousSpeciesPopulationTotals.set(
+        row.speciesId,
+        (this.previousSpeciesPopulationTotals.get(row.speciesId) ?? 0) + row.count
+      )
     }
   }
 }

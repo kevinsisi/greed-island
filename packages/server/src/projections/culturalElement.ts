@@ -14,6 +14,13 @@ const CULTURAL_RITUAL_PERFORMED = 'CULTURAL_RITUAL_PERFORMED'
 const CULTURAL_NORM_ESTABLISHED = 'CULTURAL_NORM_ESTABLISHED'
 const RARE_WINDOW_OPEN = 'RARE_WINDOW_OPEN'
 
+export const CULTURAL_ELEMENT_BOOT_EVENT_TYPES = [
+  RARE_WINDOW_OPEN,
+  CULTURAL_FESTIVAL_FORMED,
+  CULTURAL_RITUAL_PERFORMED,
+  CULTURAL_NORM_ESTABLISHED,
+] as const
+
 export class CulturalElementProjection {
   private rows = new Map<string, CulturalElementRow>()
   private festivalCounters = new Map<string, number>()

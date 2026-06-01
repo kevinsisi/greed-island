@@ -12,6 +12,14 @@ export type MapTileDef = Readonly<{
   biome: string
 }>
 
+export type MapEdgeCrossingType = 'land' | 'water-crossing'
+
+export type MapEdgeDef = Readonly<{
+  fromTileId: string
+  toTileId: string
+  crossingType: MapEdgeCrossingType
+}>
+
 export const MAP_TILES: ReadonlyArray<MapTileDef> = [
   { id: 't_desert', name: '潮聲區', x: 0, y: 4, biome: 'desert' },
   { id: 't_forest', name: '潮見丘', x: 1, y: 1, biome: 'forest' },
@@ -61,6 +69,32 @@ export const MAP_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
 export const EXPANSION_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
   t_salt_marsh: ['t_dock', 't_ruin']
 }
+
+function edgeKey(a: string, b: string): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`
+}
+
+const MAP_EDGE_DEFINITIONS: ReadonlyArray<MapEdgeDef> = [
+  { fromTileId: 't_desert', toTileId: 't_forest', crossingType: 'land' },
+  { fromTileId: 't_desert', toTileId: 't_dock', crossingType: 'water-crossing' },
+  { fromTileId: 't_forest', toTileId: 't_mountain', crossingType: 'land' },
+  { fromTileId: 't_forest', toTileId: 't_central', crossingType: 'land' },
+  { fromTileId: 't_mountain', toTileId: 't_dimai', crossingType: 'land' },
+  { fromTileId: 't_mountain', toTileId: 't_temple', crossingType: 'water-crossing' },
+  { fromTileId: 't_temple', toTileId: 't_ruin', crossingType: 'water-crossing' },
+  { fromTileId: 't_temple', toTileId: 't_dimai', crossingType: 'water-crossing' },
+  { fromTileId: 't_central', toTileId: 't_dimai', crossingType: 'land' },
+  { fromTileId: 't_central', toTileId: 't_dock', crossingType: 'water-crossing' },
+  { fromTileId: 't_central', toTileId: 't_ruin', crossingType: 'land' },
+  { fromTileId: 't_dock', toTileId: 't_ruin', crossingType: 'water-crossing' },
+  { fromTileId: 't_dock', toTileId: 't_salt_marsh', crossingType: 'water-crossing' },
+  { fromTileId: 't_ruin', toTileId: 't_salt_marsh', crossingType: 'water-crossing' },
+]
+
+const EDGE_BY_KEY: Readonly<Record<string, MapEdgeDef>> = MAP_EDGE_DEFINITIONS.reduce((acc, edge) => {
+  acc[edgeKey(edge.fromTileId, edge.toTileId)] = edge
+  return acc
+}, {} as Record<string, MapEdgeDef>)
 
 // Frontier zones: coordinate slots NOT in MAP_TILES or EXPANSION_TILES.
 // These tiles are created at runtime by TILE_GENERATED events when
@@ -144,4 +178,24 @@ export function nextStepTowards(originId: string, targetId: string, unlockedTile
     }
   }
   return null
+}
+
+export function getMapEdgeCrossingType(
+  fromTileId: string,
+  toTileId: string,
+  unlockedTileIds: readonly string[] = [],
+  generatedTileIds: readonly string[] = []
+): MapEdgeCrossingType {
+  const adjacency = getMapAdjacency(unlockedTileIds, generatedTileIds)
+  if (!(adjacency[fromTileId] ?? []).includes(toTileId)) return 'land'
+  const explicit = EDGE_BY_KEY[edgeKey(fromTileId, toTileId)]
+  if (explicit) return explicit.crossingType
+  const tileMap = [...ALL_KNOWN_TILES, ...FRONTIER_ZONES].reduce((acc, tile) => {
+    acc[tile.id] = tile
+    return acc
+  }, {} as Record<string, MapTileDef>)
+  const fromTile = tileMap[fromTileId]
+  const toTile = tileMap[toTileId]
+  if (fromTile?.biome === 'water' || toTile?.biome === 'water') return 'water-crossing'
+  return 'land'
 }

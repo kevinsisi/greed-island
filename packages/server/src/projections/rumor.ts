@@ -21,6 +21,11 @@ export type RumorRow = Readonly<{
 const NPC_RUMOR_HEARD = 'NPC_RUMOR_HEARD'
 const NPC_RUMOR_SPREAD = 'NPC_RUMOR_SPREAD'
 
+export const RUMOR_BOOT_EVENT_TYPES = [
+  NPC_RUMOR_HEARD,
+  NPC_RUMOR_SPREAD,
+] as const
+
 export class RumorProjection {
   private byNpc = new Map<string, Map<string, RumorRow>>()
 

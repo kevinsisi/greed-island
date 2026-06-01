@@ -37,7 +37,7 @@ import {
   type InteractIntent,
   type RelationshipTier,
 } from '../npcs/dialog.js'
-import { generateAiReply, AiDialogError, computePlayerAlias, computeSocialHistory, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow, type SocialHistoryContext } from '../npcs/aiDialog.js'
+import { generateAiReply, AiDialogError, computePlayerAlias, computeSocialHistory, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow, type LineageContextRow, type SocialHistoryContext } from '../npcs/aiDialog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -183,7 +183,7 @@ export function createNpcRouter(input: {
         // Phase 3 §37.1 — grounded world context
         const npcState = input.runtime.getNpcs().find((n) => n.id === npcId)
         const npcTile = npcState?.location ?? profile.defaultLocation
-        const allProfiles = input.runtime.getNpcs()
+        const allProfiles = input.runtime.getNpcsIncludingDeceased()
 
         // known-person graph from interaction memories (cap 10 unique)
         const memoryStore = input.runtime.getNpcMemory()
@@ -224,6 +224,17 @@ export function createNpcRouter(input: {
         const householdMembers: readonly HouseholdContextRow[] | undefined = rawHouseholdMembers.length > 0
           ? rawHouseholdMembers.map((m) => ({ nameZh: m.nameZh, role: m.role }))
           : undefined
+        const rawLineage = input.runtime.getLineageDialogContextFor(npcId)
+        const parentLineage: readonly LineageContextRow[] | undefined = rawLineage.length > 0
+          ? rawLineage.map((row) => ({
+              nameZh: row.nameZh,
+              role: row.role,
+              relation: row.relation,
+              deceased: row.deceased,
+            }))
+          : undefined
+        const lineageNames = rawLineage.map((row) => row.nameZh)
+        const groundedKnownNames = Array.from(new Set([...(knownPersonNames ?? []), ...lineageNames]))
 
         // ecology context
         const ecologyRows = input.runtime.getAnimalPopulationOnTile(npcTile)
@@ -291,9 +302,10 @@ export function createNpcRouter(input: {
           worldTick: tick,
           worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
-          ...(knownPersonNames ? { knownPersonNames } : {}),
+          ...(groundedKnownNames.length > 0 ? { knownPersonNames: groundedKnownNames } : {}),
           ...(relationshipContext ? { relationshipContext } : {}),
           ...(householdMembers ? { householdMembers } : {}),
+          ...(parentLineage ? { parentLineage } : {}),
           ...(playerAlias ? { playerAlias } : {}),
           ...(socialHistoryContext ? { socialHistoryContext } : {}),
           ...(ecologyRows.length > 0 ? { ecologyContext: ecologyRows } : {}),

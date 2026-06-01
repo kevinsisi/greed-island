@@ -5,6 +5,36 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-01 — Handoff Snapshot @ v0.87.12
+
+### Current Version
+`0.87.12` — Close-world-capability-gaps ship: descendant ancestor-memory grounding, roads/bridges + collapse destruction, and deferred large-log hydration completion.
+
+### What Was Broken (v0.87.11)
+- `WORLD_CAPABILITIES.md` had to be downgraded because the runtime still lacked three real behaviors: descendants could not ground deceased-parent memory in dialog, faction collapse killed logistics but not road infrastructure, and large-log boot left many projections permanently unhydrated after availability-first startup.
+- Matured born NPCs also still had partial runtime lineage/profile wiring: parent ids existed in `BornNpcsProjection`, but household membership and profile lookup paths were inconsistent.
+
+### What Was Fixed (v0.87.12)
+- Matured born NPC derived profiles now carry `householdId`; `NpcLineageProjection` admits `NPC_MATURED` descendants into household membership; runtime household/profile lookups resolve dynamic born NPCs correctly.
+- NPC dialog grounding now includes explicit parent/ancestor context plus household-scoped deceased-memory filtering, so descendants can reference factual deceased parents without leaking unrelated death memories.
+- Server-side map edge metadata now classifies infrastructure as `road` vs `bridge`; faction collapse emits `ROAD_DESTROYED` in the same consequence block as logistics closure.
+- Large-log startup now listens quickly, starts ticking again, and schedules deferred hydration in the background so omitted projections rebuild automatically without requiring a second restart; `buildingStateProjection` is included.
+- `WORLD_CAPABILITIES.md` / `ROADMAP.md` updated to reflect the shipped runtime state.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/projections/npcLineage.test.ts src/kernel/npcMemory.test.ts src/npcs/aiDialog.test.ts src/sim/roadConstruction.test.ts src/sim/runtimeLargeLogHydration.test.ts` — pass (121 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (48 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+- Local Docker smoke:
+  - `curl.exe -s http://127.0.0.1:8100/healthz` → `{ "ok": true, "version": "0.87.12", "tick": 83382 }`
+  - `curl.exe -s http://127.0.0.1:8100/api/version` → `{ "version": "0.87.12" }`
+
+### CI/CD State
+Local implementation verified. Local Docker rebuilt on the workstation-specific flow and served `v0.87.12` on `:8100`; deferred large-log hydration then continued in the background against the 7.7M-event local SQLite.
+
+---
+
 ## 2026-06-01 — Handoff Snapshot @ v0.87.11 docs audit
 
 ### Current Version

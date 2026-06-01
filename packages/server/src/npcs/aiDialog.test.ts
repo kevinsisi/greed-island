@@ -4,6 +4,7 @@ import {
   buildKnownPersonBlock,
   buildRelationshipBlock,
   buildHouseholdBlock,
+  buildLineageBlock,
   buildAntiHallucinationBlock,
   buildEcologyBlock,
   buildRecentEventsBlock,
@@ -233,6 +234,24 @@ describe('buildHouseholdBlock', () => {
     const lines = buildHouseholdBlock([{ nameZh: '老李', role: '商人' }])
     const joined = lines.join('\n')
     expect(joined).toContain('家人')
+  })
+})
+
+describe('buildLineageBlock', () => {
+  it('returns empty array when lineage is undefined', () => {
+    expect(buildLineageBlock(undefined)).toEqual([])
+  })
+
+  it('renders parent and deceased ancestor facts', () => {
+    const lines = buildLineageBlock([
+      { nameZh: '阿海', role: '漁夫', relation: '父母', deceased: false },
+      { nameZh: '老潮伯', role: '船匠', relation: '家族前輩', deceased: true },
+    ])
+    const joined = lines.join('\n')
+    expect(joined).toContain('阿海')
+    expect(joined).toContain('父母')
+    expect(joined).toContain('老潮伯')
+    expect(joined).toContain('已故')
   })
 })
 

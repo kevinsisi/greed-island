@@ -10,25 +10,28 @@ export type NpcHeirRecord = Readonly<{
 }>
 
 const NPC_HEIR_ASSIGNED = 'NPC_HEIR_ASSIGNED'
+const NPC_MATURED = 'NPC_MATURED'
 
 export class NpcLineageProjection {
+  private readonly seedProfiles: readonly NpcProfile[]
   private householdMap = new Map<string, string>()
   private membersByHousehold = new Map<string, string[]>()
   private heirRecords = new Map<string, NpcHeirRecord[]>()
 
   constructor(profiles: readonly NpcProfile[]) {
-    for (const profile of profiles) {
-      const hId = typeof profile.personality['householdId'] === 'string'
-        ? profile.personality['householdId']
-        : profile.id
-      this.householdMap.set(profile.id, hId)
-      const members = this.membersByHousehold.get(hId) ?? []
-      members.push(profile.id)
-      this.membersByHousehold.set(hId, members)
-    }
+    this.seedProfiles = profiles
+    this.resetMembersFromProfiles()
   }
 
   project(event: Event): void {
+    if (event.eventType === NPC_MATURED) {
+      const raw = event.payload as Record<string, unknown> | null
+      if (!raw) return
+      const p = (typeof raw['data'] === 'object' && raw['data'] !== null ? raw['data'] : raw) as Record<string, unknown>
+      if (typeof p['npcId'] !== 'string' || typeof p['householdId'] !== 'string') return
+      this.addMemberToHousehold(p['npcId'], p['householdId'])
+      return
+    }
     if (event.eventType !== NPC_HEIR_ASSIGNED) return
     const raw = event.payload as Record<string, unknown> | null
     if (!raw) return
@@ -53,6 +56,7 @@ export class NpcLineageProjection {
   }
 
   rebuildFromEvents(events: readonly Event[]): void {
+    this.resetMembersFromProfiles()
     this.heirRecords = new Map()
     for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
       this.project(event)
@@ -74,5 +78,25 @@ export class NpcLineageProjection {
   /** Returns living household members sorted by bornAtTick ascending (oldest first). */
   livingMembersOf(hId: string, mortality: NpcMortalityProjection): readonly string[] {
     return this.membersOf(hId).filter((id) => !mortality.isDeceased(id))
+  }
+
+  private resetMembersFromProfiles(): void {
+    this.householdMap = new Map()
+    this.membersByHousehold = new Map()
+    for (const profile of this.seedProfiles) {
+      const hId = typeof profile.personality['householdId'] === 'string'
+        ? profile.personality['householdId']
+        : profile.id
+      this.addMemberToHousehold(profile.id, hId)
+    }
+  }
+
+  private addMemberToHousehold(npcId: string, householdId: string): void {
+    this.householdMap.set(npcId, householdId)
+    const members = this.membersByHousehold.get(householdId) ?? []
+    if (!members.includes(npcId)) {
+      members.push(npcId)
+      this.membersByHousehold.set(householdId, members)
+    }
   }
 }
