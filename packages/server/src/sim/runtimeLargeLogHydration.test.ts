@@ -43,7 +43,7 @@ function makeLargeLogStore(): any {
 }
 
 describe('SimulationRuntime deferred large-log hydration', () => {
-  it('hydrates omitted projections after startup without synchronous full replay', async () => {
+  it('skips high-volume optional projections that can OOM production boot', async () => {
     const runtime = new SimulationRuntime(
       makeLargeLogStore(),
       loadNpcProfiles(),
@@ -56,7 +56,7 @@ describe('SimulationRuntime deferred large-log hydration', () => {
     await runtime.startDeferredHydration()
 
     expect(runtime.getDeferredHydrationState()).toBe('complete')
-    expect(runtime.getBuildingStatesByTile('t_central').some((row) => row.buildingId === 'b_test_bridgehead')).toBe(true)
+    expect(runtime.getBuildingStatesByTile('t_central').some((row) => row.buildingId === 'b_test_bridgehead')).toBe(false)
 
     runtime.stop()
   })

@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-02 — Handoff Snapshot @ v0.87.13
+
+### Current Version
+`0.87.13` — Restart-loop hotfix: deferred large-log hydration no longer replays high-volume projections that exhaust Node's heap.
+
+### What Was Broken (live v0.87.12)
+- `greed-island-server` had `RestartCount=131`; live `/healthz` returned `502` while the container repeatedly restarted.
+- Server logs showed HTTP listen succeeded, then the 30-second deferred hydration began and completed only the small batches (`mortality-lineage`, `born-npcs`, `life-expansion`, `combat`).
+- Immediately after that, `better-sqlite3 Statement.all()` allocated enough rows to hit V8's ~4GB heap limit, producing `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`.
+- Root cause: the v0.87.12 deferred large-log hydration tried to rebuild optional high-volume projections such as `NPC_STATE_RECORDED` (~9M rows) in memory on a 15M-event live EventLog.
+
+### What Was Fixed (v0.87.13)
+- Deferred large-log hydration now only runs the small batches needed for public NPC liveness and born-child state: mortality/lineage, born NPCs, life expansion, and combat.
+- High-volume optional projections are intentionally skipped until they have materialized or paged hydration.
+- Regression test now asserts large-log deferred hydration does not hydrate optional building state from background replay.
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/sim/runtimeLargeLogHydration.test.ts src/projections/npcLineage.test.ts src/projections/bornNpcs.test.ts` — pass (21 tests)
+- `npm run build` — pass (server + web; Vite chunk-size warning remains known non-blocking)
+- `npx openspec validate --all --strict` — pass (48 passed, 0 failed)
+- `git diff --check` — pass (CRLF normalization warnings only)
+
+### CI/CD State
+Local hotfix verified after live restart loop confirmation; pending commit, push, CI/CD, Deploy Dev, and live smoke.
+
+---
+
 ## 2026-06-01 — Handoff Snapshot @ v0.87.12
 
 ### Current Version

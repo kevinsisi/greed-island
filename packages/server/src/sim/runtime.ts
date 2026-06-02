@@ -6203,74 +6203,10 @@ export class SimulationRuntime {
         },
       },
       { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
-      { label: 'npc-state', eventTypes: NPC_STATE_BOOT_EVENT_TYPES, apply: (events) => this.npcStateProjection.rebuildFromEvents(events) },
-      { label: 'rumors', eventTypes: RUMOR_BOOT_EVENT_TYPES, apply: (events) => this.rumorProjection.rebuildFromEvents(events) },
-      { label: 'skills', eventTypes: SKILL_XP_BOOT_EVENT_TYPES, apply: (events) => this.skillXpProjection.rebuildFromEvents(events) },
-      { label: 'culture', eventTypes: CULTURAL_ELEMENT_BOOT_EVENT_TYPES, apply: (events) => this.culturalElementProjection.rebuildFromEvents(events) },
-      { label: 'settlements', eventTypes: SETTLEMENTS_BOOT_EVENT_TYPES, apply: (events) => this.settlementsProjection.rebuildFromEvents(events) },
-      {
-        label: 'ecosystem',
-        eventTypes: ECOSYSTEM_BOOT_EVENT_TYPES,
-        apply: (events) => {
-          this.animalPopulationProjection.rebuildFromEvents(events)
-          this.animalMigrationProjection.rebuildFromEvents(events)
-          this.predatorHungerProjection.rebuildFromEvents(events)
-          this.fisheryDensityProjection.rebuildFromEvents(events)
-          this.speciesExtinctionProjection.rebuildFromEvents(events)
-          this.ecosystemRegionProjection.rebuildFromEvents(events)
-          this.forestDepletionProjection.rebuildFromEvents(events)
-          this.livestockRegistryProjection.rebuildFromEvents(events)
-          this.worldEventProjection.rebuildFromEvents(events)
-          this.bioNodeProjection.rebuildFromEvents(events)
-        },
-      },
-      { label: 'player-civilization', eventTypes: PLAYER_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.playerCivilizationProjection.rebuildFromEvents(events) },
-      {
-        label: 'goods',
-        eventTypes: GOODS_BOOT_EVENT_TYPES,
-        apply: (events) => {
-          this.goodsInventoryProjection.rebuildFromEvents(events)
-          this.logisticsProjection.rebuildFromEvents(events)
-          this.marketPricesProjection.rebuildFromEvents(events)
-          this.householdEconomyProjection.rebuildFromEvents(events)
-          this.productionChainsProjection.rebuildFromEvents(events)
-        },
-      },
-      {
-        label: 'faction',
-        eventTypes: FACTION_BOOT_EVENT_TYPES,
-        apply: (events) => {
-          this.factionControlProjection.rebuildFromEvents(events)
-          this.factionDominanceProjection.rebuildFromEvents(events)
-        },
-      },
-      {
-        label: 'area-world-building',
-        eventTypes: [
-          ...AREA_STATE_BOOT_EVENT_TYPES,
-          ...WORLD_STATE_BOOT_EVENT_TYPES,
-          ...BUILDING_STATE_BOOT_EVENT_TYPES,
-          ...BUILDING_OCCUPANTS_BOOT_EVENT_TYPES,
-          ...ROAD_NETWORK_BOOT_EVENT_TYPES,
-          ...WALL_NETWORK_BOOT_EVENT_TYPES,
-          ...DYNAMIC_TILE_BOOT_EVENT_TYPES,
-          ...ACTIVE_RULE_OPERATORS_BOOT_EVENT_TYPES,
-          ...NPC_INCAPACITATION_BOOT_EVENT_TYPES,
-        ],
-        apply: (events) => {
-          this.areaStateProjection.rebuildFromEvents(events)
-          this.worldStateProjection.rebuildFromEvents(events)
-          this.buildingStateProjection.rebuildFromEvents(events)
-          this.buildingOccupantsProjection.rebuildFromEvents(events)
-          this.roadNetworkProjection.rebuildFromEvents(events)
-          this.wallNetworkProjection.rebuildFromEvents(events)
-          this.dynamicTileProjection.rebuildFromEvents(events)
-          this.activeRuleOperatorsProjection.rebuildFromEvents(events)
-          this.npcIncapacitationProjection.rebuildFromEvents(events)
-        },
-      },
-      { label: 'intent', eventTypes: INTENT_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.intentProjection.rebuildFromEvents(events) },
-      { label: 'history', eventTypes: HISTORY_CHRONICLE_BOOT_EVENT_TYPES, apply: (events) => this.historyChronicleProjection.rebuildFromEvents(events) },
+      // Do not replay high-volume projections here. Live has >15M events and
+      // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
+      // heap limit, causing a restart loop after HTTP listen. Those projections
+      // need materialized or paged hydration before they can safely run in prod.
     ]
 
     await this.yieldToEventLoop()
