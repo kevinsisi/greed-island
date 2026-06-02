@@ -28,7 +28,13 @@ developer. Keep latest status at the top.
 - `git diff --check` — pass (CRLF normalization warnings only)
 
 ### CI/CD State
-Local hotfix verified after live restart loop confirmation; pending commit, push, CI/CD, Deploy Dev, and live smoke.
+Main branch commit `bd8d601`. CI `26796280656` passed. Deploy Dev `26796318140` passed. Live v0.87.13 smoke passed:
+- `/healthz`: `version=0.87.13`, tick `401164 → 401166`
+- Container after crossing the 30s deferred-hydration window: `RestartCount=0`, `State=running`, started at `2026-06-02T03:25:08Z`
+- Deferred hydration logs completed only small batches: `mortality-lineage (100)`, `born-npcs (213)`, `life-expansion (1533)`, `combat (0)`, then `fully complete`
+- `/api/world`: 200, 94,881 bytes, ~82ms
+- `/api/npcs`: 200, 52 living NPCs
+- Recent server logs: no `FATAL ERROR`, `heap out of memory`, `[sim] tick failed`, `SQLITE_CONSTRAINT_UNIQUE`, uncaught, or unhandled matches; ambient AI key failures remain known non-blocking
 
 ---
 
