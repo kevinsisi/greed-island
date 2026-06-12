@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Phaser from 'phaser'
-import { api, ApiError, type ServerCombatSession } from '../../api/client'
+import { api, ApiError, type ServerCombatHandCard, type ServerCombatSession } from '../../api/client'
 import { useAuth } from '../../state/AuthContext'
 import { CombatProjection, type CombatSseSnapshot } from '../../state/CombatProjection.js'
 import {
@@ -27,9 +27,13 @@ interface CombatHudProps {
   initialSession: ServerCombatSession
   onClose: () => void
   enemyType?: 'npc' | 'animal'
+  /** v0.90.0 — 術式卡手牌（基本牌 + 已購術式卡）；缺值時只顯示三按鈕。 */
+  hand?: ServerCombatHandCard[]
+  /** 此戰鬥已施放過的卡（每場每張限用一次）。 */
+  initialUsedCardClasses?: string[]
 }
 
-export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' }: CombatHudProps) {
+export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc', hand, initialUsedCardClasses }: CombatHudProps) {
   const { token } = useAuth()
   const [session, setSession] = useState<ServerCombatSession>(initialSession)
   const [busy, setBusy] = useState(false)
@@ -37,6 +41,10 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' 
   const [lastEvents, setLastEvents] = useState<
     Array<{ eventType: string; payload: Record<string, unknown> }>
   >([])
+  const [selectedCard, setSelectedCard] = useState<string | null>(null)
+  const [usedCards, setUsedCards] = useState<Set<string>>(
+    () => new Set(initialUsedCardClasses ?? [])
+  )
 
   // ESC 關閉
   useEffect(() => {
@@ -52,10 +60,15 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' 
       if (!token || busy) return
       setBusy(true)
       setError(null)
+      const cardClass = selectedCard ?? undefined
       try {
-        const r = await api.combatAction(token, session.combatId, action)
+        const r = await api.combatAction(token, session.combatId, action, undefined, cardClass)
         setSession(r.session)
         setLastEvents(r.events)
+        if (cardClass) {
+          setUsedCards((prev) => new Set(prev).add(cardClass))
+          setSelectedCard(null)
+        }
       } catch (err) {
         const msg =
           err instanceof ApiError && err.code
@@ -68,7 +81,7 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' 
         setBusy(false)
       }
     },
-    [token, session.combatId, busy]
+    [token, session.combatId, busy, selectedCard]
   )
 
   const isResolved = session.state === 'resolved'
@@ -136,10 +149,45 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc' 
           </div>
         )}
 
+        {!isResolved && hand && hand.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500">
+              術式卡（每場每張限用一次；點選後隨下一個行動施放）
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+              {hand.map((card) => {
+                const used = usedCards.has(card.cardClass)
+                const selected = selectedCard === card.cardClass
+                return (
+                  <button
+                    key={card.cardClass}
+                    type="button"
+                    disabled={busy || used}
+                    onClick={() => setSelectedCard(selected ? null : card.cardClass)}
+                    className={[
+                      'gi-touch px-2 py-1.5 text-left text-[11px] font-display tracking-tightest border rounded-sharp',
+                      used
+                        ? 'border-ground-800 text-ground-600 line-through cursor-not-allowed'
+                        : selected
+                          ? 'border-ember-500 text-ember-200 bg-ember-500/15'
+                          : 'border-ground-700 text-ground-300 hover:border-ground-500 hover:text-ground-100',
+                    ].join(' ')}
+                  >
+                    <span className="block text-[9px] uppercase text-ground-500">
+                      {card.source === 'basic' ? '基本' : '術式'}{used ? ' ✓' : ''}
+                    </span>
+                    <span>{card.labelZh}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {!isResolved ? (
           <div className="grid grid-cols-3 gap-2">
-            <ActionButton label="攻擊" tone="ember" disabled={busy} onClick={() => submit('attack')} />
-            <ActionButton label="防禦" tone="moss" disabled={busy} onClick={() => submit('defend')} />
+            <ActionButton label={selectedCard ? '攻擊＋施放' : '攻擊'} tone="ember" disabled={busy} onClick={() => submit('attack')} />
+            <ActionButton label={selectedCard ? '防禦＋施放' : '防禦'} tone="moss" disabled={busy} onClick={() => submit('defend')} />
             <ActionButton label="逃跑" tone="ground" disabled={busy} onClick={() => submit('flee')} />
           </div>
         ) : (
@@ -234,6 +282,12 @@ function describeEvent(ev: { eventType: string; payload: Record<string, unknown>
       return `結束：${p.outcome}`
     case 'COMBAT_CARD_IGNORED':
       return `紋卡 #${p.cardId} 暫未支援（Phase C）`
+    case 'COMBAT_CARD_USED':
+      return `施放術式：${p.cardClass}`
+    case 'COMBAT_HEAL': {
+      const amount = typeof p.amount === 'number' ? p.amount : 0
+      return `恢復 ${amount} hp`
+    }
     default:
       return ''
   }

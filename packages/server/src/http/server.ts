@@ -27,6 +27,7 @@ import { createSocialRouter, createSocialSseRouter } from './social.js'
 import { CardWorldStore } from './cardWorldStore.js'
 import { createCardWorldRouter } from './cardWorldRouter.js'
 import { CardDropEngine, tileIdsFromRuntime } from './cardDropEngine.js'
+import { combatLootPosition, computeCombatLootCardId, pickDeterministicIndex } from './combatLoot.js'
 import { CardActionPipeline } from './cardCommands.js'
 import { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import { createBuildingsRouter } from './buildingsRouter.js'
@@ -110,6 +111,51 @@ export function createHttpApp(options: HttpAppOptions): Express {
   )
   cardDropEngine.seedInitialDrops(options.runtime.getCurrentTick())
   options.runtime.subscribeTick((tick) => cardDropEngine.onTick(tick))
+
+  // v0.90.0 — Phase D：戰鬥終局 → 紋卡世界回饋（COMBAT_ARCHITECTURE §5.2/§6）。
+  //   * player_victory：§6 機率掉一張正典 combat_victory 卡（deterministic by combatId）
+  //   * npc_victory：玩家隨身 held 卡隨機掉一張回地上（重新 60s 計時，其他人可搶 — 奪卡感）
+  options.runtime.subscribeCombatResolved((info) => {
+    try {
+      if (info.outcome === 'player_victory') {
+        const areaState = options.runtime.getAreaState(info.tileId)
+        const lootCardId = computeCombatLootCardId({
+          combatId: info.combatId,
+          durationRounds: info.durationRounds,
+          rareWindowOpen: options.runtime.isRareWindowOpen(),
+          areaSafety: typeof areaState?.resources?.safety === 'number' ? areaState.resources.safety : null,
+          catalog: cardCatalog,
+        })
+        if (lootCardId !== null) {
+          const pos = combatLootPosition(info.combatId)
+          cardActionPipeline.spawnDrop({
+            type: 'CARD_DROP_SPAWN',
+            actorId: 'system',
+            tick: info.tick,
+            cardId: lootCardId,
+            tileId: info.tileId,
+            x: pos.x,
+            y: pos.y,
+            reason: 'combat_loot',
+          })
+        }
+      } else if (info.outcome === 'npc_victory') {
+        const held = cardWorldStore.listHeldByPlayer(info.playerAccountId)
+        if (held.length > 0) {
+          const idx = pickDeterministicIndex(`${info.combatId}:defeat-drop`, held.length)
+          const lost = held[idx]!
+          cardActionPipeline.release({
+            type: 'CARD_RELEASE',
+            actorId: info.playerAccountId,
+            tick: info.tick,
+            dropId: lost.id,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[combat] post-resolve card effects failed', err)
+    }
+  })
 
   // Best-effort: drop reset tokens older than 30 days so the table
   // stays compact across long-running deployments.
@@ -293,6 +339,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       jobs: jobsStore,
       social: socialStore,
       authConfig: options.auth,
+      db: options.db,
     })
   )
   app.use(

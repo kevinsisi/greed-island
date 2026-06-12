@@ -52,6 +52,12 @@ export type CombatRoundInput = Readonly<{
   playerAction: CombatPlayerActionKind
   /** Phase B 預留；當前 release rule engine 收下後產 warning event 並忽略 */
   playerCardId?: number
+  /**
+   * v0.90.0 — 術式卡施放（卡牌戰鬥）。router 已驗持有 + 每場限用一次；
+   * rule engine 把卡效果編譯進這一回合（加傷 / 護盾 / 回復 / 震懾 /
+   * 相位迴避 / 反彈 / 連擊）。效果表見 COMBAT_TECHNIQUE_ROUND_EFFECTS。
+   */
+  playerCardClass?: CombatCardClass
   player: CombatActorTraits & { actorId: string }
   npc: CombatActorTraits & { actorId: string }
 }>
@@ -62,6 +68,8 @@ export type CombatRoundEventKind =
   | 'COMBAT_FLEE'
   | 'COMBAT_RESOLVE'
   | 'COMBAT_CARD_IGNORED'
+  | 'COMBAT_CARD_USED'
+  | 'COMBAT_HEAL'
 
 export type CombatRoundEvent = Readonly<{
   eventType: CombatRoundEventKind
@@ -446,12 +454,38 @@ export function evaluateCombatSubTick(input: CombatSubTickInput): CombatSubTickR
   }
 }
 
+/**
+ * v0.90.0 — 術式卡在回合制戰鬥中的效果表（卡牌戰鬥）。
+ * 全部 deterministic、無持續狀態（一回合內生效；HxH 一次性術式感由
+ * router 的「每場每張限用一次」把關）。
+ */
+const TECHNIQUE_ROUND_EFFECT: Readonly<Record<string, Readonly<{
+  bonusDamage?: number
+  heal?: number
+  incomingMultiplier?: number
+  avoidIncoming?: boolean
+  stunNpc?: boolean
+  npcCannotDefend?: boolean
+  reflectFraction?: number
+  doubleStrike?: boolean
+}>>> = {
+  FIRE_LASH: { bonusDamage: 18 },       // 潮燼一閃
+  TIDE_STRIKE: { bonusDamage: 22 },     // 基本牌強擊
+  MEND: { heal: 16 },                   // 治癒術
+  SHIELD: { incomingMultiplier: 0.5 },  // 退潮岩盾
+  PHASE_SHIFT: { avoidIncoming: true }, // 退潮步法
+  STUN: { stunNpc: true },              // 潮鼓震盪
+  NO_ESCAPE: { npcCannotDefend: true, bonusDamage: 8 }, // 織絲縛魂
+  COUNTERSPELL: { reflectFraction: 0.3 },               // 潮源回響
+  HASTE: { doubleStrike: true },        // 黑潮獸引
+}
+
 export function evaluateCombatRound(input: CombatRoundInput): CombatRoundResult {
   const events: CombatRoundEvent[] = []
   let playerHp = input.playerHp
   let npcHp = input.npcHp
 
-  // Phase B：紋卡 hook 預留 — 收下警告，不做事
+  // Phase B：舊 cardId（定序卡）hook 保留 — 收下警告，不做事
   if (typeof input.playerCardId === 'number') {
     events.push({
       eventType: 'COMBAT_CARD_IGNORED',
@@ -460,9 +494,53 @@ export function evaluateCombatRound(input: CombatRoundInput): CombatRoundResult 
         combatRound: input.combatRound,
         cardId: input.playerCardId,
         reason:
-          'Phase B does not compile cards yet; cardId is recorded for Phase C reconciliation.',
+          'sequence-card cardId is recorded only; technique combat effects use playerCardClass.',
       },
     })
+  }
+
+  // v0.90.0 — 術式卡效果編譯（卡牌戰鬥）
+  const cardEffect = input.playerCardClass ? TECHNIQUE_ROUND_EFFECT[input.playerCardClass] ?? null : null
+  if (input.playerCardClass && cardEffect) {
+    events.push({
+      eventType: 'COMBAT_CARD_USED',
+      payload: {
+        combatId: input.combatId,
+        combatRound: input.combatRound,
+        actorId: input.player.actorId,
+        cardClass: input.playerCardClass,
+      },
+    })
+    // 直擊類：獨立傷害（不依賴本回合選擇攻擊與否 — 術式是額外施放）
+    if (cardEffect.bonusDamage) {
+      npcHp = Math.max(0, npcHp - cardEffect.bonusDamage)
+      events.push({
+        eventType: 'COMBAT_DAMAGE',
+        payload: {
+          combatId: input.combatId,
+          combatRound: input.combatRound,
+          sourceActorId: input.player.actorId,
+          targetActorId: input.npc.actorId,
+          amount: cardEffect.bonusDamage,
+          crit: false,
+          kind: 'technique',
+          cardClass: input.playerCardClass,
+        },
+      })
+    }
+    if (cardEffect.heal) {
+      playerHp = Math.min(COMBAT_INITIAL_HP, playerHp + cardEffect.heal)
+      events.push({
+        eventType: 'COMBAT_HEAL',
+        payload: {
+          combatId: input.combatId,
+          combatRound: input.combatRound,
+          targetActorId: input.player.actorId,
+          amount: cardEffect.heal,
+          cardClass: input.playerCardClass,
+        },
+      })
+    }
   }
 
   // 1) Player action first
@@ -498,26 +576,31 @@ export function evaluateCombatRound(input: CombatRoundInput): CombatRoundResult 
 
   let playerDefendingThisRound = false
   if (input.playerAction === 'attack') {
-    const dmg = computeDamage({
-      combatId: input.combatId,
-      combatRound: input.combatRound,
-      attackerId: input.player.actorId,
-      attacker: input.player,
-      defender: input.npc,
-    })
-    npcHp = Math.max(0, npcHp - dmg.damage)
-    events.push({
-      eventType: 'COMBAT_DAMAGE',
-      payload: {
+    const strikes = cardEffect?.doubleStrike ? 2 : 1
+    for (let strike = 0; strike < strikes; strike += 1) {
+      const dmg = computeDamage({
         combatId: input.combatId,
-        combatRound: input.combatRound,
-        sourceActorId: input.player.actorId,
-        targetActorId: input.npc.actorId,
-        amount: dmg.damage,
-        crit: dmg.crit,
-        kind: 'physical',
-      },
-    })
+        combatRound: input.combatRound + strike * 1000, // 第二擊用不同 seed
+        attackerId: input.player.actorId,
+        attacker: input.player,
+        defender: input.npc,
+      })
+      const amount = strike === 0 ? dmg.damage : Math.max(1, Math.floor(dmg.damage * 0.5))
+      npcHp = Math.max(0, npcHp - amount)
+      events.push({
+        eventType: 'COMBAT_DAMAGE',
+        payload: {
+          combatId: input.combatId,
+          combatRound: input.combatRound,
+          sourceActorId: input.player.actorId,
+          targetActorId: input.npc.actorId,
+          amount,
+          crit: dmg.crit,
+          kind: 'physical',
+          ...(strike > 0 ? { followUp: true } : {}),
+        },
+      })
+    }
   } else {
     // defend
     playerDefendingThisRound = true
@@ -562,8 +645,21 @@ export function evaluateCombatRound(input: CombatRoundInput): CombatRoundResult 
 
   // 3) NPC action — deterministic by hash(combatId, npcId, round)
   // 0 attack / 1 defend / 2 attack-soft (idle glare → small damage)
-  const npcActionRoll = hashSeed(input.combatId, input.npc.actorId, input.combatRound) % 3
-  if (npcActionRoll === 1) {
+  // v0.90.0：STUN 卡 → NPC 本回合無法行動；NO_ESCAPE 卡 → NPC 防禦無效。
+  let npcActionRoll = hashSeed(input.combatId, input.npc.actorId, input.combatRound) % 3
+  if (cardEffect?.npcCannotDefend && npcActionRoll === 1) npcActionRoll = 2
+  if (cardEffect?.stunNpc) {
+    events.push({
+      eventType: 'COMBAT_DEFEND',
+      payload: {
+        combatId: input.combatId,
+        combatRound: input.combatRound,
+        actorId: input.npc.actorId,
+        recoveredHp: 0,
+        stunned: true,
+      },
+    })
+  } else if (npcActionRoll === 1) {
     // NPC defends — no damage to player
     events.push({
       eventType: 'COMBAT_DEFEND',
@@ -585,19 +681,79 @@ export function evaluateCombatRound(input: CombatRoundInput): CombatRoundResult 
     let actualDmg = dmg.damage
     if (playerDefendingThisRound) actualDmg = Math.max(1, Math.floor(actualDmg * 0.5))
     if (npcActionRoll === 2) actualDmg = Math.max(1, Math.floor(actualDmg * 0.6)) // soft glare
-    playerHp = Math.max(0, playerHp - actualDmg)
+    if (cardEffect?.incomingMultiplier !== undefined) {
+      actualDmg = Math.max(1, Math.floor(actualDmg * cardEffect.incomingMultiplier))
+    }
+    if (cardEffect?.avoidIncoming) actualDmg = 0
+    if (actualDmg > 0) {
+      playerHp = Math.max(0, playerHp - actualDmg)
+      events.push({
+        eventType: 'COMBAT_DAMAGE',
+        payload: {
+          combatId: input.combatId,
+          combatRound: input.combatRound,
+          sourceActorId: input.npc.actorId,
+          targetActorId: input.player.actorId,
+          amount: actualDmg,
+          crit: dmg.crit,
+          kind: 'physical',
+        },
+      })
+      // 潮源回響：反彈部分傷害回 NPC。
+      if (cardEffect?.reflectFraction) {
+        const reflected = Math.max(1, Math.floor(actualDmg * cardEffect.reflectFraction))
+        npcHp = Math.max(0, npcHp - reflected)
+        events.push({
+          eventType: 'COMBAT_DAMAGE',
+          payload: {
+            combatId: input.combatId,
+            combatRound: input.combatRound,
+            sourceActorId: input.player.actorId,
+            targetActorId: input.npc.actorId,
+            amount: reflected,
+            crit: false,
+            kind: 'reflect',
+            cardClass: input.playerCardClass,
+          },
+        })
+      }
+    } else {
+      events.push({
+        eventType: 'COMBAT_DEFEND',
+        payload: {
+          combatId: input.combatId,
+          combatRound: input.combatRound,
+          actorId: input.player.actorId,
+          recoveredHp: 0,
+          avoided: true,
+        },
+      })
+    }
+  }
+  // 反彈/震懾後 NPC 可能歸零 → 終局判定交給下方共用邏輯。
+  if (npcHp <= 0) {
     events.push({
-      eventType: 'COMBAT_DAMAGE',
+      eventType: 'COMBAT_RESOLVE',
       payload: {
         combatId: input.combatId,
-        combatRound: input.combatRound,
-        sourceActorId: input.npc.actorId,
-        targetActorId: input.player.actorId,
-        amount: actualDmg,
-        crit: dmg.crit,
-        kind: 'physical',
+        outcome: 'player_victory',
+        durationRounds: input.combatRound,
+        finalPlayerHp: playerHp,
+        finalNpcHp: npcHp,
+        playerEnergyToZero: false,
+        npcIncapacitatedTicks: COMBAT_NPC_INCAP_TICKS,
       },
     })
+    return {
+      events,
+      playerHpAfter: playerHp,
+      npcHpAfter: npcHp,
+      resolved: {
+        outcome: 'player_victory',
+        playerEnergyToZero: false,
+        npcIncapacitatedTicks: COMBAT_NPC_INCAP_TICKS,
+      },
+    }
   }
 
   // 4) Resolve NPC victory

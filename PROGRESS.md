@@ -5,6 +5,28 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.90.0
+
+### Current Version
+`0.90.0` — Greed Island Card Combat：術式卡接進回合制戰鬥（買卡終於有用）+ Phase D 戰鬥世界回饋（掉卡/奪卡/energy/關係位移）。
+
+### What Shipped
+- **術式卡 ↔ 手牌**：`combat/handLoadout.ts`；7 張戰鬥型術式各解鎖一個戰鬥卡類別，基本牌保底；combat API 回 `hand`+`usedCardClasses`；play/action 雙端驗持有。
+- **回合卡效果**：`evaluateCombatRound` 的 TECHNIQUE_ROUND_EFFECT（加傷/回復/盾/迴避/震懾/禁防/反彈/連擊）；每場每張限一次（combat_log 判定）；COMBAT_PLAYER_ACTION/validator 加 cardClass。
+- **Phase D**：`http/combatLoot.ts` §6 deterministic 掉落（正典 combat_victory 卡池）→ CARD_DROP_SPAWN(combat_loot)；戰敗 held 卡 deterministic CARD_RELEASE；energy 歸零移到 COMBAT_RESOLVE 消費端（Phase B inline 移除，Phase C 漏接修復）；目擊者 respect -8 ×≤6；新 `runtime.subscribeCombatResolved` hook。
+- **Web**：CombatHud 手牌列（選卡施放/已用鎖定）；NpcDialog + AreaPage 接線。
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest -- run` — **1200 tests / 153 files 全過**（+21 新：handLoadout 6、combatLoot 7、ruleEngine 術式 8）
+- `npm run build` — server + web 乾淨
+- `npx openspec validate --all --strict` — 全綠（52 items）
+
+### Known Deferred
+- Phase C 即時 sub-tick：NPC 出牌 AI 未設計、CombatHudPhaseC 未接線（本版判定回合制才是可玩的卡牌戰鬥路徑）。
+- §5.2 factionShifts；術式卡「消耗持有數」制（目前每場限一次的 cooldown 語意）。
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.89.0
 
 ### Current Version

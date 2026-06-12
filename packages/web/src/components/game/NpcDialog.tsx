@@ -7,6 +7,7 @@ import {
   ApiError,
   type LocalizedLine,
   type NpcInteractIntent,
+  type ServerCombatHandCard,
   type ServerCombatSession,
   type ServerNpcHistory,
   type ServerNpcInteraction
@@ -58,6 +59,8 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [draft, setDraft] = useState('')
   const [combatSession, setCombatSession] = useState<ServerCombatSession | null>(null)
+  const [combatHand, setCombatHand] = useState<ServerCombatHandCard[] | null>(null)
+  const [combatUsedCards, setCombatUsedCards] = useState<string[]>([])
   const [combatBusy, setCombatBusy] = useState(false)
   const [dynamicGreet, setDynamicGreet] = useState<LocalizedLine | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -204,6 +207,8 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     try {
       const r = await api.combatInitiate(token, npc.id)
       setCombatSession(r.session)
+      setCombatHand(r.hand ?? null)
+      setCombatUsedCards(r.usedCardClasses ?? [])
     } catch (err) {
       const msg =
         err instanceof ApiError && err.code
@@ -242,7 +247,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
       .combatActive(token)
       .then((r) => {
         if (cancelled) return
-        if (r.active && r.active.npcId === npc.id) setCombatSession(r.active)
+        if (r.active && r.active.npcId === npc.id) {
+          setCombatSession(r.active)
+          setCombatHand(r.hand ?? null)
+          setCombatUsedCards(r.usedCardClasses ?? [])
+        }
       })
       .catch(() => {
         // no active combat
@@ -272,6 +281,8 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
       <CombatHud
         npcName={npc.name}
         initialSession={combatSession}
+        {...(combatHand ? { hand: combatHand } : {})}
+        initialUsedCardClasses={combatUsedCards}
         onClose={() => {
           setCombatSession(null)
           onClose()

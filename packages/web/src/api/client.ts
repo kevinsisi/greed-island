@@ -1309,19 +1309,19 @@ export const api = {
     jsonFetch<ServerWalletResponse>('/wallet', {
       headers: authHeaders(token)
     }),
-  // ── Combat (Phase B, v0.15.0) ──
+  // ── Combat (Phase B, v0.15.0；v0.90.0 加術式卡手牌) ──
   combatActive: (token: string) =>
-    jsonFetch<{ active: ServerCombatSession | null; log?: ServerCombatLogRow[] }>(
+    jsonFetch<{ active: ServerCombatSession | null; log?: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/active',
       { headers: authHeaders(token) }
     ),
   combatGet: (token: string, combatId: string) =>
-    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       `/combat/${encodeURIComponent(combatId)}`,
       { headers: authHeaders(token) }
     ),
   combatInitiate: (token: string, targetNpcId: string) =>
-    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/initiate',
       {
         method: 'POST',
@@ -1330,7 +1330,7 @@ export const api = {
       }
     ),
   combatInitiateAnimal: (token: string, targetAnimalId: string, speciesId: string) =>
-    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[] }>(
+    jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/initiate-animal',
       {
         method: 'POST',
@@ -1342,7 +1342,8 @@ export const api = {
     token: string,
     combatId: string,
     action: 'attack' | 'defend' | 'flee',
-    cardId?: number
+    cardId?: number,
+    cardClass?: string
   ) =>
     jsonFetch<{
       session: ServerCombatSession
@@ -1352,7 +1353,11 @@ export const api = {
     }>(`/combat/${encodeURIComponent(combatId)}/action`, {
       method: 'POST',
       headers: authHeaders(token),
-      body: JSON.stringify(cardId !== undefined ? { action, cardId } : { action })
+      body: JSON.stringify({
+        action,
+        ...(cardId !== undefined ? { cardId } : {}),
+        ...(cardClass !== undefined ? { cardClass } : {}),
+      })
     }),
   // ── Combat (Phase C, v0.25.x) ──
   combatPlay: (token: string, combatId: string, cardClass: string, targetActorId: string) =>
@@ -1440,6 +1445,15 @@ export type PlayerActionResult = {
   accepted: boolean
   tick?: number
   reason?: string
+}
+
+/** v0.90.0 — 戰鬥手牌卡（基本牌 + 已購術式卡解鎖）。 */
+export type ServerCombatHandCard = {
+  cardClass: string
+  source: 'basic' | 'technique'
+  techniqueId: number | null
+  labelZh: string
+  labelEn: string
 }
 
 export type ServerCombatSession = {

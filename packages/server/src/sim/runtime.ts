@@ -139,6 +139,7 @@ import {
   type CombatActorTraits,
   type CombatRoundResult,
 } from '../combat/ruleEngine.js'
+import type { CombatCardClass } from '../combat/cards/catalog.js'
 import { planAnimalSpawns } from '../ecosystem/animalSpawning.js'
 import { planSpeciesExtinctionCheck } from '../ecosystem/extinctionPlanner.js'
 import { planFisheryHarvest, planFisheryPassiveRegen } from '../ecosystem/fishery.js'
@@ -279,6 +280,22 @@ import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
 const SIM_ACTOR_WORLD = 'system'
+// v0.90.0 — 戰鬥目擊者 respect 位移（COMBAT_ARCHITECTURE §5.2 relationshipShifts）。
+const COMBAT_WITNESS_RESPECT_DELTA = -8
+const COMBAT_WITNESS_RESPECT_SHIFT_MAX = 6
+
+/** v0.90.0 — Phase D hook payload：戰鬥終局摘要給 http 層的 loot/掉卡消費。 */
+export type CombatResolvedInfo = Readonly<{
+  combatId: string
+  outcome: 'player_victory' | 'npc_victory' | 'fled'
+  playerAccountId: number
+  npcId: string
+  tileId: string
+  enemyType: 'npc' | 'animal'
+  durationRounds: number
+  tick: number
+}>
+
 // v0.88.0 — 人生目標對 intent urgency 的最大 multiplier 偏壓。
 const LIFE_GOAL_INTENT_BOOST_MAX = 0.25
 // 人生目標 kind → intent kind 的方向對應。
@@ -581,6 +598,7 @@ export class SimulationRuntime {
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
   private npcAgentRunner: NpcAgentRunner | null = null
+  private readonly combatResolvedListeners = new Set<(info: CombatResolvedInfo) => void>()
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
@@ -856,6 +874,8 @@ export class SimulationRuntime {
     combatId: string
     action: CombatPlayerActionKind
     cardId?: number
+    /** v0.90.0 — 術式卡施放（router 已驗持有 + 每場限用一次）。 */
+    cardClass?: string
   }): { result: CombatRoundResult; session: CombatSessionRow } | null {
     const combatStore = this.combatStore
     if (!combatStore) return null
@@ -902,6 +922,7 @@ export class SimulationRuntime {
       npcHp: session.npc_hp,
       playerAction: input.action,
       ...(input.cardId !== undefined ? { playerCardId: input.cardId } : {}),
+      ...(input.cardClass !== undefined ? { playerCardClass: input.cardClass as CombatCardClass } : {}),
       player: playerTraits,
       npc: npcTraits,
     })
@@ -919,10 +940,13 @@ export class SimulationRuntime {
         combatRound: nextRound,
         action: input.action,
         ...(input.cardId !== undefined ? { cardId: input.cardId } : {}),
+        ...(input.cardClass !== undefined ? { cardClass: input.cardClass } : {}),
         playerHpAfter: result.playerHpAfter,
         npcHpAfter: result.npcHpAfter,
         events: result.events,
-        narration: `玩家選擇 ${input.action}（回合 ${nextRound}）。`,
+        narration: input.cardClass
+          ? `玩家施放術式並選擇 ${input.action}（回合 ${nextRound}）。`
+          : `玩家選擇 ${input.action}（回合 ${nextRound}）。`,
       }
     ))
     if (!playerEvent) return null
@@ -967,23 +991,9 @@ export class SimulationRuntime {
         ))
       }
 
-      if (result.resolved.playerEnergyToZero) {
-        const energyEvent = this.commitLivingWorldCommand(makeLivingWorldCommand(
-          'PLAYER_ENERGY_SET',
-          String(input.accountId),
-          'player',
-          currentTick,
-          Date.now(),
-          {
-            playerAccountId: String(input.accountId),
-            energy: 0,
-            reason: 'combat_defeat',
-            sourceCombatId: input.combatId,
-            narration: '玩家戰鬥敗北，體力歸零。',
-          }
-        ))
-        if (!energyEvent) return null
-      }
+      // v0.90.0 — playerEnergyToZero 改由 publishCommittedEvents 的
+      // COMBAT_RESOLVE 消費端統一處理（Phase B 與 Phase C 同一條路徑，
+      // 避免 Phase C sub-tick 戰敗漏掉 energy 歸零）。
     }
 
     const updatedSession = combatStore.getSession(input.combatId)
@@ -993,6 +1003,12 @@ export class SimulationRuntime {
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** v0.90.0 — Phase D：戰鬥終局 hook（loot / 戰敗掉卡由 http 層訂閱）。 */
+  subscribeCombatResolved(listener: (info: CombatResolvedInfo) => void): () => void {
+    this.combatResolvedListeners.add(listener)
+    return () => this.combatResolvedListeners.delete(listener)
   }
 
   /** 額外的 per-tick callback。runs after the tick has incremented. */
@@ -2053,12 +2069,31 @@ export class SimulationRuntime {
         }
       }
       // Phase 5 — persistent combat consequences on NPC defeat (v0.77.0)
+      // Phase D 完成（v0.90.0）：energy 歸零統一處理、目擊者關係位移、
+      // subscribeCombatResolved hook（loot / 戰敗掉卡由 http 層消費）。
       if (ev.eventType === 'COMBAT_RESOLVE') {
         const d = (ev.payload as { data?: Record<string, unknown> })?.data
         const combatId = typeof d?.combatId === 'string' ? d.combatId : null
         const outcome = typeof d?.outcome === 'string' ? d.outcome : null
+        const session = combatId ? this.combatStore?.getSession(combatId) : null
+        // 戰敗懲罰（Phase B + Phase C 同路徑）：energy 歸零。
+        if (combatId && session && d?.playerEnergyToZero === true) {
+          this.commitLivingWorldCommand(makeLivingWorldCommand(
+            'PLAYER_ENERGY_SET',
+            String(session.player_account_id),
+            'player',
+            this.currentTick,
+            Date.now(),
+            {
+              playerAccountId: String(session.player_account_id),
+              energy: 0,
+              reason: 'combat_defeat',
+              sourceCombatId: combatId,
+              narration: '玩家戰鬥敗北，體力歸零。',
+            }
+          ))
+        }
         if (combatId && outcome === 'player_victory') {
-          const session = this.combatStore?.getSession(combatId)
           if (session && session.enemy_type === 'npc') {
             const recoverAtTick = this.currentTick + NPC_LONG_INCAP_TICKS
             this.commitLivingWorldCommand(makeLivingWorldCommand(
@@ -2093,6 +2128,50 @@ export class SimulationRuntime {
                   narration: `${witness.npcId}目睹了${session.npc_id}在此地的戰敗。`,
                 }
               ))
+            }
+            // v0.90.0 — 目擊戰敗的 NPC 對落敗者 respect 下滑（§5.2
+            // relationshipShifts 的 npc↔npc 面；上限 6 位避免事件洪水）。
+            for (const witness of witnessNpcs.slice(0, COMBAT_WITNESS_RESPECT_SHIFT_MAX)) {
+              this.commitLivingWorldCommand(makeLivingWorldCommand(
+                'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
+                SIM_ACTOR_WORLD,
+                'system',
+                this.currentTick,
+                Date.now(),
+                {
+                  from: witness.npcId,
+                  to: session.npc_id,
+                  dimension: 'respect',
+                  delta: COMBAT_WITNESS_RESPECT_DELTA,
+                  reason: 'witnessed_combat_defeat',
+                  tick: this.currentTick,
+                  narration: `${witness.npcId}對${session.npc_id}的敬意因目睹敗北而動搖。`,
+                }
+              ))
+            }
+          }
+        }
+        // Phase D hook：http 層（card pipeline）訂閱此事處理勝利掉卡 /
+        // 戰敗掉 held 卡。
+        if (combatId && outcome && session) {
+          const durationRounds = typeof d?.durationRounds === 'number'
+            ? d.durationRounds
+            : Math.ceil((typeof d?.durationCombatTicks === 'number' ? d.durationCombatTicks : 0) / 10)
+          const info: CombatResolvedInfo = {
+            combatId,
+            outcome: outcome as CombatResolvedInfo['outcome'],
+            playerAccountId: session.player_account_id,
+            npcId: session.npc_id,
+            tileId: session.tile_id,
+            enemyType: session.enemy_type,
+            durationRounds,
+            tick: this.currentTick,
+          }
+          for (const listener of this.combatResolvedListeners) {
+            try {
+              listener(info)
+            } catch (err) {
+              console.error('[runtime] combatResolved listener error', err)
             }
           }
         }

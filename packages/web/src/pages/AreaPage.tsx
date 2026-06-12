@@ -25,6 +25,7 @@ import {
   type ServerAmbient,
   type ServerAreaState,
   type ServerBuildingView,
+  type ServerCombatHandCard,
   type ServerCombatSession,
   type ServerNearbyPlayer
 } from '../api/client'
@@ -85,6 +86,7 @@ export function AreaPage() {
   const [ecology, setEcology] = useState<AreaEcologyView | null>(null)
   const [animalCombatConfirm, setAnimalCombatConfirm] = useState<{ speciesId: string; animalId: string } | null>(null)
   const [animalCombatSession, setAnimalCombatSession] = useState<ServerCombatSession | null>(null)
+  const [animalCombatHand, setAnimalCombatHand] = useState<ServerCombatHandCard[] | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -364,6 +366,7 @@ export function AreaPage() {
     try {
       const r = await api.combatInitiateAnimal(token, animalCombatConfirm.animalId, animalCombatConfirm.speciesId)
       setAnimalCombatSession(r.session)
+      setAnimalCombatHand(r.hand ?? null)
     } catch (err) {
       showFeedback(false, `無法發起戰鬥：${err instanceof Error ? err.message : '未知錯誤'}`)
     }
@@ -735,8 +738,10 @@ export function AreaPage() {
           npcName={animalCombatSession.speciesId ?? '野生動物'}
           initialSession={animalCombatSession}
           enemyType="animal"
+          {...(animalCombatHand ? { hand: animalCombatHand } : {})}
           onClose={() => {
             setAnimalCombatSession(null)
+            setAnimalCombatHand(null)
             refreshEcology()
           }}
         />

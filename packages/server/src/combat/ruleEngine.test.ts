@@ -446,3 +446,95 @@ describe('combat rule engine — Phase C sub-tick pipeline', () => {
     expect(result.resolved?.outcome).toBe('player_victory')
   })
 })
+
+// ── v0.90.0 — 術式卡回合效果（卡牌戰鬥） ────────────────────────────────
+describe('technique cards in rounds (v0.90.0)', () => {
+  const base = {
+    combatId: 'combat_card',
+    combatRound: 1,
+    playerHp: COMBAT_INITIAL_HP,
+    npcHp: COMBAT_INITIAL_HP,
+    player: PLAYER,
+    npc: NPC,
+  }
+
+  it('FIRE_LASH deals bonus technique damage and emits COMBAT_CARD_USED', () => {
+    const withCard = evaluateCombatRound({ ...base, playerAction: 'defend', playerCardClass: 'FIRE_LASH' })
+    const without = evaluateCombatRound({ ...base, playerAction: 'defend' })
+    expect(withCard.events.find((e) => e.eventType === 'COMBAT_CARD_USED')?.payload.cardClass).toBe('FIRE_LASH')
+    expect(withCard.npcHpAfter).toBe(without.npcHpAfter - 18)
+    const techHit = withCard.events.find((e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.kind === 'technique')
+    expect(techHit?.payload.amount).toBe(18)
+  })
+
+  it('MEND heals the player', () => {
+    const r = evaluateCombatRound({ ...base, playerHp: 40, playerAction: 'attack', playerCardClass: 'MEND' })
+    expect(r.events.find((e) => e.eventType === 'COMBAT_HEAL')?.payload.amount).toBe(16)
+  })
+
+  it('PHASE_SHIFT avoids all incoming damage this round', () => {
+    // 找一個 NPC 會攻擊的 seed（roll !== 1）
+    let round = 1
+    while (hashSeed(base.combatId, NPC.actorId, round) % 3 === 1) round += 1
+    const r = evaluateCombatRound({ ...base, combatRound: round, playerAction: 'attack', playerCardClass: 'PHASE_SHIFT' })
+    const incoming = r.events.filter(
+      (e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.targetActorId === PLAYER.actorId
+    )
+    expect(incoming).toHaveLength(0)
+    expect(r.playerHpAfter).toBe(COMBAT_INITIAL_HP)
+  })
+
+  it('STUN prevents the NPC from acting', () => {
+    let round = 1
+    while (hashSeed(base.combatId, NPC.actorId, round) % 3 === 1) round += 1
+    const r = evaluateCombatRound({ ...base, combatRound: round, playerAction: 'defend', playerCardClass: 'STUN' })
+    const incoming = r.events.filter(
+      (e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.targetActorId === PLAYER.actorId
+    )
+    expect(incoming).toHaveLength(0)
+    const stunMark = r.events.find((e) => e.eventType === 'COMBAT_DEFEND' && e.payload.stunned === true)
+    expect(stunMark).toBeDefined()
+  })
+
+  it('SHIELD halves incoming damage', () => {
+    let round = 1
+    while (hashSeed(base.combatId, NPC.actorId, round) % 3 !== 0) round += 1 // 全力攻擊 roll
+    const plain = evaluateCombatRound({ ...base, combatRound: round, playerAction: 'attack' })
+    const shielded = evaluateCombatRound({ ...base, combatRound: round, playerAction: 'attack', playerCardClass: 'SHIELD' })
+    const plainHit = plain.events.find(
+      (e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.targetActorId === PLAYER.actorId
+    )
+    const shieldedHit = shielded.events.find(
+      (e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.targetActorId === PLAYER.actorId
+    )
+    expect(plainHit).toBeDefined()
+    expect(shieldedHit).toBeDefined()
+    expect(shieldedHit!.payload.amount as number).toBe(
+      Math.max(1, Math.floor((plainHit!.payload.amount as number) * 0.5))
+    )
+  })
+
+  it('HASTE strikes twice on attack', () => {
+    const r = evaluateCombatRound({ ...base, playerAction: 'attack', playerCardClass: 'HASTE' })
+    const playerHits = r.events.filter(
+      (e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.sourceActorId === PLAYER.actorId && e.payload.kind === 'physical'
+    )
+    expect(playerHits).toHaveLength(2)
+    expect(playerHits[1]!.payload.followUp).toBe(true)
+  })
+
+  it('COUNTERSPELL reflects part of incoming damage back', () => {
+    let round = 1
+    while (hashSeed(base.combatId, NPC.actorId, round) % 3 === 1) round += 1
+    const r = evaluateCombatRound({ ...base, combatRound: round, playerAction: 'defend', playerCardClass: 'COUNTERSPELL' })
+    const reflect = r.events.find((e) => e.eventType === 'COMBAT_DAMAGE' && e.payload.kind === 'reflect')
+    expect(reflect).toBeDefined()
+    expect(reflect!.payload.targetActorId).toBe(NPC.actorId)
+  })
+
+  it('card effects remain replay-deterministic', () => {
+    const a = evaluateCombatRound({ ...base, playerAction: 'attack', playerCardClass: 'HASTE' })
+    const b = evaluateCombatRound({ ...base, playerAction: 'attack', playerCardClass: 'HASTE' })
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b))
+  })
+})

@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.90.0 ✅ shipped — 2026-06-13
+
+**主題：Greed Island Card Combat（術式卡牌戰鬥 + Phase D 戰鬥世界回饋）**
+
+OpenSpec change：`greed-island-card-combat`
+
+- ✅ **術式卡 ↔ 戰鬥手牌** — 7 張戰鬥型術式卡（天際百貨）各解鎖一個戰鬥卡類別；基本牌 TIDE_STRIKE/MEND 保底「一般戰鬥」；手牌由 combat API 回傳、顯示術式卡名
+- ✅ **回合制卡牌戰鬥** — `playerCardClass` 效果編譯進回合（加傷/回復/盾/相位迴避/震懾/禁防/反彈/連擊），每場每張限用一次（combat_log 投影判定），全 deterministic
+- ✅ **Phase D 世界回饋（COMBAT_ARCHITECTURE §5.2/§6）** — 勝利按 §6 公式掉正典 combat_victory 卡（CARD_DROP_SPAWN reason=combat_loot）；戰敗 energy 歸零統一 Phase B/C 同路徑 + 隨身 held 卡掉一張回地上（奪卡感）；目擊者對落敗 NPC respect -8
+- ✅ **CombatHud 手牌列** — 選卡→隨下一個行動施放、已用打勾鎖定；NPC 戰與動物戰皆接
+- 📝 既有發現記錄：CombatHudPhaseC（即時 sub-tick UI）從未接線且 sub-tick 缺 NPC 出牌 AI — 列 deferred
+- ✅ 1200 server tests（+21 新）、build 乾淨、openspec validate 全綠
+
+---
+
 ## v0.89.0 ✅ shipped — 2026-06-13
 
 **主題：Eight-bit Living World（8-bit 像素世界 + 像素人 + 動物行為 + NPC AI agent + 事件衛生 + 手機修正）**

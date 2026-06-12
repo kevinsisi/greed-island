@@ -17,12 +17,15 @@
 // CombatStore 是 SQLite 投影（projection）。
 
 import { Router, type Request, type Response } from 'express'
+import type Database from 'better-sqlite3'
 import { requireAuth, type AuthConfig } from './auth.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
 import type { SocialStore } from './socialStore.js'
 import { CombatStore } from '../combat/combatStore.js'
 import { ANIMAL_COMBAT_AGGRESSION_THRESHOLD, COMBAT_INITIAL_HP, COMBAT_NPC_INCAP_TICKS } from '../combat/commands.js'
+import { allowedClassesFor, computeHandLoadout, type HandCardView } from '../combat/handLoadout.js'
+import { TechniqueShopStore } from '../cards/techniques.js'
 import { getSpecies } from '../ecosystem/species.js'
 import {
   makeLivingWorldCommand,
@@ -36,10 +39,18 @@ export function createCombatRouter(input: {
   jobs: PlayerJobsStore
   social: SocialStore
   authConfig: AuthConfig
+  db: Database.Database
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
   const store = input.store
+  // v0.90.0 — 術式卡 ↔ 戰鬥手牌：手牌由玩家持有的戰鬥型術式卡決定
+  // （天際百貨購買），基本牌 TIDE_STRIKE / MEND 人人都有。
+  const techniques = new TechniqueShopStore(input.db)
+  const handFor = (accountId: number): HandCardView[] =>
+    computeHandLoadout(
+      techniques.listOwned(accountId).filter((row) => row.count > 0).map((row) => row.card_id)
+    )
 
   router.get('/combat/active', auth, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
@@ -48,7 +59,7 @@ export function createCombatRouter(input: {
       res.json({ active: null })
       return
     }
-    res.json({ active: toClientSession(session), log: store.listLog(session.combat_id) })
+    res.json({ active: toClientSession(session), log: store.listLog(session.combat_id), hand: handFor(accountId), usedCardClasses: [...usedCardClassesInCombat(store, session.combat_id)] })
   })
 
   router.get('/combat/:id', auth, (req: Request, res: Response) => {
@@ -62,7 +73,7 @@ export function createCombatRouter(input: {
       res.status(403).json({ error: 'FORBIDDEN' })
       return
     }
-    res.json({ session: toClientSession(session), log: store.listLog(combatId) })
+    res.json({ session: toClientSession(session), log: store.listLog(combatId), hand: handFor(req.auth!.sub), usedCardClasses: [...usedCardClassesInCombat(store, combatId)] })
   })
 
   router.post('/combat/initiate', auth, (req: Request, res: Response) => {
@@ -155,7 +166,7 @@ export function createCombatRouter(input: {
       return
     }
 
-    res.json({ session: toClientSession(session), log: store.listLog(combatId) })
+    res.json({ session: toClientSession(session), log: store.listLog(combatId), hand: handFor(accountId), usedCardClasses: [...usedCardClassesInCombat(store, combatId)] })
   })
 
   router.post('/combat/initiate-animal', auth, (req: Request, res: Response) => {
@@ -247,7 +258,7 @@ export function createCombatRouter(input: {
       return
     }
 
-    res.json({ session: toClientSession(session), log: store.listLog(combatId) })
+    res.json({ session: toClientSession(session), log: store.listLog(combatId), hand: handFor(accountId), usedCardClasses: [...usedCardClassesInCombat(store, combatId)] })
   })
 
   // ── Phase C endpoints ────────────────────────────────────────────────
@@ -274,6 +285,15 @@ export function createCombatRouter(input: {
     }
     if (session.state !== 'active') {
       res.status(409).json({ error: 'COMBAT_RESOLVED' })
+      return
+    }
+
+    // v0.90.0 — 只能施放自己持有的術式卡解鎖的戰鬥卡（+基本牌）。
+    const allowed = allowedClassesFor(
+      techniques.listOwned(accountId).filter((row) => row.count > 0).map((row) => row.card_id)
+    )
+    if (!allowed.has(cardClass as never)) {
+      res.status(403).json({ error: 'CARD_NOT_OWNED', cardClass })
       return
     }
 
@@ -372,11 +392,11 @@ export function createCombatRouter(input: {
     req.on('error', cleanup)
   })
 
-  // ── Phase B (compat, kept through v0.16.x) ───────────────────────────
+  // ── Phase B（回合制：一般戰鬥 + v0.90.0 術式卡牌戰鬥） ───────────────
   router.post('/combat/:id/action', auth, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
     const combatId = req.params.id ?? ''
-    const body = (req.body ?? {}) as { action?: unknown; cardId?: unknown }
+    const body = (req.body ?? {}) as { action?: unknown; cardId?: unknown; cardClass?: unknown }
 
     const session = store.getSession(combatId)
     if (!session) {
@@ -410,11 +430,33 @@ export function createCombatRouter(input: {
 
     const cardIdInput = typeof body.cardId === 'number' ? body.cardId : undefined
 
+    // v0.90.0 — 術式卡施放：必須持有（天際百貨購買）且每場戰鬥每張限用一次
+    //（HxH 一次性術式感）。已用過的卡從 combat_log 的 COMBAT_PLAYER_ACTION
+    // payload.cardClass 判定 — log 是事件投影，replay 一致。
+    const cardClassInput = typeof body.cardClass === 'string' && body.cardClass.length > 0
+      ? body.cardClass
+      : undefined
+    if (cardClassInput !== undefined) {
+      const allowed = allowedClassesFor(
+        techniques.listOwned(accountId).filter((row) => row.count > 0).map((row) => row.card_id)
+      )
+      if (!allowed.has(cardClassInput as never)) {
+        res.status(403).json({ error: 'CARD_NOT_OWNED', cardClass: cardClassInput })
+        return
+      }
+      const usedClasses = usedCardClassesInCombat(store, combatId)
+      if (usedClasses.has(cardClassInput)) {
+        res.status(409).json({ error: 'CARD_ALREADY_USED', cardClass: cardClassInput })
+        return
+      }
+    }
+
     const submitted = input.runtime.submitCombatRoundAction({
       accountId,
       combatId,
       action,
       ...(cardIdInput !== undefined ? { cardId: cardIdInput } : {}),
+      ...(cardClassInput !== undefined ? { cardClass: cardClassInput } : {}),
     })
     if (!submitted) {
       res.status(500).json({ error: 'COMBAT_ACTION_REJECTED' })
@@ -437,6 +479,23 @@ export function createCombatRouter(input: {
 function sendCombatSseEvent(res: import('express').Response, name: string, payload: unknown): void {
   res.write(`event: ${name}\n`)
   res.write(`data: ${JSON.stringify(payload)}\n\n`)
+}
+
+/** v0.90.0 — 此戰鬥已施放過的術式卡類別（每場限用一次的依據）。 */
+function usedCardClassesInCombat(store: CombatStore, combatId: string): Set<string> {
+  const used = new Set<string>()
+  for (const row of store.listLog(combatId)) {
+    if (row.event_type !== 'COMBAT_PLAYER_ACTION') continue
+    try {
+      const payload = JSON.parse(row.payload_json) as { cardClass?: unknown }
+      if (typeof payload.cardClass === 'string' && payload.cardClass.length > 0) {
+        used.add(payload.cardClass)
+      }
+    } catch {
+      // 壞 payload 跳過
+    }
+  }
+  return used
 }
 
 function toClientSession(s: import('../combat/combatStore.js').CombatSessionRow) {

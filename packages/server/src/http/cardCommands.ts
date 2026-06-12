@@ -71,7 +71,7 @@ export type CardCommand =
       tileId: string
       x: number
       y: number
-      reason: 'baseline' | 'weather' | 'rare_window' | 'seed'
+      reason: 'baseline' | 'weather' | 'rare_window' | 'seed' | 'combat_loot'
     }>
   | Readonly<{
       type: 'CARD_DROP_EXPIRE'

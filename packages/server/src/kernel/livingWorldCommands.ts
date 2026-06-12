@@ -2317,6 +2317,9 @@ const VALIDATORS: Readonly<
     if (typeof p.combatRound !== 'number' || p.combatRound < 0) return 'combatRound required'
     if (p.action !== 'attack' && p.action !== 'defend' && p.action !== 'flee') return 'invalid action'
     if (typeof p.cardId !== 'undefined' && typeof p.cardId !== 'number') return 'cardId must be number or unset'
+    if (typeof p.cardClass !== 'undefined' && (typeof p.cardClass !== 'string' || p.cardClass.length === 0)) {
+      return 'cardClass must be non-empty string or unset'
+    }
     if (typeof p.playerHpAfter !== 'number' || !Number.isFinite(p.playerHpAfter)) return 'playerHpAfter required'
     if (typeof p.npcHpAfter !== 'number' || !Number.isFinite(p.npcHpAfter)) return 'npcHpAfter required'
     if (!Array.isArray(p.events)) return 'events required'
