@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.91.0
+
+### Current Version
+`0.91.0` — Freeform NPC Agent Actions：NPC AI 從「選 server 提供的 intent 編號」升級為「自由提出任意生活行為」，再由 server resolver / Rule Engine 驗證後落地。
+
+### What Shipped
+- **OpenSpec**：新增 `freeform-npc-agent-actions`，定義 AI 自由提案、server bounded taxonomy、Rule Engine 事件、runtime deterministic consequence。
+- **Freeform prompt**：`buildFreeformAgentPrompt` 要求 AI 回 structured JSON proposal（action/target/reason/risk/expectedOutcome/utterance），並帶 NPC persona、需求、人生目標、信念、反思。
+- **Server resolver**：`parseFreeformAgentProposal` / `resolveFreeformAgentProposal` 將自由提案限制到 `travel | work | rest | socialize | buy_card | challenge_combat | spread_rumor | custom_social_scene`；未知 action/tile/deceased or unknown NPC target 會 rejected。
+- **Rule Engine event**：新增 `NPC_FREEFORM_ACTION_PROPOSED` command/event payload + validator；accepted/rejected 都可觀測，rejected 不改 runtime state。
+- **Runtime application**：accepted travel-like action 只透過既有 `NpcEngine.setIntentOverride` 導向；AI 宣稱拿卡、改錢、改 HP、改關係一律不被此路徑採信。
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest run src/npcs/npcAgent.test.ts` — pass（9 tests）
+- `npm --workspace packages/server exec vitest run src/kernel/livingWorld.test.ts` — pass（59 tests）
+- `npm --workspace packages/server exec vitest run src/sim/runtimeIntentResolution.test.ts` — pass（2 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm --workspace packages/server exec vitest -- run` — pass（1204 tests / 153 files）
+- `npm --workspace packages/web exec vitest -- run` — pass（114 tests / 22 files）
+- `npx openspec validate --all --strict` — pass（52 passed / 0 failed）
+
+### Known Deferred
+- Freeform action execution is still first-slice: accepted proposals steer/narrate through existing runtime paths; richer typed task execution (actual trading, visiting, combat challenge automation, card purchase commands) should be separate changes.
+- DB/storage pressure remains a separate issue: `NPC_STATE_RECORDED` snapshot volume and possible Postgres migration are not included in this change.
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.90.0
 
 ### Current Version

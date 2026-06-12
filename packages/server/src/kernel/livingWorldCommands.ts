@@ -51,6 +51,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MATURED',
   'NPC_INHERITANCE_GRANTED',
   'NPC_AGENT_DECISION',
+  'NPC_FREEFORM_ACTION_PROPOSED',
   'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
@@ -386,6 +387,41 @@ export type NpcAgentDecisionCmd = Readonly<{
   reason: string
   /** NPC 自言自語（可上公開 ticker）。 */
   utterance: string | null
+  decidedAtTick: number
+  motivation?: EventMotivation
+  narration: string | null
+}>
+
+export type NpcFreeformActionKind =
+  | 'travel'
+  | 'work'
+  | 'rest'
+  | 'socialize'
+  | 'buy_card'
+  | 'challenge_combat'
+  | 'spread_rumor'
+  | 'custom_social_scene'
+
+export type NpcFreeformActionProposedCmd = Readonly<{
+  npcId: string
+  tile: string
+  proposal: Readonly<{
+    action: string
+    target: Readonly<{ tileId: string | null; npcId: string | null; cardId: string | null }>
+    reason: string
+    risk: string
+    expectedOutcome: string
+    utterance: string | null
+  }>
+  resolved: Readonly<{
+    kind: NpcFreeformActionKind
+    targetTile: string | null
+    targetNpcId: string | null
+    cardId: string | null
+    summary: string
+  }>
+  accepted: boolean
+  rejectionReason: string | null
   decidedAtTick: number
   motivation?: EventMotivation
   narration: string | null
@@ -1720,6 +1756,7 @@ export type LivingWorldCommandPayload =
   | NpcMaturedCmd
   | NpcInheritanceGrantedCmd
   | NpcAgentDecisionCmd
+  | NpcFreeformActionProposedCmd
   | NpcRelationshipDimensionAdjustedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
@@ -2051,6 +2088,35 @@ const VALIDATORS: Readonly<
     if (typeof p.decidedAtTick !== 'number' || !Number.isInteger(p.decidedAtTick) || p.decidedAtTick < 0) {
       return 'decidedAtTick must be non-negative integer'
     }
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  NPC_FREEFORM_ACTION_PROPOSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (!isRecord(p.proposal)) return 'proposal required'
+    if (typeof p.proposal.action !== 'string' || p.proposal.action.length === 0) return 'proposal.action required'
+    if (!isRecord(p.proposal.target)) return 'proposal.target required'
+    for (const key of ['tileId', 'npcId', 'cardId'] as const) {
+      const value = p.proposal.target[key]
+      if (value !== null && typeof value !== 'string') return `proposal.target.${key} must be string or null`
+    }
+    if (typeof p.proposal.reason !== 'string' || p.proposal.reason.length === 0) return 'proposal.reason required'
+    if (typeof p.proposal.risk !== 'string' || p.proposal.risk.length === 0) return 'proposal.risk required'
+    if (typeof p.proposal.expectedOutcome !== 'string' || p.proposal.expectedOutcome.length === 0) return 'proposal.expectedOutcome required'
+    if (p.proposal.utterance !== null && typeof p.proposal.utterance !== 'string') return 'proposal.utterance must be string or null'
+    if (!isRecord(p.resolved)) return 'resolved required'
+    const validKinds = ['travel', 'work', 'rest', 'socialize', 'buy_card', 'challenge_combat', 'spread_rumor', 'custom_social_scene']
+    if (typeof p.resolved.kind !== 'string' || !validKinds.includes(p.resolved.kind)) return 'resolved.kind invalid'
+    if (p.resolved.targetTile !== null && (typeof p.resolved.targetTile !== 'string' || p.resolved.targetTile.length === 0)) return 'resolved.targetTile must be string or null'
+    if (p.resolved.targetNpcId !== null && (typeof p.resolved.targetNpcId !== 'string' || p.resolved.targetNpcId.length === 0)) return 'resolved.targetNpcId must be string or null'
+    if (p.resolved.cardId !== null && (typeof p.resolved.cardId !== 'string' || p.resolved.cardId.length === 0)) return 'resolved.cardId must be string or null'
+    if (typeof p.resolved.summary !== 'string' || p.resolved.summary.length === 0) return 'resolved.summary required'
+    if (typeof p.accepted !== 'boolean') return 'accepted required'
+    if (p.accepted && p.rejectionReason !== null) return 'accepted proposals must not have rejectionReason'
+    if (!p.accepted && (typeof p.rejectionReason !== 'string' || p.rejectionReason.length === 0)) return 'rejected proposals require rejectionReason'
+    if (typeof p.decidedAtTick !== 'number' || !Number.isInteger(p.decidedAtTick) || p.decidedAtTick < 0) return 'decidedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },

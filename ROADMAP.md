@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.0 ✅ shipped — 2026-06-13
+
+**主題：Freeform NPC Agent Actions（AI 自由創造行為 + server 驗證落地）**
+
+OpenSpec change：`freeform-npc-agent-actions`
+
+- ✅ **自由行為提案** — NPC agent prompt 從「選項編號」升級為 structured freeform proposal：action / target / reason / risk / expectedOutcome / utterance；prompt 明確帶 persona、需求、目標、信念、反思。
+- ✅ **server resolver** — AI 可以想任何事，但 server 只接受白名單 action kind：travel / work / rest / socialize / buy_card / challenge_combat / spread_rumor / custom_social_scene；未知 tile、死亡/未知 NPC、空理由全部 rejected。
+- ✅ **Rule Engine 事件** — 新 `NPC_FREEFORM_ACTION_PROPOSED` command/event；accepted/rejected 都可觀測，但 rejected 不改 runtime state。
+- ✅ **deterministic consequence** — accepted travel/work/rest/socialize/buy_card/challenge_combat 只透過既有 `intentOverride` 導向；social/rumor/custom 只能敘事，不信 AI 的金錢/卡牌/HP/關係變更宣稱。
+- ✅ 1204 server tests、114 web tests、build 乾淨、OpenSpec validate 52/52。
+
+---
+
 ## v0.90.0 ✅ shipped — 2026-06-13
 
 **主題：Greed Island Card Combat（術式卡牌戰鬥 + Phase D 戰鬥世界回饋）**

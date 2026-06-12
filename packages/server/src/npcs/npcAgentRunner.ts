@@ -12,10 +12,10 @@ import type { NpcProfile } from './types.js'
 import { generateWithProviders } from './aiProvider.js'
 import { isOpenCodeConfigured } from './openCodeClient.js'
 import {
-  buildAgentOptions,
-  buildAgentPrompt,
-  parseAgentDecision,
-  type AgentOption,
+  buildFreeformAgentPrompt,
+  parseFreeformAgentProposal,
+  resolveFreeformAgentProposal,
+  type FreeformAgentResolution,
 } from './npcAgent.js'
 import type { IntentEntry } from '../sim/intentPlanner.js'
 import { NPC_AGENT_DECISION_INTERVAL_TICKS } from '../config/world.js'
@@ -33,9 +33,7 @@ export type NpcAgentDeps = Readonly<{
   submitDecision: (input: {
     profile: NpcProfile
     tile: string
-    option: AgentOption
-    reason: string
-    utterance: string | null
+    resolution: FreeformAgentResolution
     decidedAtTick: number
   }) => void
 }>
@@ -70,18 +68,16 @@ export class NpcAgentRunner {
       const tile = this.deps.getNpcTile(profile.id)
       if (!tile) return
       const entries = this.deps.computeIntentEntries(profile.id)
-      const options = buildAgentOptions(entries)
-      // 沒有真正的抉擇（只剩 follow_schedule）時不浪費 AI 呼叫。
-      if (options.length <= 1) return
+      // 沒有任何壓力/目標脈絡時不浪費 AI 呼叫；freeform 仍需要一點真實世界刺激。
+      if (entries.length === 0) return
 
-      const { systemPrompt, userPrompt } = buildAgentPrompt({
+      const { systemPrompt, userPrompt } = buildFreeformAgentPrompt({
         profile,
         currentTile: tile,
         needsLine: this.deps.getNeedsLine(profile.id),
         lifeGoalContext: this.deps.getLifeGoalContext(profile.id),
         beliefContext: this.deps.getBeliefContext(profile.id),
         reflectionContext: this.deps.getReflectionContext(profile.id),
-        options,
         worldTick: decidedAtTick,
       })
 
@@ -93,16 +89,19 @@ export class NpcAgentRunner {
         responseMimeType: 'application/json',
         thinkingBudget: 0,
       })
-      const decision = parseAgentDecision(result.text, options.length)
-      if (!decision) return
-      const option = options[decision.optionIndex]
-      if (!option) return
+      const proposal = parseFreeformAgentProposal(result.text)
+      if (!proposal) return
+      const livingNpcIds = new Set(this.deps.listAgentNpcs().map((p) => p.id))
+      const resolution = resolveFreeformAgentProposal(proposal, {
+        currentTile: tile,
+        defaultTile: profile.defaultLocation,
+        livingNpcIds,
+        getNpcTile: this.deps.getNpcTile,
+      })
       this.deps.submitDecision({
         profile,
         tile,
-        option,
-        reason: decision.reason,
-        utterance: decision.utterance,
+        resolution,
         decidedAtTick,
       })
     } catch {

@@ -548,6 +548,62 @@ describe('living-world rule engine', () => {
     }
   })
 
+  it('validates NPC_FREEFORM_ACTION_PROPOSED payloads', () => {
+    const { ruleEngine } = makeHarness()
+    const wellFormed = {
+      npcId: 'npc.smith',
+      tile: 't_central',
+      proposal: {
+        action: 'socialize',
+        target: { tileId: null, npcId: 'npc.friend', cardId: null },
+        reason: '我想去找朋友借錢買卡',
+        risk: '可能被拒絕',
+        expectedOutcome: '得到下一步線索',
+        utterance: '先去找他談談。',
+      },
+      resolved: {
+        kind: 'socialize' as const,
+        targetTile: 't_dock',
+        targetNpcId: 'npc.friend',
+        cardId: null,
+        summary: 'socialize: 我想去找朋友借錢買卡',
+      },
+      accepted: true,
+      rejectionReason: null,
+      decidedAtTick: 1000,
+      narration: '鐵匠喃喃自語：「先去找他談談。」',
+    }
+    expect(
+      ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', 'npc.smith', 'npc', 23, 23, wellFormed)
+      ).accepted
+    ).toBe(true)
+
+    expect(
+      ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', 'npc.smith', 'npc', 23, 23, {
+          ...wellFormed,
+          accepted: false,
+          rejectionReason: 'unsupported action: become_god',
+          narration: null,
+        })
+      ).accepted
+    ).toBe(true)
+
+    const rejectCases: Record<string, unknown>[] = [
+      { ...wellFormed, proposal: { ...wellFormed.proposal, reason: '' } },
+      { ...wellFormed, resolved: { ...wellFormed.resolved, kind: 'become_god' } },
+      { ...wellFormed, accepted: false, rejectionReason: null },
+      { ...wellFormed, accepted: true, rejectionReason: 'should not exist' },
+    ]
+    for (const payload of rejectCases) {
+      const result = ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', 'npc.smith', 'npc', 23, 23, payload as never)
+      )
+      expect(result.accepted, JSON.stringify(payload)).toBe(false)
+    }
+  })
+
   it('rejects unknown command type', () => {
     const { ruleEngine } = makeHarness()
     const bogus = {

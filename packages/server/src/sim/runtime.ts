@@ -773,9 +773,11 @@ export class SimulationRuntime {
       getLifeGoalContext: (npcId) => this.getFormattedLifeGoalContext(npcId),
       getBeliefContext: (npcId) => this.getFormattedBeliefContext(npcId),
       getReflectionContext: (npcId) => this.getFormattedReflectionContext(npcId),
-      submitDecision: ({ profile, tile, option, reason, utterance, decidedAtTick }) => {
+      submitDecision: ({ profile, tile, resolution, decidedAtTick }) => {
+        const utterance = resolution.proposal.utterance
+        const actionLabel = resolution.resolved.kind
         const command = makeLivingWorldCommand(
-          'NPC_AGENT_DECISION',
+          'NPC_FREEFORM_ACTION_PROPOSED',
           profile.id,
           'npc',
           this.currentTick,
@@ -783,17 +785,18 @@ export class SimulationRuntime {
           {
             npcId: profile.id,
             tile,
-            chosenIntent: option.kind,
-            targetTile: option.targetTile,
-            urgency: option.urgency,
-            reason,
-            utterance,
+            proposal: resolution.proposal,
+            resolved: resolution.resolved,
+            accepted: resolution.accepted,
+            rejectionReason: resolution.rejectionReason,
             decidedAtTick,
             motivation: makeMotivation(
-              `${profile.name.zh}以自己的需求、信念與目標衡量了此刻的處境，自主選擇了「${option.description}」。理由：${reason}`,
-              'NPC AI agent 自主決策'
+              resolution.accepted
+                ? `${profile.name.zh}以自己的需求、信念與目標自由提出行為「${resolution.resolved.summary}」，伺服器驗證為 ${actionLabel}。`
+                : `${profile.name.zh}自由提出行為「${resolution.resolved.summary}」，但被伺服器拒絕：${resolution.rejectionReason}`,
+              'NPC AI agent 自由行為提案'
             ),
-            narration: utterance ? `${profile.name.zh}喃喃自語：「${utterance}」` : null,
+            narration: resolution.accepted && utterance ? `${profile.name.zh}喃喃自語：「${utterance}」` : null,
           }
         )
         this.submitLivingWorldCommand(command)
@@ -1896,6 +1899,32 @@ export class SimulationRuntime {
     })
   }
 
+  /**
+   * v0.91.0 — freeform agent proposal 套用層。AI 可自由提出行為，但 runtime
+   * 只採用 server-resolved action，且第一版只透過現有 intentOverride 導向；
+   * rejected proposal 完全不改 runtime state。
+   */
+  private applyFreeformAgentActionEvent(ev: Event): void {
+    const data = (ev.payload as { data?: unknown } | null)?.data as Record<string, unknown> | undefined
+    if (!data || data.accepted !== true) return
+    const npcId = typeof data.npcId === 'string' ? data.npcId : null
+    if (!npcId) return
+    const resolved = data.resolved as Record<string, unknown> | undefined
+    if (!resolved || typeof resolved !== 'object') return
+    const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
+    const targetTile = typeof resolved.targetTile === 'string' ? resolved.targetTile : null
+    if (!targetTile) return
+    const steerableKinds = new Set(['travel', 'work', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
+    if (!steerableKinds.has(kind)) return
+    this.npcEngine.setIntentOverride(npcId, {
+      targetTile,
+      expiresAtTick: (ev.tick ?? this.currentTick) + INTENT_OVERRIDE_DURATION_TICKS,
+      intentType: kind === 'rest' ? 'survival' : kind === 'socialize' || kind === 'challenge_combat' ? 'social' : 'economic',
+      urgency: 65,
+      reason: `freeform-agent:${typeof resolved.summary === 'string' ? resolved.summary : kind}`,
+    })
+  }
+
   private commitLivingWorldCommand(command: LivingWorldCommand): Event | null {
     const result = this.livingWorldRuleEngine.evaluate(command)
     if (!result.accepted) {
@@ -2023,6 +2052,7 @@ export class SimulationRuntime {
       }
       // v0.89.0 — NPC AI agent 決策事件：套用（或解除）intentOverride。
       if (ev.eventType === 'NPC_AGENT_DECISION') this.applyAgentDecisionEvent(ev)
+      if (ev.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') this.applyFreeformAgentActionEvent(ev)
       this.factionControlProjection.project(ev)
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)

@@ -10,6 +10,7 @@ import type { NpcProfile } from './types.js'
 import type { IntentEntry } from '../sim/intentPlanner.js'
 import type { IntentKind } from '../kernel/livingWorldCommands.js'
 import { NPC_AGENT_UTTERANCE_MAX_CHARS } from '../config/world.js'
+import { MAP_ADJACENCY } from '../sim/mapGraph.js'
 
 export type AgentOption = Readonly<{
   /** 'follow_schedule' 或 intent stack entry。 */
@@ -24,6 +25,50 @@ export type AgentDecision = Readonly<{
   optionIndex: number
   reason: string
   utterance: string | null
+}>
+
+export const FREEFORM_AGENT_ACTIONS = [
+  'travel',
+  'work',
+  'rest',
+  'socialize',
+  'buy_card',
+  'challenge_combat',
+  'spread_rumor',
+  'custom_social_scene',
+] as const
+
+export type FreeformAgentActionKind = (typeof FREEFORM_AGENT_ACTIONS)[number]
+
+export type FreeformAgentProposal = Readonly<{
+  action: string
+  target: Readonly<{ tileId: string | null; npcId: string | null; cardId: string | null }>
+  reason: string
+  risk: string
+  expectedOutcome: string
+  utterance: string | null
+}>
+
+export type ResolvedFreeformAgentAction = Readonly<{
+  kind: FreeformAgentActionKind
+  targetTile: string | null
+  targetNpcId: string | null
+  cardId: string | null
+  summary: string
+}>
+
+export type FreeformAgentResolution = Readonly<{
+  proposal: FreeformAgentProposal
+  resolved: ResolvedFreeformAgentAction
+  accepted: boolean
+  rejectionReason: string | null
+}>
+
+export type FreeformAgentResolveContext = Readonly<{
+  currentTile: string
+  defaultTile: string
+  livingNpcIds: ReadonlySet<string>
+  getNpcTile: (npcId: string) => string | null
 }>
 
 const INTENT_LABEL_ZH: Readonly<Record<IntentKind, string>> = {
@@ -88,6 +133,122 @@ export function buildAgentPrompt(input: {
   return { systemPrompt, userPrompt }
 }
 
+export function buildFreeformAgentPrompt(input: {
+  profile: NpcProfile
+  currentTile: string
+  needsLine: string
+  lifeGoalContext: string
+  beliefContext: string
+  reflectionContext: string
+  worldTick: number
+}): { systemPrompt: string; userPrompt: string } {
+  const { profile } = input
+  const personality = profile.personality ?? {}
+  const personaLines = [
+    `姓名：${profile.name.zh} / ${profile.name.en}`,
+    `職業：${profile.role.zh} / ${profile.role.en}`,
+    `駐地：${profile.defaultLocation}`,
+    `人格權重：安全 ${fmtPersonality(personality.safetyWeight)}、經濟 ${fmtPersonality(personality.economyWeight)}、忠誠 ${fmtPersonality(personality.factionLoyalty)}、貪婪 ${fmtPersonality(personality.greed)}、耐心 ${fmtPersonality(personality.patience)}`,
+  ].join('\n')
+  const systemPrompt = [
+    `你是《貪婪之島 / Tideway》世界裡活著的 NPC。你不是旁白，也不是玩家助手。`,
+    '你可以替自己自由創造任意生活行為，但你不能直接改變世界；伺服器會驗證你的提案是否合法。',
+    '',
+    `### 你的身份\n${personaLines}`,
+    `### 目前位置\n${input.currentTile}`,
+    input.needsLine ? `### 你當下的身體與生活狀態\n${input.needsLine}` : '',
+    input.lifeGoalContext,
+    input.beliefContext,
+    input.reflectionContext,
+    '',
+    '### 你可以自由提出的行為方向',
+    '- travel: 去某個地區',
+    '- work: 做工作、服務、建設、打獵、採集、巡邏',
+    '- rest: 休息、躲避、恢復',
+    '- socialize: 找某個人、拜訪、求助、告白、道歉、結盟',
+    '- buy_card: 想去買卡、換卡、追求某張卡',
+    '- challenge_combat: 挑戰、威嚇、追捕或準備戰鬥',
+    '- spread_rumor: 傳聞、警告、放話',
+    '- custom_social_scene: 其他不直接改變物品/金錢/HP/關係數值的生活場景',
+    '',
+    '### 回應規則',
+    '- 回傳嚴格 JSON（不要 markdown fence）。',
+    '- 不要宣稱你已經拿到卡、改變金錢、殺死誰、治癒誰或瞬間移動；你只能提出想做的事。',
+    '- target 裡不知道的欄位填 null。tileId 必須像 t_central；npcId 必須是你知道的 NPC id；cardId 可以是想追求的卡。',
+    '- JSON 格式：',
+    '{ "action": "travel|work|rest|socialize|buy_card|challenge_combat|spread_rumor|custom_social_scene", "target": { "tileId": string|null, "npcId": string|null, "cardId": string|null }, "reason": "第一人稱中文理由", "risk": "願意承擔的風險", "expectedOutcome": "希望發生什麼", "utterance": "一句≤30字自言自語" }',
+  ].filter((line) => line !== '').join('\n')
+  const userPrompt = `世界刻度 ${input.worldTick}。請以 ${profile.name.zh} 的身分，自由提出你此刻真正想做的一件事。`
+  return { systemPrompt, userPrompt }
+}
+
+export function parseFreeformAgentProposal(raw: string): FreeformAgentProposal | null {
+  const jsonText = extractJsonObject(raw)
+  if (!jsonText) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const obj = parsed as Record<string, unknown>
+  const action = stringField(obj.action, 40)
+  const reason = stringField(obj.reason, 180)
+  if (!action || !reason) return null
+  const target = normalizeTarget(obj.target)
+  return {
+    action,
+    target,
+    reason,
+    risk: stringField(obj.risk, 120) || '未說明',
+    expectedOutcome: stringField(obj.expectedOutcome, 160) || '未說明',
+    utterance: obj.utterance === null ? null : sanitizeOptionalUtterance(obj.utterance),
+  }
+}
+
+export function resolveFreeformAgentProposal(
+  proposal: FreeformAgentProposal,
+  context: FreeformAgentResolveContext,
+): FreeformAgentResolution {
+  const kind = normalizeActionKind(proposal.action)
+  const fallbackResolved: ResolvedFreeformAgentAction = {
+    kind: kind ?? 'custom_social_scene',
+    targetTile: null,
+    targetNpcId: null,
+    cardId: proposal.target.cardId,
+    summary: summarizeProposal(proposal),
+  }
+  if (!kind) {
+    return rejectProposal(proposal, fallbackResolved, `unsupported action: ${proposal.action}`)
+  }
+  const targetNpcId = proposal.target.npcId
+  if (targetNpcId && !context.livingNpcIds.has(targetNpcId)) {
+    return rejectProposal(proposal, { ...fallbackResolved, kind, targetNpcId }, `unknown or deceased npc target: ${targetNpcId}`)
+  }
+  const npcTile = targetNpcId ? context.getNpcTile(targetNpcId) : null
+  const requestedTile = proposal.target.tileId ?? npcTile ?? defaultTileFor(kind, context)
+  if (requestedTile !== null && !isKnownTile(requestedTile)) {
+    return rejectProposal(proposal, { ...fallbackResolved, kind, targetNpcId, targetTile: requestedTile }, `unknown tile target: ${requestedTile}`)
+  }
+  const targetTile = requiresTile(kind) ? requestedTile : requestedTile ?? null
+  if (requiresTile(kind) && !targetTile) {
+    return rejectProposal(proposal, { ...fallbackResolved, kind, targetNpcId }, `${kind} requires a tile target`)
+  }
+  return {
+    proposal,
+    resolved: {
+      kind,
+      targetTile,
+      targetNpcId,
+      cardId: proposal.target.cardId,
+      summary: summarizeProposal(proposal),
+    },
+    accepted: true,
+    rejectionReason: null,
+  }
+}
+
 /** 寬容解析 AI 回覆；解析失敗回 null（呼叫端靜默放棄本輪）。 */
 export function parseAgentDecision(raw: string, optionCount: number): AgentDecision | null {
   const jsonText = extractJsonObject(raw)
@@ -115,6 +276,66 @@ export function parseAgentDecision(raw: string, optionCount: number): AgentDecis
 
 function sanitizeUtterance(value: string): string {
   return value.replace(/[\r\n]+/g, ' ').slice(0, NPC_AGENT_UTTERANCE_MAX_CHARS)
+}
+
+function sanitizeOptionalUtterance(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? sanitizeUtterance(trimmed) : null
+}
+
+function stringField(value: unknown, max: number): string {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+function normalizeTarget(value: unknown): FreeformAgentProposal['target'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { tileId: null, npcId: null, cardId: null }
+  }
+  const target = value as Record<string, unknown>
+  return {
+    tileId: stringField(target.tileId, 80) || null,
+    npcId: stringField(target.npcId, 160) || null,
+    cardId: stringField(target.cardId, 80) || null,
+  }
+}
+
+function normalizeActionKind(value: string): FreeformAgentActionKind | null {
+  const normalized = value.trim().toLowerCase().replace(/[ -]+/g, '_')
+  return (FREEFORM_AGENT_ACTIONS as readonly string[]).includes(normalized)
+    ? normalized as FreeformAgentActionKind
+    : null
+}
+
+function isKnownTile(tileId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(MAP_ADJACENCY, tileId)
+}
+
+function requiresTile(kind: FreeformAgentActionKind): boolean {
+  return kind === 'travel' || kind === 'work' || kind === 'rest' || kind === 'buy_card' || kind === 'challenge_combat'
+}
+
+function defaultTileFor(kind: FreeformAgentActionKind, context: FreeformAgentResolveContext): string | null {
+  if (kind === 'buy_card') return 't_dock'
+  if (kind === 'rest') return context.defaultTile || context.currentTile
+  if (kind === 'work' || kind === 'travel' || kind === 'challenge_combat') return context.currentTile
+  return null
+}
+
+function summarizeProposal(proposal: FreeformAgentProposal): string {
+  return `${proposal.action}: ${proposal.reason}`.slice(0, 220)
+}
+
+function rejectProposal(
+  proposal: FreeformAgentProposal,
+  resolved: ResolvedFreeformAgentAction,
+  rejectionReason: string,
+): FreeformAgentResolution {
+  return { proposal, resolved, accepted: false, rejectionReason }
+}
+
+function fmtPersonality(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(Math.round(value * 100) / 100) : '未定'
 }
 
 function extractJsonObject(raw: string): string | null {

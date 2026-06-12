@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildAgentOptions, buildAgentPrompt, parseAgentDecision } from './npcAgent.js'
+import {
+  buildAgentOptions,
+  buildAgentPrompt,
+  buildFreeformAgentPrompt,
+  parseAgentDecision,
+  parseFreeformAgentProposal,
+  resolveFreeformAgentProposal,
+} from './npcAgent.js'
 import type { IntentEntry } from '../sim/intentPlanner.js'
 import type { NpcProfile } from './types.js'
 
@@ -79,5 +86,60 @@ describe('parseAgentDecision', () => {
     const decision = parseAgentDecision(`{"choice": 0, "reason": "ok", "utterance": "${long}\\n第二行"}`, 3)
     expect(decision?.utterance).not.toContain('\n')
     expect((decision?.utterance ?? '').length).toBeLessThanOrEqual(60)
+  })
+})
+
+describe('freeform NPC agent proposals', () => {
+  it('builds a persona prompt that asks for freeform action JSON', () => {
+    const { systemPrompt, userPrompt } = buildFreeformAgentPrompt({
+      profile: {
+        ...profile(),
+        personality: { greed: 0.9, patience: 0.2, safetyWeight: 0.4 },
+      },
+      currentTile: 't_central',
+      needsLine: '金錢 80、安全 20',
+      lifeGoalContext: '### 你目前的人生目標\n  · 收集指定卡',
+      beliefContext: '### 你的信念\n  · 碼頭有人欠你錢',
+      reflectionContext: '',
+      worldTick: 123,
+    })
+    expect(systemPrompt).toContain('自由創造任意生活行為')
+    expect(systemPrompt).toContain('貪婪 0.9')
+    expect(systemPrompt).toContain('buy_card')
+    expect(systemPrompt).toContain('"action"')
+    expect(userPrompt).toContain('123')
+  })
+
+  it('parses and resolves a creative valid proposal', () => {
+    const proposal = parseFreeformAgentProposal(JSON.stringify({
+      action: 'socialize',
+      target: { tileId: null, npcId: 'npc.friend', cardId: null },
+      reason: '我想去找朋友借錢買卡',
+      risk: '可能被拒絕',
+      expectedOutcome: '得到下一步線索',
+      utterance: '先去找他談談。',
+    }))
+    expect(proposal).not.toBeNull()
+    const resolution = resolveFreeformAgentProposal(proposal!, {
+      currentTile: 't_central',
+      defaultTile: 't_central',
+      livingNpcIds: new Set(['npc.friend']),
+      getNpcTile: () => 't_dock',
+    })
+    expect(resolution.accepted).toBe(true)
+    expect(resolution.resolved).toMatchObject({ kind: 'socialize', targetNpcId: 'npc.friend', targetTile: 't_dock' })
+  })
+
+  it('rejects unsupported actions and unknown targets without executing them', () => {
+    const proposal = parseFreeformAgentProposal('{"action":"become_god","target":{"tileId":"t_void","npcId":null,"cardId":null},"reason":"我要支配世界","risk":"無","expectedOutcome":"全都聽我的","utterance":"跪下吧。"}')
+    expect(proposal).not.toBeNull()
+    const resolution = resolveFreeformAgentProposal(proposal!, {
+      currentTile: 't_central',
+      defaultTile: 't_central',
+      livingNpcIds: new Set(),
+      getNpcTile: () => null,
+    })
+    expect(resolution.accepted).toBe(false)
+    expect(resolution.rejectionReason).toContain('unsupported action')
   })
 })
