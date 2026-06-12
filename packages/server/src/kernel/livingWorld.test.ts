@@ -473,6 +473,36 @@ describe('living-world rule engine', () => {
     }
   })
 
+  it('validates NPC_INHERITANCE_GRANTED payloads (v0.88.0)', () => {
+    const { ruleEngine } = makeHarness()
+    const wellFormed = {
+      npcId: 'npc.child.1',
+      parentNpcIds: ['p1', 'p2'],
+      householdId: 'hh.1',
+      gold: 12,
+      skillXp: { construction: 1, knowledge: 0, commerce: 2, civic: 0 },
+      grantedAtTick: 17280,
+      narration: 'inherits from parents',
+    }
+    const accept = ruleEngine.evaluate(
+      makeLivingWorldCommand('NPC_INHERITANCE_GRANTED', 'npc.child.1', 'system', 21, 21, wellFormed)
+    )
+    expect(accept.accepted).toBe(true)
+
+    const rejectCases: Record<string, unknown>[] = [
+      { ...wellFormed, parentNpcIds: [] },
+      { ...wellFormed, gold: -1 },
+      { ...wellFormed, grantedAtTick: 17280.5 },
+      { ...wellFormed, skillXp: { construction: 1, knowledge: 0, commerce: 2 } },
+    ]
+    for (const payload of rejectCases) {
+      const result = ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_INHERITANCE_GRANTED', 'npc.child.1', 'system', 21, 21, payload as never)
+      )
+      expect(result.accepted, JSON.stringify(payload)).toBe(false)
+    }
+  })
+
   it('rejects unknown command type', () => {
     const { ruleEngine } = makeHarness()
     const bogus = {

@@ -18,6 +18,7 @@ const GOODS_CONSUMED = 'GOODS_CONSUMED'
 const GOODS_DESTROYED = 'GOODS_DESTROYED'
 const PLAYER_PICKED_UP_GOODS = 'PLAYER_PICKED_UP_GOODS'
 const PLAYER_DEPOSIT_GOODS = 'PLAYER_DEPOSIT_GOODS'
+const HOUSEHOLD_INHERITANCE_ASSIGNED = 'HOUSEHOLD_INHERITANCE_ASSIGNED'
 
 export class GoodsInventoryProjection {
   private rows = new Map<string, GoodsInventoryRow>()
@@ -94,6 +95,25 @@ export class GoodsInventoryProjection {
         payload.tick,
         event.sequence
       )
+      return
+    }
+    if (event.eventType === HOUSEHOLD_INHERITANCE_ASSIGNED) {
+      const payload = readInheritancePayload(event)
+      if (!payload) return
+      for (const line of payload.goods) {
+        this.subtract(
+          { goodsId: line.goodsId, holderType: 'npc', holderId: payload.deceasedNpcId, tileId: line.tileId },
+          line.quantity,
+          payload.assignedAtTick,
+          event.sequence
+        )
+        this.add(
+          { goodsId: line.goodsId, holderType: 'npc', holderId: payload.heirId, tileId: line.tileId },
+          line.quantity,
+          payload.assignedAtTick,
+          event.sequence
+        )
+      }
     }
   }
 
@@ -293,6 +313,35 @@ function readPlayerDepositPayload(event: Event): {
     goodsId: payload.goodsId,
     quantity: payload.quantity,
     tick: payload.tick,
+  }
+}
+
+function readInheritancePayload(event: Event): {
+  deceasedNpcId: string
+  heirId: string
+  assignedAtTick: number
+  goods: readonly { goodsId: string; quantity: number; tileId: string }[]
+} | null {
+  const payload = readData(event)
+  if (!payload) return null
+  if (typeof payload.deceasedNpcId !== 'string' || payload.deceasedNpcId.length === 0) return null
+  if (typeof payload.heirId !== 'string' || payload.heirId.length === 0) return null
+  if (typeof payload.assignedAtTick !== 'number' || !Number.isInteger(payload.assignedAtTick)) return null
+  if (!Array.isArray(payload.goods)) return null
+  const goods: { goodsId: string; quantity: number; tileId: string }[] = []
+  for (const raw of payload.goods) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const line = raw as Record<string, unknown>
+    if (typeof line.goodsId !== 'string' || line.goodsId.length === 0) return null
+    if (typeof line.quantity !== 'number' || !Number.isFinite(line.quantity) || line.quantity <= 0) return null
+    if (typeof line.tileId !== 'string' || line.tileId.length === 0) return null
+    goods.push({ goodsId: line.goodsId, quantity: line.quantity, tileId: line.tileId })
+  }
+  return {
+    deceasedNpcId: payload.deceasedNpcId,
+    heirId: payload.heirId,
+    assignedAtTick: payload.assignedAtTick,
+    goods,
   }
 }
 

@@ -49,6 +49,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
   'NPC_MATURED',
+  'NPC_INHERITANCE_GRANTED',
   'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
@@ -345,6 +346,19 @@ export type NpcMaturedCmd = Readonly<{
   narration: string
 }>
 
+// Matured-child inheritance (v0.88.0) — 成年那一刻從父母 civic 紀錄
+// 確定性換算出的起步 seed。不是轉移：父母 civic 狀態不變。
+export type NpcInheritanceGrantedCmd = Readonly<{
+  npcId: string
+  parentNpcIds: readonly string[]
+  householdId: string
+  gold: number
+  skillXp: Readonly<{ construction: number; knowledge: number; commerce: number; civic: number }>
+  grantedAtTick: number
+  motivation?: EventMotivation
+  narration: string
+}>
+
 export type NpcRelationshipDimensionAdjustedCmd = Readonly<{
   from: string
   to: string
@@ -397,6 +411,11 @@ export type HouseholdInheritanceAssignedCmd = Readonly<{
   heirId: string
   amount: number
   assignedAtTick: number
+  /**
+   * v0.88.0 — 死者名下實際移轉給繼承人的 goods 清單。
+   * GoodsInventoryProjection 依此把 npc:<deceased> 庫存搬到 npc:<heir>。
+   */
+  goods?: readonly Readonly<{ goodsId: string; quantity: number; tileId: string }>[]
   motivation?: EventMotivation
   narration: string
 }>
@@ -1678,6 +1697,7 @@ export type LivingWorldCommandPayload =
   | NpcHouseholdFormedCmd
   | NpcChildBornCmd
   | NpcMaturedCmd
+  | NpcInheritanceGrantedCmd
   | NpcRelationshipDimensionAdjustedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
@@ -1967,6 +1987,24 @@ const VALIDATORS: Readonly<
     if (typeof p.nameZh !== 'string' || p.nameZh.length === 0) return 'nameZh required'
     if (typeof p.nameEn !== 'string' || p.nameEn.length === 0) return 'nameEn required'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  NPC_INHERITANCE_GRANTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (!Array.isArray(p.parentNpcIds) || p.parentNpcIds.length === 0) return 'parentNpcIds required'
+    for (const id of p.parentNpcIds) {
+      if (typeof id !== 'string' || id.length === 0) return 'parentNpcIds must be non-empty strings'
+    }
+    if (typeof p.householdId !== 'string' || p.householdId.length === 0) return 'householdId required'
+    if (typeof p.gold !== 'number' || !Number.isInteger(p.gold) || p.gold < 0) return 'gold must be non-negative integer'
+    if (!isRecord(p.skillXp)) return 'skillXp required'
+    for (const key of ['construction', 'knowledge', 'commerce', 'civic'] as const) {
+      const value = p.skillXp[key]
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) return `skillXp.${key} must be non-negative integer`
+    }
+    if (typeof p.grantedAtTick !== 'number' || !Number.isInteger(p.grantedAtTick) || p.grantedAtTick < 0) return 'grantedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   },
   NPC_RELATIONSHIP_DIMENSION_ADJUSTED: (p) => {
@@ -2792,6 +2830,15 @@ const VALIDATORS: Readonly<
     if (typeof p.heirId !== 'string' || p.heirId.length === 0) return 'heirId required'
     if (!isPositiveQuantity(p.amount)) return 'amount required'
     if (typeof p.assignedAtTick !== 'number' || !Number.isInteger(p.assignedAtTick) || p.assignedAtTick < 0) return 'assignedAtTick must be non-negative integer'
+    if (p.goods !== undefined) {
+      if (!Array.isArray(p.goods)) return 'goods must be array when present'
+      for (const line of p.goods) {
+        if (!isRecord(line)) return 'goods line must be object'
+        if (typeof line.goodsId !== 'string' || line.goodsId.length === 0) return 'goods line goodsId required'
+        if (!isPositiveQuantity(line.quantity)) return 'goods line quantity must be positive'
+        if (typeof line.tileId !== 'string' || line.tileId.length === 0) return 'goods line tileId required'
+      }
+    }
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   },

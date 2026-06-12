@@ -5,6 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-12 — Handoff Snapshot @ v0.88.0
+
+### Current Version
+`0.88.0` — Living World Presentation & Autonomy：2.5D 程序化角色 + 全 100 張卡程序化卡面 + NPC 人生目標閉環（對話 + 行動偏壓）+ 雙繼承（死亡遺產轉移 + 成年 civic seed，關閉 Phase D）。
+
+### What Shipped
+- **2.5D 角色**（`packages/web/src/game/characterAvatar.ts` 重寫，對外合約不變）：地面陰影、體積陰影、id 播種膚色/髮型/褲色、雙眼朝向、關節原點手腳、scene-update 連續動作循環（走路/呼吸/工作/吃/交易/睡）；Area / Map / Building 三場景零修改。
+- **程序化卡面**（`packages/web/src/components/game/cardArt.tsx` 新檔）：mulberry32(cardId) 確定性 SVG，10 大類別主題構圖、rank 邊框光暈；`CardImage` fallback：GM 上傳圖 → CardArt → rank 色塊；Codex / CardDropPanel / AdminCardsPage 接上。
+- **人生目標 grounding**：`LifeGoalsProjection`（小 log boot 完整重建；大 log availability-first boot 依 v0.87.13 OOM 政策刻意不深度補水，對話注入由 live-derive fallback 優雅降級）+ `getFormattedLifeGoalContext`（committed → live derive fallback）+ `buildLifeGoalBlock` 對話注入 + `computeIntentStack` `lifeGoalBoost`（封頂 `LIFE_GOAL_INTENT_BOOST_MAX = 0.25`）。
+- **死亡遺產轉移**：`planInheritancePlanner` → `HOUSEHOLD_INHERITANCE_ASSIGNED`（payload 新增 optional `goods`）；`GoodsInventoryProjection` 搬 npc:deceased → npc:heir；legacy shape no-op。
+- **成年繼承（`matured-child-inheritance` change 實作）**：`NPC_INHERITANCE_GRANTED` + validator；`planMaturationInheritance`（父母 civic 均值 × 0.25 gold / 0.10 skill；全零不發）；與 `NPC_MATURED` 同 tick 配對（orphan grant = determinism error，live + replay 雙邊 guard）；`seedNpcCivicRecord`（double-grant throw）；`LIFE_EXPANSION_BOOT_EVENT_TYPES` 加入兩個新事件型別；admin `inheritedRecent` + AdminNpcsPage「近期繼承」panel。
+- OpenSpec：新增 `living-world-presentation-and-autonomy`（4 specs，全 tasks 完成）；`matured-child-inheritance` tasks 全勾（chronicle renderer 9.x 與 live sim-advance 驗證 11.4 標記 deferred）。
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest -- run` — **1172 tests / 150 files 全過**（+53 新測試）
+- `npm run build` — server + web 乾淨（Vite chunk-size warning 為既知非阻斷）
+- `npx openspec validate --all --strict` — 49 passed / 0 failed（含新 change）
+- Local Docker smoke：**未能執行** — 本機 Docker Desktop Linux engine 對所有 API 呼叫回 500（engine 起不來，與本變更無關）；依使用者指示先 push，runtime 驗證改由 CI / Deploy Dev / live smoke 完成
+
+### Known Deferred
+- `matured-child-inheritance` task 9.x（chronicle renderer for NPC_INHERITANCE_GRANTED）與 11.4（live `inheritedRecent` 非空驗證需長 sim window）。
+- `readEventsByTickWindow` 是 oldest-first：既有 births/households feed 在事件數超過 limit 後會顯示最舊而非最新（latent，非本版引入；inheritedRecent 已用寬抓+取新規避）。
+
+### CI/CD State
+本機實作與測試完成。Docker smoke 結果與 push / CI 狀態見 git log 與最新 commit message。
+
+---
+
 ## 2026-06-02 — Handoff Snapshot @ v0.87.13
 
 ### Current Version

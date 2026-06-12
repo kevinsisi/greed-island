@@ -1,7 +1,9 @@
 // Reusable card image component — shows the AI-generated illustration if
-// available, falls back to the rank-letter colored square placeholder.
+// available, falls back to the deterministic procedural card art (when the
+// card id is known), and only then to the rank-letter colored square.
 
 import { useState } from 'react'
+import { CardArt } from './cardArt'
 
 const RANK_COLORS: Record<string, string> = {
   S: 'bg-ember-500/20 border-ember-500 text-ember-200',
@@ -15,13 +17,15 @@ interface CardImageProps {
   imageUrl?: string
   rank: string
   nameZh: string
+  /** Card catalog id (1..100) — enables the procedural art fallback. */
+  cardId?: number
   /** Extra CSS classes applied to the root element. */
   className?: string
   /** Square pixel size for the rank placeholder (default 40). */
   placeholderSize?: number
 }
 
-export function CardImage({ imageUrl, rank, nameZh, className = '', placeholderSize = 40 }: CardImageProps) {
+export function CardImage({ imageUrl, rank, nameZh, cardId, className = '', placeholderSize = 40 }: CardImageProps) {
   const [failed, setFailed] = useState(false)
 
   if (imageUrl && !failed) {
@@ -32,6 +36,17 @@ export function CardImage({ imageUrl, rank, nameZh, className = '', placeholderS
         onError={() => setFailed(true)}
         className={`object-cover ${className}`}
         loading="lazy"
+      />
+    )
+  }
+
+  if (typeof cardId === 'number' && cardId >= 1 && cardId <= 100) {
+    return (
+      <CardArt
+        cardId={cardId}
+        rank={rank}
+        className={`object-cover ${className}`}
+        showRankBadge={placeholderSize >= 48}
       />
     )
   }

@@ -310,6 +310,14 @@ export type ServerLineageResponse = {
   households: readonly ServerLineageHousehold[]
 }
 
+export type ServerNpcStatsInherited = {
+  npcId: string
+  parentNpcIds: readonly string[]
+  gold: number
+  skillXpTotal: number
+  grantedAtTick: number
+}
+
 export type ServerNpcStats = {
   totalNpcs: number
   byOrigin: { manual: number; born: number }
@@ -317,6 +325,7 @@ export type ServerNpcStats = {
   households: { totalEventCount: number; recent: readonly ServerNpcStatsHousehold[] }
   matured: { totalEventCount: number; recent: readonly ServerNpcStatsMatured[] }
   deaths: { totalEventCount: number; recent: readonly ServerNpcStatsDeath[] }
+  inheritedRecent: readonly ServerNpcStatsInherited[]
   generatedAtTick: number
 }
 

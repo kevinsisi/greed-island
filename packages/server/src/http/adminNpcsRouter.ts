@@ -14,6 +14,8 @@ import { requireRole, type AuthConfig } from './auth.js'
 import { displayChildName } from '../data/npcChildNamePool.js'
 
 const RECENT_FEED_LIMIT = 20
+// v0.88.0 matured-child inheritance — spec 規定 inheritedRecent 上限 10 筆。
+const INHERITED_RECENT_LIMIT = 10
 
 export type AdminNpcsRouterInput = Readonly<{
   runtime: SimulationRuntime
@@ -56,6 +58,14 @@ export type NpcStatsMatured = Readonly<{
   nameEn: string
 }>
 
+export type NpcStatsInherited = Readonly<{
+  npcId: string
+  parentNpcIds: readonly string[]
+  gold: number
+  skillXpTotal: number
+  grantedAtTick: number
+}>
+
 export type NpcStatsResponse = Readonly<{
   totalNpcs: number
   byOrigin: Readonly<{ manual: number; born: number }>
@@ -63,6 +73,7 @@ export type NpcStatsResponse = Readonly<{
   households: Readonly<{ totalEventCount: number; recent: readonly NpcStatsHousehold[] }>
   matured: Readonly<{ totalEventCount: number; recent: readonly NpcStatsMatured[] }>
   deaths: Readonly<{ totalEventCount: number; recent: readonly NpcStatsDeath[] }>
+  inheritedRecent: readonly NpcStatsInherited[]
   generatedAtTick: number
 }>
 
@@ -153,6 +164,23 @@ export function buildNpcStats(input: {
     .map(toDeathRow)
     .filter((row): row is NpcStatsDeath => row !== null)
 
+  // 繼承事件稀少（每個成年孩子最多一筆），直接抓窗內全量再取最新 10 筆 —
+  // readEventsByTickWindow 是 oldest-first，用小 limit 會拿到最舊的而不是最新的。
+  const inheritedRows =
+    generatedAtTick > 0
+      ? eventStore.readEventsByTickWindow({
+          eventTypes: ['NPC_INHERITANCE_GRANTED'],
+          sinceTick: 0,
+          untilTick: generatedAtTick,
+          limit: 10_000,
+        }).events
+      : []
+  const inheritedRecent = [...inheritedRows]
+    .map(toInheritedRow)
+    .filter((row): row is NpcStatsInherited => row !== null)
+    .sort((a, b) => b.grantedAtTick - a.grantedAtTick)
+    .slice(0, INHERITED_RECENT_LIMIT)
+
   return {
     totalNpcs,
     byOrigin: { manual, born },
@@ -160,8 +188,37 @@ export function buildNpcStats(input: {
     households: { totalEventCount: householdsTotalEventCount, recent: recentHouseholds },
     matured: { totalEventCount: maturedTotalEventCount, recent: recentMatured },
     deaths: { totalEventCount: deathsTotalEventCount, recent: recentDeaths },
+    inheritedRecent,
     generatedAtTick,
   }
+}
+
+function toInheritedRow(event: EventLike): NpcStatsInherited | null {
+  const tick = event.tick ?? 0
+  const outer = event.payload as { data?: unknown } | null | undefined
+  if (!outer || typeof outer !== 'object') return null
+  const payload = (outer.data ?? outer) as
+    | { npcId?: unknown; parentNpcIds?: unknown; gold?: unknown; skillXp?: unknown; grantedAtTick?: unknown }
+    | null
+    | undefined
+  if (!payload || typeof payload !== 'object') return null
+  const npcId = typeof payload.npcId === 'string' ? payload.npcId : null
+  if (!npcId) return null
+  const parentNpcIds =
+    Array.isArray(payload.parentNpcIds) && payload.parentNpcIds.every((id) => typeof id === 'string')
+      ? (payload.parentNpcIds as readonly string[])
+      : []
+  const gold = typeof payload.gold === 'number' ? payload.gold : 0
+  const skillXp = payload.skillXp as Record<string, unknown> | null | undefined
+  const skillXpTotal =
+    skillXp && typeof skillXp === 'object'
+      ? (['construction', 'knowledge', 'commerce', 'civic'] as const).reduce(
+          (sum, key) => sum + (typeof skillXp[key] === 'number' ? (skillXp[key] as number) : 0),
+          0
+        )
+      : 0
+  const grantedAtTick = typeof payload.grantedAtTick === 'number' ? payload.grantedAtTick : tick
+  return { npcId, parentNpcIds, gold, skillXpTotal, grantedAtTick }
 }
 
 function toMaturedRow(event: EventLike): NpcStatsMatured | null {

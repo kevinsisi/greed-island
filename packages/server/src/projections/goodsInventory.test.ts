@@ -84,6 +84,46 @@ describe('GoodsInventoryProjection', () => {
     expect(settlementRow?.quantity).toBe(10)
   })
 
+  it('moves deceased NPC goods to heir on HOUSEHOLD_INHERITANCE_ASSIGNED', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      storedEvent(1, { goodsId: 'fish', quantity: 7, holderId: 'dock.elder', tileId: 't_dock', tick: 10 }),
+      storedEvent(2, { goodsId: 'hide', quantity: 2, holderId: 'dock.elder', tileId: 't_dock', tick: 11 }),
+      inheritanceEvent(3, {
+        deceasedNpcId: 'dock.elder',
+        heirId: 'dock.heir',
+        tick: 20,
+        goods: [
+          { goodsId: 'fish', quantity: 7, tileId: 't_dock' },
+          { goodsId: 'hide', quantity: 2, tileId: 't_dock' },
+        ],
+      }),
+    ])
+
+    expect(projection.get({ goodsId: 'fish', holderType: 'npc', holderId: 'dock.elder' })?.quantity).toBe(0)
+    expect(projection.get({ goodsId: 'hide', holderType: 'npc', holderId: 'dock.elder' })?.quantity).toBe(0)
+    expect(projection.get({ goodsId: 'fish', holderType: 'npc', holderId: 'dock.heir' })?.quantity).toBe(7)
+    expect(projection.get({ goodsId: 'hide', holderType: 'npc', holderId: 'dock.heir' })?.quantity).toBe(2)
+  })
+
+  it('ignores HOUSEHOLD_INHERITANCE_ASSIGNED without a goods list (legacy shape)', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      storedEvent(1, { goodsId: 'fish', quantity: 7, holderId: 'dock.elder', tileId: 't_dock', tick: 10 }),
+      baseEvent(2, 'HOUSEHOLD_INHERITANCE_ASSIGNED', 20, {
+        householdId: 'household-a',
+        deceasedNpcId: 'dock.elder',
+        heirId: 'dock.heir',
+        amount: 7,
+        assignedAtTick: 20,
+        narration: 'legacy inheritance',
+      }),
+    ])
+
+    expect(projection.get({ goodsId: 'fish', holderType: 'npc', holderId: 'dock.elder' })?.quantity).toBe(7)
+    expect(projection.get({ goodsId: 'fish', holderType: 'npc', holderId: 'dock.heir' })).toBeNull()
+  })
+
   it('rebuilds to an identical canonical hash', () => {
     const events = [
       storedEvent(1, { goodsId: 'fish', quantity: 12, holderId: 'dock.fisher', tileId: 't_dock', tick: 10 }),
@@ -176,6 +216,26 @@ function playerDepositEvent(
     goodsId: input.goodsId,
     quantity: input.quantity,
     tick: input.tick,
+  })
+}
+
+function inheritanceEvent(
+  sequence: number,
+  input: {
+    deceasedNpcId: string
+    heirId: string
+    tick: number
+    goods: readonly { goodsId: string; quantity: number; tileId: string }[]
+  }
+): Event {
+  return baseEvent(sequence, 'HOUSEHOLD_INHERITANCE_ASSIGNED', input.tick, {
+    householdId: 'household-a',
+    deceasedNpcId: input.deceasedNpcId,
+    heirId: input.heirId,
+    amount: input.goods.reduce((sum, line) => sum + line.quantity, 0),
+    assignedAtTick: input.tick,
+    goods: input.goods,
+    narration: 'inheritance transfer',
   })
 }
 

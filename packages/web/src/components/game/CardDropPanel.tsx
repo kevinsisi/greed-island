@@ -269,6 +269,7 @@ function CardSection({
                     {...(c?.imageUrl ? { imageUrl: c.imageUrl } : {})}
                     rank={c?.rank ?? 'D'}
                     nameZh={c?.name ?? `#${d.cardId}`}
+                    cardId={d.cardId}
                     className="w-10 h-10 rounded-sharp"
                   />
                   <div className="flex-1 min-w-0">
@@ -312,6 +313,7 @@ function CardSection({
                     {...(c?.imageUrl ? { imageUrl: c.imageUrl } : {})}
                     rank={c?.rank ?? 'D'}
                     nameZh={c?.name ?? `#${d.cardId}`}
+                    cardId={d.cardId}
                     className="w-10 h-10 rounded-sharp"
                   />
                   <div className="flex-1 min-w-0">

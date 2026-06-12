@@ -283,6 +283,7 @@ export function createNpcRouter(input: {
         const beliefCtx = input.runtime.getFormattedBeliefContext(npcId) || undefined
         const reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined
         const memoryCtx = input.runtime.getFormattedMemoryContext(npcId) || undefined
+        const lifeGoalCtx = input.runtime.getFormattedLifeGoalContext(npcId) || undefined
 
         // alias memory — the NPC's private name for this player based on relationship history
         const playerAlias = previousCount > 0 ? computePlayerAlias(previousTrust, previousCount) : undefined
@@ -321,6 +322,7 @@ export function createNpcRouter(input: {
           ...(beliefCtx ? { beliefContext: beliefCtx } : {}),
           ...(reflectionCtx ? { reflectionContext: reflectionCtx } : {}),
           ...(memoryCtx ? { memoryContext: memoryCtx } : {}),
+          ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({

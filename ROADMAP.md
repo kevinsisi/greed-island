@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.88.0 ✅ shipped — 2026-06-12
+
+**主題：Living World Presentation & Autonomy（2.5D 角色 + 程序化卡面 + 人生目標閉環 + 雙繼承）**
+
+OpenSpec changes：`living-world-presentation-and-autonomy`（新）＋ `matured-child-inheritance`（既有提案，本版實作）
+
+- ✅ **2.5D 程序化角色** — `characterAvatar.ts` 重寫：地面陰影、軀幹體積陰影、id 播種膚色/髮色/髮型/褲色、朝向雙眼、關節原點手腳、場景 update 驅動的連續動作循環（走路擺臂+bob / 呼吸 / 工作敲打 / 吃飯 / 交易手勢 / 睡姿）；`ProceduralAvatar` 對外合約不變，三個場景零修改
+- ✅ **程序化卡面** — `cardArt.tsx`：mulberry32(cardId) 播種 SVG，10 大類別主題構圖配色，rank 決定外框光暈層級；`CardImage` fallback 鏈 imageUrl → CardArt → rank 色塊；Codex 格狀/詳情、掉落面板、Admin 卡牌頁全接上 — 100 張卡張張有畫面
+- ✅ **NPC 人生目標 grounding** — 新 `LifeGoalsProjection`（NPC_LIFE_GOAL_SET → 最新目標；小 log boot 完整重建，大 log 依 v0.87.13 OOM 政策走 live-derive fallback）；`lifeGoalContext` 注入 AI 對話（NPC 能談自己立的目標，附反幻覺規則）；`computeIntentStack` 新 `lifeGoalBoost` 參數，目標方向偏壓對應 intent（封頂 0.25）
+- ✅ **死亡遺產轉移** — 新 `planInheritanceTransfers`；mortality cadence 發出 `HOUSEHOLD_INHERITANCE_ASSIGNED`（payload 新增 `goods` 清單）；`GoodsInventoryProjection` 把 npc:deceased 庫存搬給 npc:heir；legacy shape no-op 向後相容
+- ✅ **成年繼承（Phase D 關閉）** — `NPC_INHERITANCE_GRANTED` event + validator；`planMaturationInheritance`（父母 civic 均值 × `INHERITANCE_GOLD_FRACTION 0.25` / `INHERITANCE_SKILL_FRACTION 0.10`，全零不發）；與 `NPC_MATURED` 同 tick 配對發出（orphan grant = determinism error）；`seedNpcCivicRecord` 投影 + 雙 boot 分支；`/api/admin/npc-stats.inheritedRecent` + AdminNpcsPage「近期繼承」panel
+- ✅ 1172 server tests pass（+53 新），server + web build 乾淨，`openspec validate --all --strict` 49/49
+
+---
+
 ## v0.87.12 ✅ shipped — 2026-06-01
 
 **主題：Close World Capability Gaps（ancestor memory + roads/bridges + deferred large-log hydration）**

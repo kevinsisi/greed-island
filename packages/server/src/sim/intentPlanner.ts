@@ -203,13 +203,16 @@ export function computeIntentStack(
   npcFaction: string | undefined,
   currentTick: number,
   memoryUrgencyBoost = 0,
+  // v0.88.0 — NPC 自己立下的人生目標回饋到行動層：目標方向對應的
+  // intent kind 得到額外 multiplier 偏壓（與 memoryUrgencyBoost 同型）。
+  lifeGoalBoost: Readonly<Partial<Record<IntentKind, number>>> = {},
 ): IntentStack {
   const entries: IntentEntry[] = []
 
-  const survivalMultiplier = learningWeights.survival ?? 1.0
-  const economicMultiplier = learningWeights.economic ?? 1.0
-  const socialMultiplier = learningWeights.social ?? 1.0
-  const ecosystemMultiplier = learningWeights.ecosystem ?? 1.0
+  const survivalMultiplier = (learningWeights.survival ?? 1.0) + (lifeGoalBoost.survival ?? 0)
+  const economicMultiplier = (learningWeights.economic ?? 1.0) + (lifeGoalBoost.economic ?? 0)
+  const socialMultiplier = (learningWeights.social ?? 1.0) + (lifeGoalBoost.social ?? 0)
+  const ecosystemMultiplier = (learningWeights.ecosystem ?? 1.0) + (lifeGoalBoost.ecosystem ?? 0)
 
   const survival = computeSurvivalIntent(beliefs, profile, currentTile, survivalMultiplier + memoryUrgencyBoost)
   if (survival) entries.push(survival)

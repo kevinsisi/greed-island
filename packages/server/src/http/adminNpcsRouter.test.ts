@@ -76,7 +76,63 @@ function seedHouseholdEvent(
   ])
 }
 
+function seedInheritanceEvent(eventStore: SqliteEventStore, tick: number, npcId: string): void {
+  eventStore.appendEvents([
+    {
+      eventId: `evt_inherit_${tick}_${npcId}`,
+      eventType: 'NPC_INHERITANCE_GRANTED',
+      occurredAt: 0,
+      actorId: 'system',
+      payload: {
+        data: {
+          npcId,
+          parentNpcIds: ['p1', 'p2'],
+          householdId: `hh_${npcId}`,
+          gold: tick,
+          skillXp: { construction: 1, knowledge: 2, commerce: 3, civic: 4 },
+          grantedAtTick: tick,
+          narration: 'inherits from parents',
+        },
+      },
+      deterministicKey: `evt_inherit_${tick}_${npcId}`,
+      version: 1,
+      tick,
+    },
+  ])
+}
+
 describe('admin npcs router — buildNpcStats', () => {
+  it('reports empty inheritedRecent when no inheritance events exist (v0.88.0)', () => {
+    const db = new Database(':memory:')
+    try {
+      const eventStore = new SqliteEventStore(db)
+      const runtime = fakeRuntime({ manualIds: ['a'], npcIds: ['a'], tick: 100 })
+      const stats = buildNpcStats({ runtime, eventStore })
+      expect(stats.inheritedRecent).toEqual([])
+    } finally {
+      db.close()
+    }
+  })
+
+  it('bounds inheritedRecent to 10 entries, newest-first (v0.88.0)', () => {
+    const db = new Database(':memory:')
+    try {
+      const eventStore = new SqliteEventStore(db)
+      for (let i = 1; i <= 15; i += 1) {
+        seedInheritanceEvent(eventStore, i * 10, `npc.child.${i}`)
+      }
+      const runtime = fakeRuntime({ manualIds: ['a'], npcIds: ['a'], tick: 1000 })
+      const stats = buildNpcStats({ runtime, eventStore })
+      expect(stats.inheritedRecent).toHaveLength(10)
+      const ticks = stats.inheritedRecent.map((row) => row.grantedAtTick)
+      expect(ticks).toEqual([...ticks].sort((a, b) => b - a))
+      expect(stats.inheritedRecent[0]!.skillXpTotal).toBe(10)
+      expect(stats.inheritedRecent[0]!.parentNpcIds).toEqual(['p1', 'p2'])
+    } finally {
+      db.close()
+    }
+  })
+
   it('reports manual-only origin when no born NPCs exist and empty event log', () => {
     const db = new Database(':memory:')
     try {

@@ -10,6 +10,7 @@ import {
 } from '../api/client'
 import type { CardCatalogEntry } from '../state/types'
 import { CardImage } from '../components/game/CardImage'
+import { CardArt } from '../components/game/cardArt'
 
 const RANK_ORDER: Array<CardCatalogEntry['rank']> = ['S', 'A', 'B', 'C', 'D']
 
@@ -302,13 +303,14 @@ export function CodexPage() {
                     className={`h-full w-full object-cover ${card.owned ? '' : 'opacity-25 grayscale'}`}
                   />
                 ) : (
-                  <div className="h-full w-full flex flex-col items-center justify-between p-1 text-[10px] font-display tracking-tightest">
-                    <span className="text-[9px]">#{String(card.id).padStart(3, '0')}</span>
-                    <span className={`font-extrabold text-sm ${card.owned ? '' : 'text-ground-700'}`}>{card.rank}</span>
-                    <span className={card.owned ? 'text-current' : 'text-ground-700'}>{card.owned ? '●' : '○'}</span>
-                  </div>
+                  <CardArt
+                    cardId={card.id}
+                    rank={card.rank}
+                    showRankBadge={false}
+                    className={`h-full w-full ${card.owned ? '' : 'opacity-25 grayscale'}`}
+                  />
                 )}
-                {!card.owned && card.imageUrl && (
+                {!card.owned && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="font-display font-extrabold text-sm text-ground-600">{card.rank}</span>
                   </div>
@@ -325,6 +327,7 @@ export function CodexPage() {
                     <CardImage
                       rank={selected.rank}
                       nameZh={selected.name}
+                      cardId={selected.id}
                       {...(selected.imageUrl ? { imageUrl: selected.imageUrl } : {})}
                       className="w-full h-full object-cover"
                       placeholderSize={32}

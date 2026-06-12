@@ -255,6 +255,16 @@ export const MORTALITY_CADENCE_TICKS = TICKS_PER_HOUR
 export const NPC_MATURATION_TICKS = TICKS_PER_DAY
 export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
 
+// NPC life goals — cadence for NPC_LIFE_GOAL_SET emission（top-8 壓力 NPC）。
+export const LIFE_GOAL_CADENCE_TICKS = 30
+
+// Matured-child inheritance (v0.88.0)
+// 成年的孩子以父母 civic 紀錄的平均值乘上比例做為起步 seed（不是轉移，
+// 父母不會扣 — 這模擬「從父母身上學到的東西」）。調參背景見
+// openspec/changes/matured-child-inheritance/design.md Decision 3/4。
+export const INHERITANCE_GOLD_FRACTION = 0.25
+export const INHERITANCE_SKILL_FRACTION = 0.10
+
 // Household reproduction (v0.87.0)
 // Households can produce multiple children, gated by `MIN_BIRTH_INTERVAL_TICKS`
 // after the most recent birth (or household formation if no children yet) and

@@ -16,6 +16,7 @@ import {
   hydrateLifeExpansionState,
   productiveDeltaWithNpcSkill,
   rebuildLifeExpansionFromEvents,
+  seedNpcCivicRecord,
   withChildBorn,
   withConstructionInitiated,
   withConstructionProgress,
@@ -147,6 +148,76 @@ describe('city life projection', () => {
       nameEn: 'Tideborn',
       bornAtTick: 100,
     })
+  })
+
+  it('seeds a previously-absent civic record from an inheritance grant (v0.88.0)', () => {
+    const seeded = seedNpcCivicRecord(createInitialLifeExpansionState(), {
+      npcId: 'npc.child.1',
+      gold: 15,
+      skillXp: { construction: 3, knowledge: 5, commerce: 1, civic: 2 },
+      tick: 17280,
+    })
+
+    expect(seeded.npcCivicRecords['npc.child.1']).toEqual({
+      npcId: 'npc.child.1',
+      gold: 15,
+      skillXp: { construction: 3, knowledge: 5, commerce: 1, civic: 2 },
+      lastProductiveTick: null,
+    })
+  })
+
+  it('throws on double inheritance grant for the same NPC (v0.88.0)', () => {
+    const seeded = seedNpcCivicRecord(createInitialLifeExpansionState(), {
+      npcId: 'npc.child.1',
+      gold: 15,
+      skillXp: { construction: 3, knowledge: 5, commerce: 1, civic: 2 },
+      tick: 17280,
+    })
+
+    expect(() =>
+      seedNpcCivicRecord(seeded, {
+        npcId: 'npc.child.1',
+        gold: 1,
+        skillXp: { construction: 0, knowledge: 0, commerce: 0, civic: 0 },
+        tick: 17290,
+      })
+    ).toThrow(/double inheritance grant/)
+  })
+
+  it('rebuilds inheritance-seeded civic records from paired NPC_MATURED + NPC_INHERITANCE_GRANTED events (v0.88.0)', () => {
+    const rebuilt = rebuildLifeExpansionFromEvents([
+      event(1, 'NPC_MATURED', 17280, { npcId: 'npc.child.1', householdId: 'hh.1' }),
+      event(2, 'NPC_INHERITANCE_GRANTED', 17280, {
+        npcId: 'npc.child.1',
+        parentNpcIds: ['p1', 'p2'],
+        householdId: 'hh.1',
+        gold: 15,
+        skillXp: { construction: 3, knowledge: 5, commerce: 1, civic: 2 },
+        grantedAtTick: 17280,
+      }),
+    ])
+
+    expect(rebuilt.npcCivicRecords['npc.child.1']).toEqual({
+      npcId: 'npc.child.1',
+      gold: 15,
+      skillXp: { construction: 3, knowledge: 5, commerce: 1, civic: 2 },
+      lastProductiveTick: null,
+    })
+  })
+
+  it('throws a determinism error when an inheritance grant has no paired NPC_MATURED at the same tick (v0.88.0)', () => {
+    expect(() =>
+      rebuildLifeExpansionFromEvents([
+        event(1, 'NPC_INHERITANCE_GRANTED', 17280, {
+          npcId: 'npc.orphan-grant',
+          parentNpcIds: ['p1'],
+          householdId: 'hh.1',
+          gold: 5,
+          skillXp: { construction: 0, knowledge: 0, commerce: 0, civic: 1 },
+          grantedAtTick: 17280,
+        }),
+      ])
+    ).toThrow(/determinism error/)
   })
 
   it('records NPC productive work into replayable gold and skill XP', () => {

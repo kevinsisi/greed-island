@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, ApiError, type ServerNpcStats, type ServerNpcStatsDeath, type ServerNpcStatsMatured } from '../api/client'
+import { api, ApiError, type ServerNpcStats, type ServerNpcStatsDeath, type ServerNpcStatsInherited, type ServerNpcStatsMatured } from '../api/client'
 import { useAuth } from '../state/AuthContext'
 import { useI18n, type TranslationKey } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
@@ -218,6 +218,17 @@ function StatsView({ stats, t }: { stats: ServerNpcStats; t: Translator }) {
 
       <section className="gi-panel p-4 flex flex-col gap-3">
         <h2 className="font-display text-sm uppercase tracking-tightest text-ground-200">
+          近期繼承
+        </h2>
+        {(stats.inheritedRecent ?? []).length === 0 ? (
+          <p className="text-sm text-ground-400">尚無成年繼承事件。</p>
+        ) : (
+          <InheritedTable rows={stats.inheritedRecent} t={t} />
+        )}
+      </section>
+
+      <section className="gi-panel p-4 flex flex-col gap-3">
+        <h2 className="font-display text-sm uppercase tracking-tightest text-ground-200">
           {t('admin.npcs.deathsHeading')}
         </h2>
         {stats.deaths.recent.length === 0 ? (
@@ -252,6 +263,35 @@ function MaturedTable({ rows, t }: { rows: readonly ServerNpcStatsMatured[]; t: 
               </td>
               <td className="py-1.5 pr-3 text-ground-400 font-mono text-xs">{row.householdId}</td>
               <td className="py-1.5 pr-3 text-ground-400 font-mono text-xs">{row.homeTileId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function InheritedTable({ rows, t }: { rows: readonly ServerNpcStatsInherited[]; t: Translator }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-tightest text-ground-500">
+            <th className="text-left py-2 pr-3">{t('admin.npcs.colTick')}</th>
+            <th className="text-left py-2 pr-3">NPC</th>
+            <th className="text-left py-2 pr-3">父母</th>
+            <th className="text-left py-2 pr-3">金幣</th>
+            <th className="text-left py-2 pr-3">技藝點</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.grantedAtTick}-${row.npcId}`} className="border-t border-ground-800/40">
+              <td className="py-1.5 pr-3 text-ground-300 font-mono text-xs">{row.grantedAtTick}</td>
+              <td className="py-1.5 pr-3 text-ground-100 font-mono text-xs">{row.npcId}</td>
+              <td className="py-1.5 pr-3 text-ground-300 font-mono text-xs">{row.parentNpcIds.join(' + ')}</td>
+              <td className="py-1.5 pr-3 text-ground-100">{row.gold}</td>
+              <td className="py-1.5 pr-3 text-ground-300">{row.skillXpTotal}</td>
             </tr>
           ))}
         </tbody>

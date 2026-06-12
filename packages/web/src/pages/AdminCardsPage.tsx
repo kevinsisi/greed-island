@@ -167,7 +167,7 @@ export function AdminCardsPage() {
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center">
-                              <CardImage rank={card.rank} nameZh={card.nameZh} placeholderSize={48} />
+                              <CardImage rank={card.rank} nameZh={card.nameZh} cardId={card.id} placeholderSize={48} className="h-full w-full" />
                             </div>
                           )}
                           {(isUploading || isDeleting) && (

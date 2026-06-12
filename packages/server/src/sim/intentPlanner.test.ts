@@ -231,6 +231,30 @@ describe('computeIntentStack', () => {
     expect(scaledUrgency).toBeCloseTo(baseUrgency2 * 1.5)
     void baseUrgency // used in sanity check above
   })
+
+  it('life-goal boost raises the urgency of the matching intent kind only (v0.88.0)', () => {
+    const beliefs: BeliefRow[] = [
+      makeBelief({ subject: 'tile_safety', qualifier: CURRENT_TILE, value: 'dangerous', confidence: 50 }),
+      makeBelief({ subject: 'goods_scarcity', qualifier: 'fish', value: 'scarce', confidence: 50 }),
+    ]
+    const profile = makeProfile({ safetyWeight: 1.0, economyWeight: 1.0 })
+
+    const base = computeIntentStack('npc_test', beliefs, profile, {}, CURRENT_TILE, undefined, 0)
+    const baseSurvival = base.entries.find(e => e.kind === 'survival')!.urgency
+    const baseEconomic = base.entries.find(e => e.kind === 'economic')!.urgency
+
+    const boosted = computeIntentStack(
+      'npc_test', beliefs, profile, {}, CURRENT_TILE, undefined, 0,
+      0,
+      { economic: 0.25 },
+    )
+    const boostedSurvival = boosted.entries.find(e => e.kind === 'survival')!.urgency
+    const boostedEconomic = boosted.entries.find(e => e.kind === 'economic')!.urgency
+
+    // economic multiplier 1.0 → 1.25, survival unchanged
+    expect(boostedEconomic).toBeCloseTo(baseEconomic * 1.25)
+    expect(boostedSurvival).toBeCloseTo(baseSurvival)
+  })
 })
 
 // ─── selectHighestIntent ──────────────────────────────────────────────────────

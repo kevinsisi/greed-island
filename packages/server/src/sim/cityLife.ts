@@ -103,6 +103,10 @@ export const LIFE_EXPANSION_BOOT_EVENT_TYPES = [
   'BUILDING_CONSTRUCTED',
   'NPC_HOUSEHOLD_FORMED',
   'NPC_CHILD_BORN',
+  // v0.88.0 matured-child inheritance：NPC_MATURED 只用來做同 tick 配對
+  // guard，NPC_INHERITANCE_GRANTED 直接 seed civic record。
+  'NPC_MATURED',
+  'NPC_INHERITANCE_GRANTED',
 ] as const
 
 export function createInitialLifeExpansionState(): LifeExpansionState {
@@ -452,10 +456,31 @@ export function decideCivEvoConstructionInitiate(input: {
 
 export function rebuildLifeExpansionFromEvents(events: readonly Event[]): LifeExpansionState {
   let state = createInitialLifeExpansionState()
+  // v0.88.0 — NPC_INHERITANCE_GRANTED 必須與同 tick 的 NPC_MATURED 配對；
+  // 缺配對代表 EventLog 損壞，replay 必須以 determinism error 中止。
+  const maturedTickByNpcId = new Map<string, number>()
   for (const event of events) {
     const data = readEventData(event.payload)
     if (!data) continue
     const tick = typeof event.tick === 'number' ? event.tick : 0
+    if (event.eventType === 'NPC_MATURED') {
+      const npcId = readString(data.npcId)
+      if (npcId) maturedTickByNpcId.set(npcId, tick)
+      continue
+    }
+    if (event.eventType === 'NPC_INHERITANCE_GRANTED') {
+      const npcId = readString(data.npcId)
+      const gold = readFiniteNumber(data.gold)
+      const skillXp = readSkillXpRecord(data.skillXp)
+      if (!npcId || gold === null || !skillXp) continue
+      if (maturedTickByNpcId.get(npcId) !== tick) {
+        throw new Error(
+          `[lifeExpansion] determinism error: NPC_INHERITANCE_GRANTED for ${npcId} at tick ${tick} has no paired NPC_MATURED at the same tick.`
+        )
+      }
+      state = seedNpcCivicRecord(state, { npcId, gold, skillXp, tick })
+      continue
+    }
     if (event.eventType === 'CONSTRUCTION_INITIATE') {
       const npcId = readString(data.npcId)
       const tileId = readString(data.tileId)
@@ -697,6 +722,46 @@ function goalNarration(kind: NpcLifeGoalKind): string {
 
 function addUnique(values: readonly string[], value: string): string[] {
   return values.includes(value) ? [...values] : [...values, value]
+}
+
+/**
+ * v0.88.0 — 以繼承 seed 建立成年 NPC 的 civic record。
+ * 繼承是一次性的成年時刻事件：如果紀錄已存在就是 double-grant bug，
+ * 直接 throw 而不是靜默覆寫。
+ */
+export function seedNpcCivicRecord(
+  state: LifeExpansionState,
+  input: { npcId: string; gold: number; skillXp: Readonly<Record<NpcSkillKey, number>>; tick: number }
+): LifeExpansionState {
+  if (state.npcCivicRecords[input.npcId]) {
+    throw new Error(
+      `[lifeExpansion] double inheritance grant for ${input.npcId} at tick ${input.tick}: civic record already exists.`
+    )
+  }
+  return {
+    ...state,
+    npcCivicRecords: {
+      ...state.npcCivicRecords,
+      [input.npcId]: {
+        npcId: input.npcId,
+        gold: input.gold,
+        skillXp: { ...input.skillXp },
+        lastProductiveTick: null
+      }
+    }
+  }
+}
+
+function readSkillXpRecord(value: unknown): Readonly<Record<NpcSkillKey, number>> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const result = {} as Record<NpcSkillKey, number>
+  for (const key of ['construction', 'knowledge', 'commerce', 'civic'] as const) {
+    const entry = raw[key]
+    if (typeof entry !== 'number' || !Number.isFinite(entry) || entry < 0) return null
+    result[key] = entry
+  }
+  return result
 }
 
 function createNpcCivicRecord(npcId: string): NpcCivicRecord {

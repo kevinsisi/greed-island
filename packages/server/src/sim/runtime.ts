@@ -36,6 +36,7 @@ import {
   type ConstructionMotivation,
   type EventMotivation,
   type GoodsHolderType,
+  type IntentKind,
   type LivingWorldCommand,
   type LivingWorldEventPayload
 } from '../kernel/livingWorldCommands.js'
@@ -71,6 +72,9 @@ import {
   FACTION_ECOLOGY_CADENCE_TICKS,
   MORTALITY_CADENCE_TICKS,
   MATURATION_CADENCE_TICKS,
+  LIFE_GOAL_CADENCE_TICKS,
+  INHERITANCE_GOLD_FRACTION,
+  INHERITANCE_SKILL_FRACTION,
   MIN_BIRTH_INTERVAL_TICKS,
   MAX_CHILDREN_PER_HOUSEHOLD,
   HOUSEHOLD_MIGRATION_CADENCE_TICKS,
@@ -197,6 +201,7 @@ import {
   NPC_PRODUCTIVE_GOLD_BY_DOMAIN,
   productiveDeltaWithNpcSkill,
   rebuildLifeExpansionFromEvents,
+  seedNpcCivicRecord,
   withMeatHarvestedRecorded,
   withChildBorn,
   withConstructionInitiated,
@@ -262,6 +267,9 @@ import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../pro
 import { BuildingOccupantsProjection, BUILDING_OCCUPANTS_BOOT_EVENT_TYPES } from '../projections/buildingOccupants.js'
 import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
+import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
+import { planInheritanceTransfers } from './inheritancePlanner.js'
+import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
@@ -270,6 +278,19 @@ import { planLoyaltyShifts } from './factionLoyaltyPlanner.js'
 import { FACTION_LABEL_ZH } from './areaStateEngine.js'
 
 const SIM_ACTOR_WORLD = 'system'
+// v0.88.0 — 人生目標對 intent urgency 的最大 multiplier 偏壓。
+const LIFE_GOAL_INTENT_BOOST_MAX = 0.25
+// 人生目標 kind → intent kind 的方向對應。
+const LIFE_GOAL_KIND_TO_INTENT: Readonly<Record<string, IntentKind>> = {
+  eat: 'survival',
+  rest: 'survival',
+  seek_safety: 'survival',
+  secure_home: 'survival',
+  earn_money: 'economic',
+  build_city: 'economic',
+  learn_skill: 'economic',
+  form_family: 'social',
+}
 const NARRATIVE_KEY_PREFIX = 'narrative.'
 const HIDE_BYPRODUCTS = new Set(['hide', 'pelt', 'eel_skin', 'lizard_skin', 'serpent_scale', 'crab_shell'])
 const BONE_BYPRODUCTS = new Set(['bone', 'fang', 'claw', 'tusk', 'horn', 'iron_fang', 'fish_bones'])
@@ -605,6 +626,7 @@ export class SimulationRuntime {
   private readonly npcIncapacitationProjection = new NpcIncapacitationProjection()
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
+  private readonly lifeGoalsProjection = new LifeGoalsProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1255,6 +1277,54 @@ export class SimulationRuntime {
     return formatReflectionContext(this.intentProjection.getReflections(npcId), this.currentTick)
   }
 
+  /**
+   * v0.88.0 — NPC's committed life goal (formatted string for AI dialog prompt).
+   * 來源優先序：NPC_LIFE_GOAL_SET 投影（NPC 對世界承諾過的目標）→
+   * 沒有事件時退回即時 life view（當下最迫切的需求推導出的目標）。
+   */
+  getFormattedLifeGoalContext(npcId: string): string {
+    const committed = this.lifeGoalsProjection.latestFor(npcId)
+    if (committed) return formatLifeGoalContext(committed, this.currentTick, TICKS_PER_DAY)
+    const profile = this.profiles.find((p) => p.id === npcId) ?? null
+    const state = this.npcEngine.getState(npcId)
+    if (!profile || !state) return ''
+    const life = deriveNpcLifeView({
+      profile,
+      state,
+      areaState: this.getAreaState(state.tile),
+      lifeExpansion: this.lifeExpansion,
+      tick: this.currentTick,
+    })
+    return formatLifeGoalContext(
+      {
+        npcId,
+        tile: state.tile,
+        kind: life.goal.kind,
+        pressure: life.goal.pressure,
+        narration: life.goal.narration,
+        needs: life.needs,
+        setAtTick: this.currentTick,
+        lastSequence: 0,
+      },
+      this.currentTick,
+      TICKS_PER_DAY
+    )
+  }
+
+  /**
+   * v0.88.0 — 把 NPC 最近承諾的人生目標換算成 intent multiplier 偏壓。
+   * 偏壓大小隨目標壓力線性放大，封頂 LIFE_GOAL_INTENT_BOOST_MAX。
+   */
+  private computeLifeGoalIntentBoost(npcId: string): Readonly<Partial<Record<IntentKind, number>>> {
+    const goal = this.lifeGoalsProjection.latestFor(npcId)
+    if (!goal) return {}
+    const intentKind = LIFE_GOAL_KIND_TO_INTENT[goal.kind]
+    if (!intentKind) return {}
+    const boost = Math.min(LIFE_GOAL_INTENT_BOOST_MAX, (goal.pressure / 100) * LIFE_GOAL_INTENT_BOOST_MAX)
+    if (boost <= 0) return {}
+    return { [intentKind]: boost }
+  }
+
   /** v0.53.0 — NPC's episodic memory (formatted string for AI dialog prompt). */
   getFormattedMemoryContext(npcId: string): string {
     if (!this.npcMemory) return ''
@@ -1798,6 +1868,7 @@ export class SimulationRuntime {
       this.npcIncapacitationProjection.project(ev)
       this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
       this.intentProjection.project(ev)
+      this.lifeGoalsProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -3806,6 +3877,32 @@ export class SimulationRuntime {
           ))
         }
       }
+      // v0.88.0 — 死者名下 goods 實際移轉給繼承人（v0.32.0 只繼承了
+      // 「位置」，財產一直凍結在死人身上）。
+      const inheritanceTransfers = planInheritanceTransfers({
+        intents: mortalityIntents,
+        goodsInventory: this.goodsInventoryProjection,
+      })
+      for (const transfer of inheritanceTransfers) {
+        const deceasedName = this.profiles.find((p) => p.id === transfer.deceasedNpcId)?.name.zh ?? transfer.deceasedNpcId
+        const heirName = this.profiles.find((p) => p.id === transfer.heirNpcId)?.name.zh ?? transfer.heirNpcId
+        commands.push(makeLivingWorldCommand(
+          'HOUSEHOLD_INHERITANCE_ASSIGNED',
+          `household.${transfer.householdId}`,
+          'system',
+          nextTick,
+          submittedAt,
+          {
+            householdId: transfer.householdId,
+            deceasedNpcId: transfer.deceasedNpcId,
+            heirId: transfer.heirNpcId,
+            amount: transfer.amount,
+            assignedAtTick: nextTick,
+            goods: transfer.goods,
+            narration: `${heirName} 繼承了 ${deceasedName} 留下的家當（共 ${transfer.amount} 件物資）。`,
+          }
+        ))
+      }
     }
 
     // ---- Born NPC Maturation cadence (v0.86.0) ----
@@ -3839,6 +3936,37 @@ export class SimulationRuntime {
             narration: `${intent.nameZh} 在 ${tileLabel} 長成一個獨立的人。`,
           }
         ))
+        // v0.88.0 matured-child inheritance — 成年的同一個 tick，從父母
+        // civic 紀錄換算起步 seed；NPC_MATURED 必須先於 grant（同 batch
+        // 推入順序即 EventLog sequence 順序）。
+        const grant = planMaturationInheritance({
+          maturationIntent: intent,
+          civicRecords: this.lifeExpansion.npcCivicRecords,
+          tick: nextTick,
+          config: { goldFraction: INHERITANCE_GOLD_FRACTION, skillFraction: INHERITANCE_SKILL_FRACTION },
+        })
+        if (grant) {
+          const skillTotal = grant.skillXp.construction + grant.skillXp.knowledge + grant.skillXp.commerce + grant.skillXp.civic
+          commands.push(makeLivingWorldCommand(
+            'NPC_INHERITANCE_GRANTED',
+            grant.npcId,
+            'system',
+            nextTick,
+            submittedAt,
+            {
+              npcId: grant.npcId,
+              parentNpcIds: grant.parentNpcIds,
+              householdId: grant.householdId,
+              gold: grant.gold,
+              skillXp: grant.skillXp,
+              grantedAtTick: nextTick,
+              motivation: makeMotivation(
+                '成年不是從零開始：父母累積的家業與身教，會成為孩子踏入世界的起點。'
+              ),
+              narration: `${intent.nameZh} 從父母身上承接了 ${grant.gold} 金幣的家底與 ${skillTotal} 點技藝底子。`,
+            }
+          ))
+        }
       }
     }
 
@@ -4837,10 +4965,12 @@ export class SimulationRuntime {
       const memoryBoost = this.npcMemory
         ? this.npcMemory.getMemoryUrgencyBoost(profile.id, nextTick)
         : 0
+      const lifeGoalBoost = this.computeLifeGoalIntentBoost(profile.id)
       const stack = computeIntentStack(
         profile.id, beliefs, profile, weights,
         state.tile, state.faction || undefined, nextTick,
         memoryBoost,
+        lifeGoalBoost,
       )
       const best = selectHighestIntent(stack, INTENT_URGENCY_THRESHOLD, state.intentOverride)
 
@@ -4862,6 +4992,8 @@ export class SimulationRuntime {
       postAcceptedCommands.push(cmd)
     }
     let lifeExpansionChanged = false
+    // v0.88.0 — NPC_INHERITANCE_GRANTED 必須與同 tick 的 NPC_MATURED 配對。
+    const maturedThisTick = new Set<string>()
     for (const cmd of acceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
@@ -4969,6 +5101,27 @@ export class SimulationRuntime {
             childId: payload.childId,
             nameZh: payload.nameZh,
             nameEn: payload.nameEn,
+            tick: nextTick
+          })
+          lifeExpansionChanged = true
+        } else if (cmd.commandType === 'NPC_MATURED') {
+          const payload = cmd.payload as { npcId: string }
+          maturedThisTick.add(payload.npcId)
+        } else if (cmd.commandType === 'NPC_INHERITANCE_GRANTED') {
+          const payload = cmd.payload as {
+            npcId: string
+            gold: number
+            skillXp: Readonly<Record<'construction' | 'knowledge' | 'commerce' | 'civic', number>>
+          }
+          if (!maturedThisTick.has(payload.npcId)) {
+            throw new Error(
+              `[sim] determinism error: NPC_INHERITANCE_GRANTED for ${payload.npcId} at tick ${nextTick} has no paired NPC_MATURED in the same tick.`
+            )
+          }
+          this.lifeExpansion = seedNpcCivicRecord(this.lifeExpansion, {
+            npcId: payload.npcId,
+            gold: payload.gold,
+            skillXp: payload.skillXp,
             tick: nextTick
           })
           lifeExpansionChanged = true
@@ -5590,7 +5743,7 @@ export class SimulationRuntime {
   }
 
   private planLifeGoalCommands(nextTick: number, submittedAt: number): LivingWorldCommand[] {
-    if (nextTick % 30 !== 0) return []
+    if (nextTick % LIFE_GOAL_CADENCE_TICKS !== 0) return []
     return this.profiles
       .map((profile) => {
         const state = this.npcEngine.getState(profile.id)
@@ -6044,6 +6197,7 @@ export class SimulationRuntime {
       this.npcMortalityProjection.rebuildFromEvents(allEvents)
       this.npcLineageProjection.rebuildFromEvents(allEvents)
       this.bornNpcsProjection.rebuildFromEvents(allEvents)
+      this.lifeGoalsProjection.rebuildFromEvents(allEvents)
     } else {
       // Availability-first large-log boot: only rebuild projections required
       // for HTTP availability before any typed replay begins. On very large
@@ -6207,6 +6361,9 @@ export class SimulationRuntime {
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections
       // need materialized or paged hydration before they can safely run in prod.
+      // v0.88.0 — life-goals 同樣不在大 log 深度補水：對話注入有
+      // getFormattedLifeGoalContext 的 live-derive fallback，優雅降級；
+      // 小 log boot 仍由 lifeGoalsProjection.rebuildFromEvents(allEvents) 完整重建。
     ]
 
     await this.yieldToEventLoop()

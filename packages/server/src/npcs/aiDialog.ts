@@ -155,6 +155,7 @@ export type AiDialogContext = Readonly<{
   beliefContext?: string
   reflectionContext?: string
   memoryContext?: string
+  lifeGoalContext?: string
 }>
 
 export class AiDialogError extends Error {
@@ -283,6 +284,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildBeliefBlock(ctx.beliefContext),
     ...buildReflectionBlock(ctx.reflectionContext),
     ...buildMemoryBlock(ctx.memoryContext),
+    ...buildLifeGoalBlock(ctx.lifeGoalContext),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -725,6 +727,19 @@ export function buildReflectionBlock(reflectionContext: string | undefined): str
     '- 可以自然融入對話，表達情緒、態度、或做過的選擇',
     '- 不要逐字列出記憶清單，要自然融入人物個性',
     '- 禁止虛構記憶以外的事件',
+    '',
+  ]
+}
+
+export function buildLifeGoalBlock(lifeGoalContext: string | undefined): string[] {
+  if (!lifeGoalContext || lifeGoalContext.trim().length === 0) return []
+  return [
+    lifeGoalContext,
+    '',
+    '⚠️ 人生目標使用規則：',
+    '- 這是你「自己」立下的生活目標；玩家問你最近在忙什麼、想要什麼、有什麼打算時，回答必須與這個目標一致',
+    '- 可以自然流露目標帶來的情緒（焦慮、期待、滿足），不要逐字背誦目標文字',
+    '- 禁止虛構目標以外的人生規劃或誇大目標進度',
     '',
   ]
 }

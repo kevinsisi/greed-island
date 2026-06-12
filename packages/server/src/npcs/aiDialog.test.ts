@@ -11,6 +11,7 @@ import {
   buildSkillBlock,
   buildReflectionBlock,
   buildMemoryBlock,
+  buildLifeGoalBlock,
   buildPlayerAliasBlock,
   computePlayerAlias,
   buildSocialHistoryBlock,
@@ -454,6 +455,23 @@ describe('buildMemoryBlock', () => {
     expect(result.length).toBeGreaterThan(0)
     expect(result.join('\n')).toContain('個人記憶')
     expect(result.join('\n')).toContain(ctx)
+  })
+})
+
+describe('buildLifeGoalBlock', () => {
+  it('returns [] for undefined / empty / whitespace context', () => {
+    expect(buildLifeGoalBlock(undefined)).toEqual([])
+    expect(buildLifeGoalBlock('')).toEqual([])
+    expect(buildLifeGoalBlock('   ')).toEqual([])
+  })
+
+  it('includes the goal content and the usage rules', () => {
+    const content = '### 你目前的人生目標（你自己立下的，不是別人指派的）\n  · 最近，你把眼前生活目標定為：「增加收入，讓生活不被物價追著跑。」'
+    const joined = buildLifeGoalBlock(content).join('\n')
+    expect(joined).toContain('人生目標')
+    expect(joined).toContain('增加收入')
+    expect(joined).toContain('⚠️ 人生目標使用規則')
+    expect(joined).toContain('禁止虛構目標以外的人生規劃')
   })
 })
 
