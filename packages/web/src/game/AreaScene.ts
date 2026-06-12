@@ -1,8 +1,25 @@
 import Phaser from 'phaser'
 import { DISTRICTS, PLAYER_COLOR, PLAYER_OUTLINE, type DistrictId } from './districts'
 import { AREA_DECORATIONS, AREA_ROAD_COLOR, AREA_ROAD_SHADE } from './decorations'
-import { activityGlyphFor, textColorForBg } from './npcVisuals'
-import { applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import { activityGlyphFor } from './npcVisuals'
+import { applyAvatarOutfitColor, applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import {
+  GLYPH_TO_PROP,
+  addPixelCellOverlay,
+  addPixelProp,
+  ensurePixelPropTextures,
+  ensurePixelTerrainOverlays,
+  propTextureKey,
+  type PixelPropName,
+} from './pixelWorld'
+import {
+  AnimalActor,
+  animalTextureKey,
+  archetypeForSpecies,
+  ensurePixelAnimalTextures,
+  startAmbientLife,
+  type AmbientLifeHandle,
+} from './pixelAnimals'
 import {
   characterVisualStateForAreaLocalPlayer,
   characterVisualStateForAreaNpc,
@@ -264,7 +281,9 @@ export class AreaScene extends Phaser.Scene {
   private weatherLayer: Phaser.GameObjects.Container | null = null
   /** v0.15.1：環境動畫的 tween 池（裝飾物擺動 / 燈火閃爍 / 水波漣漪）。 */
   private envTweens: Phaser.Tweens.Tween[] = []
-  private envSprites: Phaser.GameObjects.Text[] = []
+  private envSprites: Array<Phaser.GameObjects.Text | Phaser.GameObjects.Image> = []
+  private animalActors: AnimalActor[] = []
+  private ambientLife: AmbientLifeHandle | null = null
 
   private player!: Phaser.Physics.Arcade.Sprite
   private playerAvatar: ProceduralAvatar | null = null
@@ -330,16 +349,20 @@ export class AreaScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, AREA_CANVAS_WIDTH, AREA_CANVAS_HEIGHT)
     this.player.setCollideWorldBounds(true)
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    // 環境生命：飛鳥橫越 / 蝴蝶 / （林地）落葉。
+    const forestFeel = this.tileId === 't_forest' || this.tileId === 't_mountain' || this.tileId === 't_salt_marsh'
+    this.ambientLife = startAmbientLife(this, AREA_CANVAS_WIDTH, AREA_CANVAS_HEIGHT, forestFeel)
+
+    const teardown = (): void => {
       this.flushPositionSave()
       this.disposeWeather()
       this.disposeEnvAnimations()
-    })
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
-      this.flushPositionSave()
-      this.disposeWeather()
-      this.disposeEnvAnimations()
-    })
+      this.disposeAnimalActors()
+      this.ambientLife?.destroy()
+      this.ambientLife = null
+    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, teardown)
+    this.events.once(Phaser.Scenes.Events.DESTROY, teardown)
   }
 
   applyExternalUpdate(payload: {
@@ -416,6 +439,9 @@ export class AreaScene extends Phaser.Scene {
   private drawBackground(): void {
     const def = DISTRICTS[this.tileId] ?? DISTRICTS.t_road
     const decoSet = AREA_DECORATIONS[this.tileId] ?? AREA_DECORATIONS.t_road
+    // 8-bit 像素材質（dither / bevel / 道具）— 同 key 只會生成一次。
+    ensurePixelTerrainOverlays(this, AREA_TILE_SIZE)
+    ensurePixelPropTextures(this)
     // 把道路 cell 做成 set 方便 O(1) 查
     const roadKeys = new Set<string>()
     for (const cell of decoSet.roadCells) roadKeys.add(`${cell.col},${cell.row}`)
@@ -460,13 +486,37 @@ export class AreaScene extends Phaser.Scene {
         }
         g.fillStyle(fill, 1)
         g.fillRect(col * AREA_TILE_SIZE, row * AREA_TILE_SIZE, AREA_TILE_SIZE, AREA_TILE_SIZE)
-        g.lineStyle(1, def.border, 0.35)
-        g.strokeRect(
-          col * AREA_TILE_SIZE + 0.5,
-          row * AREA_TILE_SIZE + 0.5,
-          AREA_TILE_SIZE - 1,
-          AREA_TILE_SIZE - 1
+        // 8-bit 質感：dither 雜訊 + 斜角 bevel 取代舊的 1px 灰框 —
+        // 每個 cell 變成一塊浮起的像素磚。
+        addPixelCellOverlay(
+          this,
+          col * AREA_TILE_SIZE,
+          row * AREA_TILE_SIZE,
+          AREA_TILE_SIZE,
+          col,
+          row,
+          1
         )
+        // 水面波光：開放水域 / 淺水的部分 cell 疊閃爍亮點。
+        if (terrain === 'open_water' || terrain === 'shallow_water') {
+          if ((col * 7 + row * 13) % 4 === 0) {
+            const sparkle = this.add
+              .image(col * AREA_TILE_SIZE, row * AREA_TILE_SIZE, `px-sparkle-t${AREA_TILE_SIZE}`)
+              .setOrigin(0)
+              .setDepth(2)
+              .setAlpha(0.15)
+            const tween = this.tweens.add({
+              targets: sparkle,
+              alpha: { from: 0.1, to: 0.8 },
+              duration: 900 + ((col * 31 + row * 17) % 700),
+              ease: 'Sine.easeInOut',
+              yoyo: true,
+              repeat: -1,
+              delay: ((col * 13 + row * 7) % 10) * 120,
+            })
+            this.envTweens.push(tween)
+          }
+        }
         // 道路再加上中央車道虛線，跟普通 tile 區隔開
         if (isRoad) {
           g.fillStyle(0xfff5b8, 0.45)
@@ -483,13 +533,22 @@ export class AreaScene extends Phaser.Scene {
     g.lineStyle(3, 0xfff5b8, 0.85)
     g.strokeRect(1.5, 1.5, AREA_CANVAS_WIDTH - 3, AREA_CANVAS_HEIGHT - 3)
 
-    // 環境物件 (建築 / 樹 / 地標)：用 emoji text 當 placeholder。
+    // 環境物件 (建築 / 樹 / 地標)：8-bit 像素道具（比 tile 高、含落影，
+    // 立刻有 2.5D 立體層次）。沒對應像素圖的 glyph 退回 emoji text。
     // 注意：建築物 cell（即將被 spawnBuildings 接管）會被略過，避免重疊。
     const buildingCells = new Set(this.buildings.map((b) => `${b.col},${b.row}`))
     for (const deco of decoSet.props) {
       if (buildingCells.has(`${deco.col},${deco.row}`)) continue
       const cx = deco.col * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
       const cy = deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE / 2
+      const propName = GLYPH_TO_PROP[deco.glyph]
+      if (propName) {
+        const bottomY = deco.row * AREA_TILE_SIZE + AREA_TILE_SIZE - 2
+        const { image } = addPixelProp(this, propName, cx, bottomY, 40)
+        this.createInspectZone(cx, cy, 44, 44, this.labelForDecoration(deco.glyph), 41)
+        this.attachEnvAnimation(image, deco.glyph, cx, bottomY, deco.col, deco.row)
+        continue
+      }
       const text = this.add.text(cx, cy, deco.glyph, {
         fontFamily:
           '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
@@ -568,7 +627,7 @@ export class AreaScene extends Phaser.Scene {
    * 全部 tween 都是 deterministic seed by (col,row)，避免相鄰物件動作完全同步。
    */
   private attachEnvAnimation(
-    sprite: Phaser.GameObjects.Text,
+    sprite: Phaser.GameObjects.Text | Phaser.GameObjects.Image,
     glyph: string,
     cx: number,
     cy: number,
@@ -681,23 +740,30 @@ export class AreaScene extends Phaser.Scene {
    *
    * Idempotent — destroys the previous overlay before re-rendering.
    */
+  private disposeAnimalActors(): void {
+    for (const actor of this.animalActors) actor.destroy()
+    this.animalActors = []
+  }
+
   private drawEcologyOverlay(): void {
     if (this.ecologyLayer) {
       this.ecologyLayer.destroy(true)
       this.ecologyLayer = null
     }
+    this.disposeAnimalActors()
     const eco = this.ecology
     if (!eco) return
+    ensurePixelPropTextures(this)
+    ensurePixelAnimalTextures(this)
 
     const layer = this.add.container(0, 0)
     layer.setDepth(44)
     this.ecologyLayer = layer
 
-    // v0.41.0 — plant sprites: trees / reeds / herbs / fungi visibly placed on
-    // the area canvas with a density-driven size + saturation bar. When NPCs
-    // chop trees the density drops, the tree shrinks, and the bar empties.
-    const plantGlyph: Record<string, string> = {
-      oak: '🌳', pine: '🌲', reed: '🌾', wild_herb: '🌿', cave_fungus: '🍄',
+    // v0.41.0 → 8-bit 版 — plant nodes 用像素道具呈現，飽和度驅動縮放 +
+    // 密度條。NPC 砍伐後密度掉、樹縮小、條清空（資料邏輯不變）。
+    const plantProp: Record<string, PixelPropName> = {
+      oak: 'tree', pine: 'pine', reed: 'reed', wild_herb: 'grain', cave_fungus: 'fungus',
     }
     const plantNameZh: Record<string, string> = {
       oak: '橡樹', pine: '松木', reed: '蘆葦', wild_herb: '野草藥', cave_fungus: '洞穴菌',
@@ -708,18 +774,22 @@ export class AreaScene extends Phaser.Scene {
       const colStep = (AREA_CANVAS_WIDTH - 80) / Math.max(1, slots)
       const px = 40 + colStep * (plantIdx + 0.5)
       const py = 40
-      const glyph = plantGlyph[plant.speciesId] ?? '🌱'
       const nameZh = plantNameZh[plant.speciesId] ?? plant.speciesId
-      // Size scales with saturation: 14px when depleted, 26px when full.
-      const sizePx = 14 + Math.round((plant.saturationPct / 100) * 12)
-      const tree = this.add.text(px, py, glyph, {
-        fontFamily:
-          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
-        fontSize: `${sizePx}px`,
-        color: '#ffffff',
-      })
-      tree.setOrigin(0.5, 0.5)
+      const propName = plantProp[plant.speciesId] ?? 'reed'
+      const tree = this.add.image(px, py + 10, propTextureKey(propName))
+      tree.setOrigin(0.5, 1)
+      // 飽和度 → 縮放：枯竭 0.55，全滿 1.05。
+      tree.setScale(0.55 + (plant.saturationPct / 100) * 0.5)
       layer.add(tree)
+      const sway = this.tweens.add({
+        targets: tree,
+        angle: { from: -3, to: 3 },
+        duration: 2000 + (plantIdx * 137) % 800,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+      })
+      this.envTweens.push(sway)
       // Density bar under the plant glyph: width scales 0..32 px.
       const barWidth = 32
       const fillWidth = Math.max(1, Math.round((plant.density / Math.max(1, plant.capacity)) * barWidth))
@@ -743,86 +813,61 @@ export class AreaScene extends Phaser.Scene {
       layer.add(this.createInspectZone(px, py, 44, 44, `${nameZh} ${plant.density.toFixed(0)}/${plant.capacity}`))
     })
 
+    // 8-bit 動物：每隻是有行為的 AnimalActor（漫遊 / 吃草 / 逃離玩家 /
+    // 掠食者潛行）。≤5 隻逐隻呈現；≥6 隻呈現 3 隻代表 + 數量標籤（群聚）。
+    const animalBounds = new Phaser.Geom.Rectangle(16, 16, AREA_CANVAS_WIDTH - 32, AREA_CANVAS_HEIGHT - 32)
+    const getPlayerXY = (): { x: number; y: number } | null =>
+      this.player ? { x: this.player.x, y: this.player.y } : null
+    const canStandAt = (x: number, y: number): boolean => this.isAreaWalkable(x, y)
+
     for (const row of eco.animals) {
       const visual = visualForSpecies(row.speciesId)
       if (row.animalIds.length <= 5) {
         for (const animalId of row.animalIds) {
           const { x, y } = areaSubcellFromHash(animalId, eco.tileId, 'ecology-placement')
-          const dot = this.add.circle(x, y, 9, visual.color, 0.9)
-          dot.setStrokeStyle(1.5, 0x0a0a0a, 0.8)
-          // v0.40.0: bigger hit radius (was 15) — small ecology dots were
-          // unreliably tappable on touch + mouse alike. 26px is the same
-          // ratio as the cluster bg, which works well in playtests.
-          dot.setInteractive(new Phaser.Geom.Circle(0, 0, 26), Phaser.Geom.Circle.Contains)
-          dot.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            pointer.event?.stopPropagation?.()
-            this.suppressNextPointerTarget = true
-            this.flashInspectHint(`獵 ${labelForSpecies(row.speciesId)}`, x, y)
-            this.callbacks.onAnimalHunt?.(row.speciesId, animalId)
+          const actor = new AnimalActor(this, {
+            speciesId: row.speciesId,
+            animalId,
+            x,
+            y,
+            color: visual.color,
+            nameZh: labelForSpecies(row.speciesId),
+            bounds: animalBounds,
+            canStandAt,
+            getPlayerXY,
+            onHunt: () => {
+              this.suppressNextPointerTarget = true
+              this.flashInspectHint(`獵 ${labelForSpecies(row.speciesId)}`, actor.container.x, actor.container.y)
+              this.callbacks.onAnimalHunt?.(row.speciesId, animalId)
+            },
           })
-          layer.add(dot)
-          const glyph = this.add.text(x, y - 1, visual.emoji, {
-            fontFamily:
-              '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
-            fontSize: '12px',
-            color: '#ffffff',
-          })
-          glyph.setOrigin(0.5, 0.5)
-          layer.add(glyph)
-          // v0.40.0: always show species nameZh under each animal so the
-          // user knows WHAT they're about to hunt before clicking.
-          const nameLabel = this.add.text(x, y + 11, labelForSpecies(row.speciesId), {
-            fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
-            fontSize: '9px',
-            color: '#fff5b8',
-            stroke: '#0a0a0a',
-            strokeThickness: 2,
-          })
-          nameLabel.setOrigin(0.5, 0)
-          layer.add(nameLabel)
-          // v0.41.1 — inspect zone now actually triggers the hunt (used to
-          // only show the hint label; the underlying dot's 26px hit area was
-          // shadowed by this larger zone). Closing over animalId so each
-          // zone hunts the specific animal it covers.
-          const _animalId = animalId
-          layer.add(
-            this.createInspectZone(
-              x, y, 44, 44,
-              `獵 ${labelForSpecies(row.speciesId)}`,
-              undefined,
-              () => {
-                this.callbacks.onAnimalHunt?.(row.speciesId, _animalId)
-              }
-            )
-          )
+          this.animalActors.push(actor)
         }
       } else {
-        // Cluster at a deterministic spot derived from speciesId + tileId.
+        // 群聚：代表 3 隻 + 數量標籤，第一隻可獵。
         const { x, y } = areaSubcellFromHash(row.speciesId, eco.tileId, 'ecology-cluster')
-        const bg = this.add.circle(x, y, 16, 0x141820, 0.85)
-        bg.setStrokeStyle(2, visual.color, 0.95)
-        bg.setInteractive(new Phaser.Geom.Circle(0, 0, 32), Phaser.Geom.Circle.Contains)
-        bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          pointer.event?.stopPropagation?.()
-          this.suppressNextPointerTarget = true
-          this.flashInspectHint(`獵 ${labelForSpecies(row.speciesId)} ×${row.count}`, x, y)
-          const firstId = row.animalIds[0]
-          if (firstId !== undefined) {
-            this.callbacks.onAnimalHunt?.(row.speciesId, firstId)
-          }
+        const arch = archetypeForSpecies(row.speciesId)
+        const offsets = [
+          { dx: -12, dy: 2 },
+          { dx: 10, dy: -4 },
+          { dx: 2, dy: 8 },
+        ]
+        offsets.forEach((off, i) => {
+          const member = this.add.image(x + off.dx, y + off.dy, animalTextureKey(arch, 0))
+          member.setTint(visual.color)
+          member.setFlipX(i % 2 === 1)
+          layer.add(member)
+          const bob = this.tweens.add({
+            targets: member,
+            y: { from: y + off.dy, to: y + off.dy - 2 },
+            duration: 600 + i * 180,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+          })
+          this.envTweens.push(bob)
         })
-        layer.add(bg)
-        const glyph = this.add.text(x, y, visual.emoji, {
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", system-ui, sans-serif',
-          fontSize: '20px',
-          color: '#ffffff',
-        })
-        glyph.setOrigin(0.5, 0.5)
-        layer.add(glyph)
-        // v0.40.0: species name + count, both visible. The old "x8" alone
-        // gave no clue what the cluster actually was.
-        const speciesLabel = this.add.text(x, y + 19, `${labelForSpecies(row.speciesId)} ×${row.count}`, {
+        const speciesLabel = this.add.text(x, y + 16, `${labelForSpecies(row.speciesId)} ×${row.count}`, {
           fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
           fontSize: '10px',
           color: '#fff5b8',
@@ -831,10 +876,6 @@ export class AreaScene extends Phaser.Scene {
         })
         speciesLabel.setOrigin(0.5, 0)
         layer.add(speciesLabel)
-        // v0.41.1 — inspect zone fires the hunt for the cluster's first
-        // animal, mirroring the bg circle's pointerdown behaviour. Without
-        // this, players who clicked outside the 32px circle but inside the
-        // 1.4-tile zone saw the hint but no action.
         const _firstAnimalId = row.animalIds[0]
         layer.add(
           this.createInspectZone(
@@ -1917,12 +1958,7 @@ export class AreaScene extends Phaser.Scene {
     sprite.setTexture(key)
     sprite.setData('npcColor', color)
     const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
-    if (avatar) {
-      avatar.body.setFillStyle(color, 1)
-      avatar.leftArm.setFillStyle(color, 1)
-      avatar.rightArm.setFillStyle(color, 1)
-      if (avatar.label) avatar.label.setColor(textColorForBg(color))
-    }
+    if (avatar) applyAvatarOutfitColor(avatar, color)
   }
 
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {

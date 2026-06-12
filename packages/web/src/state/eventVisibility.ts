@@ -1,6 +1,13 @@
 import type { EventSummary } from './types'
 
-const INTERNAL_EVENT_TYPES = new Set(['FACT_SET', 'WORLD_TICK'])
+const INTERNAL_EVENT_TYPES = new Set([
+  'FACT_SET',
+  'WORLD_TICK',
+  // 投影/快照類內部事件：任何 narration 都不該上「世界正在發生」。
+  'AREA_STATE_RECORDED',
+  'NPC_STATE_RECORDED',
+  'NPC_INTENT_RESOLVED',
+])
 const ROUTINE_CHRONICLE_EVENT_TYPES = new Set([
   'GOODS_EXTRACTED',
   'GOODS_STORED',

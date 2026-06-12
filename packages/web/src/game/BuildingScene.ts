@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { ServerBuildingDef } from '../api/client'
-import { activityGlyphFor, textColorForBg } from './npcVisuals'
-import { applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import { activityGlyphFor } from './npcVisuals'
+import { applyAvatarOutfitColor, applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
 import {
   BUILDING_NPC_FALLBACK_COLOR,
   BUILDING_PLAYER_COLOR,
@@ -433,10 +433,7 @@ export class BuildingScene extends Phaser.Scene {
   }
 
   private applyNpcAvatarColor(avatar: ProceduralAvatar, color: number): void {
-    avatar.body.setFillStyle(color, 1)
-    avatar.leftArm.setFillStyle(color, 1)
-    avatar.rightArm.setFillStyle(color, 1)
-    avatar.label?.setColor(textColorForBg(color))
+    applyAvatarOutfitColor(avatar, color)
   }
 
   private npcTextureKey(id: string, color?: number): string {

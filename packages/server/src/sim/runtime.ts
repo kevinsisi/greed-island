@@ -184,6 +184,7 @@ import type { BuildingDef, BuildingRuntimeView } from '../buildings/types.js'
 import { completedConstructionBuildingDef, completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
 import { findBuildingById, listAllBuildings, listBuildingsForTile } from '../buildings/catalog.js'
 import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
+import { NpcAgentRunner } from '../npcs/npcAgentRunner.js'
 import type { SettingsStore } from '../http/settings.js'
 import {
   LIFE_EXPANSION_FACT_KEY,
@@ -579,6 +580,7 @@ export class SimulationRuntime {
   private npcMemory: SqliteNpcMemoryStore | null = null
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
+  private npcAgentRunner: NpcAgentRunner | null = null
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
@@ -709,6 +711,79 @@ export class SimulationRuntime {
 
   getAmbientNarrator(): AmbientNarrator | null {
     return this.ambientNarrator
+  }
+
+  /**
+   * v0.89.0 — 每個 NPC 都是 AI agent：以 NPC_AGENT_DECISION_INTERVAL_TICKS
+   * 為週期（npcId hash 錯相），AI 在 server 算好的合法 intent 選項中替 NPC
+   * 做選擇，包成 NPC_AGENT_DECISION command 走 Rule Engine。AI 不可用時
+   * 確定性 intent planner 照常運作（本層purely additive）。
+   */
+  attachNpcAgent(settings: SettingsStore): NpcAgentRunner {
+    if (this.npcAgentRunner) return this.npcAgentRunner
+    const runner = new NpcAgentRunner(settings, {
+      listAgentNpcs: () =>
+        this.npcEngine.listProfiles().filter((p) => !this.npcMortalityProjection.isDeceased(p.id)),
+      getNpcTile: (npcId) => this.npcEngine.getState(npcId)?.tile ?? null,
+      computeIntentEntries: (npcId) => {
+        const profile = this.npcEngine.listProfiles().find((p) => p.id === npcId)
+        const state = this.npcEngine.getState(npcId)
+        if (!profile || !state) return []
+        const beliefs = this.beliefProjection.getBeliefs(npcId)
+        const weights = this.intentProjection.getLearningWeights(npcId, this.currentTick)
+        const memoryBoost = this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(npcId, this.currentTick) : 0
+        const lifeGoalBoost = this.computeLifeGoalIntentBoost(npcId)
+        return computeIntentStack(
+          npcId, beliefs, profile, weights,
+          state.tile, state.faction || undefined, this.currentTick,
+          memoryBoost, lifeGoalBoost,
+        ).entries
+      },
+      getNeedsLine: (npcId) => {
+        const profile = this.npcEngine.listProfiles().find((p) => p.id === npcId)
+        const state = this.npcEngine.getState(npcId)
+        if (!profile || !state) return ''
+        const life = deriveNpcLifeView({
+          profile,
+          state,
+          areaState: this.getAreaState(state.tile),
+          lifeExpansion: this.lifeExpansion,
+          tick: this.currentTick,
+        })
+        return `食物壓力 ${Math.round(life.needs.food)}、休息 ${Math.round(life.needs.rest)}、金錢 ${Math.round(life.needs.money)}、住房 ${Math.round(life.needs.housing)}、安全 ${Math.round(life.needs.safety)}（0 安穩、100 危急）`
+      },
+      getLifeGoalContext: (npcId) => this.getFormattedLifeGoalContext(npcId),
+      getBeliefContext: (npcId) => this.getFormattedBeliefContext(npcId),
+      getReflectionContext: (npcId) => this.getFormattedReflectionContext(npcId),
+      submitDecision: ({ profile, tile, option, reason, utterance, decidedAtTick }) => {
+        const command = makeLivingWorldCommand(
+          'NPC_AGENT_DECISION',
+          profile.id,
+          'npc',
+          this.currentTick,
+          Date.now(),
+          {
+            npcId: profile.id,
+            tile,
+            chosenIntent: option.kind,
+            targetTile: option.targetTile,
+            urgency: option.urgency,
+            reason,
+            utterance,
+            decidedAtTick,
+            motivation: makeMotivation(
+              `${profile.name.zh}以自己的需求、信念與目標衡量了此刻的處境，自主選擇了「${option.description}」。理由：${reason}`,
+              'NPC AI agent 自主決策'
+            ),
+            narration: utterance ? `${profile.name.zh}喃喃自語：「${utterance}」` : null,
+          }
+        )
+        this.submitLivingWorldCommand(command)
+      },
+    })
+    this.npcAgentRunner = runner
+    this.subscribeTick((tick) => runner.tick(tick))
+    return runner
   }
 
   /**
@@ -1776,6 +1851,35 @@ export class SimulationRuntime {
     }
   }
 
+  /**
+   * v0.89.0 — NPC_AGENT_DECISION 事件套用：follow_schedule 解除 override，
+   * intent 選項以 server 算好的 urgency 設 override（與確定性 planner 同一
+   * 條 NpcEngine 路徑；override 為 ephemeral 導引狀態，不需 boot 重放）。
+   */
+  private applyAgentDecisionEvent(ev: Event): void {
+    const data = (ev.payload as { data?: unknown } | null)?.data as Record<string, unknown> | undefined
+    if (!data) return
+    const npcId = typeof data.npcId === 'string' ? data.npcId : null
+    if (!npcId) return
+    const chosen = data.chosenIntent
+    if (chosen === 'follow_schedule') {
+      this.npcEngine.clearIntentOverride(npcId)
+      return
+    }
+    if (chosen !== 'survival' && chosen !== 'economic' && chosen !== 'social' && chosen !== 'ecosystem') return
+    const targetTile = typeof data.targetTile === 'string' ? data.targetTile : null
+    const urgency = typeof data.urgency === 'number' && Number.isFinite(data.urgency) ? data.urgency : 0
+    if (!targetTile || urgency <= 0) return
+    const reason = typeof data.reason === 'string' ? data.reason : ''
+    this.npcEngine.setIntentOverride(npcId, {
+      targetTile,
+      expiresAtTick: (ev.tick ?? this.currentTick) + INTENT_OVERRIDE_DURATION_TICKS,
+      intentType: chosen,
+      urgency,
+      reason: `agent:${reason}`,
+    })
+  }
+
   private commitLivingWorldCommand(command: LivingWorldCommand): Event | null {
     const result = this.livingWorldRuleEngine.evaluate(command)
     if (!result.accepted) {
@@ -1901,6 +2005,8 @@ export class SimulationRuntime {
           if (profile) this.npcEngine.registerDynamicNpc(profile)
         }
       }
+      // v0.89.0 — NPC AI agent 決策事件：套用（或解除）intentOverride。
+      if (ev.eventType === 'NPC_AGENT_DECISION') this.applyAgentDecisionEvent(ev)
       this.factionControlProjection.project(ev)
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)
@@ -4173,7 +4279,9 @@ export class SimulationRuntime {
           {
             tileId: next.tileId,
             state: next,
-            narration: 'internal area state projection',
+            // 內部投影事件不該出現在「世界正在發生」ticker — narration 為
+            // null 時 web 端 isPublicNarrativeEvent 直接過濾掉。
+            narration: null,
           }
         )
       )
@@ -5581,7 +5689,8 @@ export class SimulationRuntime {
       {
         npcId: change.npcId,
         state: { ...change.state },
-        narration: 'internal npc state projection'
+        // 內部投影事件 — narration null，不上公開 ticker。
+        narration: null
       }
     )
   }

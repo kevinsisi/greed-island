@@ -5,6 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.89.0 ✅ shipped — 2026-06-13
+
+**主題：Eight-bit Living World（8-bit 像素世界 + 像素人 + 動物行為 + NPC AI agent + 事件衛生 + 手機修正）**
+
+OpenSpec change：`eight-bit-living-world`
+
+- ✅ **8-bit 像素地形** — `pixelWorld.ts`：每 cell dither 雜訊 + bevel 磚面（體素感）、水面波光；21 種程序化像素道具（樹/松/屋/商鋪/神社/城樓/水晶/錨/船/菌…）取代 emoji，高於 tile + 落影 = 2.5D；Area / Map 兩場景接上
+- ✅ **8-bit 像素人** — `characterAvatar.ts` 重寫 texture-based：tint 衣/褲色、5 膚色、7 髮色×3 髮型、雙幀走路 + 舉鎚工作幀；換色 API `applyAvatarOutfitColor`
+- ✅ **動物行為** — `pixelAnimals.ts`：23 物種 5 體型雙幀 sprite；`AnimalActor` 漫遊/吃草/非掠食者逃離玩家/掠食者潛行；群聚 3 隻代表；環境生命（飛鳥/蝴蝶/落葉）
+- ✅ **NPC AI agent** — `NPC_AGENT_DECISION` event：AI 在 server 算好的合法 intent 選項中替每個 NPC 做選擇（意圖分類路徑，urgency/targetTile 不信 AI）；`NpcAgentRunner` 錯相排程、非阻塞、無 AI 自動 inert；utterance「喃喃自語」上公開 ticker
+- ✅ **事件衛生** — AREA/NPC_STATE_RECORDED narration→null（根因）+ web 投影型別過濾（防禦）；「internal area state projection」不再污染世界事件流
+- ✅ **手機修正** — Codex 卡格 4 欄起跳、Market 卡片式清單、client 版本顯示修復（0.24.2→跟版）
+- ✅ 1179 server + 114 web tests、build 乾淨、Playwright desktop/mobile 視覺驗證
+
+---
+
 ## v0.88.0 ✅ shipped — 2026-06-12
 
 **主題：Living World Presentation & Autonomy（2.5D 角色 + 程序化卡面 + 人生目標閉環 + 雙繼承）**

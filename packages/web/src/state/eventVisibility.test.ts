@@ -45,6 +45,22 @@ describe('isPublicNarrativeEvent', () => {
     expect(isChronicleSurfaceEvent(pressure)).toBe(false)
   })
 
+  it('hides projection snapshot events even when a narration string leaked in (v0.89.0)', () => {
+    expect(
+      isPublicNarrativeEvent(
+        event({ eventType: 'AREA_STATE_RECORDED', narration: 'internal area state projection' })
+      )
+    ).toBe(false)
+    expect(
+      isPublicNarrativeEvent(
+        event({ eventType: 'NPC_STATE_RECORDED', narration: 'internal npc state projection' })
+      )
+    ).toBe(false)
+    expect(
+      isPublicNarrativeEvent(event({ eventType: 'NPC_INTENT_RESOLVED', narration: 'resolved' }))
+    ).toBe(false)
+  })
+
   it('keeps raw internal ids out of world prompt surfaces', () => {
     const leakedId = event({
       eventType: 'ANIMAL_ATTACKED_NPC',

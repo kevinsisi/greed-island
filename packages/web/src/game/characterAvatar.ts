@@ -2,21 +2,26 @@ import Phaser from 'phaser'
 import type { CharacterVisualState } from './characterVisualState'
 import { textColorForBg } from './npcVisuals'
 
-// 2.5D 程序化人形：地面陰影 + 軀幹體積陰影 + 播種的膚色/髮型/褲色 + 關節
-// 原點手腳 + 場景 update 驅動的連續動作循環（走路 / 呼吸 / 工作 / 吃 / 交易）。
-// 對外合約（三個場景共用）保持不變：
+// 8-bit 像素小人 — 與 pixelWorld 的樹/屋道具同一種 chunky 像素語彙。
+//
+// 結構（全部 texture-based，不再用向量方塊拼裝）：
+//   * legs  ：白底灰階雙幀（立正 / 跨步）→ setTint 褲色
+//   * body  ：白底灰階軀幹+手臂雙幀（垂手 / 擺臂）+ 工作幀（舉鎚）→ setTint 衣色
+//   * head  ：膚色直繪（5 種膚色 texture），眼睛偏右 → flipX 即轉向
+//   * hair  ：髮色×髮型 lazy 生成
+// 動作循環掛在場景 UPDATE：走路換幀+bob、待機呼吸、工作舉鎚、睡姿側躺。
+//
+// 對外合約：
 //   * createProceduralHumanoidAvatar / applyProceduralAvatarPose 簽名不變
-//   * ProceduralAvatar 仍暴露 body / 手 / 腳為 Rectangle、head 為 Arc、label
-//     為 Text，場景的 applyNpcAvatarColor 直接 setFillStyle 重新上色。
+//   * ProceduralAvatar 改為 texture 欄位；場景重新上色一律走
+//     applyAvatarOutfitColor(avatar, color)（取代舊的 body.setFillStyle）。
 
 export type ProceduralAvatar = Readonly<{
   container: Phaser.GameObjects.Container
-  body: Phaser.GameObjects.Rectangle
-  head: Phaser.GameObjects.Arc
-  leftArm: Phaser.GameObjects.Rectangle
-  rightArm: Phaser.GameObjects.Rectangle
-  leftLeg: Phaser.GameObjects.Rectangle
-  rightLeg: Phaser.GameObjects.Rectangle
+  body: Phaser.GameObjects.Image
+  head: Phaser.GameObjects.Image
+  legs: Phaser.GameObjects.Image
+  hair: Phaser.GameObjects.Image
   label: Phaser.GameObjects.Text | null
 }>
 
@@ -27,36 +32,157 @@ export type ProceduralAvatarOptions = Readonly<{
 }>
 
 const DEFAULT_AVATAR_SIZE = 28
-const OUTLINE_COLOR = 0x1c1300
 const LOW_HEALTH_ALPHA = 0.78
 const LOW_HEALTH_THRESHOLD = 30
 
-// 播種用調色盤 — 同一個 id 在三個場景永遠長同一張臉。
-const SKIN_TONES: readonly number[] = [0xffd3a6, 0xf2c191, 0xe2a878, 0xc98a5b, 0xffe0b8]
+const SKIN_TONES: readonly number[] = [0xffd9b0, 0xf2c191, 0xe2a878, 0xc98a5b, 0xffe4c0]
 const HAIR_COLORS: readonly number[] = [0x2b2118, 0x191613, 0x5b3a1e, 0x6e7079, 0x3d2c4f, 0x6e3b25, 0x8a6b3f]
-const PANTS_COLORS: readonly number[] = [0x2b2138, 0x33312b, 0x27343a, 0x3a2a22]
+const PANTS_COLORS: readonly number[] = [0x4a4458, 0x55524a, 0x47585e, 0x5e4a3e]
 const HAIR_STYLE_COUNT = 3
 
-// 動作循環參數（ms 週期的倒數刻度）。
-const WALK_CYCLE_SPEED = 1 / 130
-const IDLE_BREATH_SPEED = 1 / 620
-const WORK_SWING_SPEED = 1 / 210
-const EAT_CYCLE_SPEED = 1 / 280
-const TRADE_GESTURE_SPEED = 1 / 340
+// 角色邏輯像素：3px。整體 10×15 units（30×45px），對 28px 基準再由 size 縮放。
+const HU = 3
+const CHAR_W = 10
+const CHAR_H = 15
+const BASE_SPRITE_HEIGHT = CHAR_H * HU // 45
 
-type AvatarRigParts = Readonly<{
+const WALK_CYCLE_MS = 170
+const IDLE_BREATH_SPEED = 1 / 620
+const WORK_SWING_SPEED = 1 / 230
+
+type Px = (x: number, y: number, w: number, h: number, color: number, alpha?: number) => void
+
+function makeTexture(
+  scene: Phaser.Scene,
+  key: string,
+  wUnits: number,
+  hUnits: number,
+  draw: (px: Px) => void
+): void {
+  if (scene.textures.exists(key)) return
+  const g = scene.add.graphics()
+  const px: Px = (x, y, w, h, color, alpha = 1) => {
+    g.fillStyle(color, alpha)
+    g.fillRect(x * HU, y * HU, w * HU, h * HU)
+  }
+  draw(px)
+  g.generateTexture(key, wUnits * HU, hUnits * HU)
+  g.destroy()
+}
+
+const BODY_W = 0xffffff
+const BODY_S = 0xb4b4b4 // 暗面（tint 後變深色）
+const DARKPX = 0x232323
+
+/** 軀幹（含手臂）三幀 + 腿兩幀 — 白底灰階，tint 上色。 */
+function ensureHumanBaseTextures(scene: Phaser.Scene): void {
+  // 腿：frame 0 立正、frame 1 跨步
+  makeTexture(scene, 'pxh-legs-0', CHAR_W, 5, (px) => {
+    px(3, 0, 2, 4, BODY_W)
+    px(5, 0, 2, 4, BODY_S)
+    px(2, 4, 3, 1, DARKPX)
+    px(5, 4, 3, 1, DARKPX)
+  })
+  makeTexture(scene, 'pxh-legs-1', CHAR_W, 5, (px) => {
+    px(2, 0, 2, 3, BODY_W)
+    px(1, 3, 2, 1, BODY_W)
+    px(0, 4, 3, 1, DARKPX)
+    px(6, 0, 2, 3, BODY_S)
+    px(7, 3, 2, 1, BODY_S)
+    px(7, 4, 3, 1, DARKPX)
+  })
+  // 軀幹：frame 0 垂手、frame 1 擺臂、work 舉鎚
+  makeTexture(scene, 'pxh-body-0', CHAR_W, 6, (px) => {
+    px(2, 0, 6, 5, BODY_W)
+    px(6, 0, 2, 5, BODY_S)
+    px(0, 1, 2, 4, BODY_W)
+    px(8, 1, 2, 4, BODY_S)
+    px(2, 5, 6, 1, BODY_S) // 腰帶
+  })
+  makeTexture(scene, 'pxh-body-1', CHAR_W, 6, (px) => {
+    px(2, 0, 6, 5, BODY_W)
+    px(6, 0, 2, 5, BODY_S)
+    px(0, 0, 2, 3, BODY_W) // 前臂上擺
+    px(8, 2, 2, 4, BODY_S) // 後臂下擺
+    px(2, 5, 6, 1, BODY_S)
+  })
+  makeTexture(scene, 'pxh-body-work', CHAR_W, 8, (px) => {
+    px(2, 2, 6, 5, BODY_W)
+    px(6, 2, 2, 5, BODY_S)
+    px(0, 3, 2, 4, BODY_W)
+    px(8, 0, 2, 4, BODY_S) // 舉起的手臂
+    px(8, 0, 2, 1, 0x3a3a3a) // 工具頭（深色不受 tint 影響太多）
+    px(2, 7, 6, 1, BODY_S)
+  })
+}
+
+function headTextureKey(skinIdx: number): string {
+  return `pxh-head-${skinIdx}`
+}
+
+function ensureHeadTexture(scene: Phaser.Scene, skinIdx: number): void {
+  const skin = SKIN_TONES[skinIdx] ?? SKIN_TONES[0]!
+  makeTexture(scene, headTextureKey(skinIdx), 8, 7, (px) => {
+    px(1, 0, 6, 6, skin)
+    px(6, 0, 1, 6, shadeOf(skin))
+    px(0, 2, 1, 3, skin) // 左耳
+    px(7, 2, 1, 3, shadeOf(skin)) // 右耳
+    // 眼睛偏右（角色朝右）；flipX 即面向左
+    px(4, 2, 1, 1, DARKPX)
+    px(6, 2, 1, 1, DARKPX)
+    px(5, 4, 1, 1, shadeOf(skin)) // 嘴影
+  })
+}
+
+function hairTextureKey(colorIdx: number, style: number): string {
+  return `pxh-hair-${colorIdx}-${style}`
+}
+
+function ensureHairTexture(scene: Phaser.Scene, colorIdx: number, style: number): void {
+  const color = HAIR_COLORS[colorIdx] ?? HAIR_COLORS[0]!
+  makeTexture(scene, hairTextureKey(colorIdx, style), 8, 5, (px) => {
+    // 共通髮頂
+    px(1, 0, 6, 2, color)
+    px(0, 1, 1, 2, color)
+    px(7, 1, 1, 2, shadeOf(color))
+    if (style === 1) {
+      // 後梳馬尾
+      px(0, 2, 1, 3, color)
+      px(0, 4, 1, 1, shadeOf(color))
+    } else if (style === 2) {
+      // 側分瀏海
+      px(4, 2, 3, 1, color)
+    } else {
+      // 圓蓋
+      px(1, 2, 2, 1, color)
+    }
+  })
+}
+
+function shadeOf(color: number): number {
+  const r = Math.max(0, ((color >> 16) & 0xff) - 40)
+  const g = Math.max(0, ((color >> 8) & 0xff) - 40)
+  const b = Math.max(0, (color & 0xff) - 40)
+  return (r << 16) | (g << 8) | b
+}
+
+type AvatarParts = Readonly<{
   rig: Phaser.GameObjects.Container
   shadow: Phaser.GameObjects.Ellipse
-  body: Phaser.GameObjects.Rectangle
-  head: Phaser.GameObjects.Arc
-  leftArm: Phaser.GameObjects.Rectangle
-  rightArm: Phaser.GameObjects.Rectangle
-  leftLeg: Phaser.GameObjects.Rectangle
-  rightLeg: Phaser.GameObjects.Rectangle
+  body: Phaser.GameObjects.Image
+  legs: Phaser.GameObjects.Image
+  head: Phaser.GameObjects.Image
+  hair: Phaser.GameObjects.Image
   label: Phaser.GameObjects.Text | null
-  size: number
+  outfitColor: number
   phase: number
+  lastStepAt: number
+  stepFrame: 0 | 1
 }>
+
+type MutableAvatarParts = {
+  -readonly [K in keyof AvatarParts]: AvatarParts[K]
+}
 
 export function createProceduralHumanoidAvatar(
   scene: Phaser.Scene,
@@ -65,66 +191,46 @@ export function createProceduralHumanoidAvatar(
 ): ProceduralAvatar {
   const size = options.size ?? DEFAULT_AVATAR_SIZE
   const seed = hashId(state.id)
-  const skin = SKIN_TONES[seed % SKIN_TONES.length] ?? SKIN_TONES[0]!
-  const hairColor = HAIR_COLORS[(seed >> 3) % HAIR_COLORS.length] ?? HAIR_COLORS[0]!
-  const pantsColor = PANTS_COLORS[(seed >> 6) % PANTS_COLORS.length] ?? PANTS_COLORS[0]!
+  const skinIdx = seed % SKIN_TONES.length
+  const hairIdx = (seed >> 3) % HAIR_COLORS.length
   const hairStyle = (seed >> 9) % HAIR_STYLE_COUNT
-  const strokeW = Math.max(1, Math.round(size * 0.06))
+  const pantsColor = PANTS_COLORS[(seed >> 6) % PANTS_COLORS.length] ?? PANTS_COLORS[0]!
   const textColor = textColorForBg(state.color)
 
-  // 地面陰影：立體感的錨點，跟著步伐微縮放。不放進 rig，bob 時留在地面。
-  const shadow = scene.add.ellipse(0, size * 0.5, size * 0.7, size * 0.2, 0x000000, 0.28)
+  ensureHumanBaseTextures(scene)
+  ensureHeadTexture(scene, skinIdx)
+  ensureHairTexture(scene, hairIdx, hairStyle)
 
-  // rig：所有身體部位的內層容器 — 走路 bob / 呼吸 / 睡姿都動 rig，不動陰影。
-  const leftLeg = scene.add.rectangle(-size * 0.13, size * 0.06, size * 0.15, size * 0.44, pantsColor, 1)
-  leftLeg.setOrigin(0.5, 0.06)
-  leftLeg.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
-  const rightLeg = scene.add.rectangle(size * 0.13, size * 0.06, size * 0.15, size * 0.44, pantsColor, 1)
-  rightLeg.setOrigin(0.5, 0.06)
-  rightLeg.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
+  // 以 size 為「目標總高」縮放（28px 基準 → scale ≈ 0.78；hub 34px → ~0.93）。
+  const scale = (size * 1.55) / BASE_SPRITE_HEIGHT
 
-  const body = scene.add.rectangle(0, -size * 0.06, size * 0.5, size * 0.6, state.color, 1)
-  body.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
-  // 體積陰影：固定半透明黑覆蓋在軀幹背側，任何 setFillStyle 重上色都不受影響。
-  const bodyShade = scene.add.rectangle(-size * 0.135, -size * 0.06, size * 0.18, size * 0.55, 0x000000, 0.16)
-  const belt = scene.add.rectangle(0, size * 0.17, size * 0.48, size * 0.07, 0x000000, 0.25)
+  const shadow = scene.add.ellipse(0, size * 0.5, size * 0.72, size * 0.2, 0x000000, 0.28)
 
-  const leftArm = scene.add.rectangle(-size * 0.31, -size * 0.3, size * 0.13, size * 0.44, state.color, 1)
-  leftArm.setOrigin(0.5, 0.08)
-  leftArm.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
-  const rightArm = scene.add.rectangle(size * 0.31, -size * 0.3, size * 0.13, size * 0.44, state.color, 1)
-  rightArm.setOrigin(0.5, 0.08)
-  rightArm.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
+  // rig 內以「腳底 = size*0.5」對齊：legs 底部貼地。
+  const footY = size * 0.5
+  const legs = scene.add.image(0, footY, 'pxh-legs-0').setOrigin(0.5, 1).setScale(scale)
+  legs.setTint(pantsColor)
+  const legsH = 5 * HU * scale
+  const body = scene.add.image(0, footY - legsH + 1, 'pxh-body-0').setOrigin(0.5, 1).setScale(scale)
+  body.setTint(state.color)
+  const bodyH = 6 * HU * scale
+  const headY = footY - legsH - bodyH + 2
+  const head = scene.add.image(0, headY, headTextureKey(skinIdx)).setOrigin(0.5, 1).setScale(scale)
+  const headH = 7 * HU * scale
+  const hair = scene.add.image(0, headY - headH + 2 * HU * scale, hairTextureKey(hairIdx, hairStyle))
+    .setOrigin(0.5, 1)
+    .setScale(scale)
 
-  const head = scene.add.circle(0, -size * 0.52, size * 0.21, skin, 1)
-  head.setStrokeStyle(strokeW, OUTLINE_COLOR, 1)
-  const hairParts = createHair(scene, size, hairColor, hairStyle)
-  // 雙眼放在 +x（朝右）側；container 翻面時自動跟著面向。
-  const leftEye = scene.add.circle(size * 0.05, -size * 0.53, size * 0.024, OUTLINE_COLOR, 1)
-  const rightEye = scene.add.circle(size * 0.135, -size * 0.53, size * 0.024, OUTLINE_COLOR, 1)
-
-  const rig = scene.add.container(0, 0, [
-    leftLeg,
-    rightLeg,
-    bodyShade,
-    body,
-    belt,
-    leftArm,
-    rightArm,
-    head,
-    ...hairParts,
-    leftEye,
-    rightEye,
-  ])
+  const rig = scene.add.container(0, 0, [legs, body, head, hair])
 
   const label = options.showLabel === false
     ? null
-    : scene.add.text(0, -size * 0.98, state.shortLabel, {
+    : scene.add.text(0, headY - headH - 4, state.shortLabel, {
         fontFamily: 'Inter, "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif',
         fontSize: `${Math.max(10, Math.round(size * 0.42))}px`,
         color: textColor,
         fontStyle: 'bold',
-      }).setOrigin(0.5, 0.5)
+      }).setOrigin(0.5, 1)
 
   const container = scene.add.container(state.x, state.y, [shadow, rig, ...(label ? [label] : [])])
   container.setDepth(options.depth ?? 70)
@@ -132,26 +238,24 @@ export function createProceduralHumanoidAvatar(
   container.setData('characterKind', state.kind)
   container.setData('characterAction', state.action)
 
-  const parts: AvatarRigParts = {
+  const parts: MutableAvatarParts = {
     rig,
     shadow,
     body,
+    legs,
     head,
-    leftArm,
-    rightArm,
-    leftLeg,
-    rightLeg,
+    hair,
     label,
-    size,
-    // 每個角色相位錯開，避免全場 NPC 同步齊步走。
+    outfitColor: state.color,
     phase: (seed % 628) / 100,
+    lastStepAt: 0,
+    stepFrame: 0,
   }
   container.setData('avatarParts', parts)
 
-  // 連續動作循環：掛在場景 update 上，銷毀時自動解除。
-  const onSceneUpdate = () => {
+  const onSceneUpdate = (): void => {
     if (!container.active) return
-    animateAvatar(container, parts, scene.time.now)
+    animateAvatar(container, parts, scene.time.now, size)
   }
   scene.events.on(Phaser.Scenes.Events.UPDATE, onSceneUpdate)
   container.once(Phaser.GameObjects.Events.DESTROY, () => {
@@ -159,9 +263,9 @@ export function createProceduralHumanoidAvatar(
   })
 
   applyProceduralAvatarPose(container, state)
-  animateAvatar(container, parts, scene.time.now)
+  animateAvatar(container, parts, scene.time.now, size)
 
-  return { container, body, head, leftArm, rightArm, leftLeg, rightLeg, label }
+  return { container, body, head, legs, hair, label }
 }
 
 export function applyProceduralAvatarPose(
@@ -174,21 +278,27 @@ export function applyProceduralAvatarPose(
   container.setAlpha(
     state.health !== undefined && state.health < LOW_HEALTH_THRESHOLD ? LOW_HEALTH_ALPHA : 1
   )
-
-  const parts = container.getData('avatarParts') as AvatarRigParts | undefined
+  const parts = container.getData('avatarParts') as MutableAvatarParts | undefined
   if (!parts) return
-  // label 反向縮放，翻面時文字不鏡像。
   parts.label?.setScale(state.facing === 'left' ? -1 : 1, 1)
 }
 
-/** 由場景 update 每幀驅動的動作循環。pose 只記錄 action，這裡負責動起來。 */
+/** 場景換裝（faction 重新上色等）— 取代舊的 body.setFillStyle 路徑。 */
+export function applyAvatarOutfitColor(avatar: ProceduralAvatar, color: number): void {
+  avatar.body.setTint(color)
+  const parts = avatar.container.getData('avatarParts') as MutableAvatarParts | undefined
+  if (parts) parts.outfitColor = color
+  avatar.label?.setColor(textColorForBg(color))
+}
+
 function animateAvatar(
   container: Phaser.GameObjects.Container,
-  parts: AvatarRigParts,
-  timeMs: number
+  parts: MutableAvatarParts,
+  timeMs: number,
+  size: number
 ): void {
   const action = (container.getData('characterAction') as CharacterVisualState['action']) ?? 'idle'
-  const { rig, shadow, leftArm, rightArm, leftLeg, rightLeg, size, phase } = parts
+  const { rig, shadow, body, legs } = parts
 
   rig.setRotation(0)
   rig.setScale(1, 1)
@@ -196,96 +306,55 @@ function animateAvatar(
   shadow.setScale(1, 1)
 
   switch (action) {
-    case 'walk': {
-      const swing = Math.sin(timeMs * WALK_CYCLE_SPEED + phase)
-      leftLeg.setRotation(swing * 0.5)
-      rightLeg.setRotation(-swing * 0.5)
-      leftArm.setRotation(-swing * 0.42)
-      rightArm.setRotation(swing * 0.42)
-      const bob = Math.abs(Math.sin(timeMs * WALK_CYCLE_SPEED + phase))
-      rig.y = -bob * size * 0.06
-      shadow.setScale(1 - bob * 0.14, 1)
-      break
-    }
+    case 'walk':
     case 'patrol': {
-      const swing = Math.sin(timeMs * WALK_CYCLE_SPEED * 0.6 + phase)
-      leftLeg.setRotation(swing * 0.22)
-      rightLeg.setRotation(-swing * 0.22)
-      leftArm.setRotation(-0.16 + swing * 0.1)
-      rightArm.setRotation(-0.16 - swing * 0.1)
+      const interval = action === 'walk' ? WALK_CYCLE_MS : WALK_CYCLE_MS * 1.8
+      if (timeMs - parts.lastStepAt > interval) {
+        parts.lastStepAt = timeMs
+        parts.stepFrame = parts.stepFrame === 0 ? 1 : 0
+      }
+      legs.setTexture(parts.stepFrame === 0 ? 'pxh-legs-0' : 'pxh-legs-1')
+      body.setTexture(parts.stepFrame === 0 ? 'pxh-body-0' : 'pxh-body-1')
+      body.setTint(parts.outfitColor)
+      const bob = Math.abs(Math.sin(timeMs / interval + parts.phase))
+      rig.y = -bob * size * 0.05
+      shadow.setScale(1 - bob * 0.12, 1)
       break
     }
     case 'work': {
-      const hammer = Math.sin(timeMs * WORK_SWING_SPEED + phase)
-      rightArm.setRotation(-0.95 + hammer * 0.5)
-      leftArm.setRotation(0.12)
-      leftLeg.setRotation(0)
-      rightLeg.setRotation(0)
-      rig.y = Math.max(0, hammer) * size * 0.02
+      const swing = Math.sin(timeMs * WORK_SWING_SPEED + parts.phase)
+      body.setTexture(swing > 0 ? 'pxh-body-work' : 'pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.y = Math.max(0, swing) * size * 0.02
       break
     }
-    case 'eat': {
-      const lift = Math.sin(timeMs * EAT_CYCLE_SPEED + phase)
-      rightArm.setRotation(-1.05 + lift * 0.22)
-      leftArm.setRotation(0.18)
-      leftLeg.setRotation(0)
-      rightLeg.setRotation(0)
-      break
-    }
+    case 'eat':
     case 'trade': {
-      const gesture = Math.sin(timeMs * TRADE_GESTURE_SPEED + phase)
-      rightArm.setRotation(-0.5 + gesture * 0.18)
-      leftArm.setRotation(0.5 - gesture * 0.18)
-      leftLeg.setRotation(0)
-      rightLeg.setRotation(0)
+      const cycle = Math.sin(timeMs / 320 + parts.phase)
+      body.setTexture(cycle > 0 ? 'pxh-body-1' : 'pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
       break
     }
     case 'sleep': {
+      body.setTexture('pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
       rig.setRotation(-Math.PI / 2)
       rig.y = size * 0.32
-      leftArm.setRotation(0)
-      rightArm.setRotation(0)
-      leftLeg.setRotation(0)
-      rightLeg.setRotation(0)
       shadow.setScale(1.25, 1)
       break
     }
     case 'idle':
     default: {
-      const breath = Math.sin(timeMs * IDLE_BREATH_SPEED + phase)
+      body.setTexture('pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      const breath = Math.sin(timeMs * IDLE_BREATH_SPEED + parts.phase)
       rig.setScale(1, 1 + breath * 0.015)
-      leftArm.setRotation(breath * 0.035)
-      rightArm.setRotation(-breath * 0.035)
-      leftLeg.setRotation(0)
-      rightLeg.setRotation(0)
       break
     }
-  }
-}
-
-function createHair(
-  scene: Phaser.Scene,
-  size: number,
-  hairColor: number,
-  style: number
-): Phaser.GameObjects.GameObject[] {
-  // 頂部髮頂（上半圓弧）所有造型共用。
-  const dome = scene.add.arc(0, -size * 0.555, size * 0.215, 180, 360, false, hairColor, 1)
-  switch (style) {
-    case 1: {
-      // 後梳馬尾：腦後加一束下垂髮。
-      const tail = scene.add.rectangle(-size * 0.19, -size * 0.45, size * 0.09, size * 0.26, hairColor, 1)
-      tail.setOrigin(0.5, 0)
-      return [dome, tail]
-    }
-    case 2: {
-      // 側分瀏海：額前加一小片斜蓋。
-      const fringe = scene.add.rectangle(size * 0.06, -size * 0.6, size * 0.22, size * 0.08, hairColor, 1)
-      fringe.setRotation(0.18)
-      return [dome, fringe]
-    }
-    default:
-      return [dome]
   }
 }
 

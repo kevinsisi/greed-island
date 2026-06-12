@@ -281,7 +281,7 @@ export function CodexPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
-          <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-1.5">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
             {visible.map((card) => (
               <button
                 key={card.id}

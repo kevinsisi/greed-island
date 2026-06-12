@@ -93,6 +93,8 @@ export function createHttpApp(options: HttpAppOptions): Express {
   const jobsStore = new PlayerJobsStore(options.db)
   options.runtime.attachPlayerJobsStore(jobsStore)
   options.runtime.attachAmbientNarrator(settingsStore)
+  // v0.89.0 — 每個 NPC 都是 AI agent（AI 不可用時自動退回確定性 planner）。
+  options.runtime.attachNpcAgent(settingsStore)
   const combatStore = new CombatStore(options.db)
   options.runtime.attachCombatStore(combatStore)
 

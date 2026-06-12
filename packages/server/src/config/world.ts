@@ -258,6 +258,13 @@ export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
 // NPC life goals — cadence for NPC_LIFE_GOAL_SET emission（top-8 壓力 NPC）。
 export const LIFE_GOAL_CADENCE_TICKS = 30
 
+// NPC AI agent（v0.89.0）— 每個 NPC 以此節奏輪到一次 AI 自主決策
+// （由 npcId hash 錯相），AI 只能在 server 算好的合法 intent 選項中選擇。
+// TICKS_PER_HOUR=720 → 每 NPC 約每小時（牆鐘）一次、52 NPC ≈ 每 70 秒一次呼叫。
+export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_HOUR
+// AI 自述 utterance 上限長度（防 prompt 失控輸出灌爆 ticker）。
+export const NPC_AGENT_UTTERANCE_MAX_CHARS = 60
+
 // Matured-child inheritance (v0.88.0)
 // 成年的孩子以父母 civic 紀錄的平均值乘上比例做為起步 seed（不是轉移，
 // 父母不會扣 — 這模擬「從父母身上學到的東西」）。調參背景見

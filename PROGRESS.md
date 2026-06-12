@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.89.0
+
+### Current Version
+`0.89.0` — Eight-bit Living World：像素地形/道具/人物、動物行為演出、NPC AI agent（意圖分類路徑）、世界事件衛生、手機響應式修正。
+
+### What Shipped
+- **8-bit 視覺**：`pixelWorld.ts`（dither+bevel 磚面、21 像素道具、水面波光）+ `characterAvatar.ts` texture-based 像素人 + `pixelAnimals.ts` 動物行為 actor（漫遊/逃離/潛行）與環境生命（飛鳥/蝴蝶/落葉）。場景換色 API 改 `applyAvatarOutfitColor`。
+- **NPC AI agent**：`NPC_AGENT_DECISION` command/event；AI 只能在 server 確定性 intent stack 算出的合法選項中選擇（follow_schedule + intent 候選），urgency/targetTile 採 server 值；`NpcAgentRunner` 以 `NPC_AGENT_DECISION_INTERVAL_TICKS` 錯相、非阻塞、AI 失敗靜默退回 planner；utterance 以「喃喃自語」narration 上 ticker。
+- **事件衛生**：AREA_STATE_RECORDED / NPC_STATE_RECORDED narration→null；web eventVisibility 過濾投影型別（含歷史污染事件）。
+- **響應式**：Codex 手機 4 欄、Market 手機卡片式、web/version.ts 修復（header 不再顯示 client v0.24.2）。
+- 生存動機/學習/開拓的既有系統盤點寫入 proposal（skillXp+mentorship+reflection 學習、needs/beliefs 生存、construction+tile unlock 開拓）— agent 層把動機接上 AI 自主決策。
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest -- run` — 1179 tests / 151 files 全過
+- `npm --workspace packages/web exec vitest -- run` — 114 tests / 22 files 全過
+- `npm run build` — server + web 乾淨
+- 本機 runtime：`/healthz` `{ok:true, version:"0.89.0"}`，boot hydration 完成、無錯誤 log；無 AI key 時 agent 層 inert（行為與 v0.88 完全一致）
+- Playwright：desktop 1280×800 hub/area（像素世界+像素人+動物/蝴蝶可見）；mobile 390×844 hub/codex/market（卡片式行情正常、無橫向溢出）
+
+### Known Deferred
+- BuildingScene 室內仍 emoji（下一版像素化）。
+- NPC chat bubble 顯示 agent utterance（目前走 ticker narration）。
+- 真 AI key 環境下的 agent 決策實測（本機無 key；live 部署後由 admin 設定 keys 驗證）。
+- 前一版 v0.88.0 live smoke 因本機 Tailscale 通道中斷未能執行；CI/Deploy Dev 均綠。
+
+---
+
 ## 2026-06-12 — Handoff Snapshot @ v0.88.0
 
 ### Current Version

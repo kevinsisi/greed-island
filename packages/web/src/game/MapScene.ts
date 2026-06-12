@@ -17,8 +17,15 @@ import {
   type DistrictId
 } from './districts'
 import { CITY_DECORATIONS } from './decorations'
-import { activityGlyphFor, textColorForBg } from './npcVisuals'
-import { applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
+import {
+  GLYPH_TO_PROP,
+  addPixelCellOverlay,
+  addPixelProp,
+  ensurePixelPropTextures,
+  ensurePixelTerrainOverlays,
+} from './pixelWorld'
+import { activityGlyphFor } from './npcVisuals'
+import { applyAvatarOutfitColor, applyProceduralAvatarPose, createProceduralHumanoidAvatar, type ProceduralAvatar } from './characterAvatar'
 import {
   characterVisualStateForHubLocalPlayer,
   characterVisualStateForHubNpc,
@@ -200,7 +207,7 @@ export class MapScene extends Phaser.Scene {
   private peerSprites: Map<number, Phaser.GameObjects.Container> = new Map()
   private playerNameLabel: Phaser.GameObjects.Text | null = null
   private envTweens: Phaser.Tweens.Tween[] = []
-  private envSprites: Phaser.GameObjects.Text[] = []
+  private envSprites: Array<Phaser.GameObjects.Text | Phaser.GameObjects.Image> = []
 
   private initialPosition: { x: number; y: number } | null = null
 
@@ -430,6 +437,9 @@ export class MapScene extends Phaser.Scene {
   // ---------- 地圖渲染 ----------
 
   private drawTiles(): void {
+    // 8-bit 像素材質（dither / bevel / 道具）— 同 key 只會生成一次。
+    ensurePixelTerrainOverlays(this, TILE_SIZE)
+    ensurePixelPropTextures(this)
     const g = this.add.graphics()
     for (let row = 0; row < GRID_ROWS; row += 1) {
       for (let col = 0; col < GRID_COLS; col += 1) {
@@ -442,9 +452,13 @@ export class MapScene extends Phaser.Scene {
         const checker = (col + row) % 2 === 0
         g.fillStyle(active ? (checker ? def.color : def.shade) : 0x1f2429, 1)
         g.fillRect(x, y, TILE_SIZE, TILE_SIZE)
-        // 街區內側細邊框 (讓街區整體看起來像一個方塊)
-        g.lineStyle(1, active ? def.border : 0x3b4248, active ? 0.35 : 0.55)
-        g.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
+        // 8-bit 質感：dither + bevel 取代細灰框，城市變成浮起的像素磚盤。
+        if (active) {
+          addPixelCellOverlay(this, x, y, TILE_SIZE, col, row, 1)
+        } else {
+          g.lineStyle(1, 0x3b4248, 0.55)
+          g.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1)
+        }
         if (!active && (col + row) % 3 === 0) {
           g.fillStyle(0xf6c560, 0.2)
           g.fillRect(x + 6, y + TILE_SIZE / 2 - 1, TILE_SIZE - 12, 2)
@@ -540,8 +554,16 @@ export class MapScene extends Phaser.Scene {
       const list = CITY_DECORATIONS[id]
       if (!list) continue
       for (const deco of list) {
+        const cx = deco.col * TILE_SIZE + TILE_SIZE / 2
+        const propName = GLYPH_TO_PROP[deco.glyph]
+        if (propName) {
+          const bottomY = deco.row * TILE_SIZE + TILE_SIZE - 2
+          const { image } = addPixelProp(this, propName, cx, bottomY, 40)
+          this.attachEnvAnimation(image, deco.glyph, deco.col, deco.row)
+          continue
+        }
         const text = this.add.text(
-          deco.col * TILE_SIZE + TILE_SIZE / 2,
+          cx,
           deco.row * TILE_SIZE + TILE_SIZE / 2,
           deco.glyph,
           {
@@ -561,7 +583,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private attachEnvAnimation(
-    sprite: Phaser.GameObjects.Text,
+    sprite: Phaser.GameObjects.Text | Phaser.GameObjects.Image,
     glyph: string,
     col: number,
     row: number
@@ -1473,10 +1495,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private applyNpcAvatarColor(avatar: ProceduralAvatar, color: number): void {
-    avatar.body.setFillStyle(color, 1)
-    avatar.leftArm.setFillStyle(color, 1)
-    avatar.rightArm.setFillStyle(color, 1)
-    avatar.label?.setColor(textColorForBg(color))
+    applyAvatarOutfitColor(avatar, color)
   }
 
   private npcTextureKey(npcId: string, color?: number): string {

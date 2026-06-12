@@ -50,6 +50,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_CHILD_BORN',
   'NPC_MATURED',
   'NPC_INHERITANCE_GRANTED',
+  'NPC_AGENT_DECISION',
   'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
@@ -368,6 +369,26 @@ export type NpcRelationshipDimensionAdjustedCmd = Readonly<{
   tick: number
   motivation?: EventMotivation
   narration: string
+}>
+
+// NPC AI agent decision（v0.89.0）— AI 以「意圖分類」身分替 NPC 在 server
+// 算好的合法選項中做選擇。urgency 由 server 的 intent stack 決定（不信 AI
+// 數字）；AI 只貢獻 choice / reason / utterance。憲法依據：ARCHITECTURE.md
+// §9 AI read-only + 意圖分類例外。
+export type NpcAgentDecisionCmd = Readonly<{
+  npcId: string
+  tile: string
+  chosenIntent: 'follow_schedule' | IntentKind
+  targetTile: string | null
+  /** server 端從被選 intent stack entry 取得；follow_schedule 為 0。 */
+  urgency: number
+  /** AI 的一句決策理由（read-only 自述，僅供觀測/敘事）。 */
+  reason: string
+  /** NPC 自言自語（可上公開 ticker）。 */
+  utterance: string | null
+  decidedAtTick: number
+  motivation?: EventMotivation
+  narration: string | null
 }>
 
 export type NpcProductiveActionCmd = Readonly<{
@@ -1698,6 +1719,7 @@ export type LivingWorldCommandPayload =
   | NpcChildBornCmd
   | NpcMaturedCmd
   | NpcInheritanceGrantedCmd
+  | NpcAgentDecisionCmd
   | NpcRelationshipDimensionAdjustedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
@@ -2005,6 +2027,31 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.grantedAtTick !== 'number' || !Number.isInteger(p.grantedAtTick) || p.grantedAtTick < 0) return 'grantedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  NPC_AGENT_DECISION: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    const validIntents = ['follow_schedule', 'survival', 'economic', 'social', 'ecosystem']
+    if (typeof p.chosenIntent !== 'string' || !validIntents.includes(p.chosenIntent)) {
+      return 'chosenIntent must be follow_schedule or a valid intent kind'
+    }
+    if (p.targetTile !== null && (typeof p.targetTile !== 'string' || p.targetTile.length === 0)) {
+      return 'targetTile must be non-empty string or null'
+    }
+    if (p.chosenIntent !== 'follow_schedule' && p.targetTile === null) {
+      return 'intent choices require a targetTile'
+    }
+    if (typeof p.urgency !== 'number' || !Number.isFinite(p.urgency) || p.urgency < 0 || p.urgency > 100) {
+      return 'urgency must be 0..100'
+    }
+    if (typeof p.reason !== 'string' || p.reason.length === 0) return 'reason required'
+    if (p.utterance !== null && typeof p.utterance !== 'string') return 'utterance must be string or null'
+    if (typeof p.decidedAtTick !== 'number' || !Number.isInteger(p.decidedAtTick) || p.decidedAtTick < 0) {
+      return 'decidedAtTick must be non-negative integer'
+    }
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },
   NPC_RELATIONSHIP_DIMENSION_ADJUSTED: (p) => {

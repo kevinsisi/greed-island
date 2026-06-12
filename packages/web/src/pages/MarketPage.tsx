@@ -73,8 +73,35 @@ export function MarketPage() {
         <p className="text-sm text-ground-600">{t('market.noData')}</p>
       )}
 
+      {/* 手機（<sm）：卡片式清單 — 6 欄表格在 390px 會橫向溢出。 */}
       {!loading && !error && prices && prices.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="flex flex-col gap-2 sm:hidden">
+          {prices.map((entry) => (
+            <div
+              key={`m-${entry.marketId}-${entry.goodsId}`}
+              className="gi-panel p-3 flex flex-col gap-1.5"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-ground-100 font-medium">{entry.nameZh}</span>
+                <span className="tabular-nums text-ember-300 font-bold">{entry.priceGold.toFixed(1)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-ground-400">
+                <span className="font-mono truncate">{entry.settlementId}</span>
+                <span className={`font-display uppercase tracking-tightest text-[10px] ${statusColor(entry)}`}>
+                  {statusLabel(entry)}
+                </span>
+              </div>
+              <div className="flex gap-4 text-xs text-ground-300 tabular-nums">
+                <span>{t('market.supply')} {entry.supplyQuantity}</span>
+                <span>{t('market.demand')} {entry.demandQuantity}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && prices && prices.length > 0 && (
+        <div className="overflow-x-auto hidden sm:block">
           <table className="w-full text-sm text-left border-collapse">
             <thead>
               <tr className="border-b border-ground-700">

@@ -503,6 +503,51 @@ describe('living-world rule engine', () => {
     }
   })
 
+  it('validates NPC_AGENT_DECISION payloads (v0.89.0)', () => {
+    const { ruleEngine } = makeHarness()
+    const wellFormed = {
+      npcId: 'npc.smith',
+      tile: 't_central',
+      chosenIntent: 'survival' as const,
+      targetTile: 't_dock',
+      urgency: 62,
+      reason: '碼頭比較安全',
+      utterance: '這裡不能再待了。',
+      decidedAtTick: 1000,
+      narration: '鐵匠喃喃自語：「這裡不能再待了。」',
+    }
+    expect(
+      ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_AGENT_DECISION', 'npc.smith', 'npc', 22, 22, wellFormed)
+      ).accepted
+    ).toBe(true)
+    expect(
+      ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_AGENT_DECISION', 'npc.smith', 'npc', 22, 22, {
+          ...wellFormed,
+          chosenIntent: 'follow_schedule' as const,
+          targetTile: null,
+          urgency: 0,
+          utterance: null,
+          narration: null,
+        })
+      ).accepted
+    ).toBe(true)
+
+    const rejectCases: Record<string, unknown>[] = [
+      { ...wellFormed, chosenIntent: 'conquer_world' },
+      { ...wellFormed, targetTile: null }, // intent choice 必須有 targetTile
+      { ...wellFormed, urgency: 140 },
+      { ...wellFormed, reason: '' },
+    ]
+    for (const payload of rejectCases) {
+      const result = ruleEngine.evaluate(
+        makeLivingWorldCommand('NPC_AGENT_DECISION', 'npc.smith', 'npc', 22, 22, payload as never)
+      )
+      expect(result.accepted, JSON.stringify(payload)).toBe(false)
+    }
+  })
+
   it('rejects unknown command type', () => {
     const { ruleEngine } = makeHarness()
     const bogus = {
