@@ -18,7 +18,10 @@ developer. Keep latest status at the top.
 - `npm run check` — pass after timeout fix（build + server 1207 tests / 153 files + web 114 tests / 22 files；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（52 items）
 - Non-destructive live smoke before timeout hotfix：`/healthz` `version=0.91.2`; `/api/world` 200; `/api/npcs` 200; `/` 200; `/api/events` 200; `/api/combat/active` unauthenticated 401 as expected; `/api/world/chronicle?ai=1` attempted OpenCode but fell back on 8s timeout.
-- Pending v0.91.3 CI/CD/live smoke after push.
+- v0.91.3 targeted verification：`npm --workspace packages/server exec vitest -- run src/kernel/chronicleRenderer.test.ts src/sim/runtimeSettlementFamine.test.ts` — pass（14 tests / 2 files）；`npm run build` — pass；`npx openspec validate --all --strict` — pass（52 items）。
+- CI `27462670671` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27462706519` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` `version=0.91.3` tick `77769`; `/api/world` 200; `/api/npcs` 200; `/api/combat/active` unauthenticated 401 as expected; `/api/world/chronicle?ai=1&limit=20` reported `timeoutMs=20000` and fallbackReason `No chronicle-ready events to render.`（normal empty-context fallback, not provider timeout）。
 
 ### Known QA Gaps
 - No browser automation suite exists in repo（no Playwright/Cypress files found），so mobile visual claims still require manual/browser-device verification.
