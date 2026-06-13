@@ -17,7 +17,9 @@ developer. Keep latest status at the top.
 ### Verification Evidence
 - `npm --workspace packages/server exec vitest -- run src/kernel/chronicleRenderer.test.ts` — pass（13 tests / 1 file）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
-- Pending CI/CD/live smoke after push.
+- CI `27462166735` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27462199501` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke：`/healthz` `version=0.91.2` tick `77485`；`/api/world/chronicle?ai=1&limit=20` returned `source="ai"`, `fallbackReason=null`, `activeKeys=0`, one successful OpenCode attempt；`/api/world` 200；`/api/npcs` 200。
 
 ---
 
