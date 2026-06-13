@@ -22,6 +22,7 @@ developer. Keep latest status at the top.
 - CI `27462670671` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
 - Deploy Dev `27462706519` — pass（Docker build/push + desktop deploy smoke）
 - Live smoke after deploy：`/healthz` `version=0.91.3` tick `77769`; `/api/world` 200; `/api/npcs` 200; `/api/combat/active` unauthenticated 401 as expected; `/api/world/chronicle?ai=1&limit=20` reported `timeoutMs=20000` and fallbackReason `No chronicle-ready events to render.`（normal empty-context fallback, not provider timeout）。
+- Playwright live browser QA（Chromium, live `https://hunter.sisihome.org`）：mobile 390x844 `/timeline` shows `V0.91.3`; bottom nav is one row (`height=57`, 5 touch targets); tapping「更多」opens sheet above nav (`sheet.bottom=780`, `nav.top=787`); `/area/t_central` canvas remained mounted/stable for 7s (`358x238.65625`); `/api/combat/active` unauthenticated request returned 401; desktop 1280x800 root/timeline/area canvas smoke passed.
 
 ### Known QA Gaps
 - No browser automation suite exists in repo（no Playwright/Cypress files found），so mobile visual claims still require manual/browser-device verification.
