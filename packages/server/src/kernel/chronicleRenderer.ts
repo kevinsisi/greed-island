@@ -3,6 +3,7 @@
 // create facts; invalid or ungrounded AI output falls back to deterministic text.
 
 import { generateWithProviders } from '../npcs/aiProvider.js'
+import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { Event } from './types.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
@@ -115,13 +116,15 @@ export async function renderChronicle(input: {
   aiBackoffMs?: number
 }): Promise<ChronicleRender> {
   const activeKeys = input.settings.countActive()
+  const hasOpenCode = isOpenCodeConfigured(input.settings)
+  const hasAiProvider = activeKeys > 0 || hasOpenCode
   const timeoutMs = Math.max(1, input.aiTimeoutMs ?? CHRONICLE_AI_TIMEOUT_MS)
   const maxAttempts = Math.max(1, input.aiMaxAttempts ?? CHRONICLE_AI_MAX_ATTEMPTS)
   const backoffMs = Math.max(0, input.aiBackoffMs ?? CHRONICLE_AI_BACKOFF_MS)
   const skipReason = !input.useAi
     ? null
-    : activeKeys === 0
-      ? 'No active Gemini API keys configured.'
+    : !hasAiProvider
+      ? 'No AI providers configured.'
       : input.context.events.length === 0
         ? 'No chronicle-ready events to render.'
         : null
@@ -134,7 +137,7 @@ export async function renderChronicle(input: {
     fallbackReason: skipReason
   })
   const fallback = renderFallbackChronicle(input.context, null, baseAiMeta)
-  if (!input.useAi || activeKeys === 0 || input.context.events.length === 0) {
+  if (!input.useAi || !hasAiProvider || input.context.events.length === 0) {
     return fallback
   }
 

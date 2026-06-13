@@ -11,10 +11,10 @@ vi.mock('../npcs/aiProvider.js', () => ({
 
 const mockedGenerate = vi.mocked(generateWithProviders)
 
-function makeSettings(activeKeys = 1): SettingsStore {
+function makeSettings(activeKeys = 1, settings: Record<string, string> = {}): SettingsStore {
   return {
     countActive: () => activeKeys,
-    getSetting: () => null,
+    getSetting: (key: string) => settings[key] ?? null,
   } as unknown as SettingsStore
 }
 
@@ -158,7 +158,32 @@ describe('chronicle AI rendering', () => {
     ])
   })
 
-  it('skips AI cleanly when no active keys are configured', async () => {
+  it('uses OpenCode when configured without active Gemini keys', async () => {
+    mockedGenerate.mockResolvedValue({
+      text: JSON.stringify({
+        zh: 'npc-a 和 npc-b 的交談由 OpenCode 寫入編年史。',
+        en: 'npc-a and npc-b were chronicled by OpenCode.',
+        citedNames: ['npc-a', 'npc-b']
+      }),
+      provider: 'opencode'
+    })
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(0, { opencode_servers: 'http://127.0.0.1:4096' }),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('ai')
+    expect(mockedGenerate).toHaveBeenCalledTimes(1)
+    expect(rendered.aiMeta).toEqual(expect.objectContaining({
+      requested: true,
+      activeKeys: 0,
+      fallbackReason: null,
+    }))
+  })
+
+  it('skips AI cleanly when no providers are configured', async () => {
     const rendered = await renderChronicle({
       context: makeContext(),
       settings: makeSettings(0),
@@ -170,7 +195,7 @@ describe('chronicle AI rendering', () => {
     expect(rendered.aiMeta).toEqual(expect.objectContaining({
       requested: true,
       activeKeys: 0,
-      fallbackReason: 'No active Gemini API keys configured.',
+      fallbackReason: 'No AI providers configured.',
       attempts: []
     }))
   })

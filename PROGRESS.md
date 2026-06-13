@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.91.1
+
+### Current Version
+`0.91.1` — Mobile More Nav + Chronicle Provider + Animal Movement Hotfix：修正手機底部導覽「更多」選單造成底欄換行與內容重疊、編年史在 OpenCode 已設定但 Gemini key 為 0 時直接 fallback，以及區域動物在資料刷新時瞬移回 spawn 點。
+
+### What Shipped
+- **Mobile tab count**：`MobileTabBar` 的固定入口維持 4 個主分頁 + 1 個「更多」，避免 5 欄 grid 被 6+ 個項目撐成兩列。
+- **More bottom sheet**：「更多」選單移出 nav grid，改成固定在底欄上方的 scrollable bottom sheet，並保留 backdrop 關閉行為。
+- **Active state**：目前路徑位於 overflow 項目時，「更多」按鈕會維持 active 狀態。
+- **Chronicle provider gate**：`renderChronicle` 不再只用 Gemini active key 數判斷 AI 可用；OpenCode configured 時會嘗試 `generateWithProviders`，避免 live `/world/chronicle?ai=1` 直接標成 `FALLBACK`。
+- **Animal movement stability**：`AreaScene.applyExternalUpdate` 對 ecology payload 做內容 signature；資料未變時不重建 ecology overlay / `AnimalActor`，避免動物 tween 中途被銷毀後瞬移回 deterministic spawn 點。
+
+### Verification Evidence
+- `npm --workspace packages/web exec vitest -- run` — pass（114 tests / 22 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm --workspace packages/server exec vitest -- run src/kernel/chronicleRenderer.test.ts src/kernel/livingWorld.test.ts` — pass（71 tests / 2 files）
+- `npm --workspace packages/web exec vitest -- run` — pass after animal movement fix（114 tests / 22 files）
+- `npm run build` — pass after animal movement fix（server + web；Vite chunk-size warning remains known non-blocking）
+- Pending CI/CD/live smoke after push.
+
+### Known Deferred
+- `package-lock.json` 的 root version 仍停在既有 `0.86.0` baseline；本 hotfix 不改動 lockfile，避免混入無關歷史同步 diff。
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.91.0
 
 ### Current Version

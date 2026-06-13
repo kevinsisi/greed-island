@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.1 ✅ shipped — 2026-06-13
+
+**主題：Mobile More Nav + Chronicle Provider + Animal Movement Hotfix（手機「更多」不疊版，編年史可走 OpenCode，動物不再刷新瞬移）**
+
+- ✅ **固定 5 欄底欄** — mobile primary tabs 維持 4 個主入口 + 1 個「更多」，避免底欄 grid 自動換成兩列。
+- ✅ **獨立 bottom sheet** — 「更多」選單移出 nav grid，固定在底欄上方並可捲動，避免壓到 tick/event 內容與底部導覽。
+- ✅ **overflow active state** — 進入市集、社交、profile、admin、API keys 等 overflow 頁面時，「更多」維持 active 樣式。
+- ✅ **編年史 OpenCode gate** — `/api/world/chronicle?ai=1` 不再因 Gemini active key=0 直接 fallback；OpenCode configured 時會嘗試 provider router。
+- ✅ **動物刷新穩定** — area ecology 資料內容未變時不重建 `AnimalActor`，避免非人型 NPC/動物行走 tween 被刷新打斷後瞬移回原始 hash 座標。
+
+---
+
 ## v0.91.0 ✅ shipped — 2026-06-13
 
 **主題：Freeform NPC Agent Actions（AI 自由創造行為 + server 驗證落地）**

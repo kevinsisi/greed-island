@@ -231,6 +231,30 @@ function areaSubcellFromHash(key: string, tileId: string, salt: string): { x: nu
   }
 }
 
+function ecologySignature(eco: AreaEcologyView | null): string {
+  if (!eco) return 'none'
+  const animals = eco.animals
+    .map((row) => `${row.speciesId}:${row.count}:${[...row.animalIds].sort().join(',')}`)
+    .sort()
+    .join('|')
+  const plants = eco.plants
+    .map((row) => `${row.speciesId}:${row.density}:${row.capacity}:${row.saturationPct}`)
+    .sort()
+    .join('|')
+  const fishery = eco.fishery
+    ? `${eco.fishery.density}:${eco.fishery.collapsed}:${eco.fishery.harvestedTotal}`
+    : 'none'
+  const arriving = eco.migrationsArriving
+    .map((row) => `${row.waveId}:${row.speciesId}:${row.count}:${row.fromTileId}:${row.toTileId}`)
+    .sort()
+    .join('|')
+  const departing = eco.migrationsDeparting
+    .map((row) => `${row.waveId}:${row.speciesId}:${row.count}:${row.fromTileId}:${row.toTileId}`)
+    .sort()
+    .join('|')
+  return [eco.tileId, animals, plants, fishery, arriving, departing].join('::')
+}
+
 const RANK_COLOR: Record<string, number> = {
   SS: 0xffd966,
   S: 0xffb84d,
@@ -277,6 +301,7 @@ export class AreaScene extends Phaser.Scene {
   private ecology: AreaEcologyView | null = null
   /** Sprint 2A — animal sprites + fishery bar layer, replaced when ecology updates. */
   private ecologyLayer: Phaser.GameObjects.Container | null = null
+  private ecologySignature = ''
   /** v0.15.1：天氣 VFX layer，applyWeather 切換時整批 destroy 重畫。 */
   private weatherLayer: Phaser.GameObjects.Container | null = null
   /** v0.15.1：環境動畫的 tween 池（裝飾物擺動 / 燈火閃爍 / 水波漣漪）。 */
@@ -411,7 +436,10 @@ export class AreaScene extends Phaser.Scene {
       this.applyWeather(payload.weather)
     }
     if (payload.ecology !== undefined) {
+      const nextSignature = ecologySignature(payload.ecology)
+      if (nextSignature === this.ecologySignature) return
       this.ecology = payload.ecology
+      this.ecologySignature = nextSignature
       this.drawEcologyOverlay()
     }
   }
@@ -753,6 +781,7 @@ export class AreaScene extends Phaser.Scene {
     this.disposeAnimalActors()
     const eco = this.ecology
     if (!eco) return
+    this.ecologySignature = ecologySignature(eco)
     ensurePixelPropTextures(this)
     ensurePixelAnimalTextures(this)
 

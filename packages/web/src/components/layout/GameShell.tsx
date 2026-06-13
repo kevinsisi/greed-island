@@ -335,12 +335,14 @@ function DesktopRail() {
   )
 }
 
-// Primary 4 tabs always pinned; auth + admin items go into "⋯ More" when overflow exists.
-const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/ecology', '/market', '/social']
+// Primary 4 tabs always pinned; every other mobile entry lives behind "⋯ More".
+// Keep this at exactly 4 so the 5-column mobile bar never wraps into two rows.
+const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/ecology']
 
 function MobileTabBar() {
   const { t } = useI18n()
   const { account } = useAuth()
+  const location = useLocation()
   const [moreOpen, setMoreOpen] = useState(false)
 
   const items = visibleNavItems(account ?? null)
@@ -353,6 +355,9 @@ function MobileTabBar() {
   const moreItems: NavItem[] = hasOverflow
     ? ([profileItem, ...overflowItems].filter(Boolean) as NavItem[])
     : []
+  const moreActive = moreItems.some(
+    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+  )
 
   const tabClass = (isActive: boolean) =>
     [
@@ -370,31 +375,31 @@ function MobileTabBar() {
           aria-hidden="true"
         />
       )}
+      {/* More bottom sheet: fixed above the nav, scrollable, and never part of the grid layout. */}
+      {moreOpen && (
+        <div className="lg:hidden fixed inset-x-3 bottom-[64px] z-40 max-h-[min(58vh,360px)] overflow-y-auto rounded-sharp border border-ground-700 bg-ground-900/98 backdrop-blur px-3 py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.65)]">
+          {moreItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              onClick={() => setMoreOpen(false)}
+              className={({ isActive }) =>
+                [
+                  'gi-touch flex items-center gap-3 px-3 py-2.5 rounded-sharp transition-colors',
+                  isActive
+                    ? 'text-ember-400 bg-ember-500/5'
+                    : 'text-ground-300 hover:text-ground-100 hover:bg-ground-800',
+                ].join(' ')
+              }
+            >
+              <span className="font-display text-lg leading-none w-5 text-center">{item.glyph}</span>
+              <span className="text-[12px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ground-800 bg-ground-900/95 backdrop-blur">
-        {/* More popover */}
-        {moreOpen && (
-          <div className="absolute bottom-full inset-x-0 border-t border-ground-800 bg-ground-900/98 backdrop-blur px-4 py-3 flex flex-col gap-1 shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
-            {moreItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                onClick={() => setMoreOpen(false)}
-                className={({ isActive }) =>
-                  [
-                    'gi-touch flex items-center gap-3 px-3 py-2.5 rounded-sharp transition-colors',
-                    isActive
-                      ? 'text-ember-400 bg-ember-500/5'
-                      : 'text-ground-300 hover:text-ground-100 hover:bg-ground-800',
-                  ].join(' ')
-                }
-              >
-                <span className="font-display text-lg leading-none w-5 text-center">{item.glyph}</span>
-                <span className="text-[12px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
-              </NavLink>
-            ))}
-          </div>
-        )}
         {/* Always 5 columns */}
         <ul className="grid grid-cols-5">
           {primaryItems.map((item) => (
@@ -427,7 +432,7 @@ function MobileTabBar() {
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-expanded={moreOpen}
                 aria-label={t('nav.more')}
-                className={tabClass(moreOpen)}
+                className={tabClass(moreOpen || moreActive)}
               >
                 <span className="font-display text-lg leading-none">⋯</span>
                 <span className="text-[10px] font-display uppercase tracking-tightest">{t('nav.more')}</span>
