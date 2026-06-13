@@ -10,7 +10,7 @@ import type { SqliteNpcMemoryStore } from './npcMemory.js'
 import { isLivingWorldCommandType, type LivingWorldEventPayload } from './livingWorldCommands.js'
 
 const CHRONICLE_AI_RESPONSE_MIME = 'application/json'
-const CHRONICLE_AI_TIMEOUT_MS = 8_000
+const CHRONICLE_AI_TIMEOUT_MS = 20_000
 const CHRONICLE_AI_MAX_ATTEMPTS = 2
 const CHRONICLE_AI_BACKOFF_MS = 250
 

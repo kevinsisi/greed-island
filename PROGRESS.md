@@ -5,6 +5,27 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.91.3
+
+### Current Version
+`0.91.3` — Chronicle Timeout QA Hotfix：完整 QA pass 發現 live OpenCode chronicle 可能被 8s timeout 打成 fallback；調高預設 chronicle AI timeout，並修正長模擬測試 timeout 過緊造成 `npm run check` 不穩。
+
+### What Shipped
+- **Chronicle timeout**：`CHRONICLE_AI_TIMEOUT_MS` 從 8s 調到 20s，避免 self-hosted OpenCode 慢回應時過早 fallback。
+- **Test reliability**：`runtimeSettlementFamine.test.ts` timeout 從 15s 調到 45s；該測試單跑約 6s、full suite 並行時可達 ~17-22s，原 timeout 太緊造成 false negative。
+
+### Verification Evidence
+- `npm run check` — pass after timeout fix（build + server 1207 tests / 153 files + web 114 tests / 22 files；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（52 items）
+- Non-destructive live smoke before timeout hotfix：`/healthz` `version=0.91.2`; `/api/world` 200; `/api/npcs` 200; `/` 200; `/api/events` 200; `/api/combat/active` unauthenticated 401 as expected; `/api/world/chronicle?ai=1` attempted OpenCode but fell back on 8s timeout.
+- Pending v0.91.3 CI/CD/live smoke after push.
+
+### Known QA Gaps
+- No browser automation suite exists in repo（no Playwright/Cypress files found），so mobile visual claims still require manual/browser-device verification.
+- Live combat E2E is state-changing（starts/advances a combat session）and was not run without explicit test-account/approval policy.
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.91.2
 
 ### Current Version

@@ -9,7 +9,7 @@ import { SimulationRuntime } from './runtime.js'
 type Internal = { runTick: () => void }
 
 describe('SimulationRuntime settlement famine', () => {
-  it('emits GOODS_CONSUMED from settlement storage at cadence and raises food pressure', { timeout: 15000 }, () => {
+  it('emits GOODS_CONSUMED from settlement storage at cadence and raises food pressure', { timeout: 45000 }, () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
     const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())

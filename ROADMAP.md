@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.3 ✅ shipped — 2026-06-13
+
+**主題：Chronicle Timeout QA Hotfix（OpenCode 慢回應不再太早 fallback，完整 check 穩定）**
+
+- ✅ **Chronicle timeout** — 預設 AI chronicle timeout 8s → 20s，配合 self-hosted OpenCode 實際延遲。
+- ✅ **Long simulation test reliability** — famine runtime test timeout 15s → 45s，避免 full suite 並行壓力下 false negative。
+- ✅ **QA evidence** — full `npm run check`、OpenSpec、non-destructive live smoke 補入 `PROGRESS.md`，並明確標出未授權 live combat E2E 與缺少 browser automation 的 gap。
+
+---
+
 ## v0.91.2 ✅ shipped — 2026-06-13
 
 **主題：Chronicle Fenced JSON Hotfix（OpenCode JSON code fence 不再導致 fallback）**
