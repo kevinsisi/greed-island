@@ -5,6 +5,22 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-13 — Handoff Snapshot @ v0.91.2
+
+### Current Version
+`0.91.2` — Chronicle Fenced JSON Hotfix：修正 OpenCode 回傳 ```json fenced JSON 時，編年史 parser 因只接受裸 JSON 而 fallback。
+
+### What Shipped
+- **Chronicle parser tolerance**：`parseAiChronicle` 先抽出裸 JSON payload，支援 raw JSON、Markdown code fence、以及前後有文字但包含單一 JSON object 的回覆。
+- **Validation unchanged**：仍要求 `zh` / `en` 非空，`citedNames` 仍會被 grounded allow-list 檢查；只放寬 transport wrapper，不放寬世界事實。
+
+### Verification Evidence
+- `npm --workspace packages/server exec vitest -- run src/kernel/chronicleRenderer.test.ts` — pass（13 tests / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- Pending CI/CD/live smoke after push.
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.91.1
 
 ### Current Version

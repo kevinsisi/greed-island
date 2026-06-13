@@ -69,6 +69,23 @@ describe('chronicle AI rendering', () => {
     ])
   })
 
+  it('accepts JSON wrapped in a markdown code fence', async () => {
+    mockedGenerate.mockResolvedValue({
+      text: '```json\n{"zh":"npc-a 和 npc-b 被記入編年史。","en":"npc-a and npc-b were chronicled.","citedNames":["npc-a","npc-b"]}\n```',
+      provider: 'opencode'
+    })
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(0, { opencode_servers: 'http://127.0.0.1:4096' }),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('ai')
+    expect(rendered.textZh).toContain('npc-a')
+    expect(rendered.aiMeta.fallbackReason).toBeNull()
+  })
+
   it('retries transient chronicle AI failures with observable metadata', async () => {
     mockedGenerate
       .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))

@@ -473,7 +473,7 @@ function chronicleUserPrompt(context: ChronicleContext): string {
 }
 
 function parseAiChronicle(raw: string): { zh: string; en: string; citedNames: string[] } {
-  const parsed = JSON.parse(raw) as AiChronicleResponse
+  const parsed = JSON.parse(extractJsonPayload(raw)) as AiChronicleResponse
   if (typeof parsed.zh !== 'string' || parsed.zh.trim().length === 0) {
     throw new Error('AI chronicle missing zh text.')
   }
@@ -484,6 +484,22 @@ function parseAiChronicle(raw: string): { zh: string; en: string; citedNames: st
     ? parsed.citedNames.filter((name): name is string => typeof name === 'string')
     : []
   return { zh: parsed.zh.trim(), en: parsed.en.trim(), citedNames }
+}
+
+function extractJsonPayload(raw: string): string {
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('{')) return trimmed
+  if (trimmed.startsWith('```')) {
+    const firstLineEnd = trimmed.indexOf('\n')
+    const closingFence = trimmed.lastIndexOf('```')
+    if (firstLineEnd >= 0 && closingFence > firstLineEnd) {
+      return trimmed.slice(firstLineEnd + 1, closingFence).trim()
+    }
+  }
+  const firstBrace = trimmed.indexOf('{')
+  const lastBrace = trimmed.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) return trimmed.slice(firstBrace, lastBrace + 1)
+  return trimmed
 }
 
 function collectStringFields(value: Record<string, unknown>, keys: readonly string[]): string[] {

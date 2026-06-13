@@ -5,6 +5,15 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.2 ✅ shipped — 2026-06-13
+
+**主題：Chronicle Fenced JSON Hotfix（OpenCode JSON code fence 不再導致 fallback）**
+
+- ✅ **fenced JSON parser** — 編年史 AI 回覆若是 ```json fenced JSON，server 會抽出 JSON payload 再 parse。
+- ✅ **grounding 保留** — 只放寬 code fence wrapper；`zh`/`en` 必填與 `citedNames` allow-list 驗證不變。
+
+---
+
 ## v0.91.1 ✅ shipped — 2026-06-13
 
 **主題：Mobile More Nav + Chronicle Provider + Animal Movement Hotfix（手機「更多」不疊版，編年史可走 OpenCode，動物不再刷新瞬移）**
