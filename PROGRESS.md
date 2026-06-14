@@ -5,6 +5,33 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.13
+
+### Current Version
+`0.91.13` — Chronicle Routine-Noise Hotfix：v0.91.12 fixed the empty live chronicle context, but live screenshots showed the renderer still treated routine tick logs (`NPC_PRODUCTIVE_ACTION`, movement/activity/interact, area pressure, harvest rows) as story material, producing repetitive fake public narrative.
+
+### What Shipped
+- **Routine events removed from chronicle story context**：server chronicle context now excludes routine/system projection rows including `NPC_PRODUCTIVE_ACTION`, `NPC_MOVE`, `NPC_ACTIVITY_CHANGE`, `NPC_INTERACT`, `AREA_PRESSURE`, `BIO_NODE_HARVESTED`, and `FISHERY_HARVESTED`; these remain available to debug/raw event views but no longer dominate public chronicle summaries.
+- **Main Timeline productive spam demoted**：web event visibility now keeps `NPC_PRODUCTIVE_ACTION` out of the main chronicle surface, while AI freeform proposal events remain visible when they carry grounded narration.
+- **Fallback wording is less fake**：world-event fallback now prefers concrete committed narration instead of stitching repeated canned conclusions around low-level event rows.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.91.13` for live health evidence.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- chronicleRenderer.test.ts livingWorld.test.ts` — pass（78 tests / 2 files）
+- `npm run test -w @greed-island/web -- eventVisibility.test.ts TimelinePage.test.ts` — pass（14 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- CI `27497315924` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27497354899` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.91.13`；deterministic `/api/world/chronicle?limit=120&ai=0` returned 12 story events with no blocked routine/productive types；AI `/api/world/chronicle?limit=120&ai=1` returned `source="ai"`, 7 grounded story events, no blocked routine/productive types, and no fallback reason；`/api/world.facts.npcAgent` reported `enabled=true`, `configured=true`, `providerSuccessCount=1`, `submitCount=1`, `errorCount=0`.
+
+### Known Notes
+- Raw `/api/events` remains a developer/debug feed and can still include routine simulation rows; the fix targets public chronicle/Timeline story surfaces.
+- Local Playwright render smoke was not run because `playwright` is not installed in this workspace.
+- `.opencode-tmp/`, `deploy/data/`, and `test-results/` remain local untracked artifacts and were intentionally not committed.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.12
 
 ### Current Version
@@ -24,7 +51,7 @@ developer. Keep latest status at the top.
 - Live smoke after deploy：`/healthz` reported `version=0.91.12`；`/api/world/chronicle?limit=40&ai=0` returned non-empty `context.events` with recent `NPC_PRODUCTIVE_ACTION` rows and Traditional Chinese fallback text instead of empty-context fallback；`/api/world/chronicle?limit=40&ai=1` returned `source="ai"` with Traditional Chinese summary citing live NPC actions；after a short wait, `/api/world.facts.npcAgent` reported `enabled=true`, `configured=true`, `providerSuccessCount=1`, `submitCount=1`, `errorCount=0`, latest success via `opencode` for `central.busker.huang_yu_cheng`.
 
 ### Known Notes
-- Raw `/api/world/chronicle` deterministic fallback still includes some lower-level public events such as movement/resource harvest when they are in the requested recent window; the critical empty-context fallback is resolved. Further editorial ranking can be a separate presentation pass.
+- Superseded by v0.91.13, which removes routine/productive tick logs from public chronicle story context.
 - `.opencode-tmp/`, `deploy/data/`, and `test-results/` remain local untracked artifacts and were intentionally not committed.
 
 ---

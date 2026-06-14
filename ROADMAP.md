@@ -5,7 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.91.12 ✅ shipped — 2026-06-14
+## v0.91.13 ✅ shipped — 2026-06-14
+
+**主題：Chronicle Routine-Noise Hotfix（編年史不再把 routine tick log 串成假故事）**
+
+- ✅ **routine context filter** — server chronicle context 排除 `NPC_PRODUCTIVE_ACTION`、NPC move/activity/interact、area pressure、resource harvest 等 routine/system projection rows；raw `/api/events` 仍保留 debug 可見性。
+- ✅ **main Timeline demotion** — `NPC_PRODUCTIVE_ACTION` 不再進主編年 surface，避免同模板 productive log 洗版；`NPC_FREEFORM_ACTION_PROPOSED` 仍可用 grounded narration 進公開故事。
+- ✅ **fallback cleanup** — world-event fallback 優先用 committed narration，不再把低階 routine rows 硬串成「留下痕跡」式罐頭結論。
+- ✅ **Verification** — targeted server/web regressions、build、OpenSpec、CI `27497315924`、Deploy Dev `27497354899`、live smoke 全過；live `0.91.13` deterministic/AI chronicle context 均無 blocked routine/productive types，NPC agent diagnostics 仍 enabled/configured 且 provider submit success。
+
+---
+
+## v0.91.12 ✅ shipped, superseded — 2026-06-14
 
 **主題：Live Chronicle Feed Hotfix（編年史要讀 live public feed，不再空 context fallback）**
 
