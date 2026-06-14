@@ -5999,7 +5999,7 @@ export class SimulationRuntime {
       .sort((a, b) => b.life.goal.pressure - a.life.goal.pressure || a.profile.id.localeCompare(b.profile.id))
       .slice(0, 8)
       .map(({ profile, state, life }) => {
-        const agenda = this.worldAgendaFor(state.tile, nextTick)
+        const tileName = TILE_NAME_BY_ID[state.tile] ?? state.tile
         return makeLivingWorldCommand(
           'NPC_LIFE_GOAL_SET',
           profile.id,
@@ -6012,8 +6012,8 @@ export class SimulationRuntime {
             needs: life.needs,
             goal: life.goal,
             motivation: makeMotivation(
-              `上位指令：${agenda.sponsorZh}正在${agenda.scopeNameZh}推動「${agenda.directiveZh}」（${agenda.rationaleZh}）。${profile.name.zh}以${profile.role.zh}身分${roleInterpretationZh(`${profile.role.zh} ${profile.role.en}`, agenda)}，再用自己的食物、休息、收入、住房與安全需求決定眼前目標：「${life.goal.narration}」。`,
-              `上位指令 ${agenda.id}；目標壓力 ${life.goal.pressure}`
+              `${profile.name.zh}以${profile.role.zh}身分回應${tileName}的生活壓力；食物、休息、收入、住房與安全需求重新計算後，眼前目標變成「${life.goal.narration}」。`,
+              `目標壓力 ${life.goal.pressure}`
             ),
             narration: `${profile.name.zh}把眼前生活目標定為：${life.goal.narration}`
           }

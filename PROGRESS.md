@@ -5,6 +5,22 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.8
+
+### Current Version
+`0.91.8` — Life Goal Motivation Source Hotfix：修正 live smoke 發現 `NPC_LIFE_GOAL_SET` source payload 仍保留 world agenda directive 長句與 `agenda.*` debug id 的問題。
+
+### What Shipped
+- **Life-goal source cleanup**：新 `NPC_LIFE_GOAL_SET` motivation 不再引用 world agenda directive 或 agenda id，只保留 NPC 身分、地區生活壓力、需求重算與目標敘述。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimeExpansion.test.ts` — pass（1 test / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live smoke.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.7
 
 ### Current Version
