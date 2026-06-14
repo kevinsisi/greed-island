@@ -5,14 +5,14 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.92.1 ✅ local-ready — 2026-06-14
+## v0.92.1 ✅ shipped — 2026-06-14
 
 **主題：Freeform Build Autonomy Hotfix（NPC AI 可以明確想要建造，不再被壓成 generic work）**
 
 - ✅ **build action vocabulary** — freeform NPC agent prompt / resolver / command validator 新增 `build`，讓 NPC 可以直接提出修建、擴建、開新建案、整理道路或公共設施。
 - ✅ **bounded autonomy** — server 最大程度接受建造意圖，但不讓 AI 直接改世界；accepted `build` 只導向建造工作狀態，真正開案/完工仍走既有 Rule Engine 的需求、金錢、地點、上限檢查。
 - ✅ **productive build domain** — freeform build intent 期間的 productive event 強制成 `domain="build"`，避免職業模板把建造想法誤分類成 trade/service/learn。
-- ✅ **Verification** — targeted server tests（75 tests / 4 files）、build、OpenSpec 53 items 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted server tests（75 tests / 4 files）、build、OpenSpec 53 items、CI `27508323058`、Deploy Dev `27508366329`、live `0.92.1` smoke 全過；post-deploy NPC agent diagnostics show `opencode` provider success + submitted actions with `errorCount=0`。
 - 📝 **Next design track** — animal cognition and plant life-state autonomy need dedicated OpenSpec design, not fake one-off narration rows.
 
 ---

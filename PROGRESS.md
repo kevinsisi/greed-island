@@ -20,9 +20,12 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server -- npcAgent.test.ts npcAgentRunner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（75 tests / 4 files）
 - `npx openspec validate --all --strict` — pass（53 items）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- CI `27508323058` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27508366329` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.92.1`；after OpenCode calls completed, `/api/world.facts.npcAgent` reported `enabled=true`, `configured=true`, `providerSuccessCount=6`, `submitCount=6`, `errorCount=0`, latest success via `opencode`.
 
 ### Known Notes
-- CI/CD and live smoke pending after commit/push.
+- Recent `/api/events` remains capped/noisy, so the smoke uses `facts.npcAgent` diagnostics for post-deploy AI submit evidence rather than relying on catching a freeform row in the latest public slice.
 - This hotfix addresses human/NPC construction autonomy only. Animal cognition and plant life-state autonomy should be designed as a dedicated OpenSpec track; do not fake them as one-off narration rows.
 - `.opencode-tmp/`, `deploy/data/`, and `test-results/` remain local untracked artifacts and must not be committed.
 
