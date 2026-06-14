@@ -105,6 +105,7 @@ describe('freeform NPC agent proposals', () => {
     })
     expect(systemPrompt).toContain('自由創造任意生活行為')
     expect(systemPrompt).toContain('貪婪 0.9')
+    expect(systemPrompt).toContain('build')
     expect(systemPrompt).toContain('buy_card')
     expect(systemPrompt).toContain('"action"')
     expect(userPrompt).toContain('123')
@@ -128,6 +129,26 @@ describe('freeform NPC agent proposals', () => {
     })
     expect(resolution.accepted).toBe(true)
     expect(resolution.resolved).toMatchObject({ kind: 'socialize', targetNpcId: 'npc.friend', targetTile: 't_dock' })
+  })
+
+  it('accepts build as a first-class freeform action', () => {
+    const proposal = parseFreeformAgentProposal(JSON.stringify({
+      action: 'build',
+      target: { tileId: 't_central', npcId: null, cardId: null },
+      reason: '我想替街區開一處新的公共建案',
+      risk: '材料不一定夠',
+      expectedOutcome: '讓大家有更穩的落腳處',
+      utterance: '先把地基量出來。',
+    }))
+    expect(proposal).not.toBeNull()
+    const resolution = resolveFreeformAgentProposal(proposal!, {
+      currentTile: 't_central',
+      defaultTile: 't_central',
+      livingNpcIds: new Set(),
+      getNpcTile: () => null,
+    })
+    expect(resolution.accepted).toBe(true)
+    expect(resolution.resolved).toMatchObject({ kind: 'build', targetTile: 't_central' })
   })
 
   it('rejects unsupported actions and unknown targets without executing them', () => {

@@ -20,7 +20,7 @@ type InternalRuntime = {
         reason: string
       }
     ) => void
-    getState: (npcId: string) => { intentOverride?: { targetTile: string; reason: string } | null } | undefined
+    getState: (npcId: string) => { activity?: string; agent?: { activeTask?: { kind?: string } }; intentOverride?: { targetTile: string; reason: string } | null } | undefined
   }
 }
 
@@ -107,6 +107,49 @@ describe('SimulationRuntime intent resolution', () => {
       })
       runtime.submitLivingWorldCommand(rejected)
       expect((runtime as unknown as InternalRuntime).npcEngine.getState(npc.id)?.intentOverride?.targetTile).toBe('t_dock')
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('turns accepted build freeform proposals into build work intent', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const npc = runtime.getNpcs()[0]!
+      const accepted = makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', npc.id, 'npc', 1, 1, {
+        npcId: npc.id,
+        tile: npc.location,
+        proposal: {
+          action: 'build',
+          target: { tileId: npc.location, npcId: null, cardId: null },
+          reason: '我想替街區開一處新的公共建案',
+          risk: '材料不一定夠',
+          expectedOutcome: '讓大家有更穩的落腳處',
+          utterance: '先把地基量出來。',
+        },
+        resolved: {
+          kind: 'build',
+          targetTile: npc.location,
+          targetNpcId: null,
+          cardId: null,
+          summary: 'build: 我想替街區開一處新的公共建案',
+        },
+        accepted: true,
+        rejectionReason: null,
+        decidedAtTick: 1,
+        narration: 'test',
+      })
+      runtime.submitLivingWorldCommand(accepted)
+      expect((runtime as unknown as InternalRuntime).npcEngine.getState(npc.id)?.intentOverride?.reason).toContain('freeform-agent-build:')
+
+      ;(runtime as unknown as InternalRuntime).runTick()
+
+      const state = (runtime as unknown as InternalRuntime).npcEngine.getState(npc.id)
+      expect(state?.activity).toBe('work')
+      expect(state?.agent?.activeTask?.kind).toBe('build')
     } finally {
       runtime.stop()
       db.close()

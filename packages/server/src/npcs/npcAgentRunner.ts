@@ -221,6 +221,7 @@ function freeformActionLabel(kind: FreeformAgentResolution['resolved']['kind']):
   switch (kind) {
     case 'travel': return '換個地方走走'
     case 'work': return '找件事做'
+    case 'build': return '動手修建或開新建案'
     case 'rest': return '先讓自己休息'
     case 'socialize': return '找人說話'
     case 'buy_card': return '追一張想要的紋卡'

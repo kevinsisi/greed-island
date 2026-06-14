@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.92.1
+
+### Current Version
+`0.92.1` — Freeform Build Autonomy Hotfix：live v0.92.0 confirmed NPC AI proposals were running, but freeform action vocabulary and server validation still collapsed construction intent into generic `work`; autonomous building only happened when deterministic productive templates happened to choose `domain="build"`.
+
+### What Shipped
+- **`build` is now a first-class freeform NPC action**：NPC AI prompts, parser/resolver, command validator, narration labels, and runtime steering now accept explicit `build` proposals instead of forcing construction thoughts into generic `work`.
+- **Server stays permissive but bounded**：accepted `build` proposals set a build-marked intent override and make the NPC do local `work`; actual construction still goes through the existing `NPC_PRODUCTIVE_ACTION domain="build"` → `CONSTRUCTION_INITIATE` / project progress / `BUILDING_CONSTRUCTED` Rule Engine path with gold, demand, tile, and cap checks.
+- **Build intent affects productive domain**：when an NPC is acting under a freeform build intent, productive output is forced to `domain="build"` with infrastructure/supply narration, so builders are not misclassified as trade/service/learn because of their old role template.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.92.1`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcAgent.test.ts npcAgentRunner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（75 tests / 4 files）
+- `npx openspec validate --all --strict` — pass（53 items）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- CI/CD and live smoke pending after commit/push.
+- This hotfix addresses human/NPC construction autonomy only. Animal cognition and plant life-state autonomy should be designed as a dedicated OpenSpec track; do not fake them as one-off narration rows.
+- `.opencode-tmp/`, `deploy/data/`, and `test-results/` remain local untracked artifacts and must not be committed.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.92.0
 
 ### Current Version
@@ -24,9 +47,9 @@ developer. Keep latest status at the top.
 - `npx openspec validate --all --strict` — pass（53 items）
 
 ### Known Notes
+- Superseded by v0.92.1, which adds explicit freeform `build` intent instead of collapsing construction thought into generic `work`.
 - Speech bubble is always visible (not proximity-gated unlike the 💬 interact icon) — it's ambient world info.
 - Utterance TTL is `TICKS_PER_HOUR / 4 = 180 ticks = ~15 min real time`; NPCs get new AI decisions every `TICKS_PER_HOUR = 720 ticks = ~60 min`, so the bubble is typically visible for ~1/4 of the decision cycle.
-- CI/CD deploy pending after commit.
 
 ---
 

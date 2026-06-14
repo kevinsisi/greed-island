@@ -990,6 +990,7 @@ function decideNextState(
         targetTile: effectiveTargetTile,
         scheduleTarget,
         personalityOverride,
+        intentOverride,
         currentTick,
         isTraveling: activity === 'move' && travelRoute !== null
       })
@@ -1029,7 +1030,7 @@ function decideNextState(
         )
       }
     }
-    return finish(arrivedTile, slot?.activity ?? 'idle', null, targetTile)
+    return finish(arrivedTile, isBuildIntentReason(intentOverride?.reason) ? 'work' : slot?.activity ?? 'idle', null, targetTile)
   }
 
   let nextTile = before.tile
@@ -1051,9 +1052,13 @@ function decideNextState(
       activity = 'idle'
     }
   } else {
-    activity = slot?.activity ?? 'idle'
+    activity = isBuildIntentReason(intentOverride?.reason) ? 'work' : slot?.activity ?? 'idle'
   }
   return finish(nextTile, activity, travelRoute, targetTile)
+}
+
+function isBuildIntentReason(reason: string | null | undefined): boolean {
+  return typeof reason === 'string' && reason.startsWith('freeform-agent-build:')
 }
 
 function initialAgentState(profile: NpcProfile): NpcAgentState {
@@ -1146,6 +1151,7 @@ function buildNextAgentState(input: {
   targetTile: string
   scheduleTarget: string
   personalityOverride: NpcRuntimeState['personalityOverride']
+  intentOverride: NpcRuntimeState['intentOverride']
   currentTick: number
   isTraveling: boolean
 }): NpcAgentState {
@@ -1166,14 +1172,19 @@ function buildNextAgentState(input: {
   }
   const nudgeReason = input.personalityOverride?.reason ?? null
   const isNudged = input.personalityOverride?.targetTile === input.targetTile && input.targetTile !== input.scheduleTarget
+  const isBuildIntent = isBuildIntentReason(input.intentOverride?.reason)
   const source = input.isTraveling ? 'movement' : isNudged ? 'personality' : 'schedule'
   const reason = input.isTraveling
     ? nudgeReason ?? 'scheduled-travel'
+    : isBuildIntent
+      ? input.intentOverride?.reason ?? 'freeform-agent-build'
     : isNudged
       ? nudgeReason ?? 'personality-nudge'
       : `schedule:${input.activity}`
   const kind: NpcAgentTaskKind = input.isTraveling
     ? 'travel'
+    : isBuildIntent && input.activity === 'work'
+      ? 'build'
     : isNudged
       ? 'personality-nudge'
       : input.activity === 'idle'
@@ -1682,6 +1693,29 @@ function composeProductiveActionNarration(
   const arch = String(profile.personality.archetype ?? '')
   const tileName = TILE_NAME_BY_ID[tile] ?? tile
   const pick = <T>(items: readonly T[]): T => items[hashStr(`${profile.id}|${tile}|${tick}|${weather}`) % items.length]!
+
+  if (isBuildIntentReason(state.intentOverride?.reason)) {
+    return pick([
+      {
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: `${name}照著自己的建造念頭，在${tileName}量出一塊可施工的空地，先把地基線拉直。`
+      },
+      {
+        domain: 'build',
+        metric: 'supply',
+        delta: 2,
+        narration: `${name}把${tileName}散落的木料與石材集中起來，準備讓新的公共設施有材料可用。`
+      },
+      {
+        domain: 'build',
+        metric: 'infrastructure',
+        delta: 2,
+        narration: `${name}在${tileName}修整破損路面，順手標出下一處可以擴建的街角。`
+      }
+    ])
+  }
 
   if (state.activity === 'trade' || arch === 'shopkeeper' || /(交易|商|market|shop|broker|vendor|cafe|tavern|exchange)/i.test(role)) {
     return pick([

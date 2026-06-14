@@ -1936,14 +1936,14 @@ export class SimulationRuntime {
     const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
     const targetTile = typeof resolved.targetTile === 'string' ? resolved.targetTile : null
     if (!targetTile) return
-    const steerableKinds = new Set(['travel', 'work', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
+    const steerableKinds = new Set(['travel', 'work', 'build', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
     if (!steerableKinds.has(kind)) return
     this.npcEngine.setIntentOverride(npcId, {
       targetTile,
       expiresAtTick: (ev.tick ?? this.currentTick) + INTENT_OVERRIDE_DURATION_TICKS,
       intentType: kind === 'rest' ? 'survival' : kind === 'socialize' || kind === 'challenge_combat' ? 'social' : 'economic',
       urgency: 65,
-      reason: `freeform-agent:${typeof resolved.summary === 'string' ? resolved.summary : kind}`,
+      reason: `${kind === 'build' ? 'freeform-agent-build' : 'freeform-agent'}:${typeof resolved.summary === 'string' ? resolved.summary : kind}`,
     })
   }
 
