@@ -314,7 +314,6 @@ function sleep(ms: number): Promise<void> {
 function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
   if (event.eventType === 'WORLD_TICK') return null
-  if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return null
   if (event.eventType === 'NPC_OBSERVED_SKILL') return null
   if (event.eventType === 'NPC_STATE_RECORDED') return null
   if (event.eventType === 'ANIMAL_SPAWNED') return null
@@ -402,6 +401,21 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
     const desiredWeather = typeof p?.desiredWeather === 'string' ? p.desiredWeather : ''
     return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[WEATHER_INTENT_PROPOSED] desiredWeather=${desiredWeather} thought=${thought}` }
   }
+  if (event.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') {
+    const p = (event.payload as { data?: Record<string, unknown>; narration?: unknown } | null)?.data
+    const narration = (event.payload as { narration?: unknown } | null)?.narration
+    const resolved = p?.resolved && typeof p.resolved === 'object' ? p.resolved as Record<string, unknown> : {}
+    const action = typeof resolved.kind === 'string' ? resolved.kind : 'act'
+    const accepted = p?.accepted === true
+    const summary = typeof resolved.summary === 'string' ? sanitizeChronicleNarration(resolved.summary) : null
+    const publicNarration = typeof narration === 'string' ? sanitizeChronicleNarration(narration) : null
+    return {
+      tick: event.tick ?? 0,
+      eventType: event.eventType,
+      actorId: event.actorId,
+      narration: publicNarration ?? `[NPC_FREEFORM_ACTION_PROPOSED] action=${action} accepted=${accepted}${summary ? ` summary=${summary}` : ''}`,
+    }
+  }
   // Phase 6 - Player Civilization: pass through to AI pipeline
   if (event.eventType.startsWith('PLAYER_') && event.eventType !== 'PLAYER_INTERVENE' && event.eventType !== 'PLAYER_ENERGY_SET') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
@@ -477,7 +491,9 @@ function chronicleSentenceZh(event: ChronicleEvent, index: number): string {
     case 'NPC_LIFE_GOAL_SET':
       return `${prefix}某個生活目標被重新計算，壓力開始推動下一步行動。`
     case 'NPC_PRODUCTIVE_ACTION':
-      return `${prefix}有人把職責或生活壓力轉成街區裡可見的進展。`
+      return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '有人把職責或生活壓力轉成街區裡可見的進展。'}`
+    case 'NPC_FREEFORM_ACTION_PROPOSED':
+      return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '有人照著自己的念頭提出下一步行動。'}`
     case 'WEATHER_INTENT_PROPOSED':
       return `${prefix}天氣先有了自己的念頭，才把變化推向世界。`
     case 'WEATHER_CHANGE':
@@ -514,6 +530,8 @@ function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
       return `${prefix}the weather shifted, changing the texture of the streets.`
     case 'WEATHER_INTENT_PROPOSED':
       return `${prefix}the weather itself formed an intention before the sky changed.`
+    case 'NPC_FREEFORM_ACTION_PROPOSED':
+      return `${prefix}someone acted from a self-directed NPC proposal instead of a routine schedule.`
     case 'SEASON_CHANGE':
       return `${prefix}the season crossed a quiet boundary.`
     default:

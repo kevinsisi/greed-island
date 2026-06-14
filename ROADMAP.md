@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.11 ✅ local-ready — 2026-06-14
+
+**主題：Public Chronicle AI Visibility Hotfix（AI 已跑的事件要進公開編年，而不是被 fallback/罐頭洗掉）**
+
+- ✅ **freeform visible** — `NPC_FREEFORM_ACTION_PROPOSED` 即使 AI 沒給 utterance，也會有 public narration，不再被 Timeline 隱藏。
+- ✅ **chronicle-ready context** — chronicle context 納入 AI freeform proposals 與 productive progress，避免有事件仍 fallback 成「沒有足夠鮮明的公共事件」。
+- ✅ **timeline noise reduction** — `NPC_MOVE` / `NPC_ACTIVITY_CHANGE` / routine `NPC_INTERACT` 從「全部」主流降級，避免罐頭互動洗版；NPC filter 仍可查。
+- 🧪 **Verification pending** — targeted server/web tests、build、OpenSpec 已過；CI/CD/live smoke 待跑。
+
+---
+
 ## v0.91.10 ✅ shipped — 2026-06-14
 
 **主題：NPC Freeform Agent Gate Hotfix（沒有危機 intent 也要能 AI 自我思考）**

@@ -405,4 +405,47 @@ describe('chronicle AI rendering', () => {
     expect(context.events[0]!.eventType).toBe('WEATHER_INTENT_PROPOSED')
     expect(context.events[0]!.narration).toContain('天空想替街口')
   })
+
+  it('keeps productive and AI freeform NPC events in chronicle context', () => {
+    const events = [
+      {
+        eventType: 'NPC_PRODUCTIVE_ACTION',
+        actorId: 'npc-worker',
+        tick: 5,
+        payload: {
+          actorType: 'npc',
+          data: { npcId: 'npc-worker', domain: 'service' },
+          narration: '阿駿把碼頭區的人流重新分開。'
+        },
+        eventId: 'productive',
+        sequence: 5,
+        occurredAt: 5
+      },
+      {
+        eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
+        actorId: 'npc-agent',
+        tick: 6,
+        payload: {
+          actorType: 'npc',
+          data: {
+            npcId: 'npc-agent',
+            accepted: true,
+            resolved: { kind: 'work', summary: 'work: 我想整理街區補給' },
+          },
+          narration: '阿駿照著自己的念頭決定找件事做。'
+        },
+        eventId: 'freeform',
+        sequence: 6,
+        occurredAt: 6
+      }
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({ events, memory: makeMemory() })
+
+    expect(context.events.map((event) => event.eventType)).toEqual([
+      'NPC_PRODUCTIVE_ACTION',
+      'NPC_FREEFORM_ACTION_PROPOSED',
+    ])
+    expect(context.events[1]?.narration).toContain('自己的念頭')
+  })
 })

@@ -24,6 +24,7 @@ describe('Timeline event motivation', () => {
 
   it('explains common non-construction public events', () => {
     expect(eventMotivationFor(event('NPC_PRODUCTIVE_ACTION', { domain: 'trade', metric: 'supply' }))?.explanation).toContain('交易')
+    expect(eventMotivationFor(event('NPC_FREEFORM_ACTION_PROPOSED', { accepted: true, resolved: { kind: 'work' } }))?.explanation).toContain('NPC AI agent')
     expect(eventMotivationFor(event('NPC_INTERACT', { mode: 'argue' }))?.explanation).toContain('爭執')
     expect(eventMotivationFor(event('AREA_PRESSURE', { kind: 'resource.low' }))?.explanation).toContain('資源')
     expect(eventMotivationFor(event('CARD_DROP_SPAWN', {}))?.explanation).toContain('紋卡')

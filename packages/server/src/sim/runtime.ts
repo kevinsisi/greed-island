@@ -187,7 +187,7 @@ import type { BuildingDef, BuildingRuntimeView } from '../buildings/types.js'
 import { completedConstructionBuildingDef, completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
 import { findBuildingById, listAllBuildings, listBuildingsForTile } from '../buildings/catalog.js'
 import { AmbientNarrator, type AmbientContext } from './ambientNarrator.js'
-import { NpcAgentRunner } from '../npcs/npcAgentRunner.js'
+import { NpcAgentRunner, narrateFreeformAgentDecision } from '../npcs/npcAgentRunner.js'
 import type { SettingsStore } from '../http/settings.js'
 import {
   LIFE_EXPANSION_FACT_KEY,
@@ -776,8 +776,8 @@ export class SimulationRuntime {
       getBeliefContext: (npcId) => this.getFormattedBeliefContext(npcId),
       getReflectionContext: (npcId) => this.getFormattedReflectionContext(npcId),
       submitDecision: ({ profile, tile, resolution, decidedAtTick }) => {
-        const utterance = resolution.proposal.utterance
         const actionLabel = resolution.resolved.kind
+        const narration = narrateFreeformAgentDecision(profile.name.zh, resolution)
         const command = makeLivingWorldCommand(
           'NPC_FREEFORM_ACTION_PROPOSED',
           profile.id,
@@ -798,7 +798,7 @@ export class SimulationRuntime {
                 : `${profile.name.zh}自由提出行為「${resolution.resolved.summary}」，但被伺服器拒絕：${resolution.rejectionReason}`,
               'NPC AI agent 自由行為提案'
             ),
-            narration: resolution.accepted && utterance ? `${profile.name.zh}喃喃自語：「${utterance}」` : null,
+            narration,
           }
         )
         this.submitLivingWorldCommand(command)

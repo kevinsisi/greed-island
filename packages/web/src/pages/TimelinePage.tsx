@@ -184,6 +184,7 @@ export function eventMotivationFor(event: EventSummary): TimelineEventMotivation
 
 function publicFallbackMotivation(event: EventSummary): TimelineEventMotivation | null {
   if (isConstructionEvent(event.eventType)) return saltMarshConstructionFallback(event)
+  if (event.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') return freeformAgentMotivation(event)
   if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return productiveMotivation(event)
   if (event.eventType === 'NPC_INTERACT') return interactionMotivation(event)
   if (event.eventType === 'NPC_LIFE_GOAL_SET') return lifeGoalMotivation(event)
@@ -231,6 +232,33 @@ function productiveMotivation(event: EventSummary): TimelineEventMotivation {
   if (domain === 'trade') return withPurpose('NPC 透過交易與供應調節物資流向，讓收入、補給與價格壓力保持可控。', metricLabel(metric))
   if (domain === 'learn') return withPurpose('NPC 累積知識或技能，讓未來的工作、建設與解決問題能力提升。', metricLabel(metric))
   return { explanation: 'NPC 的 productive action 代表角色職責或生活目標被轉化成可回放的世界進展。' }
+}
+
+function freeformAgentMotivation(event: EventSummary): TimelineEventMotivation {
+  const accepted = event.payload.accepted === true
+  const resolved = isRecord(event.payload.resolved) ? event.payload.resolved : null
+  const action = typeof resolved?.kind === 'string' ? freeformActionLabel(resolved.kind) : '自由行為'
+  if (accepted) {
+    return { explanation: `這是 NPC AI agent 依照自身需求、人生目標、信念與反思提出的自由行為；server 驗證後接受為「${action}」。` }
+  }
+  const reason = typeof event.payload.rejectionReason === 'string' && isPublicMotivationText(event.payload.rejectionReason)
+    ? `拒絕原因：${event.payload.rejectionReason}`
+    : 'server 規則拒絕了這個提案。'
+  return { explanation: `這是 NPC AI agent 的自由行為提案，但沒有通過世界規則驗證；${reason}` }
+}
+
+function freeformActionLabel(kind: string): string {
+  switch (kind) {
+    case 'travel': return '移動 / 旅行'
+    case 'work': return '工作 / 服務'
+    case 'rest': return '休息 / 恢復'
+    case 'socialize': return '社交 / 拜訪'
+    case 'buy_card': return '追求紋卡'
+    case 'challenge_combat': return '挑戰 / 戰鬥'
+    case 'spread_rumor': return '傳聞 / 放話'
+    case 'custom_social_scene': return '自訂生活場景'
+    default: return kind
+  }
 }
 
 function withPurpose(explanation: string, projectPurpose: string | undefined): TimelineEventMotivation {

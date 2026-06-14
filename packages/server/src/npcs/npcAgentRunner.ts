@@ -205,6 +205,31 @@ export class NpcAgentRunner {
   }
 }
 
+export function narrateFreeformAgentDecision(
+  npcNameZh: string,
+  resolution: FreeformAgentResolution,
+): string {
+  const utterance = resolution.proposal.utterance?.trim()
+  if (resolution.accepted && utterance) return `${npcNameZh}喃喃自語：「${utterance}」`
+  if (resolution.accepted) {
+    return `${npcNameZh}照著自己的念頭決定${freeformActionLabel(resolution.resolved.kind)}。`
+  }
+  return `${npcNameZh}冒出一個念頭，但世界規則沒有讓它成行。`
+}
+
+function freeformActionLabel(kind: FreeformAgentResolution['resolved']['kind']): string {
+  switch (kind) {
+    case 'travel': return '換個地方走走'
+    case 'work': return '找件事做'
+    case 'rest': return '先讓自己休息'
+    case 'socialize': return '找人說話'
+    case 'buy_card': return '追一張想要的紋卡'
+    case 'challenge_combat': return '準備挑戰或威嚇對手'
+    case 'spread_rumor': return '把消息放出去'
+    case 'custom_social_scene': return '處理一段日常關係'
+  }
+}
+
 function hashId(id: string): number {
   let hash = 5381
   for (let i = 0; i < id.length; i += 1) {

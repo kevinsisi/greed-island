@@ -5,6 +5,25 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.11
+
+### Current Version
+`0.91.11` — Public Chronicle AI Visibility Hotfix：修正 v0.91.10 雖然 NPC freeform AI 已進 EventLog，但公開 Timeline/編年摘要仍被 fallback 與 deterministic `NPC_INTERACT`/move/activity canned events 佔據的問題。
+
+### What Shipped
+- **Freeform proposals are visible**：accepted/rejected `NPC_FREEFORM_ACTION_PROPOSED` 都會產生 public narration；即使 AI 沒給 utterance，也不會因 `narration=null` 被前端隱藏。
+- **Chronicle context includes AI/freeform and productive progress**：server chronicle 不再把 `NPC_PRODUCTIVE_ACTION` 全部排除，並會把 `NPC_FREEFORM_ACTION_PROPOSED` 納入 chronicle-ready events，避免有實際事件時仍顯示「沒有足夠鮮明的公共事件」。
+- **Main Timeline noise reduction**：`NPC_MOVE`、`NPC_ACTIVITY_CHANGE`、`NPC_INTERACT` 從「全部」主編年流降級；仍可在 NPC filter 看到，但不再壓過 AI freeform 與 productive progress。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- chronicleRenderer.test.ts npcAgentRunner.test.ts` — pass（18 tests / 2 files）
+- `npm run test -w @greed-island/web -- TimelinePage.test.ts eventVisibility.test.ts` — pass（14 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live smoke confirming chronicle no longer reports `No chronicle-ready events to render` when freeform/productive events exist, and main Timeline no longer starts with routine `NPC_INTERACT` spam.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.10
 
 ### Current Version

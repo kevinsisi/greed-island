@@ -24,6 +24,20 @@ describe('isPublicNarrativeEvent', () => {
     expect(isPublicNarrativeEvent(event({ eventType: 'NPC_INTERACT' }))).toBe(true)
   })
 
+  it('keeps routine NPC interactions public but off the main chronicle feed', () => {
+    const interact = event({ eventType: 'NPC_INTERACT', narration: '兩人在街邊閒聊。' })
+
+    expect(isPublicNarrativeEvent(interact)).toBe(true)
+    expect(isChronicleSurfaceEvent(interact)).toBe(false)
+  })
+
+  it('keeps AI freeform NPC proposals on chronicle surfaces', () => {
+    const proposal = event({ eventType: 'NPC_FREEFORM_ACTION_PROPOSED', narration: '阿駿照著自己的念頭決定找件事做。' })
+
+    expect(isPublicNarrativeEvent(proposal)).toBe(true)
+    expect(isChronicleSurfaceEvent(proposal)).toBe(true)
+  })
+
   it('keeps narrated NPC work visible on chronicle surfaces', () => {
     const productive = event({ eventType: 'NPC_PRODUCTIVE_ACTION', narration: '某人補了一箱貨。' })
 
