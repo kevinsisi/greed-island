@@ -1406,7 +1406,7 @@ describe('grounded chronicle renderer', () => {
     })
   })
 
-  it('keeps routine productive actions out of chronicle context', () => {
+  it('keeps productive actions in chronicle context as public progress', () => {
     const { eventStore, memory, ruleEngine } = makeHarness()
     submit(
       makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 1, 1, {
@@ -1424,7 +1424,9 @@ describe('grounded chronicle renderer', () => {
 
     const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
 
-    expect(context.events).toHaveLength(0)
+    expect(context.events).toHaveLength(1)
+    expect(context.events[0]?.eventType).toBe('NPC_PRODUCTIVE_ACTION')
+    expect(context.events[0]?.narration).toContain('補給')
   })
 
   it('renders deterministic fallback without AI keys', async () => {
