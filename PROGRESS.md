@@ -5,10 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.12
+
+### Current Version
+`0.91.12` — Live Chronicle Feed Hotfix：v0.91.11 CI/CD passed, but live smoke showed `/api/world/chronicle` still read the SQLite recent slice while `/api/events` and the current simulation used the runtime recent feed, so chronicle context stayed empty even with fresh `NPC_PRODUCTIVE_ACTION` rows visible on the public feed.
+
+### What Shipped
+- **Chronicle now uses the live public feed**：`/api/world/chronicle` builds context from `runtime.getRecentEvents(limit)` in chronological order, matching the public Timeline source and allowing freshly generated productive / freeform NPC events to enter the chronicle immediately after deploy/restart.
+- **Chronicle source type narrowed**：`buildChronicleContext` now accepts the smaller server-event shape it actually reads (`tick`, `eventType`, `actorId`, `payload`), so both persisted EventLog rows and runtime recent events can feed the grounded renderer without fake persistence metadata.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.91.12` for live health evidence.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- chronicleRenderer.test.ts livingWorld.test.ts` — pass（77 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- CI `27493148612` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27493186150` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.91.12`；`/api/world/chronicle?limit=40&ai=0` returned non-empty `context.events` with recent `NPC_PRODUCTIVE_ACTION` rows and Traditional Chinese fallback text instead of empty-context fallback；`/api/world/chronicle?limit=40&ai=1` returned `source="ai"` with Traditional Chinese summary citing live NPC actions；after a short wait, `/api/world.facts.npcAgent` reported `enabled=true`, `configured=true`, `providerSuccessCount=1`, `submitCount=1`, `errorCount=0`, latest success via `opencode` for `central.busker.huang_yu_cheng`.
+
+### Known Notes
+- Raw `/api/world/chronicle` deterministic fallback still includes some lower-level public events such as movement/resource harvest when they are in the requested recent window; the critical empty-context fallback is resolved. Further editorial ranking can be a separate presentation pass.
+- `.opencode-tmp/`, `deploy/data/`, and `test-results/` remain local untracked artifacts and were intentionally not committed.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.11
 
 ### Current Version
-`0.91.11` — Public Chronicle AI Visibility Hotfix：修正 v0.91.10 雖然 NPC freeform AI 已進 EventLog，但公開 Timeline/編年摘要仍被 fallback 與 deterministic `NPC_INTERACT`/move/activity canned events 佔據的問題。
+`0.91.11` — Public Chronicle AI Visibility Hotfix：修正 v0.91.10 雖然 NPC freeform AI 已進 EventLog，但公開 Timeline/編年摘要仍被 fallback 與 deterministic `NPC_INTERACT`/move/activity canned events 佔據的問題。此版 CI/CD passed，但 live smoke 發現 chronicle route 仍讀 persisted recent slice；v0.91.12 已補上 live-feed route fix。
 
 ### What Shipped
 - **Freeform proposals are visible**：accepted/rejected `NPC_FREEFORM_ACTION_PROPOSED` 都會產生 public narration；即使 AI 沒給 utterance，也不會因 `narration=null` 被前端隱藏。
@@ -20,7 +44,8 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/web -- TimelinePage.test.ts eventVisibility.test.ts` — pass（14 tests / 2 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（53 items）
-- Pending after release: CI/CD and live smoke confirming chronicle no longer reports `No chronicle-ready events to render` when freeform/productive events exist, and main Timeline no longer starts with routine `NPC_INTERACT` spam.
+- CI `27492960638` — pass after follow-up test expectation fix；Deploy Dev `27492998035` — pass。
+- Live smoke found remaining route bug：`/api/world/chronicle?limit=40&ai=1` still returned empty-context fallback while `/api/events?limit=100` showed recent productive rows；fixed by v0.91.12.
 
 ---
 

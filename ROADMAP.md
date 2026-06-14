@@ -5,14 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.91.11 ✅ local-ready — 2026-06-14
+## v0.91.12 ✅ shipped — 2026-06-14
+
+**主題：Live Chronicle Feed Hotfix（編年史要讀 live public feed，不再空 context fallback）**
+
+- ✅ **live feed context** — `/api/world/chronicle` 改用 `runtime.getRecentEvents(limit)` 並轉回 chronological order，與 public Timeline 同源，讓 fresh productive / freeform NPC events 立即進入編年 context。
+- ✅ **source shape cleanup** — `buildChronicleContext` 接受 renderer 實際需要的 server-event shape，不再要求 EventLog persistence metadata，仍保持 AI 只能 render grounded events。
+- ✅ **Verification** — targeted chronicle/living-world tests、build、OpenSpec、CI `27493148612`、Deploy Dev `27493186150`、live smoke 全過；live `0.91.12` chronicle context 非空且 AI summary 以繁中引用 NPC productive actions，NPC agent diagnostics 也顯示 `opencode` success + submitted proposal。
+
+---
+
+## v0.91.11 ✅ shipped, superseded — 2026-06-14
 
 **主題：Public Chronicle AI Visibility Hotfix（AI 已跑的事件要進公開編年，而不是被 fallback/罐頭洗掉）**
 
 - ✅ **freeform visible** — `NPC_FREEFORM_ACTION_PROPOSED` 即使 AI 沒給 utterance，也會有 public narration，不再被 Timeline 隱藏。
 - ✅ **chronicle-ready context** — chronicle context 納入 AI freeform proposals 與 productive progress，避免有事件仍 fallback 成「沒有足夠鮮明的公共事件」。
 - ✅ **timeline noise reduction** — `NPC_MOVE` / `NPC_ACTIVITY_CHANGE` / routine `NPC_INTERACT` 從「全部」主流降級，避免罐頭互動洗版；NPC filter 仍可查。
-- 🧪 **Verification pending** — targeted server/web tests、build、OpenSpec 已過；CI/CD/live smoke 待跑。
+- ✅ **Verification** — targeted server/web tests、build、OpenSpec、CI、Deploy Dev 已過；live smoke 發現 route 仍讀 persisted recent slice 導致 chronicle empty-context fallback，已由 v0.91.12 修正。
 
 ---
 
