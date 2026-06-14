@@ -6040,13 +6040,12 @@ export class SimulationRuntime {
       tick
     })
     const primary = strongestNeed(life.needs)
-    const tileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
     const purpose = metricPurpose(metric)
     const domainText = productiveDomainText(domain)
     const agenda = this.worldAgendaFor(fallbackTile, tick)
     return makeMotivation(
-      `${agenda.sponsorZh}對${agenda.scopeNameZh}的上位指令是「${agenda.directiveZh}」；原因是：${agenda.rationaleZh}${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分${roleInterpretationZh(`${fallbackProfile.role.zh} ${fallbackProfile.role.en}`, agenda)}，個人最高壓力是${needLabel(primary.key)} ${primary.value}，因此這次${domainText}不是隨機善行，而是對制度壓力的角色回應。`,
-      `${purpose}；上位指令 ${agenda.id}`
+      `${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分回應${agenda.scopeNameZh}的「${agenda.directiveZh}」壓力；目前最高需求是${needLabel(primary.key)} ${primary.value}，所以這次${domainText}被記成公共進展。`,
+      purpose
     )
   }
 

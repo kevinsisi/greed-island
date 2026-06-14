@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.5
+
+### Current Version
+`0.91.5` — Timeline Motivation Quality Hotfix：修正公開編年史/事件列表把 internal agenda id、過長制度推理與 debug motivation 直接顯示給玩家的問題。
+
+### What Shipped
+- **Public motivation sanitizer**：Timeline 先使用事件型別對應的短版公開動機；對未知事件只接受短且不含 internal id 的 authoritative motivation。
+- **Legacy event cleanup in UI**：既有 `NPC_PRODUCTIVE_ACTION` 即使 payload 裡已有 `agenda.t_...` / `cap_zero` 等 debug 文字，也會顯示短版「巡查/服務/交易/建設」動機。
+- **Server-side source cleanup**：新產生的 `NPC_PRODUCTIVE_ACTION` motivation 不再把 `agenda.id` 寫進 public project purpose，並縮短 explanation。
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- TimelinePage.test.ts` — pass（5 tests / 1 file）
+- `npm run test -w @greed-island/server -- runtimeExpansion.test.ts` — pass（1 test / 1 file）
+- `npx openspec validate --all --strict` — pass（53 items）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- Pending after release: CI/CD and live log-quality smoke.
+
+### Known Deferred
+- Live deploy/smoke pending for this hotfix.
+- `package-lock.json` root version remains at the existing stale `0.86.0` baseline; this hotfix did not modify lockfile to avoid unrelated historical churn.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.4
 
 ### Current Version

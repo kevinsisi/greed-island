@@ -169,13 +169,20 @@ type TimelineEventMotivation = Readonly<{
 }>
 
 export function eventMotivationFor(event: EventSummary): TimelineEventMotivation | null {
+  const publicFallback = publicFallbackMotivation(event)
+  if (publicFallback) return publicFallback
+
   const motivation = event.payload.motivation
-  if (isRecord(motivation) && typeof motivation.explanation === 'string') {
-    return {
-      explanation: motivation.explanation,
-      ...(typeof motivation.projectPurpose === 'string' ? { projectPurpose: motivation.projectPurpose } : {})
-    }
+  if (isRecord(motivation) && typeof motivation.explanation === 'string' && isPublicMotivationText(motivation.explanation)) {
+    const projectPurpose = typeof motivation.projectPurpose === 'string' && isPublicMotivationText(motivation.projectPurpose)
+      ? motivation.projectPurpose
+      : undefined
+    return projectPurpose ? { explanation: motivation.explanation, projectPurpose } : { explanation: motivation.explanation }
   }
+  return null
+}
+
+function publicFallbackMotivation(event: EventSummary): TimelineEventMotivation | null {
   if (isConstructionEvent(event.eventType)) return saltMarshConstructionFallback(event)
   if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return productiveMotivation(event)
   if (event.eventType === 'NPC_INTERACT') return interactionMotivation(event)
@@ -199,6 +206,11 @@ export function eventMotivationFor(event: EventSummary): TimelineEventMotivation
   if (event.eventType === 'PLAYER_INTERVENE') return { explanation: '玩家主動介入 NPC 關係或衝突，因此事件由玩家意圖與規則引擎共同定稿。' }
   if (event.eventType.startsWith('CARD_')) return { explanation: '紋卡事件由地區、天氣、稀有窗口、玩家動作或持有期限觸發，代表資源機會在世界中流動。' }
   return null
+}
+
+function isPublicMotivationText(value: string): boolean {
+  if (value.length > 220) return false
+  return !/(?:agenda\.|\bt_[a-z0-9_]+\b|cap_zero|event\.[a-z0-9_.-]+)/i.test(value)
 }
 
 function saltMarshConstructionFallback(event: EventSummary): TimelineEventMotivation | null {

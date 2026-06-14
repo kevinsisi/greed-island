@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.5 ✅ local-ready — 2026-06-14
+
+**主題：Timeline Motivation Quality Hotfix（公開日誌不再噴 internal agenda/debug 文字）**
+
+- ✅ **短版公開動機優先** — Timeline 對 `NPC_PRODUCTIVE_ACTION`、NPC 互動、life goal、區域壓力、世界/卡牌事件先使用事件型別對應的短版解釋，不再直接展示高熵 payload motivation。
+- ✅ **unsafe motivation filter** — 未知事件只接受短且不含 `agenda.t_...`、tile id、`cap_zero`、internal event id 的 motivation；不合格就不顯示。
+- ✅ **server source cleanup** — 新的 productive action motivation 不再把 internal `agenda.id` 寫入 public project purpose，並縮短 explanation。
+- ✅ **Verification** — Timeline regression + runtime productive action targeted tests pass；release 前仍需 build/OpenSpec/full live smoke。
+
+---
+
 ## v0.91.4 ✅ local-ready — 2026-06-14
 
 **主題：Traditional Chinese Chronicle Hotfix + Weather Agent（編年史不再漏簡體；天氣有自己的 deterministic agent 意志）**

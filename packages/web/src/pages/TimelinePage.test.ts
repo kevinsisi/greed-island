@@ -28,6 +28,30 @@ describe('Timeline event motivation', () => {
     expect(eventMotivationFor(event('AREA_PRESSURE', { kind: 'resource.low' }))?.explanation).toContain('資源')
     expect(eventMotivationFor(event('CARD_DROP_SPAWN', {}))?.explanation).toContain('紋卡')
   })
+
+  it('does not expose internal agenda payload motivation for productive actions', () => {
+    const motivation = eventMotivationFor(event('NPC_PRODUCTIVE_ACTION', {
+      domain: 'service',
+      metric: 'safety',
+      motivation: {
+        explanation: '島嶼主宰的暗流對潮見丘的上位指令是「利用存世上限歸零的舊卡被釋出市場」；個人最高壓力是住房 66，因此這次公共服務不是隨機善行，而是對制度壓力的角色回應。',
+        projectPurpose: '安全 / 秩序；上位指令 agenda.t_dock.event.we_card.release.cap_zero_92484.3089'
+      }
+    }))
+
+    expect(motivation?.explanation).toBe('NPC 用巡查、照護或公共服務維持街區秩序，避免區域壓力失控。')
+    expect(motivation?.projectPurpose).toBe('安全 / 秩序')
+  })
+
+  it('drops unsafe authoritative motivation text instead of showing debug ids', () => {
+    const motivation = eventMotivationFor(event('UNKNOWN_PUBLIC_EVENT', {
+      motivation: {
+        explanation: '上位指令 agenda.t_dock.event.we_card.release.cap_zero_92484.3089'
+      }
+    }))
+
+    expect(motivation).toBeNull()
+  })
 })
 
 function event(eventType: string, payload: Record<string, unknown>): EventSummary {
