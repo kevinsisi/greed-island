@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.7 ✅ local-ready — 2026-06-14
+
+**主題：Public Log Source Quality Hotfix（productive motivation 與 chronicle context 不再帶內部/冗長系統文字）**
+
+- ✅ **productive source cleanup** — 新 productive action motivation 不再引用 world-event directive 長句，只保留地區公共壓力、NPC 身分、主要需求與 domain。
+- ✅ **chronicle context hygiene** — `NPC_OBSERVED_SKILL` 從 chronicle context 排除，避免 AI 摘要 `system.skill.*`。
+- 🧪 **Verification pending** — release 前跑 targeted tests、build、OpenSpec、CI/CD/live smoke。
+
+---
+
 ## v0.91.6 ✅ local-ready — 2026-06-14
 
 **主題：Chronicle Fallback Language Hotfix（空編年摘要不再在中文欄顯示英文）**

@@ -6040,11 +6040,11 @@ export class SimulationRuntime {
       tick
     })
     const primary = strongestNeed(life.needs)
+    const tileName = TILE_NAME_BY_ID[fallbackTile] ?? fallbackTile
     const purpose = metricPurpose(metric)
     const domainText = productiveDomainText(domain)
-    const agenda = this.worldAgendaFor(fallbackTile, tick)
     return makeMotivation(
-      `${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分回應${agenda.scopeNameZh}的「${agenda.directiveZh}」壓力；目前最高需求是${needLabel(primary.key)} ${primary.value}，所以這次${domainText}被記成公共進展。`,
+      `${fallbackProfile.name.zh}以${fallbackProfile.role.zh}身分回應${tileName}的公共壓力；目前最高需求是${needLabel(primary.key)} ${primary.value}，所以這次${domainText}被記成公共進展。`,
       purpose
     )
   }

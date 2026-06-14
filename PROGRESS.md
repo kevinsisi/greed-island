@@ -5,6 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.7
+
+### Current Version
+`0.91.7` — Public Log Source Quality Hotfix：修正 v0.91.6 live smoke 發現的新 productive action source motivation 仍會引用 world-event directive 長句，以及 chronicle AI 會把 `NPC_OBSERVED_SKILL` / `system.skill.*` 寫進摘要的問題。
+
+### What Shipped
+- **Productive motivation source cleanup**：新 `NPC_PRODUCTIVE_ACTION` motivation 不再引用 world agenda directive 文字，只用地區公共壓力、NPC 身分、主要需求與 domain 說明。
+- **Chronicle context hygiene**：`NPC_OBSERVED_SKILL` 從 chronicle context 排除，避免 AI 摘要出 `system.skill.fishing` 這類內部技能觀察。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- livingWorld.test.ts chronicleRenderer.test.ts runtimeExpansion.test.ts` — pass（77 tests / 3 files）
+- `npm run test -w @greed-island/web -- TimelinePage.test.ts` — pass（5 tests / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live smoke.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.6
 
 ### Current Version

@@ -315,6 +315,7 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
   if (event.eventType === 'WORLD_TICK') return null
   if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return null
+  if (event.eventType === 'NPC_OBSERVED_SKILL') return null
   if (event.eventType === 'NPC_STATE_RECORDED') return null
   if (event.eventType === 'ANIMAL_SPAWNED') return null
   if (event.eventType === 'ANIMAL_HUNT_STARTED') return null
