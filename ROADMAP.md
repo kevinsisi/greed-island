@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.6 ✅ local-ready — 2026-06-14
+
+**主題：Chronicle Fallback Language Hotfix（空編年摘要不再在中文欄顯示英文）**
+
+- ✅ **繁中 fallback** — `/api/world/chronicle?ai=1` 沒有 chronicle-ready events 時，`textZh` 回繁體中文 fallback，而不是 English fallback。
+- ✅ **fallback 句子清理** — 非 AI 中文 fallback 事件句使用繁中模板，並過濾 internal/debug id。
+- 🧪 **Verification pending** — release 前跑 chronicle targeted test、build、OpenSpec、CI/CD/live smoke。
+
+---
+
 ## v0.91.5 ✅ local-ready — 2026-06-14
 
 **主題：Timeline Motivation Quality Hotfix（公開日誌不再噴 internal agenda/debug 文字）**

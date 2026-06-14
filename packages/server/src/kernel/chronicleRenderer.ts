@@ -433,10 +433,11 @@ function renderFallbackChronicle(
     .filter((event) => event.eventType !== 'WORLD_TICK')
     .filter((event) => event.narration !== null || event.eventType !== 'NPC_ACTIVITY_CHANGE')
     .slice(-8)
+  const textZh = renderFallbackParagraphZh(storyEvents)
   const textEn = renderFallbackParagraphEn(storyEvents)
   return {
     source: 'fallback',
-    textZh: textEn,
+    textZh,
     textEn,
     citedNames: context.allowedNames,
     aiError,
@@ -445,11 +446,50 @@ function renderFallbackChronicle(
   }
 }
 
+function renderFallbackParagraphZh(events: readonly ChronicleEvent[]): string {
+  if (events.length === 0) {
+    return '沒有足夠鮮明的公共事件能寫入編年史，但城市仍在自行運轉。'
+  }
+  return dedupeSentences(events.map((event, index) => chronicleSentenceZh(event, index))).slice(-5).join('')
+}
+
 function renderFallbackParagraphEn(events: readonly ChronicleEvent[]): string {
   if (events.length === 0) {
     return 'No public event was sharp enough to enter the chronicle, though the city kept moving on its own.'
   }
   return dedupeSentences(events.map((event, index) => chronicleSentenceEn(event, index))).slice(-5).join('')
+}
+
+function chronicleSentenceZh(event: ChronicleEvent, index: number): string {
+  const prefix = index === 0 ? '' : index % 3 === 1 ? '接著，' : index % 3 === 2 ? '稍後，' : '同時，'
+  switch (event.eventType) {
+    case 'NPC_INTERACT':
+      return `${prefix}兩個人的交會留下了能被城市記住的痕跡。`
+    case 'NPC_MOVE':
+      return `${prefix}有人改變了穿過城市的路線，讓當天的流向跟著變化。`
+    case 'BUILDING_ENTER':
+      return `${prefix}一道門把某人帶離街面的視線。`
+    case 'BUILDING_LEAVE':
+      return `${prefix}有人從室內任務回到街區流動。`
+    case 'NPC_ACTIVITY_CHANGE':
+      return `${prefix}一段日程轉向，讓角色的眼前任務換了形狀。`
+    case 'NPC_LIFE_GOAL_SET':
+      return `${prefix}某個生活目標被重新計算，壓力開始推動下一步行動。`
+    case 'NPC_PRODUCTIVE_ACTION':
+      return `${prefix}有人把職責或生活壓力轉成街區裡可見的進展。`
+    case 'WEATHER_INTENT_PROPOSED':
+      return `${prefix}天氣先有了自己的念頭，才把變化推向世界。`
+    case 'WEATHER_CHANGE':
+      return `${prefix}天氣改變了城市的節奏。`
+    case 'SEASON_CHANGE':
+      return `${prefix}季節把世界推進到下一個長週期。`
+    case 'WORLD_EVENT_SPAWN':
+      return `${prefix}一股外部壓力浮上城市表面。`
+    case 'WORLD_EVENT_END':
+      return `${prefix}先前的外部壓力暫時退場。`
+    default:
+      return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '世界留下了一筆可回放的公共紀錄。'}`
+  }
 }
 
 function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
@@ -478,6 +518,12 @@ function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
     default:
       return `${prefix}one more event settled into the city's record.`
   }
+}
+
+function sanitizeChronicleNarration(narration: string | null): string | null {
+  if (!narration) return null
+  if (/(?:agenda\.|\bt_[a-z0-9_]+\b|cap_zero|event\.[a-z0-9_.-]+)/i.test(narration)) return null
+  return normalizeTraditionalChinese(narration.trim())
 }
 
 function dedupeSentences(sentences: readonly string[]): string[] {

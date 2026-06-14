@@ -5,6 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.6
+
+### Current Version
+`0.91.6` — Chronicle Fallback Language Hotfix：修正 live `/api/world/chronicle?ai=1` 在沒有 chronicle-ready events 時，把英文 fallback 塞進 `textZh` 的品質問題。
+
+### What Shipped
+- **Traditional Chinese fallback chronicle**：fallback renderer 產生獨立 `textZh`，空事件時回「沒有足夠鮮明的公共事件能寫入編年史，但城市仍在自行運轉。」而不是英文句子。
+- **Fallback event sentences**：fallback chronicle 的非 AI 中文句子走繁中模板，並避免把 `agenda.*`、tile id、`cap_zero`、internal event id 之類 debug 字串帶入中文 fallback。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- chronicleRenderer.test.ts` — pass（16 tests / 1 file）
+- `npm run test -w @greed-island/web -- TimelinePage.test.ts` — pass（5 tests / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live chronicle smoke.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.5
 
 ### Current Version

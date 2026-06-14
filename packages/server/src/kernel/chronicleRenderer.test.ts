@@ -109,6 +109,18 @@ describe('chronicle AI rendering', () => {
     }))
   })
 
+  it('uses Traditional Chinese fallback text when no public events are chronicle-ready', async () => {
+    const rendered = await renderChronicle({
+      context: { sinceTick: 0, untilTick: 0, allowedNames: [], events: [], memories: [] },
+      settings: makeSettings(0),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('fallback')
+    expect(rendered.textZh).toBe('沒有足夠鮮明的公共事件能寫入編年史，但城市仍在自行運轉。')
+    expect(rendered.textZh).not.toContain('No public event')
+  })
+
   it('retries transient chronicle AI failures with observable metadata', async () => {
     mockedGenerate
       .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))
@@ -296,7 +308,8 @@ describe('chronicle AI rendering', () => {
     })
 
     expect(rendered.source).toBe('fallback')
-    expect(rendered.textZh).toContain('two lives crossed closely enough to leave a public trace')
+    expect(rendered.textZh).toContain('兩個人的交會留下了能被城市記住的痕跡')
+    expect(rendered.textEn).toContain('two lives crossed closely enough to leave a public trace')
     expect(rendered.textZh).not.toContain('第 2 tick')
     expect(rendered.textZh).not.toContain('\n')
   })
