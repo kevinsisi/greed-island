@@ -5,13 +5,13 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.91.10 ✅ local-ready — 2026-06-14
+## v0.91.10 ✅ shipped — 2026-06-14
 
 **主題：NPC Freeform Agent Gate Hotfix（沒有危機 intent 也要能 AI 自我思考）**
 
 - ✅ **remove stale gate** — freeform NPC agent 不再因 deterministic intent entries 為空就跳過 AI；日常 needs / life goal / beliefs / reflections 足以讓 NPC 自由提出生活行為。
 - ✅ **diagnostic clarity** — `emptyIntentEntriesCount` 只當觀測值，不再代表 skip；live 應該開始看到 `providerSuccessCount` / `submitCount` 增加。
-- 🧪 **Verification pending** — targeted runner regression、build、OpenSpec、CI/CD/live smoke。
+- ✅ **Verification** — targeted runner regression、build、OpenSpec、CI、Deploy Dev、live smoke 全過；live `facts.npcAgent` 已顯示 `opencode` provider success + submitted freeform proposal，recent events 也出現 `NPC_FREEFORM_ACTION_PROPOSED`。
 
 ---
 

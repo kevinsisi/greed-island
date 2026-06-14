@@ -19,7 +19,10 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server -- npcAgentRunner.test.ts runtimeIntentResolution.test.ts` — pass（4 tests / 2 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（53 items）
-- Pending after release: CI/CD and live smoke; expected live `facts.npcAgent.providerSuccessCount` / `submitCount` should increase after due NPCs run.
+- CI `27492383605` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27492422554` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` `version=0.91.10` tick `93990`；after waiting for due NPCs, `/api/world.facts.npcAgent` reported `enabled=true`, `configured=true`, `dueCount=1`, `emptyIntentEntriesCount=1`, `providerSuccessCount=1`, `submitCount=1`, `errorCount=0`, latest success `central.paperboy.a_jun` via `opencode` with accepted action `work`.
+- Recent `/api/events?limit=100` included `NPC_FREEFORM_ACTION_PROPOSED` with `accepted=true` and action `rest`, confirming AI freeform proposals are now committed into EventLog after the stale gate was removed.
 
 ---
 
