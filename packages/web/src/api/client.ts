@@ -168,6 +168,9 @@ export type ServerNpc = {
   // deceased NPCs out, so this field is typically false or absent there. UI
   // treats `undefined` as `false` for back-compat with pre-0.87.3 servers.
   deceased?: boolean
+  // v0.92.0+：most recent accepted AI freeform utterance within the visibility window;
+  // null / absent when expired or no utterance yet.
+  recentUtterance?: { text: string; tick: number } | null
 }
 
 export type ServerCardCategory =

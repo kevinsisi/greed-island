@@ -264,6 +264,9 @@ export const LIFE_GOAL_CADENCE_TICKS = 30
 export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_HOUR
 // AI 自述 utterance 上限長度（防 prompt 失控輸出灌爆 ticker）。
 export const NPC_AGENT_UTTERANCE_MAX_CHARS = 60
+// 最近一次 utterance 在 Area scene 聊天泡泡裡保持可見的 tick 數
+// （= TICKS_PER_HOUR / 4 ≈ 3 分鐘牆鐘）。超過後 API 回傳 null 讓前端隱藏。
+export const NPC_AGENT_UTTERANCE_VISIBLE_TICKS = Math.round(TICKS_PER_HOUR / 4)
 
 // Matured-child inheritance (v0.88.0)
 // 成年的孩子以父母 civic 紀錄的平均值乘上比例做為起步 seed（不是轉移，

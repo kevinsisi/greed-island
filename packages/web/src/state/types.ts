@@ -90,6 +90,8 @@ export interface NpcSummary {
    * a true value as an SSE/poll race and refuses to open a dialog (defense in depth).
    */
   deceased: boolean
+  /** v0.92.0+：most recent accepted AI freeform utterance within the visibility window. */
+  recentUtterance?: { text: string; tick: number } | null
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'

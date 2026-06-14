@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.92.0 ✅ local-ready — 2026-06-14
+
+**主題：NPC AI Speech Bubbles（NPC AI 自言自語氣泡）**
+
+- ✅ **server utterance tracking** — `SimulationRuntime.npcUtteranceMap` 在每次 accepted freeform AI proposal 帶 utterance 時更新，`NPC_AGENT_UTTERANCE_VISIBLE_TICKS = TICKS_PER_HOUR / 4` 後自動過期（API 回傳 null）。
+- ✅ **SimNpcState / ServerNpc / NpcSummary 帶 `recentUtterance`** — 全鏈路從 server 到 toNpcSummary mapping 都通。
+- ✅ **AreaScene speechBubble** — NPC sprite 多一個 Text 物件（depth 75）；有 utterance 時顯示 `「utterance」`（深色半透明背景 9px 字體，wordWrap 120px）；隨 NPC 移動 tween 跟進；`disposeNpcSprite` 清理。
+- ✅ **Verification** — server 1221 tests + web 118 tests + build + OpenSpec 53 items 全過。
+
+---
+
 ## v0.91.13 ✅ shipped — 2026-06-14
 
 **主題：Chronicle Routine-Noise Hotfix（編年史不再把 routine tick log 串成假故事）**

@@ -387,7 +387,12 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
       : {}),
     ...(npc.life && npc.life.goal && npc.life.needs
       ? { life: npc.life }
-      : {})
+      : {}),
+    ...(npc.recentUtterance && typeof npc.recentUtterance.text === 'string'
+      ? { recentUtterance: npc.recentUtterance }
+      : npc.recentUtterance === null
+        ? { recentUtterance: null }
+        : {}),
   }
   return summary
 }

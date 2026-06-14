@@ -1,6 +1,6 @@
 {
   "name": "@greed-island/web",
-  "version": "0.91.13",
+  "version": "0.92.0",
   "private": true,
   "type": "module",
   "scripts": {

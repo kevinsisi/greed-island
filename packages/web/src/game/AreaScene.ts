@@ -104,6 +104,8 @@ export interface AreaMapNpc {
   health?: number
   /** Short deterministic task text from the server projection. */
   intentLine?: string
+  /** Most recent accepted AI freeform utterance from the NPC agent, if still visible. */
+  recentUtterance?: string | null
 }
 
 export interface AreaMapPlayer {
@@ -1719,6 +1721,14 @@ export class AreaScene extends Phaser.Scene {
           const injured = typeof npc.health === 'number' && npc.health < 30
           healthIcon.setVisible(injured)
         }
+        // speech bubble — update text when utterance changes
+        const speechBubble = existing.getData('speechBubble') as Phaser.GameObjects.Text | undefined
+        if (speechBubble) {
+          const utteranceText = npc.recentUtterance ?? null
+          const newText = utteranceText ? `「${utteranceText}」` : ''
+          if (speechBubble.text !== newText) speechBubble.setText(newText)
+          speechBubble.setVisible(!!utteranceText)
+        }
         // sprite 顏色（faction 變更也跟著換）
         const currentColor = existing.getData('npcColor') as number | undefined
         if (currentColor !== npc.color) {
@@ -1867,6 +1877,27 @@ export class AreaScene extends Phaser.Scene {
         this.callbacks.onNpcInteract(npc.id)
       })
 
+      // AI freeform utterance speech bubble — shows when NPC has a recent utterance
+      const utteranceText = npc.recentUtterance ?? null
+      const speechBubble = this.add.text(
+        target.x,
+        target.y - NPC_SPRITE_SIZE * 2.6,
+        utteranceText ? `「${utteranceText}」` : '',
+        {
+          fontSize: '9px',
+          fontFamily: '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif',
+          color: '#f0e8d8',
+          backgroundColor: '#1a1230cc',
+          padding: { left: 5, right: 5, top: 3, bottom: 3 },
+          wordWrap: { width: 120, useAdvancedWrap: true },
+          align: 'center',
+        }
+      )
+      speechBubble.setOrigin(0.5, 1)
+      speechBubble.setDepth(75)
+      speechBubble.setVisible(!!utteranceText)
+      sprite.setData('speechBubble', speechBubble)
+
       this.attachNpcIdleAnimation(sprite, npc.id)
       this.applyOpenWaterHint(sprite, npc)
       this.npcSprites.set(npc.id, sprite)
@@ -1915,6 +1946,7 @@ export class AreaScene extends Phaser.Scene {
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    const speechBubble = sprite.getData('speechBubble') as Phaser.GameObjects.Text | undefined
     const boatOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
     const startX = sprite.x
     const startY = sprite.y
@@ -1930,6 +1962,7 @@ export class AreaScene extends Phaser.Scene {
       if (healthIcon)
         healthIcon.setPosition(x - NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
       if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
+      if (speechBubble) speechBubble.setPosition(x, y - NPC_SPRITE_SIZE * 2.6)
       if (boatOverlay) boatOverlay.setPosition(x, y - NPC_SPRITE_SIZE * 1.35)
       return
     }
@@ -1948,6 +1981,7 @@ export class AreaScene extends Phaser.Scene {
         if (healthIcon)
           healthIcon.setPosition(t.px - NPC_SPRITE_SIZE * 0.55, t.py - NPC_SPRITE_SIZE * 0.55)
         if (chatBubble) chatBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.6)
+        if (speechBubble) speechBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 2.6)
         if (boatOverlay) boatOverlay.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.35)
       },
       onComplete: () => {
@@ -2000,12 +2034,14 @@ export class AreaScene extends Phaser.Scene {
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
     const healthIcon = sprite.getData('healthIcon') as Phaser.GameObjects.Text | undefined
     const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    const speechBubble = sprite.getData('speechBubble') as Phaser.GameObjects.Text | undefined
     const boatOverlay = sprite.getData('boatOverlay') as Phaser.GameObjects.Text | undefined
     if (avatar) avatar.container.destroy(true)
     if (nameLabel) nameLabel.destroy()
     if (activityIcon) activityIcon.destroy()
     if (healthIcon) healthIcon.destroy()
     if (chatBubble) chatBubble.destroy()
+    if (speechBubble) speechBubble.destroy()
     if (boatOverlay) boatOverlay.destroy()
     sprite.destroy()
     this.npcSprites.delete(id)

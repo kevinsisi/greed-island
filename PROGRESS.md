@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.92.0
+
+### Current Version
+`0.92.0` — NPC AI Speech Bubbles：當 NPC 的 freeform AI agent 提案被接受且帶有 utterance 時，該句話會在 Area scene 的 NPC 頭頂顯示為浮動文字氣泡（深色半透明背景，持續約 3 分鐘牆鐘），讓玩家在地圖上直接看到 AI NPC 的「自我思考」。
+
+### What Shipped
+- **NPC speech bubble rendering**：`AreaScene` 每個 NPC sprite 多一個 `speechBubble` Text 物件（depth 75，高於 name label depth 72）；當 `npc.recentUtterance` 有值時顯示 `「utterance」`，否則隱藏。
+- **Server utterance tracking**：`SimulationRuntime` 新增 `npcUtteranceMap`，在 `applyFreeformAgentActionEvent` accepted + utterance 時記錄 `{ text, tick }`；`NPC_AGENT_UTTERANCE_VISIBLE_TICKS = TICKS_PER_HOUR / 4 ≈ 3 min` 後自動過期（API 回傳 null）。
+- **SimNpcState + ServerNpc + NpcSummary** 各新增 `recentUtterance: { text: string; tick: number } | null` 欄位；`toNpcSummary` mapping 帶過去。
+- **Move tween 同步**：speech bubble 隨 NPC 移動 tween 一起位移（距離 0 直接設位置，否則在 onUpdate 回調中跟進）；`disposeNpcSprite` 也清理 speech bubble。
+- **`NPC_AGENT_UTTERANCE_VISIBLE_TICKS`** 加入 `config/world.ts`（named constant，非 magic number）。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server` — pass（1221 tests / 156 files）
+- `npm run test -w @greed-island/web` — pass（118 tests / 22 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+
+### Known Notes
+- Speech bubble is always visible (not proximity-gated unlike the 💬 interact icon) — it's ambient world info.
+- Utterance TTL is `TICKS_PER_HOUR / 4 = 180 ticks = ~15 min real time`; NPCs get new AI decisions every `TICKS_PER_HOUR = 720 ticks = ~60 min`, so the bubble is typically visible for ~1/4 of the decision cycle.
+- CI/CD deploy pending after commit.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.13
 
 ### Current Version

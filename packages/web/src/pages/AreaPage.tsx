@@ -216,6 +216,7 @@ export function AreaPage() {
         if (typeof npc.mood === 'number') base.mood = npc.mood
         if (typeof npc.health === 'number') base.health = npc.health
         if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
+        if (npc.recentUtterance?.text) base.recentUtterance = npc.recentUtterance.text
         return base
       }),
     [locale, outdoorOccupants, t]

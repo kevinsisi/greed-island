@@ -98,6 +98,7 @@ import {
   SETTLEMENT_FOOD_GOODS,
   SETTLEMENT_FOOD_UNITS_PER_NPC,
   POLLUTION_THRESHOLD,
+  NPC_AGENT_UTTERANCE_VISIBLE_TICKS,
 } from '../config/world.js'
 import { applyCommandHardCap } from './commandBudget.js'
 import { partitionNpcsForTick } from './npcPartition.js'
@@ -483,6 +484,8 @@ export type SimNpcState = Readonly<{
   civic: NpcCivicRecord | null
   /** True when an NPC_DECEASED event has been recorded for this NPC. */
   deceased: boolean
+  /** Most recent AI freeform utterance if it is still within the visibility window; null otherwise. */
+  recentUtterance: { text: string; tick: number } | null
 }>
 
 export type TickCommandStats = Readonly<{
@@ -601,6 +604,8 @@ export class SimulationRuntime {
   private ambientNarrator: AmbientNarrator | null = null
   private npcAgentRunner: NpcAgentRunner | null = null
   private readonly combatResolvedListeners = new Set<(info: CombatResolvedInfo) => void>()
+  /** Most recent accepted AI utterance per NPC — populated by applyFreeformAgentActionEvent. */
+  private readonly npcUtteranceMap = new Map<string, { text: string; tick: number }>()
   private lifeExpansion: LifeExpansionState = createInitialLifeExpansionState()
   private readonly constructionProjects = new ConstructionProjectsProjection()
   private readonly npcStateProjection = new NpcStateProjection()
@@ -1610,6 +1615,12 @@ export class SimulationRuntime {
         }),
         civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null,
         deceased: this.npcMortalityProjection.isDeceased(profile.id),
+        recentUtterance: (() => {
+          const u = this.npcUtteranceMap.get(profile.id)
+          if (!u) return null
+          if (this.currentTick - u.tick > NPC_AGENT_UTTERANCE_VISIBLE_TICKS) return null
+          return u
+        })(),
       }
     })
   }
@@ -1913,6 +1924,13 @@ export class SimulationRuntime {
     if (!data || data.accepted !== true) return
     const npcId = typeof data.npcId === 'string' ? data.npcId : null
     if (!npcId) return
+    // Capture utterance for speech bubble display in the area scene.
+    const utteranceText = typeof data.utterance === 'string' && data.utterance.trim().length > 0
+      ? data.utterance.trim()
+      : null
+    if (utteranceText) {
+      this.npcUtteranceMap.set(npcId, { text: utteranceText, tick: ev.tick ?? this.currentTick })
+    }
     const resolved = data.resolved as Record<string, unknown> | undefined
     if (!resolved || typeof resolved !== 'object') return
     const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
