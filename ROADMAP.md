@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.9 ✅ local-ready — 2026-06-14
+
+**主題：NPC Agent Diagnostics（驗證 AI 自我思考是否真的成功落地）**
+
+- ✅ **agent diagnostics** — `/api/world.facts.npcAgent` expose enabled/configured、due/skip/provider/parse/submit/error counters，以及最近 attempt/success/error。
+- ✅ **failure evidence** — AI 失敗時 deterministic planner 仍 fallback，但最近錯誤原因會出現在 diagnostics，避免 live 上只看到罐頭行為卻無法判斷是 provider、parse、或無 intent context。
+- 🧪 **Verification pending** — release 後跑 CI/CD/live smoke，確認 `providerSuccessCount` / `submitCount` 是否實際增加。
+
+---
+
 ## v0.91.8 ✅ shipped — 2026-06-14
 
 **主題：Life Goal Motivation Source Hotfix（life-goal source 不再帶 world agenda debug 文字）**

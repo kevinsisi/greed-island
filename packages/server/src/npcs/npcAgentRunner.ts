@@ -38,8 +38,44 @@ export type NpcAgentDeps = Readonly<{
   }) => void
 }>
 
+export type NpcAgentDiagnostics = Readonly<{
+  enabled: boolean
+  configured: boolean
+  inFlight: number
+  dueCount: number
+  skippedNoTile: number
+  skippedNoIntentEntries: number
+  providerSuccessCount: number
+  parseFailureCount: number
+  submitCount: number
+  errorCount: number
+  lastAttempt: NpcAgentAttempt | null
+  lastSuccess: NpcAgentAttempt | null
+  lastError: NpcAgentAttempt | null
+}>
+
+export type NpcAgentAttempt = Readonly<{
+  tick: number
+  npcId: string
+  status: 'success' | 'no_tile' | 'no_intent_entries' | 'parse_failed' | 'error'
+  provider?: string
+  action?: string
+  accepted?: boolean
+  reason?: string
+}>
+
 export class NpcAgentRunner {
   private readonly inFlight = new Set<string>()
+  private dueCount = 0
+  private skippedNoTile = 0
+  private skippedNoIntentEntries = 0
+  private providerSuccessCount = 0
+  private parseFailureCount = 0
+  private submitCount = 0
+  private errorCount = 0
+  private lastAttempt: NpcAgentAttempt | null = null
+  private lastSuccess: NpcAgentAttempt | null = null
+  private lastError: NpcAgentAttempt | null = null
 
   constructor(
     private readonly settings: SettingsStore,
@@ -53,7 +89,26 @@ export class NpcAgentRunner {
       const phase = hashId(profile.id) % NPC_AGENT_DECISION_INTERVAL_TICKS
       if (currentTick % NPC_AGENT_DECISION_INTERVAL_TICKS !== phase) continue
       if (this.inFlight.has(profile.id)) continue
+      this.dueCount += 1
       void this.deliberate(profile, currentTick)
+    }
+  }
+
+  getDiagnostics(): NpcAgentDiagnostics {
+    return {
+      enabled: this.isEnabled(),
+      configured: isOpenCodeConfigured(this.settings) || this.settings.countActive() > 0,
+      inFlight: this.inFlight.size,
+      dueCount: this.dueCount,
+      skippedNoTile: this.skippedNoTile,
+      skippedNoIntentEntries: this.skippedNoIntentEntries,
+      providerSuccessCount: this.providerSuccessCount,
+      parseFailureCount: this.parseFailureCount,
+      submitCount: this.submitCount,
+      errorCount: this.errorCount,
+      lastAttempt: this.lastAttempt,
+      lastSuccess: this.lastSuccess,
+      lastError: this.lastError,
     }
   }
 
@@ -66,10 +121,18 @@ export class NpcAgentRunner {
     this.inFlight.add(profile.id)
     try {
       const tile = this.deps.getNpcTile(profile.id)
-      if (!tile) return
+      if (!tile) {
+        this.skippedNoTile += 1
+        this.lastAttempt = { tick: decidedAtTick, npcId: profile.id, status: 'no_tile' }
+        return
+      }
       const entries = this.deps.computeIntentEntries(profile.id)
       // 沒有任何壓力/目標脈絡時不浪費 AI 呼叫；freeform 仍需要一點真實世界刺激。
-      if (entries.length === 0) return
+      if (entries.length === 0) {
+        this.skippedNoIntentEntries += 1
+        this.lastAttempt = { tick: decidedAtTick, npcId: profile.id, status: 'no_intent_entries' }
+        return
+      }
 
       const { systemPrompt, userPrompt } = buildFreeformAgentPrompt({
         profile,
@@ -89,8 +152,21 @@ export class NpcAgentRunner {
         responseMimeType: 'application/json',
         thinkingBudget: 0,
       })
+      this.providerSuccessCount += 1
       const proposal = parseFreeformAgentProposal(result.text)
-      if (!proposal) return
+      if (!proposal) {
+        this.parseFailureCount += 1
+        const attempt: NpcAgentAttempt = {
+          tick: decidedAtTick,
+          npcId: profile.id,
+          status: 'parse_failed',
+          provider: result.provider,
+          reason: 'provider returned non-conforming freeform JSON',
+        }
+        this.lastAttempt = attempt
+        this.lastError = attempt
+        return
+      }
       const livingNpcIds = new Set(this.deps.listAgentNpcs().map((p) => p.id))
       const resolution = resolveFreeformAgentProposal(proposal, {
         currentTile: tile,
@@ -104,8 +180,28 @@ export class NpcAgentRunner {
         resolution,
         decidedAtTick,
       })
-    } catch {
+      this.submitCount += 1
+      const attempt: NpcAgentAttempt = {
+        tick: decidedAtTick,
+        npcId: profile.id,
+        status: 'success',
+        provider: result.provider,
+        action: resolution.resolved.kind,
+        accepted: resolution.accepted,
+      }
+      this.lastAttempt = attempt
+      this.lastSuccess = attempt
+    } catch (err) {
       // AI 不可用：本輪靜默放棄，確定性 planner 接手。
+      this.errorCount += 1
+      const attempt: NpcAgentAttempt = {
+        tick: decidedAtTick,
+        npcId: profile.id,
+        status: 'error',
+        reason: err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
+      }
+      this.lastAttempt = attempt
+      this.lastError = attempt
     } finally {
       this.inFlight.delete(profile.id)
     }

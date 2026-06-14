@@ -5,6 +5,23 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.9
+
+### Current Version
+`0.91.9` — NPC Agent Diagnostics：針對 live 只看到罐頭 deterministic 行為、缺乏證據證明 NPC AI freeform 自我思考有成功落地的問題，新增 NPC agent runtime diagnostics。
+
+### What Shipped
+- **NPC agent observability**：`/api/world.facts.npcAgent` 現在回報 agent enabled/configured、in-flight 數、輪到 AI 的次數、無 tile/無 intent entries skip 次數、provider 成功次數、parse failure、submit 成功次數、error 次數，以及最近 attempt/success/error。
+- **Real failure visibility**：AI provider call 失敗不再只被靜默吞掉；deterministic planner 仍照常 fallback，但 diagnostics 會保留最近錯誤原因，供 live smoke 判斷為什麼玩家看到罐頭行為。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimeIntentResolution.test.ts` — pass（3 tests / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live `/api/world.facts.npcAgent` smoke to confirm whether provider success/submit counters increase.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.8
 
 ### Current Version

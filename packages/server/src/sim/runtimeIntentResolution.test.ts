@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { loadCardCatalog } from '../cards/loader.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
+import { SettingsStore } from '../http/settings.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
 import { SimulationRuntime } from './runtime.js'
 
@@ -106,6 +107,22 @@ describe('SimulationRuntime intent resolution', () => {
       })
       runtime.submitLivingWorldCommand(rejected)
       expect((runtime as unknown as InternalRuntime).npcEngine.getState(npc.id)?.intentOverride?.targetTile).toBe('t_dock')
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('exposes NPC agent diagnostics in the world snapshot', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      runtime.attachNpcAgent(new SettingsStore(db))
+
+      const npcAgent = runtime.getSnapshot().facts.npcAgent as { enabled?: boolean; configured?: boolean } | null
+
+      expect(npcAgent).toMatchObject({ enabled: false, configured: false })
     } finally {
       runtime.stop()
       db.close()

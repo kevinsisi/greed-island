@@ -1035,6 +1035,7 @@ export class SimulationRuntime {
       facts: {
         weather: this.weather,
         weatherAgent: this.worldStateProjection.getWeatherAgent(),
+        npcAgent: this.npcAgentRunner?.getDiagnostics() ?? null,
         season: this.season,
         rareWindowOpen: this.rareWindowOpen,
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
