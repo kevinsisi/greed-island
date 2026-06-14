@@ -17,7 +17,12 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server -- runtimeExpansion.test.ts` — pass（1 test / 1 file）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（53 items）
-- Pending after release: CI/CD and live smoke.
+- CI `27490878433` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27490913340` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` `version=0.91.8` tick `93138`；`/api/events?limit=30` showed new productive/life-goal source motivations no longer include `agenda.*` / `cap_zero` in sampled player-facing motivation text；`/api/world/chronicle?limit=20&ai=1` returned Traditional Chinese fallback `textZh`（「沒有足夠鮮明的公共事件能寫入編年史，但城市仍在自行運轉。」）with no `system.skill.*` chronicle leakage.
+
+### Known Deferred
+- Raw `/api/events` remains a developer/debug API and still includes structural ids plus lower-level internal rows such as `BIO_NODE_HARVESTED`; this release targets public/chronicle source quality and future source generation, not historical EventLog rewriting.
 
 ---
 

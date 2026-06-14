@@ -5,13 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.91.7 ✅ local-ready — 2026-06-14
+## v0.91.8 ✅ shipped — 2026-06-14
+
+**主題：Life Goal Motivation Source Hotfix（life-goal source 不再帶 world agenda debug 文字）**
+
+- ✅ **life-goal source cleanup** — 新 `NPC_LIFE_GOAL_SET` motivation 不再引用 world agenda directive 或 `agenda.*` id，只保留 NPC 身分、地區生活壓力、需求重算與目標敘述。
+- ✅ **Verification** — targeted runtime regression、build、OpenSpec strict validation、CI、Deploy Dev、live smoke 全過；live `0.91.8` 的 chronicle fallback 維持繁體中文且 sampled source text 不再外漏 `agenda.*` / `cap_zero`。
+
+---
+
+## v0.91.7 ✅ shipped — 2026-06-14
 
 **主題：Public Log Source Quality Hotfix（productive motivation 與 chronicle context 不再帶內部/冗長系統文字）**
 
 - ✅ **productive source cleanup** — 新 productive action motivation 不再引用 world-event directive 長句，只保留地區公共壓力、NPC 身分、主要需求與 domain。
 - ✅ **chronicle context hygiene** — `NPC_OBSERVED_SKILL` 從 chronicle context 排除，避免 AI 摘要 `system.skill.*`。
-- 🧪 **Verification pending** — release 前跑 targeted tests、build、OpenSpec、CI/CD/live smoke。
+- ✅ **Verification** — targeted server/web regressions、build、OpenSpec strict validation、CI、Deploy Dev、live smoke 全過；v0.91.7 live smoke 同時發現 life-goal source 殘留 agenda 文字，已由 v0.91.8 修正。
 
 ---
 
