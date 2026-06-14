@@ -44,7 +44,7 @@ export type NpcAgentDiagnostics = Readonly<{
   inFlight: number
   dueCount: number
   skippedNoTile: number
-  skippedNoIntentEntries: number
+  emptyIntentEntriesCount: number
   providerSuccessCount: number
   parseFailureCount: number
   submitCount: number
@@ -68,7 +68,7 @@ export class NpcAgentRunner {
   private readonly inFlight = new Set<string>()
   private dueCount = 0
   private skippedNoTile = 0
-  private skippedNoIntentEntries = 0
+  private emptyIntentEntriesCount = 0
   private providerSuccessCount = 0
   private parseFailureCount = 0
   private submitCount = 0
@@ -101,7 +101,7 @@ export class NpcAgentRunner {
       inFlight: this.inFlight.size,
       dueCount: this.dueCount,
       skippedNoTile: this.skippedNoTile,
-      skippedNoIntentEntries: this.skippedNoIntentEntries,
+      emptyIntentEntriesCount: this.emptyIntentEntriesCount,
       providerSuccessCount: this.providerSuccessCount,
       parseFailureCount: this.parseFailureCount,
       submitCount: this.submitCount,
@@ -127,11 +127,8 @@ export class NpcAgentRunner {
         return
       }
       const entries = this.deps.computeIntentEntries(profile.id)
-      // 沒有任何壓力/目標脈絡時不浪費 AI 呼叫；freeform 仍需要一點真實世界刺激。
       if (entries.length === 0) {
-        this.skippedNoIntentEntries += 1
-        this.lastAttempt = { tick: decidedAtTick, npcId: profile.id, status: 'no_intent_entries' }
-        return
+        this.emptyIntentEntriesCount += 1
       }
 
       const { systemPrompt, userPrompt } = buildFreeformAgentPrompt({

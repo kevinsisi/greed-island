@@ -5,13 +5,23 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.91.9 ✅ local-ready — 2026-06-14
+## v0.91.10 ✅ local-ready — 2026-06-14
+
+**主題：NPC Freeform Agent Gate Hotfix（沒有危機 intent 也要能 AI 自我思考）**
+
+- ✅ **remove stale gate** — freeform NPC agent 不再因 deterministic intent entries 為空就跳過 AI；日常 needs / life goal / beliefs / reflections 足以讓 NPC 自由提出生活行為。
+- ✅ **diagnostic clarity** — `emptyIntentEntriesCount` 只當觀測值，不再代表 skip；live 應該開始看到 `providerSuccessCount` / `submitCount` 增加。
+- 🧪 **Verification pending** — targeted runner regression、build、OpenSpec、CI/CD/live smoke。
+
+---
+
+## v0.91.9 ✅ shipped — 2026-06-14
 
 **主題：NPC Agent Diagnostics（驗證 AI 自我思考是否真的成功落地）**
 
 - ✅ **agent diagnostics** — `/api/world.facts.npcAgent` expose enabled/configured、due/skip/provider/parse/submit/error counters，以及最近 attempt/success/error。
 - ✅ **failure evidence** — AI 失敗時 deterministic planner 仍 fallback，但最近錯誤原因會出現在 diagnostics，避免 live 上只看到罐頭行為卻無法判斷是 provider、parse、或無 intent context。
-- 🧪 **Verification pending** — release 後跑 CI/CD/live smoke，確認 `providerSuccessCount` / `submitCount` 是否實際增加。
+- ✅ **live finding** — v0.91.9 live smoke confirmed provider was configured but all due NPCs skipped on empty deterministic intent entries；v0.91.10 removes that stale gate.
 
 ---
 

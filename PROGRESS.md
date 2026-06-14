@@ -5,6 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.10
+
+### Current Version
+`0.91.10` — NPC Freeform Agent Gate Hotfix：v0.91.9 live diagnostics confirmed NPC agent/provider were enabled, but the runner skipped every due NPC with empty deterministic intent entries before calling AI, so players only saw deterministic canned behavior.
+
+### What Shipped
+- **Freeform no longer requires urgent intent entries**：NPC freeform self-thinking now still calls AI when deterministic `computeIntentEntries()` is empty; needs, life goal, beliefs, and reflections remain enough context for daily self-directed behavior.
+- **Diagnostics rename**：`facts.npcAgent.emptyIntentEntriesCount` records how often an AI call had no urgent deterministic intent context, but this is no longer a skip condition.
+- **Regression coverage**：新增 `npcAgentRunner.test.ts`，驗證 empty intent entries 時仍會呼叫 provider 並提交 freeform proposal。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcAgentRunner.test.ts runtimeIntentResolution.test.ts` — pass（4 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+- Pending after release: CI/CD and live smoke; expected live `facts.npcAgent.providerSuccessCount` / `submitCount` should increase after due NPCs run.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.91.9
 
 ### Current Version
@@ -18,7 +36,7 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server -- runtimeIntentResolution.test.ts` — pass（3 tests / 1 file）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（53 items）
-- Pending after release: CI/CD and live `/api/world.facts.npcAgent` smoke to confirm whether provider success/submit counters increase.
+- Live v0.91.9 diagnostics：`enabled=true`、`configured=true`、但 `dueCount=2` / `skippedNoIntentEntries=2` / `providerSuccessCount=0` / `submitCount=0`，證實罐頭行為來自 empty intent gate。
 
 ---
 
