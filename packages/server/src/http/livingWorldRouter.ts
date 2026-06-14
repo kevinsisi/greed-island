@@ -64,7 +64,7 @@ export function createLivingWorldRouter(input: {
   router.get('/world/chronicle', async (req: Request, res: Response) => {
     const limit = clampInt(req.query.limit, 1, 100, 40)
     const useAi = String(req.query.ai ?? '0') === '1'
-    const events = eventStore.readRecentEvents(limit)
+    const events = input.runtime.getRecentEvents(limit).slice().reverse()
     // Chronicle MUST resolve names for deceased actors so their last arcs read correctly.
     const actorNames = Object.fromEntries(
       input.runtime.getNpcsIncludingDeceased().map((npc) => [npc.id, npc.name.zh]),

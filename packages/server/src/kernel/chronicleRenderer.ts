@@ -1,11 +1,10 @@
-// Grounded chronicle rendering. The context is built only from committed
-// EventLog rows and NPC memory projection rows. AI can render text, but cannot
+// Grounded chronicle rendering. The context is built only from server events
+// and NPC memory projection rows. AI can render text, but cannot
 // create facts; invalid or ungrounded AI output falls back to deterministic text.
 
 import { generateWithProviders } from '../npcs/aiProvider.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
 import type { SettingsStore } from '../http/settings.js'
-import type { Event } from './types.js'
 import type { SqliteNpcMemoryStore } from './npcMemory.js'
 import { isLivingWorldCommandType, type LivingWorldEventPayload } from './livingWorldCommands.js'
 
@@ -48,6 +47,13 @@ export type ChronicleEvent = Readonly<{
   eventType: string
   actorId: string
   narration: string | null
+}>
+
+type ChronicleSourceEvent = Readonly<{
+  tick?: number
+  eventType: string
+  actorId: string
+  payload?: unknown
 }>
 
 export type ChronicleMemorySnippet = Readonly<{
@@ -102,7 +108,7 @@ type AiChronicleResponse = Readonly<{
 }>
 
 export function buildChronicleContext(input: {
-  events: readonly Event[]
+  events: readonly ChronicleSourceEvent[]
   memory: SqliteNpcMemoryStore
   actorNames?: Readonly<Record<string, string>>
   maxMemories?: number
@@ -311,7 +317,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function eventToChronicleEvent(event: Event): ChronicleEvent | null {
+function eventToChronicleEvent(event: ChronicleSourceEvent): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
   if (event.eventType === 'WORLD_TICK') return null
   if (event.eventType === 'NPC_OBSERVED_SKILL') return null
