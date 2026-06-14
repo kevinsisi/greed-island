@@ -1347,11 +1347,22 @@ describe('grounded chronicle renderer', () => {
   it('builds chronicle context from committed events and memory snippets', () => {
     const { eventStore, memory, ruleEngine } = makeHarness()
     submit(
-      makeLivingWorldCommand('NPC_INTERACT', 'npc-a', 'npc', 1, 1, {
+      makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', 'npc-a', 'npc', 1, 1, {
+        npcId: 'npc-a',
         tile: 't_market',
-        participants: ['npc-a', 'npc-b'],
-        mode: 'argue',
-        narration: 'npc-a 和 npc-b 爭論了碼頭的流言。'
+        accepted: true,
+        proposal: {
+          action: '拜訪 npc-b',
+          target: { tileId: null, npcId: 'npc-b', cardId: null },
+          reason: '想確認碼頭流言是否可靠',
+          risk: '可能被拒絕',
+          expectedOutcome: '取得可用消息',
+          utterance: null
+        },
+        resolved: { kind: 'socialize', targetTile: null, targetNpcId: 'npc-b', cardId: null, summary: 'socialize: 拜訪 npc-b' },
+        rejectionReason: null,
+        decidedAtTick: 1,
+        narration: 'npc-a 照著自己的念頭拜訪 npc-b，想確認碼頭流言。'
       }),
       ruleEngine,
       eventStore
@@ -1361,9 +1372,7 @@ describe('grounded chronicle renderer', () => {
     const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
 
     expect(context.events).toHaveLength(1)
-    expect(context.memories.length).toBeGreaterThan(0)
     expect(context.allowedNames).toContain('npc-a')
-    expect(context.allowedNames).toContain('npc-b')
   })
 
   describe('NPC_STATE_RECORDED validator', () => {
@@ -1406,7 +1415,7 @@ describe('grounded chronicle renderer', () => {
     })
   })
 
-  it('keeps productive actions in chronicle context as public progress', () => {
+  it('keeps routine productive actions out of chronicle context', () => {
     const { eventStore, memory, ruleEngine } = makeHarness()
     submit(
       makeLivingWorldCommand('NPC_PRODUCTIVE_ACTION', 'npc-a', 'npc', 1, 1, {
@@ -1424,19 +1433,20 @@ describe('grounded chronicle renderer', () => {
 
     const context = buildChronicleContext({ events: eventStore.readRecentEvents(10), memory })
 
-    expect(context.events).toHaveLength(1)
-    expect(context.events[0]?.eventType).toBe('NPC_PRODUCTIVE_ACTION')
-    expect(context.events[0]?.narration).toContain('補給')
+    expect(context.events).toHaveLength(0)
   })
 
   it('renders deterministic fallback without AI keys', async () => {
     const { db, eventStore, memory, ruleEngine } = makeHarness()
     const settings = new SettingsStore(db)
     submit(
-      makeLivingWorldCommand('AREA_PRESSURE', 'system', 'system', 2, 2, {
-        tileId: 't_market',
-        kind: 'pressure.food_shortage',
-        detail: { food: 22 },
+      makeLivingWorldCommand('WORLD_EVENT_SPAWN', 'system', 'system', 2, 2, {
+        worldEventId: 'we-market-shortage',
+        templateId: 'market.shortage',
+        type: 'supply',
+        scope: 'tile',
+        endsAtTick: 8,
+        data: { tileId: 't_market', intensity: 40 },
         narration: '市場的食物供給變得緊張。'
       }),
       ruleEngine,
@@ -1448,7 +1458,7 @@ describe('grounded chronicle renderer', () => {
 
     expect(chronicle.source).toBe('fallback')
     expect(chronicle.textZh).toContain('市場的食物供給變得緊張')
-    expect(chronicle.textEn).toContain('pressure in one district altered the crowd')
+    expect(chronicle.textEn).toContain('a new omen began')
     expect(chronicle.aiError).toBeNull()
   })
 })

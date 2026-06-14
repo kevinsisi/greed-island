@@ -317,13 +317,13 @@ describe('chronicle AI rendering', () => {
   it('adds actor display names to allowedNames', () => {
     const events = [
       {
-        eventType: 'NPC_INTERACT',
+        eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
         actorId: 'npc-a',
         tick: 3,
         payload: {
           actorType: 'npc',
-          data: { tile: 't_market', participants: ['npc-a', 'npc-b'], mode: 'chat', narration: '...' },
-          narration: '莊婉容和阿七在市場交換消息。'
+          data: { npcId: 'npc-a', accepted: true, resolved: { kind: 'socialize', summary: 'socialize: 找阿七交換消息' } },
+          narration: '莊婉容照著自己的念頭找阿七交換消息。'
         },
         eventId: 'interact',
         sequence: 3,
@@ -406,7 +406,7 @@ describe('chronicle AI rendering', () => {
     expect(context.events[0]!.narration).toContain('天空想替街口')
   })
 
-  it('keeps productive and AI freeform NPC events in chronicle context', () => {
+  it('keeps routine productive logs out while preserving AI freeform NPC events in chronicle context', () => {
     const events = [
       {
         eventType: 'NPC_PRODUCTIVE_ACTION',
@@ -443,9 +443,23 @@ describe('chronicle AI rendering', () => {
     const context = buildChronicleContext({ events, memory: makeMemory() })
 
     expect(context.events.map((event) => event.eventType)).toEqual([
-      'NPC_PRODUCTIVE_ACTION',
       'NPC_FREEFORM_ACTION_PROPOSED',
     ])
-    expect(context.events[1]?.narration).toContain('自己的念頭')
+    expect(context.events[0]?.narration).toContain('自己的念頭')
+  })
+
+  it('keeps routine movement, interaction, pressure, and harvest logs out of chronicle context', () => {
+    const events = [
+      { eventType: 'NPC_MOVE', actorId: 'npc-a', tick: 1, payload: { actorType: 'npc', data: {}, narration: 'npc-a 抵達市場。' } },
+      { eventType: 'NPC_ACTIVITY_CHANGE', actorId: 'npc-a', tick: 2, payload: { actorType: 'npc', data: {}, narration: 'npc-a 開始工作。' } },
+      { eventType: 'NPC_INTERACT', actorId: 'npc-a', tick: 3, payload: { actorType: 'npc', data: {}, narration: '兩人在街邊閒聊。' } },
+      { eventType: 'AREA_PRESSURE', actorId: 'system', tick: 4, payload: { actorType: 'system', data: {}, narration: '區域壓力上升。' } },
+      { eventType: 'BIO_NODE_HARVESTED', actorId: 'npc-a', tick: 5, payload: { actorType: 'npc', data: {}, narration: 'npc-a 採集木材。' } },
+      { eventType: 'FISHERY_HARVESTED', actorId: 'npc-a', tick: 6, payload: { actorType: 'npc', data: {}, narration: 'npc-a 採收漁獲。' } },
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({ events, memory: makeMemory() })
+
+    expect(context.events).toHaveLength(0)
   })
 })

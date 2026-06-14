@@ -12,6 +12,17 @@ const CHRONICLE_AI_RESPONSE_MIME = 'application/json'
 const CHRONICLE_AI_TIMEOUT_MS = 20_000
 const CHRONICLE_AI_MAX_ATTEMPTS = 2
 const CHRONICLE_AI_BACKOFF_MS = 250
+const ROUTINE_CHRONICLE_EVENT_TYPES = new Set([
+  'AREA_PRESSURE',
+  'BIO_NODE_HARVESTED',
+  'BUILDING_ENTER',
+  'BUILDING_LEAVE',
+  'FISHERY_HARVESTED',
+  'NPC_ACTIVITY_CHANGE',
+  'NPC_INTERACT',
+  'NPC_MOVE',
+  'NPC_PRODUCTIVE_ACTION',
+])
 const SIMPLIFIED_TO_TRADITIONAL_PHRASES: ReadonlyArray<readonly [string, string]> = [
   ['无事发生', '無事發生'],
   ['发生', '發生'],
@@ -319,6 +330,7 @@ function sleep(ms: number): Promise<void> {
 
 function eventToChronicleEvent(event: ChronicleSourceEvent): ChronicleEvent | null {
   if (!isLivingWorldCommandType(event.eventType)) return null
+  if (ROUTINE_CHRONICLE_EVENT_TYPES.has(event.eventType)) return null
   if (event.eventType === 'WORLD_TICK') return null
   if (event.eventType === 'NPC_OBSERVED_SKILL') return null
   if (event.eventType === 'NPC_STATE_RECORDED') return null
@@ -507,9 +519,9 @@ function chronicleSentenceZh(event: ChronicleEvent, index: number): string {
     case 'SEASON_CHANGE':
       return `${prefix}季節把世界推進到下一個長週期。`
     case 'WORLD_EVENT_SPAWN':
-      return `${prefix}一股外部壓力浮上城市表面。`
+      return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '一股外部壓力浮上城市表面。'}`
     case 'WORLD_EVENT_END':
-      return `${prefix}先前的外部壓力暫時退場。`
+      return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '先前的外部壓力暫時退場。'}`
     default:
       return `${prefix}${sanitizeChronicleNarration(event.narration) ?? '世界留下了一筆可回放的公共紀錄。'}`
   }

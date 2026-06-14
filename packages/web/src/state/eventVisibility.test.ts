@@ -38,11 +38,11 @@ describe('isPublicNarrativeEvent', () => {
     expect(isChronicleSurfaceEvent(proposal)).toBe(true)
   })
 
-  it('keeps narrated NPC work visible on chronicle surfaces', () => {
+  it('keeps routine NPC work public but off the main chronicle feed', () => {
     const productive = event({ eventType: 'NPC_PRODUCTIVE_ACTION', narration: '某人補了一箱貨。' })
 
     expect(isPublicNarrativeEvent(productive)).toBe(true)
-    expect(isChronicleSurfaceEvent(productive)).toBe(true)
+    expect(isChronicleSurfaceEvent(productive)).toBe(false)
   })
 
   it('keeps routine logistics out of chronicle surfaces', () => {
