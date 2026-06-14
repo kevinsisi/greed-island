@@ -1445,7 +1445,8 @@ describe('grounded chronicle renderer', () => {
     const chronicle = await renderChronicle({ context, settings, useAi: true })
 
     expect(chronicle.source).toBe('fallback')
-    expect(chronicle.textZh).toContain("pressure in one district altered the crowd")
+    expect(chronicle.textZh).toContain('市場的食物供給變得緊張')
+    expect(chronicle.textEn).toContain('pressure in one district altered the crowd')
     expect(chronicle.aiError).toBeNull()
   })
 })
