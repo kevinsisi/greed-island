@@ -5,6 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.91.4 ✅ local-ready — 2026-06-14
+
+**主題：Traditional Chinese Chronicle Hotfix + Weather Agent（編年史不再漏簡體；天氣有自己的 deterministic agent 意志）**
+
+OpenSpec change：`weather-agent-with-intent`
+
+- ✅ **Chronicle 繁中 prompt** — AI chronicle system prompt 明確要求 `zh` 必須是 Traditional Chinese / 繁體中文，禁止 Simplified Chinese characters。
+- ✅ **Server-side normalization** — accepted AI `zh` output 進 public chronicle 前會做 deterministic simplified-to-traditional normalization，覆蓋 live 截圖中的 `无事发生。` 類問題。
+- ✅ **Regression test** — 新增 chronicleRenderer 測試，確認簡體輸入正規化成 `無事發生。...這時在市場說話。`，並確認 provider prompt 含 Traditional Chinese 指令。
+- ✅ **Weather agent implementation** — `weather-agent-with-intent` 定義並實作 `weather.agent` system actor：weather thought/intent 先成為 typed `WEATHER_INTENT_PROPOSED` Command/Event，再由 Rule Engine 驗證 `WEATHER_CHANGE` outcome；AI 只能 render，不可決定天氣事實。
+- ✅ **Deterministic weather mind** — Weather Agent 依 tick、ruleset version、世界壓力、季節、生態/文明/world-event context 推導 mood、pressure source、desired weather、thought、reason、cadence key，不使用 AI/provider/wall-clock。
+- ✅ **Projection/API/chronicle surfacing** — WorldState projection 追蹤 weather-agent mood/latest thought/recent thoughts/desired weather/accepted weather；`/api/world.facts.weatherAgent` additive expose；chronicle input/fallback 可引用 committed thought。
+- ✅ **Verification** — targeted weather/chronicle tests（93 tests）、OpenSpec strict validation（53 items）、build、full test suite（server 1216 + web 114）全過；Vite chunk-size warning 仍為 known non-blocking。
+
+---
+
 ## v0.91.3 ✅ shipped — 2026-06-13
 
 **主題：Chronicle Timeout QA Hotfix（OpenCode 慢回應不再太早 fallback，完整 check 穩定）**

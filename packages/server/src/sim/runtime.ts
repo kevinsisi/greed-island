@@ -31,6 +31,7 @@ import { createInitialWorldState } from '../kernel/reducer.js'
 import type { Command } from '../kernel/types.js'
 import {
   LivingWorldRuleEngine,
+  WEATHER_AGENT_ACTOR_ID,
   isLivingWorldCommandType,
   makeLivingWorldCommand,
   type ConstructionMotivation,
@@ -180,6 +181,7 @@ import {
   type FactionId,
   FACTIONS
 } from './areaStateEngine.js'
+import { planWeatherAgentIntent } from './weatherAgent.js'
 import { BuildingRuntime } from '../buildings/buildingRuntime.js'
 import type { BuildingDef, BuildingRuntimeView } from '../buildings/types.js'
 import { completedConstructionBuildingDef, completedConstructionBuildingView } from '../buildings/dynamicConstruction.js'
@@ -1032,6 +1034,7 @@ export class SimulationRuntime {
       npcCount: this.profiles.length,
       facts: {
         weather: this.weather,
+        weatherAgent: this.worldStateProjection.getWeatherAgent(),
         season: this.season,
         rareWindowOpen: this.rareWindowOpen,
         rareWindowClosesAtTick: this.rareWindowOpen ? this.rareWindowClosesAtTick : null,
@@ -4544,9 +4547,25 @@ export class SimulationRuntime {
 
     // ---- 天氣 / 季節 / 稀有窗口 / 世界事件 ----
     if (nextTick % WEATHER_CADENCE_TICKS === 0) {
-      const next = pickFromCycle(WEATHERS, Math.floor(nextTick / WEATHER_CADENCE_TICKS))
-      if (next !== this.weather) {
+      const cadenceStep = Math.floor(nextTick / WEATHER_CADENCE_TICKS)
+      const cycleWeather = pickFromCycle(WEATHERS, cadenceStep)
+      const intent = planWeatherAgentIntent({
+        tick: nextTick,
+        cadenceStep,
+        currentWeather: this.weather as (typeof WEATHERS)[number],
+        cycleWeather,
+        season: this.season,
+        activeWorldEventIds: this.eventEngine.getActive().map((event) => event.templateId),
+        areas: this.getAreaStates().map((area) => ({
+          tileId: area.tileId,
+          resources: area.resources,
+          factionTension: Math.max(...Object.values(area.factionControl)),
+        })),
+      })
+      if (intent) {
         const before = this.weather
+        const next = intent.desiredWeather
+        commands.push(makeLivingWorldCommand('WEATHER_INTENT_PROPOSED', WEATHER_AGENT_ACTOR_ID, 'system', nextTick, submittedAt, intent))
         stateDrafts.push(this.factSetDraft(FACT_WEATHER, next, SIM_ACTOR_WORLD, nextTick))
         commands.push(
           makeLivingWorldCommand(
@@ -4558,7 +4577,7 @@ export class SimulationRuntime {
             {
               from: before,
               to: next,
-              motivation: makeMotivation('世界天氣週期推進到新的階段，後續會影響 NPC 行為、區域狀態與事件生成。'),
+              motivation: makeMotivation(`天氣意志：${intent.thought}`),
               narration: `天空從${before}轉為${next}。`
             }
           )
@@ -5721,6 +5740,7 @@ export class SimulationRuntime {
         this.factionDominanceProjection.project(ev)
         this.historyChronicleProjection.project(ev)
         this.areaStateProjection.project(ev)
+        this.worldStateProjection.project(ev)
         this.bioNodeProjection.project(ev)
         // Household migration — permanently update NPC home tile in engine
         if (ev.eventType === 'NPC_HOUSEHOLD_MIGRATED') {
@@ -6575,6 +6595,7 @@ export class SimulationRuntime {
         },
       },
       { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
+      { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections

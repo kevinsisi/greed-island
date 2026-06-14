@@ -86,6 +86,29 @@ describe('chronicle AI rendering', () => {
     expect(rendered.aiMeta.fallbackReason).toBeNull()
   })
 
+  it('normalizes AI zh chronicle output to Traditional Chinese', async () => {
+    mockedGenerate.mockResolvedValue({
+      text: JSON.stringify({
+        zh: '无事发生。npc-a 和 npc-b 这时在市场说话。',
+        en: 'Nothing happened. npc-a and npc-b spoke in the market.',
+        citedNames: ['npc-a', 'npc-b']
+      }),
+      provider: 'opencode'
+    })
+
+    const rendered = await renderChronicle({
+      context: makeContext(),
+      settings: makeSettings(0, { opencode_servers: 'http://127.0.0.1:4096' }),
+      useAi: true
+    })
+
+    expect(rendered.source).toBe('ai')
+    expect(rendered.textZh).toBe('無事發生。npc-a 和 npc-b 這時在市場說話。')
+    expect(mockedGenerate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      systemPrompt: expect.stringContaining('Traditional Chinese')
+    }))
+  })
+
   it('retries transient chronicle AI failures with observable metadata', async () => {
     mockedGenerate
       .mockRejectedValueOnce(new Error('HTTP 500: overloaded'))
@@ -334,5 +357,39 @@ describe('chronicle AI rendering', () => {
 
     expect(context.events).toHaveLength(1)
     expect(context.events[0]!.eventType).toBe('WORLD_EVENT_SPAWN')
+  })
+
+  it('keeps committed weather-agent thoughts in chronicle context', () => {
+    const events = [
+      {
+        eventType: 'WEATHER_INTENT_PROPOSED',
+        actorId: 'weather.agent',
+        tick: 5,
+        payload: {
+          actorType: 'system',
+          data: {
+            currentWeather: '晴',
+            desiredWeather: '霧雨',
+            mood: 'watchful',
+            pressureSource: 'cadence',
+            thought: '天空想替街口降下一場細雨。',
+            reason: 'weather cadence shaped the weather-agent intent',
+            cadenceKey: 'weather:1:cadence',
+            proposedAtTick: 5,
+            narration: '天氣意志低語：天空想替街口降下一場細雨。'
+          },
+          narration: '天氣意志低語：天空想替街口降下一場細雨。'
+        },
+        eventId: 'weather-intent',
+        sequence: 5,
+        occurredAt: 5
+      }
+    ] as unknown as Event[]
+
+    const context = buildChronicleContext({ events, memory: makeMemory() })
+
+    expect(context.events).toHaveLength(1)
+    expect(context.events[0]!.eventType).toBe('WEATHER_INTENT_PROPOSED')
+    expect(context.events[0]!.narration).toContain('天空想替街口')
   })
 })

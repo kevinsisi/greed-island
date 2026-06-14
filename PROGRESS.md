@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-14 — Handoff Snapshot @ v0.91.4
+
+### Current Version
+`0.91.4` — Traditional Chinese Chronicle Hotfix + Weather Agent：修正 AI chronicle `zh` 可漏出簡體字（例如 `无事发生。`）的品質問題，並實作「天氣也是 agent、有自己的想法」的 deterministic Weather Agent。
+
+### What Shipped
+- **Chronicle 繁中約束**：`chronicleSystemPrompt()` 明確要求 `zh` 欄位輸出 Traditional Chinese / 繁體中文，禁止 Simplified Chinese characters。
+- **Server-side 防線**：AI chronicle parse 成功後會對 `zh` 做 deterministic simplified-to-traditional normalization，避免模型或 OpenCode 偶發輸出簡體字直接進 public chronicle。
+- **Regression coverage**：新增 `无事发生。npc-a 和 npc-b 这时在市场说话。` → `無事發生。npc-a 和 npc-b 這時在市場說話。` 測試，並確認 prompt 傳給 provider 時帶 Traditional Chinese 指令。
+- **Weather Agent OpenSpec + implementation**：新增並實作 `openspec/changes/weather-agent-with-intent/`；天氣是 `weather.agent` system actor，先提交 bounded `WEATHER_INTENT_PROPOSED` thought/intent，再由 Rule Engine 驗證 `WEATHER_CHANGE` outcome，AI 不可決定天氣事實。
+- **Deterministic weather mind**：新增 pure policy module，依 tick、ruleset version、世界壓力、季節、生態/文明/world-event context 推導 mood、pressure source、desired weather、thought、reason、cadence key，不使用 AI/provider/wall-clock。
+- **Projection/API/chronicle surfacing**：WorldState projection 追蹤 weather-agent mood/latest thought/recent thoughts/desired weather/accepted weather；`/api/world.facts.weatherAgent` additive expose；chronicle input/fallback 可引用 committed weather-agent thought，不可憑空創造天氣事實。
+- **Version sync**：workspace/server/web package version 與 server/web `APP_VERSION` 更新到 `0.91.4`。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- livingWorld.test.ts weatherAgent.test.ts worldState.test.ts runtimeWeatherAgent.test.ts runtimeExpansion.test.ts chronicleRenderer.test.ts` — pass（93 tests / 6 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items，包含 `weather-agent-with-intent`）
+- `npm run test` — pass（server 1216 tests / 155 files + web 114 tests / 22 files）
+
+### Known Deferred
+- Live deploy/smoke not run in this handoff. Local build/tests/spec validation are complete.
+- `package-lock.json` root version remains at the existing stale `0.86.0` baseline; this hotfix did not modify lockfile to avoid unrelated historical churn.
+
+---
+
 ## 2026-06-13 — Handoff Snapshot @ v0.91.3
 
 ### Current Version

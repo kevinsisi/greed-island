@@ -9,6 +9,7 @@ import Database from 'better-sqlite3'
 import { describe, expect, it } from 'vitest'
 import {
   LivingWorldRuleEngine,
+  WEATHER_AGENT_ACTOR_ID,
   isLivingWorldCommandType,
   makeLivingWorldCommand,
   type LivingWorldCommand
@@ -143,6 +144,17 @@ describe('living-world rule engine', () => {
         tile: 't_market',
         holdTicks: 12,
         narration: null
+      }),
+      makeLivingWorldCommand('WEATHER_INTENT_PROPOSED', WEATHER_AGENT_ACTOR_ID, 'system', 5, 5, {
+        currentWeather: '晴',
+        desiredWeather: '霧雨',
+        mood: 'watchful',
+        pressureSource: 'cadence',
+        thought: '雲腳低垂，城裡需要一場輕雨。',
+        reason: 'weather cadence reached',
+        cadenceKey: 'weather:5',
+        proposedAtTick: 5,
+        narration: '天氣意志低語：雲腳低垂，城裡需要一場輕雨。'
       }),
       makeLivingWorldCommand('WEATHER_CHANGE', 'system', 'system', 5, 5, {
         from: '晴',
@@ -601,6 +613,52 @@ describe('living-world rule engine', () => {
         makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', 'npc.smith', 'npc', 23, 23, payload as never)
       )
       expect(result.accepted, JSON.stringify(payload)).toBe(false)
+    }
+  })
+
+  it('validates WEATHER_INTENT_PROPOSED payloads', () => {
+    const { ruleEngine } = makeHarness()
+    const wellFormed = {
+      currentWeather: '晴' as const,
+      desiredWeather: '驟雨' as const,
+      mood: 'brooding' as const,
+      pressureSource: 'ecosystem' as const,
+      thought: '林線太乾，雲層想替山脊壓下一場重雨。',
+      reason: 'forest pressure is rising',
+      cadenceKey: 'weather:120:ecosystem',
+      proposedAtTick: 120,
+      narration: '天氣意志低語：林線太乾，雲層想替山脊壓下一場重雨。',
+    }
+
+    const accepted = ruleEngine.evaluate(
+      makeLivingWorldCommand('WEATHER_INTENT_PROPOSED', WEATHER_AGENT_ACTOR_ID, 'system', 120, 120, wellFormed)
+    )
+    expect(accepted.accepted).toBe(true)
+    if (accepted.accepted) {
+      expect(accepted.events[0]!.eventType).toBe('WEATHER_INTENT_PROPOSED')
+      expect(accepted.events[0]!.actorId).toBe(WEATHER_AGENT_ACTOR_ID)
+    }
+
+    const rejectCases: Array<{ payload: Record<string, unknown>; reason: string }> = [
+      { payload: { ...wellFormed, desiredWeather: '沙塵暴' }, reason: 'desiredWeather invalid' },
+      { payload: { ...wellFormed, currentWeather: '雷暴' }, reason: 'currentWeather invalid' },
+      { payload: { ...wellFormed, mood: 'angry' }, reason: 'mood invalid' },
+      { payload: { ...wellFormed, pressureSource: 'llm' }, reason: 'pressureSource invalid' },
+      { payload: { ...wellFormed, thought: '' }, reason: 'thought required' },
+      { payload: { ...wellFormed, reason: '' }, reason: 'reason required' },
+      { payload: { ...wellFormed, cadenceKey: '' }, reason: 'cadenceKey required' },
+      { payload: { ...wellFormed, proposedAtTick: -1 }, reason: 'proposedAtTick required' },
+    ]
+
+    for (const c of rejectCases) {
+      const result = ruleEngine.evaluate(
+        makeLivingWorldCommand('WEATHER_INTENT_PROPOSED', WEATHER_AGENT_ACTOR_ID, 'system', 120, 120, c.payload as never)
+      )
+      expect(result.accepted, JSON.stringify(c.payload)).toBe(false)
+      if (!result.accepted) {
+        expect(result.rejection.code).toBe('INVALID_PAYLOAD')
+        expect(result.rejection.reason).toBe(c.reason)
+      }
     }
   })
 

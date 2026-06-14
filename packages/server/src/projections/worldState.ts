@@ -16,7 +16,27 @@ export type WorldStateRareWindow = Readonly<{
   closesAt: number | null
 }>
 
+export type WeatherAgentThought = Readonly<{
+  tick: number
+  currentWeather: string
+  desiredWeather: string
+  mood: string
+  pressureSource: string
+  thought: string
+  reason: string
+  cadenceKey: string
+}>
+
+export type WeatherAgentState = Readonly<{
+  mood: string | null
+  latestThought: WeatherAgentThought | null
+  recentThoughts: readonly WeatherAgentThought[]
+  latestDesiredWeather: string | null
+  latestAcceptedWeather: string | null
+}>
+
 export const WORLD_STATE_BOOT_EVENT_TYPES = [
+  'WEATHER_INTENT_PROPOSED',
   'WEATHER_CHANGE',
   'SEASON_CHANGE',
   'RARE_WINDOW_OPEN',
@@ -30,6 +50,7 @@ export class WorldStateProjection {
   private season: string | null = null
   private rareWindow: WorldStateRareWindow = { open: false, closesAt: null }
   private activeEventSeeds = new Map<string, WorldStateActiveEventSeed>()
+  private weatherAgent: WeatherAgentState = emptyWeatherAgentState()
   private hydrated = false
 
   rebuildFromEvents(events: readonly Event[]): void {
@@ -37,6 +58,7 @@ export class WorldStateProjection {
     this.season = null
     this.rareWindow = { open: false, closesAt: null }
     this.activeEventSeeds = new Map()
+    this.weatherAgent = emptyWeatherAgentState()
     this.hydrated = false
     for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
       this.project(event)
@@ -48,8 +70,27 @@ export class WorldStateProjection {
     if (!p) return
 
     switch (event.eventType) {
+      case 'WEATHER_INTENT_PROPOSED': {
+        const thought = readWeatherAgentThought(event, p)
+        if (thought) {
+          this.weatherAgent = {
+            mood: thought.mood,
+            latestThought: thought,
+            recentThoughts: [...this.weatherAgent.recentThoughts, thought].slice(-8),
+            latestDesiredWeather: thought.desiredWeather,
+            latestAcceptedWeather: this.weatherAgent.latestAcceptedWeather,
+          }
+          this.hydrated = true
+        }
+        break
+      }
+
       case 'WEATHER_CHANGE':
-        if (typeof p.to === 'string') { this.weather = p.to; this.hydrated = true }
+        if (typeof p.to === 'string') {
+          this.weather = p.to
+          this.weatherAgent = { ...this.weatherAgent, latestAcceptedWeather: p.to }
+          this.hydrated = true
+        }
         break
 
       case 'SEASON_CHANGE':
@@ -92,6 +133,7 @@ export class WorldStateProjection {
   getWeather(): string | null { return this.weather }
   getSeason(): string | null { return this.season }
   getRareWindow(): WorldStateRareWindow { return this.rareWindow }
+  getWeatherAgent(): WeatherAgentState { return this.weatherAgent }
   getActiveEventSeeds(): readonly WorldStateActiveEventSeed[] {
     return [...this.activeEventSeeds.values()]
   }
@@ -99,12 +141,45 @@ export class WorldStateProjection {
   canonicalHash(): string {
     return hashCanonicalJson({
       weather: this.weather,
+      weatherAgent: this.weatherAgent,
       season: this.season,
       rareWindow: this.rareWindow,
       activeEventSeeds: [...this.activeEventSeeds.values()].sort((a, b) =>
         a.worldEventId.localeCompare(b.worldEventId)
       ),
     })
+  }
+}
+
+function emptyWeatherAgentState(): WeatherAgentState {
+  return {
+    mood: null,
+    latestThought: null,
+    recentThoughts: [],
+    latestDesiredWeather: null,
+    latestAcceptedWeather: null,
+  }
+}
+
+function readWeatherAgentThought(event: Event, p: Record<string, unknown>): WeatherAgentThought | null {
+  if (
+    typeof p.currentWeather !== 'string' ||
+    typeof p.desiredWeather !== 'string' ||
+    typeof p.mood !== 'string' ||
+    typeof p.pressureSource !== 'string' ||
+    typeof p.thought !== 'string' ||
+    typeof p.reason !== 'string' ||
+    typeof p.cadenceKey !== 'string'
+  ) return null
+  return {
+    tick: event.tick ?? 0,
+    currentWeather: p.currentWeather,
+    desiredWeather: p.desiredWeather,
+    mood: p.mood,
+    pressureSource: p.pressureSource,
+    thought: p.thought,
+    reason: p.reason,
+    cadenceKey: p.cadenceKey,
   }
 }
 

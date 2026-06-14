@@ -13,7 +13,36 @@ const CHRONICLE_AI_RESPONSE_MIME = 'application/json'
 const CHRONICLE_AI_TIMEOUT_MS = 20_000
 const CHRONICLE_AI_MAX_ATTEMPTS = 2
 const CHRONICLE_AI_BACKOFF_MS = 250
-
+const SIMPLIFIED_TO_TRADITIONAL_PHRASES: ReadonlyArray<readonly [string, string]> = [
+  ['无事发生', '無事發生'],
+  ['发生', '發生'],
+  ['这时', '這時'],
+  ['市场', '市場'],
+  ['说话', '說話']
+]
+const SIMPLIFIED_TO_TRADITIONAL_CHARS: Readonly<Record<string, string>> = {
+  '无': '無',
+  '发': '發',
+  '这': '這',
+  '时': '時',
+  '场': '場',
+  '说': '說',
+  '话': '話',
+  '个': '個',
+  '们': '們',
+  '与': '與',
+  '为': '為',
+  '后': '後',
+  '来': '來',
+  '会': '會',
+  '见': '見',
+  '风': '風',
+  '阴': '陰',
+  '阳': '陽',
+  '雾': '霧',
+  '骤': '驟',
+  '岛': '島'
+}
 export type ChronicleEvent = Readonly<{
   tick: number
   eventType: string
@@ -366,7 +395,13 @@ function eventToChronicleEvent(event: Event): ChronicleEvent | null {
     const factionId = typeof p?.factionId === 'string' ? p.factionId : ''
     return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[RITUAL_ECOSYSTEM_MANIPULATION] faction=${factionId}` }
   }
-  // Phase 6 — Player Civilization: pass through to AI pipeline
+  if (event.eventType === 'WEATHER_INTENT_PROPOSED') {
+    const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
+    const thought = typeof p?.thought === 'string' ? p.thought : ''
+    const desiredWeather = typeof p?.desiredWeather === 'string' ? p.desiredWeather : ''
+    return { tick: event.tick ?? 0, eventType: event.eventType, actorId: event.actorId, narration: `[WEATHER_INTENT_PROPOSED] desiredWeather=${desiredWeather} thought=${thought}` }
+  }
+  // Phase 6 - Player Civilization: pass through to AI pipeline
   if (event.eventType.startsWith('PLAYER_') && event.eventType !== 'PLAYER_INTERVENE' && event.eventType !== 'PLAYER_ENERGY_SET') {
     const p = (event.payload as { data?: Record<string, unknown> } | null)?.data
     const actor = typeof p?.playerAccountId === 'string' ? p.playerAccountId : event.actorId
@@ -436,6 +471,8 @@ function chronicleSentenceEn(event: ChronicleEvent, index: number): string {
       return `${prefix}an omen faded, and daily noise filled the gap again.`
     case 'WEATHER_CHANGE':
       return `${prefix}the weather shifted, changing the texture of the streets.`
+    case 'WEATHER_INTENT_PROPOSED':
+      return `${prefix}the weather itself formed an intention before the sky changed.`
     case 'SEASON_CHANGE':
       return `${prefix}the season crossed a quiet boundary.`
     default:
@@ -459,6 +496,7 @@ function chronicleSystemPrompt(): string {
     'You render a concise living-world chronicle from committed game events.',
     'You are read-only: do not create events, facts, locations, NPCs, buildings, or outcomes.',
     'Only mention names listed in allowedNames. If unsure, use generic unnamed references.',
+    'The zh field must be Traditional Chinese, Taiwan/Hong Kong style. Do not output Simplified Chinese characters.',
     'Return strict JSON: {"zh": string, "en": string, "citedNames": string[]}.'
   ].join('\n')
 }
@@ -483,7 +521,15 @@ function parseAiChronicle(raw: string): { zh: string; en: string; citedNames: st
   const citedNames = Array.isArray(parsed.citedNames)
     ? parsed.citedNames.filter((name): name is string => typeof name === 'string')
     : []
-  return { zh: parsed.zh.trim(), en: parsed.en.trim(), citedNames }
+  return { zh: normalizeTraditionalChinese(parsed.zh.trim()), en: parsed.en.trim(), citedNames }
+}
+
+function normalizeTraditionalChinese(text: string): string {
+  let normalized = text
+  for (const [from, to] of SIMPLIFIED_TO_TRADITIONAL_PHRASES) {
+    normalized = normalized.split(from).join(to)
+  }
+  return [...normalized].map((char) => SIMPLIFIED_TO_TRADITIONAL_CHARS[char] ?? char).join('')
 }
 
 function extractJsonPayload(raw: string): string {

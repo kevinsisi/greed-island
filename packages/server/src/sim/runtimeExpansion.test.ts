@@ -59,7 +59,7 @@ describe('SimulationRuntime life goals and expansion', () => {
       expect(lifeGoalData?.motivation?.explanation).toContain('需求')
       expect(householdData?.motivation?.explanation).toContain('成家條件')
       expect(areaPressureData?.motivation?.explanation).toContain('門檻')
-      expect(weatherData?.motivation?.explanation).toContain('天氣週期')
+      expect(weatherData?.motivation?.explanation).toContain('天氣意志')
       expect(worldEventData?.motivation?.explanation).toContain('世界事件引擎')
       expect(constructionData?.motivation?.projectPurpose).toContain('住房')
       expect(constructionData?.motivation?.explanation).toContain('上位指令')

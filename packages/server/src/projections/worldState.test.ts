@@ -33,7 +33,56 @@ describe('WorldStateProjection', () => {
     const proj = new WorldStateProjection()
     proj.project(makeEvent('WEATHER_CHANGE', { from: 'clear', to: 'rain', narration: '...' }))
     expect(proj.getWeather()).toBe('rain')
+    expect(proj.getWeatherAgent().latestAcceptedWeather).toBe('rain')
     expect(proj.isHydrated()).toBe(true)
+  })
+
+  it('tracks weather-agent thoughts from WEATHER_INTENT_PROPOSED', () => {
+    const proj = new WorldStateProjection()
+    proj.project(makeEvent('WEATHER_INTENT_PROPOSED', {
+      currentWeather: '晴',
+      desiredWeather: '霧雨',
+      mood: 'watchful',
+      pressureSource: 'cadence',
+      thought: '天空想替街口降下一場細雨。',
+      reason: 'weather cadence shaped the weather-agent intent',
+      cadenceKey: 'weather:1:cadence',
+      proposedAtTick: 10,
+      narration: '天氣意志低語：天空想替街口降下一場細雨。',
+    }))
+
+    expect(proj.getWeatherAgent()).toEqual(expect.objectContaining({
+      mood: 'watchful',
+      latestDesiredWeather: '霧雨',
+      latestAcceptedWeather: null,
+    }))
+    expect(proj.getWeatherAgent().latestThought?.thought).toContain('天空想替街口')
+    expect(proj.getWeatherAgent().recentThoughts).toHaveLength(1)
+  })
+
+  it('rebuilds weather-agent thoughts deterministically', () => {
+    const events = [
+      makeEvent('WEATHER_CHANGE', { from: '晴', to: '陰', narration: '...' }, 2),
+      makeEvent('WEATHER_INTENT_PROPOSED', {
+        currentWeather: '晴',
+        desiredWeather: '陰',
+        mood: 'calm',
+        pressureSource: 'cadence',
+        thought: '節律走到第 1 拍，我讓天空轉為陰。',
+        reason: 'weather cadence shaped the weather-agent intent',
+        cadenceKey: 'weather:1:cadence',
+        proposedAtTick: 10,
+        narration: '天氣意志低語：節律走到第 1 拍，我讓天空轉為陰。',
+      }, 1),
+    ]
+    const p1 = new WorldStateProjection()
+    const p2 = new WorldStateProjection()
+
+    p1.rebuildFromEvents(events)
+    p2.rebuildFromEvents(events)
+
+    expect(p1.getWeatherAgent()).toEqual(p2.getWeatherAgent())
+    expect(p1.canonicalHash()).toBe(p2.canonicalHash())
   })
 
   it('tracks season from SEASON_CHANGE', () => {
@@ -87,6 +136,7 @@ describe('WorldStateProjection', () => {
     proj.project(makeEvent('WEATHER_CHANGE', { from: 'clear', to: 'storm', narration: '...' }, 1))
     proj.rebuildFromEvents([])
     expect(proj.getWeather()).toBeNull()
+    expect(proj.getWeatherAgent().latestThought).toBeNull()
     expect(proj.isHydrated()).toBe(false)
   })
 

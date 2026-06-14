@@ -37,6 +37,14 @@ import {
 export const LIVING_WORLD_ACTOR_TYPES = ['player', 'npc', 'system'] as const
 export type LivingWorldActorType = (typeof LIVING_WORLD_ACTOR_TYPES)[number]
 
+export const WEATHER_AGENT_ACTOR_ID = 'weather.agent'
+export const WEATHER_AGENT_SUPPORTED_WEATHERS = ['晴', '陰', '霧雨', '驟雨', '微風'] as const
+export type WeatherAgentSupportedWeather = (typeof WEATHER_AGENT_SUPPORTED_WEATHERS)[number]
+export const WEATHER_AGENT_MOODS = ['calm', 'watchful', 'restless', 'brooding', 'playful'] as const
+export type WeatherAgentMood = (typeof WEATHER_AGENT_MOODS)[number]
+export const WEATHER_AGENT_PRESSURE_SOURCES = ['cadence', 'season', 'ecosystem', 'civilization', 'world_event'] as const
+export type WeatherAgentPressureSource = (typeof WEATHER_AGENT_PRESSURE_SOURCES)[number]
+
 export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_MOVE',
   'NPC_ACTIVITY_CHANGE',
@@ -63,6 +71,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'MAP_TILE_UNLOCKED',
   'NPC_INTERACT',
   'AREA_PRESSURE',
+  'WEATHER_INTENT_PROPOSED',
   'WEATHER_CHANGE',
   'SEASON_CHANGE',
   'WORLD_EVENT_SPAWN',
@@ -825,6 +834,19 @@ export type AreaPressureCmd = Readonly<{
   tileId: string
   kind: string
   detail: Record<string, string | number>
+  motivation?: EventMotivation
+  narration: string
+}>
+
+export type WeatherIntentProposedCmd = Readonly<{
+  currentWeather: WeatherAgentSupportedWeather
+  desiredWeather: WeatherAgentSupportedWeather
+  mood: WeatherAgentMood
+  pressureSource: WeatherAgentPressureSource
+  thought: string
+  reason: string
+  cadenceKey: string
+  proposedAtTick: number
   motivation?: EventMotivation
   narration: string
 }>
@@ -1771,6 +1793,7 @@ export type LivingWorldCommandPayload =
   | TileGeneratedCmd
   | NpcInteractCmd
   | AreaPressureCmd
+  | WeatherIntentProposedCmd
   | WeatherChangeCmd
   | SeasonChangeCmd
   | WorldEventSpawnCmd
@@ -2291,6 +2314,19 @@ const VALIDATORS: Readonly<
     if (typeof p.tileId !== 'string' || p.tileId.length === 0) return 'tileId required'
     if (typeof p.kind !== 'string' || p.kind.length === 0) return 'kind required'
     if (!isRecord(p.detail)) return 'detail must be object'
+    if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  WEATHER_INTENT_PROPOSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (!isSupportedWeather(p.currentWeather)) return 'currentWeather invalid'
+    if (!isSupportedWeather(p.desiredWeather)) return 'desiredWeather invalid'
+    if (!isWeatherAgentMood(p.mood)) return 'mood invalid'
+    if (!isWeatherAgentPressureSource(p.pressureSource)) return 'pressureSource invalid'
+    if (typeof p.thought !== 'string' || p.thought.trim().length === 0) return 'thought required'
+    if (typeof p.reason !== 'string' || p.reason.trim().length === 0) return 'reason required'
+    if (typeof p.cadenceKey !== 'string' || p.cadenceKey.length === 0) return 'cadenceKey required'
+    if (!isNonNegativeInteger(p.proposedAtTick)) return 'proposedAtTick required'
     if (typeof p.narration !== 'string') return 'narration required'
     return null
   },
@@ -3645,6 +3681,18 @@ function reject(
     reason
   }
   return { accepted: false, rejection }
+}
+
+function isSupportedWeather(value: unknown): value is WeatherAgentSupportedWeather {
+  return typeof value === 'string' && (WEATHER_AGENT_SUPPORTED_WEATHERS as readonly string[]).includes(value)
+}
+
+function isWeatherAgentMood(value: unknown): value is WeatherAgentMood {
+  return typeof value === 'string' && (WEATHER_AGENT_MOODS as readonly string[]).includes(value)
+}
+
+function isWeatherAgentPressureSource(value: unknown): value is WeatherAgentPressureSource {
+  return typeof value === 'string' && (WEATHER_AGENT_PRESSURE_SOURCES as readonly string[]).includes(value)
 }
 
 function validateConstructionMotivation(value: unknown): string | null {
