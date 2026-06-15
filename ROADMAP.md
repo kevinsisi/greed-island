@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.92.3 ✅ local-ready — 2026-06-15
+
+**主題：Timeline Human Narration Hotfix（防禦隊事件不再把 raw NPC id 當敘事）**
+
+- ✅ **server narration cleanup** — 新 `NPC_DEFENSE_PARTY_FORMED` / defense hunt narration 用中文名摘要或「幾位居民」，不再輸出完整 npcId/household id 長串。
+- ✅ **legacy Timeline fallback** — 前端對既有 defense party / defense hunt events 轉成人話，避免 mobile Timeline/NPC filter 直接顯示 raw id 清單。
+- ✅ **motivation fallback** — 防禦隊事件說明為 NPC 目擊攻擊後透過 Rule Engine 條件臨時結隊保護同伴。
+- ✅ **Verification** — Timeline targeted tests、build、OpenSpec 53 items 全過；CI/CD/live smoke pending。
+
+---
+
 ## v0.92.2 ✅ shipped — 2026-06-15
 
 **主題：Ecology Intent Visibility Hotfix（動物/植物不再只是數量與密度）**

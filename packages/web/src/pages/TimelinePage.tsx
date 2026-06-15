@@ -124,6 +124,7 @@ function TimelineRow({ event, t }: { event: EventSummary; t: Translator }) {
   const occurredAt = new Date(event.occurredAt)
   const tag = event.eventType.replace(/_/g, ' ')
   const motivation = eventMotivationFor(event)
+  const narration = eventNarrationFor(event)
   return (
     <article className="gi-panel p-4 lg:p-5 flex flex-col gap-2">
       <header className="flex flex-wrap items-center gap-2 text-[11px] font-display uppercase tracking-tightest text-ground-500">
@@ -137,7 +138,7 @@ function TimelineRow({ event, t }: { event: EventSummary; t: Translator }) {
           {formatRelative(occurredAt, t)}
         </span>
       </header>
-      <p className="text-sm text-ground-200 leading-relaxed">{event.narration}</p>
+      <p className="text-sm text-ground-200 leading-relaxed">{narration}</p>
       {motivation && (
         <div className="rounded-sharp border border-moss-800/70 bg-moss-950/20 px-3 py-2 text-[12px] leading-relaxed text-moss-200">
           <div className="font-display text-[10px] uppercase tracking-tightest text-moss-500 mb-1">
@@ -161,6 +162,30 @@ function TimelineRow({ event, t }: { event: EventSummary; t: Translator }) {
       </details>
     </article>
   )
+}
+
+export function eventNarrationFor(event: EventSummary): string {
+  if (event.eventType === 'NPC_DEFENSE_PARTY_FORMED') {
+    const memberCount = Array.isArray(event.payload.memberNpcIds) ? event.payload.memberNpcIds.length : 0
+    const tile = typeof event.payload.tileId === 'string' ? event.payload.tileId : '這片街區'
+    const species = typeof event.payload.targetSpeciesId === 'string' ? event.payload.targetSpeciesId : '威脅'
+    const victim = typeof event.payload.victimNpcId === 'string' ? '受襲者' : '附近居民'
+    const group = memberCount > 0 ? `${memberCount}位居民` : '附近居民'
+    return `${group}在${tile}臨時結隊，保護${victim}並追擊${species}。`
+  }
+  if (event.eventType === 'ANIMAL_HUNT_STARTED' && isDefenseHunt(event.payload.huntId)) {
+    const species = typeof event.payload.targetSpeciesId === 'string' ? event.payload.targetSpeciesId : '威脅'
+    return `居民防禦隊開始追擊${species}。`
+  }
+  if (event.eventType === 'ANIMAL_HUNT_RESOLVED' && isDefenseHunt(event.payload.huntId)) {
+    const species = typeof event.payload.targetSpeciesId === 'string' ? event.payload.targetSpeciesId : '威脅'
+    return `居民防禦隊結束追擊，${species}的威脅暫時被壓下。`
+  }
+  return event.narration ?? '世界記錄了一件事件，但沒有公開敘事。'
+}
+
+function isDefenseHunt(value: unknown): boolean {
+  return typeof value === 'string' && value.startsWith('hunt.defense.')
 }
 
 type TimelineEventMotivation = Readonly<{
@@ -187,6 +212,7 @@ function publicFallbackMotivation(event: EventSummary): TimelineEventMotivation 
   if (event.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') return freeformAgentMotivation(event)
   if (event.eventType === 'NPC_PRODUCTIVE_ACTION') return productiveMotivation(event)
   if (event.eventType === 'NPC_INTERACT') return interactionMotivation(event)
+  if (event.eventType === 'NPC_DEFENSE_PARTY_FORMED') return { explanation: '附近 NPC 目擊攻擊後臨時結隊保護同伴；這是由生態威脅、在場人數與規則引擎共同觸發的防衛反應。' }
   if (event.eventType === 'NPC_LIFE_GOAL_SET') return lifeGoalMotivation(event)
   if (event.eventType === 'NPC_HOUSEHOLD_FORMED') {
     return { explanation: '兩位 NPC 的生活條件、關係與安定需求達到門檻，世界把短期互動推進成可回放的家庭事實。' }
@@ -251,6 +277,7 @@ function freeformActionLabel(kind: string): string {
   switch (kind) {
     case 'travel': return '移動 / 旅行'
     case 'work': return '工作 / 服務'
+    case 'build': return '建造 / 開墾'
     case 'rest': return '休息 / 恢復'
     case 'socialize': return '社交 / 拜訪'
     case 'buy_card': return '追求紋卡'

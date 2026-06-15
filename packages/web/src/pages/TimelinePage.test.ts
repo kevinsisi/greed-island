@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EventSummary } from '../state/types'
-import { eventMotivationFor } from './TimelinePage'
+import { eventMotivationFor, eventNarrationFor } from './TimelinePage'
 
 describe('Timeline event motivation', () => {
   it('uses authoritative motivation when present', () => {
@@ -26,6 +26,7 @@ describe('Timeline event motivation', () => {
     expect(eventMotivationFor(event('NPC_PRODUCTIVE_ACTION', { domain: 'trade', metric: 'supply' }))?.explanation).toContain('交易')
     expect(eventMotivationFor(event('NPC_FREEFORM_ACTION_PROPOSED', { accepted: true, resolved: { kind: 'work' } }))?.explanation).toContain('NPC AI agent')
     expect(eventMotivationFor(event('NPC_INTERACT', { mode: 'argue' }))?.explanation).toContain('爭執')
+    expect(eventMotivationFor(event('NPC_DEFENSE_PARTY_FORMED', { memberNpcIds: ['npc.a', 'npc.b'] }))?.explanation).toContain('保護同伴')
     expect(eventMotivationFor(event('AREA_PRESSURE', { kind: 'resource.low' }))?.explanation).toContain('資源')
     expect(eventMotivationFor(event('CARD_DROP_SPAWN', {}))?.explanation).toContain('紋卡')
   })
@@ -52,6 +53,32 @@ describe('Timeline event motivation', () => {
     }))
 
     expect(motivation).toBeNull()
+  })
+
+  it('renders defense party events without raw npc id lists', () => {
+    const narration = eventNarrationFor(event('NPC_DEFENSE_PARTY_FORMED', {
+      tileId: 't_desert',
+      targetSpeciesId: 'mirage_hawk',
+      victimNpcId: 'desert.camelkeeper.tuo_yin',
+      memberNpcIds: [
+        'desert.camelkeeper.tuo_yin',
+        'desert.guide.sha_jiao',
+        'household.desert.camelkeeper.tuo_yin.desert.cardreader.zhuang_ling.child.1',
+      ],
+    }))
+
+    expect(narration).toBe('3位居民在t_desert臨時結隊，保護受襲者並追擊mirage_hawk。')
+    expect(narration).not.toContain('desert.camelkeeper')
+    expect(narration).not.toContain('household.')
+  })
+
+  it('renders defense hunt follow-up events without member ids', () => {
+    const narration = eventNarrationFor(event('ANIMAL_HUNT_STARTED', {
+      huntId: 'hunt.defense.party-1',
+      targetSpeciesId: 'mirage_hawk',
+    }))
+
+    expect(narration).toBe('居民防禦隊開始追擊mirage_hawk。')
   })
 })
 

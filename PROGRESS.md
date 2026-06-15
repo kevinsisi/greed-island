@@ -5,6 +5,28 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-15 — Handoff Snapshot @ v0.92.3
+
+### Current Version
+`0.92.3` — Timeline Human Narration Hotfix：編年史/NPC filter 仍會直接顯示 `NPC_DEFENSE_PARTY_FORMED` 的 raw NPC id 清單，讓 NPC 看起來像資料列而不是人在保護同伴。
+
+### What Shipped
+- **Defense party narration cleanup**：server 新生成的 `NPC_DEFENSE_PARTY_FORMED` / defense hunt narration uses NPC 中文名摘要或「幾位居民」，不再把完整 `npcId` / household id list 串進公開敘事。
+- **Legacy Timeline fallback**：web `TimelinePage` 對既有 `NPC_DEFENSE_PARTY_FORMED`、defense `ANIMAL_HUNT_STARTED`、defense `ANIMAL_HUNT_RESOLVED` 事件改用人話 fallback，不直接印 raw `event.narration` 的 id 長串。
+- **Motivation fallback**：Timeline now explains defense party events as NPC witnessing an attack and forming a temporary protection group through Rule Engine conditions.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.92.3`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- TimelinePage.test.ts` — pass（7 tests / 1 file）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（53 items）
+
+### Known Notes
+- CI/CD and live smoke pending after commit/push.
+- This specifically fixes the visible raw-id defense-party issue shown in mobile Timeline/NPC filter screenshots; broader NPC personality/deeper cognition remains separate from this presentation bug.
+
+---
+
 ## 2026-06-15 — Handoff Snapshot @ v0.92.2
 
 ### Current Version

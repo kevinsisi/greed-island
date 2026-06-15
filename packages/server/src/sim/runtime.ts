@@ -3500,9 +3500,14 @@ export class SimulationRuntime {
       for (const plan of defensePlans) {
         const tileName = TILE_NAME_BY_ID[plan.tileId] ?? plan.tileId
         const leaderNpcId = plan.memberNpcIds[0]!
-        const membersText = plan.memberNpcIds.join('、')
+        const profileById = new Map(this.npcEngine.listProfiles().map((profile) => [profile.id, profile]))
+        const memberNames = plan.memberNpcIds
+          .map((id) => profileById.get(id)?.name.zh)
+          .filter((name): name is string => typeof name === 'string' && name.length > 0)
+        const membersText = summarizeNpcGroup(memberNames, plan.memberNpcIds.length)
+        const victimName = profileById.get(plan.victimNpcId)?.name.zh ?? '受襲的居民'
         const motivation = makeMotivation(
-          `${membersText} 在${tileName}組成防禦隊伍，反擊攻擊 ${plan.victimNpcId} 的 ${plan.targetSpeciesId}。`,
+          `${membersText}在${tileName}臨時結隊，保護${victimName}並反擊${plan.targetSpeciesId}。`,
           'defense'
         )
         plannedHuntedAnimalIds.add(plan.targetAnimalId)
@@ -3523,7 +3528,7 @@ export class SimulationRuntime {
               reactionToAttackId: plan.reactionToAttackId,
               formedAtTick: nextTick,
               motivation,
-              narration: `${membersText}在${tileName}組成防禦隊伍，圍剿${plan.targetSpeciesId}。`,
+              narration: `${membersText}在${tileName}組成防禦隊伍，保護${victimName}並圍剿${plan.targetSpeciesId}。`,
             }
           ),
           makeLivingWorldCommand(
@@ -6808,6 +6813,13 @@ function productiveDomainText(domain: string): string {
     case 'learn': return '知識與技能累積'
     default: return '生產性行動'
   }
+}
+
+function summarizeNpcGroup(names: readonly string[], fallbackCount: number): string {
+  if (names.length === 0) return `${fallbackCount}位居民`
+  const shown = names.slice(0, 3).join('、')
+  const remaining = Math.max(0, fallbackCount - names.slice(0, 3).length)
+  return remaining > 0 ? `${shown}等${fallbackCount}人` : shown
 }
 
 function metricPurpose(metric: string): string | undefined {
