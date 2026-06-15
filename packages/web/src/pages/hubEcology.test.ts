@@ -14,6 +14,8 @@ function row(
     biomeRegion: biome,
     count,
     animalIds: Array.from({ length: count }, (_, i) => `${speciesId}-${tileId}-${i}`),
+    intent: 'foraging',
+    thoughtZh: `${speciesId} is foraging.`,
   }
 }
 

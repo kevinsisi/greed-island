@@ -107,6 +107,12 @@ export function EcologyPage() {
                     </div>
                     <div className="text-ground-100 font-bold text-lg">{a.count}</div>
                     <div className="text-[10px] text-ground-600">{a.biomeRegion}</div>
+                    <div className="mt-1 inline-flex w-fit rounded-sharp border border-moss-500/40 px-1.5 py-0.5 text-[10px] uppercase tracking-tightest text-moss-300">
+                      {a.intent}
+                    </div>
+                    <div className="mt-1 text-[10px] leading-snug text-ground-400">
+                      {a.thoughtZh}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -155,10 +161,16 @@ export function EcologyPage() {
                       {p.speciesId}
                     </div>
                     <div className="text-ground-100 font-bold text-lg">
-                      {(p.saturationPct * 100).toFixed(0)}%
+                      {p.saturationPct.toFixed(0)}%
                     </div>
                     <div className="text-[10px] text-ground-600">
                       {p.density} / {p.capacity}
+                    </div>
+                    <div className="mt-1 inline-flex w-fit rounded-sharp border border-moss-500/40 px-1.5 py-0.5 text-[10px] uppercase tracking-tightest text-moss-300">
+                      {p.state}
+                    </div>
+                    <div className="mt-1 text-[10px] leading-snug text-ground-400">
+                      {p.thoughtZh}
                     </div>
                   </div>
                 ))}

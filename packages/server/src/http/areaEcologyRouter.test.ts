@@ -36,6 +36,8 @@ describe('areaEcology router', () => {
           biomeRegion: 'forest',
           count: 3,
           animalIds: ['a1', 'a2', 'a3'],
+          intent: 'foraging',
+          thoughtZh: 'forest_deer沿著氣味與地形覓食。',
         },
       ],
       fishery: null,

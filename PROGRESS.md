@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-15 — Handoff Snapshot @ v0.92.2
+
+### Current Version
+`0.92.2` — Ecology Intent Visibility Hotfix：動物與植物已經有 deterministic 生態事件（遷徙、飢餓、攻擊、逃跑、反擊、播種、採收、再生、枯竭/恢復），但公開 ecology surface 只顯示數量/密度，看起來像死資料。
+
+### What Shipped
+- **Animal intent rollup**：`/api/area/:tileId/ecology` 的 animal rows now expose deterministic `intent` + `thoughtZh` derived from existing world state: `hunting`（predator hunger）、`migrating`（migration wave）、`herding`（large group）、`foraging`（default living behavior）。
+- **Plant life-state rollup**：plant rows expose `state` + `thoughtZh` from saturation: `struggling`、`regrowing`、`spreading`、`mature`，讓植物呈現生命狀態而不是純資源百分比。
+- **Ecology UI visibility**：Ecology page now shows animal intent/thought and plant state/thought; also fixes plant saturation display to use the server's 0–100 percentage directly.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.92.2`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- areaEcology.test.ts areaEcologyRouter.test.ts` — pass（11 tests / 2 files）
+- `npm run test -w @greed-island/web -- hubEcology.test.ts` — pass（6 tests / 1 file）
+- `npx openspec validate --all --strict` — pass（53 items）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- This is not fake animal/plant AI. It is a deterministic intent/life-state view over existing ecosystem state, preserving Command → Rule Engine → Event → Projection boundaries.
+- Deeper animal cognition / plant agency still deserves a proper OpenSpec track.
+- CI/CD and live smoke pending after commit/push.
+
+---
+
 ## 2026-06-14 — Handoff Snapshot @ v0.92.1
 
 ### Current Version

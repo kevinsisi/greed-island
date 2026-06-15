@@ -22,6 +22,8 @@ export type AnimalGroupRow = {
   biomeRegion: 'salt_marsh' | 'forest' | 'mountain' | 'desert' | 'ruin'
   count: number
   animalIds: readonly string[]
+  intent: 'foraging' | 'herding' | 'migrating' | 'hunting'
+  thoughtZh: string
 }
 
 export type FisheryRow = {
@@ -53,6 +55,8 @@ export type PlantNodeRow = {
   density: number
   capacity: number
   saturationPct: number
+  state: 'struggling' | 'regrowing' | 'spreading' | 'mature'
+  thoughtZh: string
 }
 
 export type AreaEcologyView = {

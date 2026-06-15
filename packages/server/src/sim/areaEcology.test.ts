@@ -178,4 +178,48 @@ describe('areaEcology.buildAreaEcology', () => {
     expect(view.predatorWarnings).toHaveLength(1)
     expect(view.predatorWarnings[0]!.predatorSpeciesId).toBe('fog_wolf')
   })
+
+  it('derives animal intent from migration, predator hunger, and herd size', () => {
+    const view = buildAreaEcology({
+      tileId: 't_forest',
+      animals: [
+        { speciesId: 'fog_wolf', tileId: 't_forest', biomeRegion: 'forest', count: 1, animalIds: ['w1'] },
+        { speciesId: 'forest_deer', tileId: 't_forest', biomeRegion: 'forest', count: 3, animalIds: ['d1', 'd2', 'd3'] },
+        { speciesId: 'bark_mantis', tileId: 't_forest', biomeRegion: 'forest', count: 4, animalIds: ['m1', 'm2', 'm3', 'm4'] },
+      ],
+      fishery: null,
+      migrationWaves: [
+        { waveId: 'wave-1', speciesId: 'forest_deer', fromTileId: 't_forest', toTileId: 't_central', migrationType: 'pressure', startedAtTick: 10, count: 3 },
+      ],
+      predatorHunger: [
+        { predatorSpeciesId: 'fog_wolf', tileId: 't_forest', lastKillAtTick: 9 },
+      ],
+      plants: [],
+    })
+
+    expect(view.animals.find((row) => row.speciesId === 'fog_wolf')?.intent).toBe('hunting')
+    expect(view.animals.find((row) => row.speciesId === 'forest_deer')?.intent).toBe('migrating')
+    expect(view.animals.find((row) => row.speciesId === 'bark_mantis')?.intent).toBe('herding')
+  })
+
+  it('derives plant life state from saturation', () => {
+    const view = buildAreaEcology({
+      tileId: 't_forest',
+      animals: [],
+      fishery: null,
+      migrationWaves: [],
+      predatorHunger: [],
+      plants: [
+        { tileId: 't_forest', speciesId: 'dying_moss', density: 1, capacity: 10 },
+        { tileId: 't_forest', speciesId: 'young_fern', density: 4, capacity: 10 },
+        { tileId: 't_forest', speciesId: 'wide_grass', density: 8, capacity: 10 },
+        { tileId: 't_forest', speciesId: 'old_tree', density: 10, capacity: 10 },
+      ],
+    })
+
+    expect(view.plants.find((row) => row.speciesId === 'dying_moss')?.state).toBe('struggling')
+    expect(view.plants.find((row) => row.speciesId === 'young_fern')?.state).toBe('regrowing')
+    expect(view.plants.find((row) => row.speciesId === 'wide_grass')?.state).toBe('spreading')
+    expect(view.plants.find((row) => row.speciesId === 'old_tree')?.state).toBe('mature')
+  })
 })

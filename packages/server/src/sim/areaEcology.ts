@@ -13,7 +13,11 @@ export type AnimalGroupRow = Readonly<{
   biomeRegion: EcosystemRegionId
   count: number
   animalIds: readonly string[]
+  intent: AnimalGroupIntent
+  thoughtZh: string
 }>
+
+export type AnimalGroupIntent = 'foraging' | 'herding' | 'migrating' | 'hunting'
 
 export type FisheryRow = Readonly<{
   tileId: string
@@ -44,7 +48,11 @@ export type PlantNodeRow = Readonly<{
   density: number
   capacity: number
   saturationPct: number
+  state: PlantLifeState
+  thoughtZh: string
 }>
+
+export type PlantLifeState = 'struggling' | 'regrowing' | 'spreading' | 'mature'
 
 export type AreaEcologyView = Readonly<{
   tileId: string
@@ -95,15 +103,30 @@ export type AreaEcologyInput = Readonly<{
 }>
 
 export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
+  const predatorSpeciesOnTile = new Set(
+    input.predatorHunger
+      .filter((row) => row.tileId === input.tileId)
+      .map((row) => row.predatorSpeciesId)
+  )
+  const migratingSpeciesOnTile = new Set(
+    input.migrationWaves
+      .filter((wave) => wave.fromTileId === input.tileId || wave.toTileId === input.tileId)
+      .map((wave) => wave.speciesId)
+  )
   const animals: AnimalGroupRow[] = input.animals
     .filter((row) => row.tileId === input.tileId && row.count > 0)
-    .map((row) => ({
-      speciesId: row.speciesId,
-      tileId: row.tileId,
-      biomeRegion: row.biomeRegion,
-      count: row.count,
-      animalIds: [...row.animalIds],
-    }))
+    .map((row) => {
+      const intent = animalIntentFor(row, predatorSpeciesOnTile, migratingSpeciesOnTile)
+      return {
+        speciesId: row.speciesId,
+        tileId: row.tileId,
+        biomeRegion: row.biomeRegion,
+        count: row.count,
+        animalIds: [...row.animalIds],
+        intent,
+        thoughtZh: animalThoughtZh(row.speciesId, intent),
+      }
+    })
     .sort(
       (a, b) =>
         b.count - a.count ||
@@ -144,12 +167,18 @@ export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
 
   const plants: PlantNodeRow[] = input.plants
     .filter((p) => p.tileId === input.tileId)
-    .map((p) => ({
-      speciesId: p.speciesId,
-      density: p.density,
-      capacity: p.capacity,
-      saturationPct: p.capacity > 0 ? Math.round((p.density / p.capacity) * 100) : 0,
-    }))
+    .map((p) => {
+      const saturationPct = p.capacity > 0 ? Math.round((p.density / p.capacity) * 100) : 0
+      const state = plantStateFor(saturationPct)
+      return {
+        speciesId: p.speciesId,
+        density: p.density,
+        capacity: p.capacity,
+        saturationPct,
+        state,
+        thoughtZh: plantThoughtZh(p.speciesId, state),
+      }
+    })
     .sort((a, b) => b.density - a.density || a.speciesId.localeCompare(b.speciesId))
 
   return {
@@ -160,6 +189,42 @@ export function buildAreaEcology(input: AreaEcologyInput): AreaEcologyView {
     migrationsDeparting,
     predatorWarnings,
     plants,
+  }
+}
+
+function animalIntentFor(
+  row: { speciesId: string; count: number },
+  predatorSpeciesOnTile: ReadonlySet<string>,
+  migratingSpeciesOnTile: ReadonlySet<string>
+): AnimalGroupIntent {
+  if (predatorSpeciesOnTile.has(row.speciesId)) return 'hunting'
+  if (migratingSpeciesOnTile.has(row.speciesId)) return 'migrating'
+  if (row.count >= 4) return 'herding'
+  return 'foraging'
+}
+
+function animalThoughtZh(speciesId: string, intent: AnimalGroupIntent): string {
+  switch (intent) {
+    case 'hunting': return `${speciesId}正在嗅探獵物與弱點。`
+    case 'migrating': return `${speciesId}感到棲地壓力，群體正尋找下一處落腳地。`
+    case 'herding': return `${speciesId}聚成一群，用數量保護幼小個體。`
+    case 'foraging': return `${speciesId}沿著氣味與地形覓食。`
+  }
+}
+
+function plantStateFor(saturationPct: number): PlantLifeState {
+  if (saturationPct < 20) return 'struggling'
+  if (saturationPct < 60) return 'regrowing'
+  if (saturationPct < 95) return 'spreading'
+  return 'mature'
+}
+
+function plantThoughtZh(speciesId: string, state: PlantLifeState): string {
+  switch (state) {
+    case 'struggling': return `${speciesId}正在把最後的養分收回根部。`
+    case 'regrowing': return `${speciesId}沿著潮濕縫隙重新抽芽。`
+    case 'spreading': return `${speciesId}把種子與枝葉慢慢推向空地。`
+    case 'mature': return `${speciesId}已長成穩定群落，正在維持遮蔭與土壤。`
   }
 }
 
