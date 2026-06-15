@@ -5,14 +5,14 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.92.2 ✅ local-ready — 2026-06-15
+## v0.92.2 ✅ shipped — 2026-06-15
 
 **主題：Ecology Intent Visibility Hotfix（動物/植物不再只是數量與密度）**
 
 - ✅ **animal intent rollup** — Area ecology API 對動物群新增 deterministic `intent` + `thoughtZh`：hunting / migrating / herding / foraging，由 predator hunger、migration wave、群體大小與既有生態狀態推導。
 - ✅ **plant life state** — BioNode plant rows 新增 `state` + `thoughtZh`：struggling / regrowing / spreading / mature，由 density/capacity 飽和度推導。
 - ✅ **Ecology UI** — 生態頁顯示動物意圖與植物生命狀態，並修正植物百分比直接使用 server 的 0–100 `saturationPct`。
-- ✅ **Verification** — targeted server ecology/router tests、web hub ecology test、OpenSpec 53 items、build 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted server ecology/router tests、web hub ecology test、OpenSpec 53 items、build、CI `27520948206`、Deploy Dev `27520992882`、live `0.92.2` smoke 全過；live plant state fields verified across multiple tiles，animal intent fields covered by tests/API schema because sampled live tiles currently had no animal rows。
 
 ---
 

@@ -21,11 +21,14 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/web -- hubEcology.test.ts` — pass（6 tests / 1 file）
 - `npx openspec validate --all --strict` — pass（53 items）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- CI `27520948206` — pass（Build/typecheck/test + OpenSpec validate；Node.js 20 deprecation annotation remains known non-blocking）
+- Deploy Dev `27520992882` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.92.2`；`/api/area/t_forest/ecology` returned plant `state`/`thoughtZh` fields（e.g. mature oak/pine/wild_herb）；multi-tile ecology smoke confirmed plant states across forest/mountain/desert/ruin/dimai/salt-marsh.
 
 ### Known Notes
 - This is not fake animal/plant AI. It is a deterministic intent/life-state view over existing ecosystem state, preserving Command → Rule Engine → Event → Projection boundaries.
 - Deeper animal cognition / plant agency still deserves a proper OpenSpec track.
-- CI/CD and live smoke pending after commit/push.
+- Live animal rows were absent on sampled tiles during smoke, so animal `intent` fields are covered by tests/API schema and will appear when animal population rows exist.
 
 ---
 
