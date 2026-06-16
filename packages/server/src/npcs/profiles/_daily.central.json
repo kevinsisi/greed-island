@@ -119,8 +119,8 @@
     "role": { "zh": "圖書館員", "en": "Librarian" },
     "defaultLocation": "t_central",
     "routine": [
-      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning shelving" },
-      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "reading-room desk" },
+      { "fromTickOfDay": 0,     "toTickOfDay": 5760,  "location": "t_central", "label": "morning shelving",   "buildingId": "b_central_library" },
+      { "fromTickOfDay": 5760,  "toTickOfDay": 14400, "location": "t_central", "label": "reading-room desk",  "buildingId": "b_central_library" },
       { "fromTickOfDay": 14400, "toTickOfDay": 17280, "location": "t_central", "label": "closing rounds" }
     ],
     "triggers": [

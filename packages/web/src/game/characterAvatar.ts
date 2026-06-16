@@ -346,6 +346,73 @@ function animateAvatar(
       shadow.setScale(1.25, 1)
       break
     }
+    case 'read': {
+      // Forward lean, slow page-turn rhythm (one frame every ~1.5s)
+      const pageTurn = Math.floor(timeMs / 1500 + parts.phase) % 2
+      body.setTexture(pageTurn === 0 ? 'pxh-body-0' : 'pxh-body-1')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.setRotation(0.08)
+      rig.y = size * 0.04
+      break
+    }
+    case 'perform': {
+      // Upbeat rhythm sway — faster than eat/trade, with bounce
+      const beat = Math.sin(timeMs / 220 + parts.phase)
+      body.setTexture(beat > 0.3 ? 'pxh-body-1' : 'pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.y = Math.abs(beat) * size * 0.04
+      break
+    }
+    case 'craft': {
+      // Two-handed motion — slower than work, emphasises upswing hold
+      const press = Math.sin(timeMs * (WORK_SWING_SPEED * 0.7) + parts.phase)
+      body.setTexture(press > 0.2 ? 'pxh-body-work' : 'pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.y = Math.max(0, press * 0.5) * size * 0.03
+      break
+    }
+    case 'study': {
+      // Concentrated lean with subtle head-bob
+      const bob = Math.sin(timeMs / 900 + parts.phase)
+      body.setTexture('pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.setRotation(0.06)
+      rig.y = bob * size * 0.025 + size * 0.03
+      break
+    }
+    case 'pray': {
+      // Slow rise-and-fall, slight forward tilt
+      const rise = Math.sin(timeMs / 1200 + parts.phase)
+      body.setTexture('pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.setScale(1, 1 + rise * 0.02)
+      rig.setRotation(rise * 0.05)
+      break
+    }
+    case 'write': {
+      // Slow arm sweep — one stroke every ~2s
+      const stroke = Math.sin(timeMs / 600 + parts.phase)
+      body.setTexture(stroke > 0 ? 'pxh-body-work' : 'pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.setRotation(0.04)
+      rig.y = size * 0.03
+      break
+    }
+    case 'guard': {
+      // Alert upright stance — very slow scan (nearly static, subtle breath)
+      const scan = Math.sin(timeMs / 2400 + parts.phase)
+      body.setTexture('pxh-body-0')
+      body.setTint(parts.outfitColor)
+      legs.setTexture('pxh-legs-0')
+      rig.setScale(1, 1 + scan * 0.01)
+      break
+    }
     case 'idle':
     default: {
       body.setTexture('pxh-body-0')

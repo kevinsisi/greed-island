@@ -17,7 +17,14 @@ export const ACTIVITY_GLYPH: Readonly<Record<NpcActivity, string>> = {
   eat: '🍴',
   sleep: '',
   trade: '💰',
-  patrol: '👁️'
+  patrol: '👁️',
+  read: '📖',
+  perform: '🎵',
+  craft: '⚒️',
+  study: '🔬',
+  pray: '🙏',
+  write: '✍️',
+  guard: '🛡️'
 }
 
 export function activityGlyphFor(activity: NpcActivity | undefined): string {

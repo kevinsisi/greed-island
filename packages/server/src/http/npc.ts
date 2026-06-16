@@ -38,6 +38,7 @@ import {
   type RelationshipTier,
 } from '../npcs/dialog.js'
 import { generateAiReply, AiDialogError, computePlayerAlias, computeSocialHistory, type AiDialogContext, type PlantContextRow, type RelationshipContextRow, type HouseholdContextRow, type LineageContextRow, type SocialHistoryContext } from '../npcs/aiDialog.js'
+import { findBuildingById } from '../buildings/catalog.js'
 import { getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
@@ -285,6 +286,13 @@ export function createNpcRouter(input: {
         const memoryCtx = input.runtime.getFormattedMemoryContext(npcId) || undefined
         const lifeGoalCtx = input.runtime.getFormattedLifeGoalContext(npcId) || undefined
 
+        // building context — tells AI which building the NPC is currently in
+        const npcBuildingId = input.runtime.getNpcBuildingId(npcId)
+        const buildingDef = npcBuildingId ? findBuildingById(npcBuildingId) : null
+        const buildingContext = buildingDef
+          ? `目前位置：${buildingDef.nameZh}（${buildingDef.type}）內`
+          : null
+
         // alias memory — the NPC's private name for this player based on relationship history
         const playerAlias = previousCount > 0 ? computePlayerAlias(previousTrust, previousCount) : undefined
 
@@ -323,6 +331,7 @@ export function createNpcRouter(input: {
           ...(reflectionCtx ? { reflectionContext: reflectionCtx } : {}),
           ...(memoryCtx ? { memoryContext: memoryCtx } : {}),
           ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
+          ...(buildingContext ? { buildingContext } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({

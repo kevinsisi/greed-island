@@ -1,7 +1,21 @@
 import type { NpcActivity, NpcSummary } from '../state/types'
 
 export type CharacterVisualKind = 'npc' | 'local-player' | 'peer-player'
-export type CharacterVisualAction = 'idle' | 'walk' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
+export type CharacterVisualAction =
+  | 'idle'
+  | 'walk'
+  | 'work'
+  | 'eat'
+  | 'sleep'
+  | 'trade'
+  | 'patrol'
+  | 'read'
+  | 'perform'
+  | 'craft'
+  | 'study'
+  | 'pray'
+  | 'write'
+  | 'guard'
 export type CharacterVisualSource = 'server-npc' | 'server-player-presence' | 'local-input'
 export type CharacterFacing = 'left' | 'right'
 
@@ -68,21 +82,21 @@ const MOVEMENT_EPSILON = 0.5
 
 export function characterActionForNpcActivity(activity: NpcActivity | undefined): CharacterVisualAction {
   switch (activity) {
-    case 'move':
-      return 'walk'
-    case 'work':
-      return 'work'
-    case 'eat':
-      return 'eat'
-    case 'sleep':
-      return 'idle'
-    case 'trade':
-      return 'trade'
-    case 'patrol':
-      return 'patrol'
+    case 'move':    return 'walk'
+    case 'work':    return 'work'
+    case 'eat':     return 'eat'
+    case 'sleep':   return 'idle'
+    case 'trade':   return 'trade'
+    case 'patrol':  return 'patrol'
+    case 'read':    return 'read'
+    case 'perform': return 'perform'
+    case 'craft':   return 'craft'
+    case 'study':   return 'study'
+    case 'pray':    return 'pray'
+    case 'write':   return 'write'
+    case 'guard':   return 'guard'
     case 'idle':
-    default:
-      return 'idle'
+    default:        return 'idle'
   }
 }
 

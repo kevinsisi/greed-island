@@ -36,6 +36,13 @@ export type NpcActivity =
   | 'sleep'
   | 'trade'
   | 'patrol'
+  | 'read'
+  | 'perform'
+  | 'craft'
+  | 'study'
+  | 'pray'
+  | 'write'
+  | 'guard'
 
 export interface NpcSummary {
   id: string

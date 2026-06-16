@@ -117,6 +117,13 @@ export type TranslationKey =
   | 'npc.activity.sleep'
   | 'npc.activity.trade'
   | 'npc.activity.patrol'
+  | 'npc.activity.read'
+  | 'npc.activity.perform'
+  | 'npc.activity.craft'
+  | 'npc.activity.study'
+  | 'npc.activity.pray'
+  | 'npc.activity.write'
+  | 'npc.activity.guard'
   // npc proximity gating
   | 'npc.tooFarHint'
   | 'npc.tooFarBadge'

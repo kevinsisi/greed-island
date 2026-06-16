@@ -670,6 +670,7 @@ export class SimulationRuntime {
     this.npcFactionLean = buildNpcFactionLean(profiles)
     this.npcLineageProjection = new NpcLineageProjection(profiles)
     this.bornNpcsProjection = new BornNpcsProjection(new Set(profiles.map((p) => p.id)))
+    this.validateScheduleBuildingIds(profiles)
     this.hydrateFromEventLog()
     // After hydration, admit any matured born NPCs into NpcEngine so they participate
     // in subsequent tick processing from tick 0 of this run.
@@ -1659,7 +1660,9 @@ export class SimulationRuntime {
   /** 此 NPC 是否在某棟建築內？回傳建築 id 或 null。 */
   getNpcBuildingId(npcId: string): string | null {
     const state = this.npcEngine.getState(npcId)
-    return state ? this.buildingRuntime.resolveNpcBuildingId(npcId, state) : null
+    if (!state) return null
+    if (state.scheduledBuildingId) return state.scheduledBuildingId
+    return this.buildingRuntime.resolveNpcBuildingId(npcId, state)
   }
 
   /** 回傳 NPC 最近一次 productive action 的 domain 與 narration，供建築 API 用。 */
@@ -6365,6 +6368,19 @@ export class SimulationRuntime {
     return this.householdEconomyProjection.getByHouseholdId(householdId)?.balance ?? 0
   }
 
+  private validateScheduleBuildingIds(profiles: readonly NpcProfile[]): void {
+    const allBuildings = new Set(listAllBuildings().map((b) => b.id))
+    for (const profile of profiles) {
+      for (const slot of profile.routine) {
+        if (slot.buildingId && !allBuildings.has(slot.buildingId)) {
+          console.warn(
+            `[boot] NPC profile "${profile.id}" references unknown buildingId "${slot.buildingId}" in schedule — ignored`
+          )
+        }
+      }
+    }
+  }
+
   private hydrateFromEventLog(): void {
     const state = this.store.readLatestFactSnapshot()
     // Boot intentionally hydrates only stateful simulation facts needed before
@@ -6990,6 +7006,20 @@ function activityVerb(activity: NpcActivity): string {
       return '稍作停留'
     case 'move':
       return '正在移動'
+    case 'read':
+      return '正在閱讀'
+    case 'perform':
+      return '正在表演'
+    case 'craft':
+      return '正在製作'
+    case 'study':
+      return '正在研究'
+    case 'pray':
+      return '正在祈禱'
+    case 'write':
+      return '正在書寫'
+    case 'guard':
+      return '正在守衛'
   }
 }
 

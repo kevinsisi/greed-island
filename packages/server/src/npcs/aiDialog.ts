@@ -156,6 +156,7 @@ export type AiDialogContext = Readonly<{
   reflectionContext?: string
   memoryContext?: string
   lifeGoalContext?: string
+  buildingContext?: string | null
 }>
 
 export class AiDialogError extends Error {
@@ -244,6 +245,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     `- 英文名: ${profile.name.en}`,
     `- 角色: ${profile.role.zh} / ${profile.role.en}`,
     `- 駐地: ${profile.defaultLocation}`,
+    ...(ctx.buildingContext ? [`- ${ctx.buildingContext}`] : []),
     `- 性格參數: ${personality}`,
     '',
     '### 你的回答風格（依性格）',

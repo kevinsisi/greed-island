@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.93.0 ✅ local-ready — 2026-06-16
+
+**主題：NPC Activity ↔ Building Consistency（NPC 行為類型與建築位置完全對齊）**
+
+- ✅ **14 NpcActivity types** — read/perform/craft/study/pray/write/guard 加入 union；characterAvatar 動畫 + npcVisuals emoji glyph 全補。
+- ✅ **Label→activity patterns** — 6 個精細 pattern（read/perform/craft/study/pray/write）在 work pattern 之前比對；圖書館員/工匠/祭司 不再被壓成 `work`。
+- ✅ **ScheduleSlot.buildingId** — NpcRoutineSlot + NpcRuntimeState 新欄位；decideNextState 於到達 tile 後帶入 scheduledBuildingId。
+- ✅ **`b_central_library`** — catalog 新增夜潮文庫；圖書館員林珮柔 routine slots 補 buildingId。
+- ✅ **AI building context injection** — AiDialogContext.buildingContext 注入 system prompt；AI 知道 NPC 在哪棟建築。
+- ✅ **14 label→activity characterization tests** — npcEngine.test.ts 全過。
+- ✅ **Verification** — server 1239 tests + web 120 tests + both builds clean。
+
+---
+
 ## v0.92.3 ✅ local-ready — 2026-06-15
 
 **主題：Timeline Human Narration Hotfix（防禦隊事件不再把 raw NPC id 當敘事）**

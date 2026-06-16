@@ -1012,6 +1012,38 @@ describe('NpcEngine', () => {
     })
   })
 
+  describe('fine-grained activity label inference (v0.93.0)', () => {
+    const labelCases: Array<{ label: string; expected: NpcRuntimeState['activity'] }> = [
+      { label: 'morning shelving',    expected: 'read'    },
+      { label: 'reading-room desk',   expected: 'read'    },
+      { label: 'library catalogue',   expected: 'read'    },
+      { label: 'rehearsal session',   expected: 'perform' },
+      { label: 'busking circuit',     expected: 'perform' },
+      { label: 'forge crafting',      expected: 'craft'   },
+      { label: 'pottery workshop',    expected: 'craft'   },
+      { label: 'smithing session',     expected: 'craft'   },
+      { label: 'herbal study',        expected: 'study'   },
+      { label: 'lab research',        expected: 'study'   },
+      { label: 'morning prayer',      expected: 'pray'    },
+      { label: 'altar ceremony',      expected: 'pray'    },
+      { label: 'ledger bookkeeping',  expected: 'write'   },
+      { label: 'tally records',       expected: 'write'   },
+    ]
+
+    for (const { label, expected } of labelCases) {
+      it(`"${label}" resolves to activity="${expected}"`, () => {
+        const profile = makeProfile({
+          id: `label.${label.replace(/\s+/g, '_')}`,
+          defaultLocation: 't_central',
+          routine: [{ fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label }]
+        })
+        const engine = new NpcEngine([profile])
+        engine.tick(1)
+        expect(engine.getState(profile.id)!.activity).toBe(expected)
+      })
+    }
+  })
+
   describe('deceasedNpcIds tick gate (v0.87.3)', () => {
     it('freezes a deceased NPC across many ticks', () => {
       const alive = makeProfile({

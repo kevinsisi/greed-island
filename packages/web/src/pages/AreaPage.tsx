@@ -38,13 +38,20 @@ import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
-  idle: 'npc.activity.idle',
-  move: 'npc.activity.move',
-  work: 'npc.activity.work',
-  eat: 'npc.activity.eat',
-  sleep: 'npc.activity.sleep',
-  trade: 'npc.activity.trade',
-  patrol: 'npc.activity.patrol'
+  idle:    'npc.activity.idle',
+  move:    'npc.activity.move',
+  work:    'npc.activity.work',
+  eat:     'npc.activity.eat',
+  sleep:   'npc.activity.sleep',
+  trade:   'npc.activity.trade',
+  patrol:  'npc.activity.patrol',
+  read:    'npc.activity.read',
+  perform: 'npc.activity.perform',
+  craft:   'npc.activity.craft',
+  study:   'npc.activity.study',
+  pray:    'npc.activity.pray',
+  write:   'npc.activity.write',
+  guard:   'npc.activity.guard'
 }
 
 type DrawerTab = 'scene' | 'npcs' | 'cards' | 'events' | 'players'

@@ -5,6 +5,37 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-16 — Handoff Snapshot @ v0.93.0
+
+### Current Version
+`0.93.0` — NPC Activity ↔ Building Consistency（NPC 行為類型與建築位置完全對齊）
+
+### What Shipped
+- **14 fine-grained NpcActivity types** — 原有 7 個粗粒度類型（idle/move/work/eat/sleep/trade/patrol）擴充為 14，新增 read/perform/craft/study/pray/write/guard，每種有獨立 animation（characterAvatar.ts）與 emoji glyph（npcVisuals.ts）。
+- **Label→activity patterns** — `inferActivityFromLabel` 新增 6 個精細 pattern（LABEL_READ/PERFORM/CRAFT/STUDY/PRAY/WRITE），在 LABEL_WORK_PATTERN 之前比對，確保圖書館員/工匠/祭司/抄寫員不再被壓成 generic `work`。
+- **ScheduleSlot.buildingId** — NpcRoutineSlot 新增可選欄位 `buildingId?: string | null`；NpcRuntimeState 新增 `scheduledBuildingId`；`decideNextState` 在 NPC 到達正確 tile 後帶入 building。
+- **`b_central_library` 建築** — catalog 新增「夜潮文庫」(t_central, type='library')；圖書館員林珮柔的 morning/afternoon slots 補 `buildingId: "b_central_library"`。
+- **AI narration building context** — `AiDialogContext.buildingContext` 新欄位；`npc.ts` 對話 endpoint 計算 NPC 所在建築並注入 system prompt，AI 不再憑空幻想地點。
+- **ACTIVITY_RESOURCE_DELTA / ACTIVITY_DRIFT** — areaStateEngine + npcEngine 兩個 Record 均補齊 7 新 activity type 的 Partial<ResourceMap>/mood+health 值。
+- **canEmitProductiveAction** — 擴充為 Set 含所有 10 個生產性活動（work/trade/patrol + craft/study/write/perform/pray/read/guard）。
+- **i18n 補全** — zh.ts / en.ts / types.ts 7 個新 translation key；AreaPage ACTIVITY_KEY Record 補齊。
+- **boot-time schedule validation** — runtime constructor 呼叫 `validateScheduleBuildingIds`，對不存在 buildingId 輸出 warn 但不中斷 boot。
+- **14 新 label→activity 特徵化測試** — npcEngine.test.ts，涵蓋 read/perform/craft/study/pray/write 所有正/反例。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server` — 1239 tests / 156 files all pass
+- `npm run test -w @greed-island/web` — 120 tests / 22 files all pass
+- `npm run build -w @greed-island/server` — clean (no TS errors)
+- `npm run build -w @greed-island/web` — clean (Vite chunk-size warning is known non-blocking)
+- OpenSpec validate pending (run after commit)
+- CI/CD pending after push
+
+### Known Notes
+- `guard` activity 目前無 label pattern（因為 `guard` 在 LABEL_PATROL_PATTERN 中 → 解析成 patrol）。guard activity 需要非 label 路徑觸發（archetype 或 future explicit mechanic）— 這是有意的，不是 gap。
+- CombatHudPhaseC 仍未接線，NPC combat AI (sub-tick) 仍未實作 — 這些是 Phase C/D 遺留的已知 deferred scope。
+
+---
+
 ## 2026-06-15 — Handoff Snapshot @ v0.92.3
 
 ### Current Version

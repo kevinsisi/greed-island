@@ -373,6 +373,22 @@ const ALL_BUILDINGS: BuildingDef[] = [
     enterable: true,
     restorative: false
   },
+  {
+    id: 'b_central_library',
+    tileId: 't_central',
+    nameZh: '夜潮文庫',
+    nameEn: 'Nighttide Library',
+    descriptionZh: '林沛柔獨力整理的街區文庫，書架是用舊木棧板拼的，燈光昏黃，但安靜。',
+    type: 'library',
+    placement: { col: 7, row: 1, glyph: '📚', size: 22 },
+    interior: libraryInterior(),
+    ownerNpcId: null,
+    hiring: [
+      { shift: 'afternoon', capacity: 2, wage: 14, taskZh: '整理書目、服務讀者' }
+    ],
+    enterable: true,
+    restorative: true
+  },
   // ── t_ruin 鏽灣區
   {
     id: 'b_ruin_archive',

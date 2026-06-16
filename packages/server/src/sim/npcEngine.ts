@@ -105,7 +105,21 @@ function isLandWalkable(tileId: string, col: number, row: number): boolean {
   return ch !== 'X'
 }
 
-export type NpcActivity = 'idle' | 'move' | 'work' | 'eat' | 'sleep' | 'trade' | 'patrol'
+export type NpcActivity =
+  | 'idle'
+  | 'move'
+  | 'work'
+  | 'eat'
+  | 'sleep'
+  | 'trade'
+  | 'patrol'
+  | 'read'
+  | 'perform'
+  | 'craft'
+  | 'study'
+  | 'pray'
+  | 'write'
+  | 'guard'
 export type NpcAgentPermission =
   | 'move.cross_tile'
   | 'move.local_area'
@@ -200,6 +214,9 @@ export type NpcRuntimeState = {
    *  Replaces `profile.defaultLocation` as the routing fallback.
    *  Persisted via NPC_STATE_RECORDED. */
   homeTileOverride?: string
+  /** Building the NPC is scheduled to occupy during the current slot, if any.
+   *  Takes precedence over proximity-based building detection. */
+  scheduledBuildingId?: string | null
 }
 
 export type NpcDecisionEvent = Readonly<
@@ -263,13 +280,20 @@ const HEALTH_MAX = 100
 const ACTIVITY_DRIFT: Readonly<
   Record<NpcActivity, { mood: number; health: number }>
 > = {
-  idle: { mood: 0.1, health: 0.05 },
-  move: { mood: -0.05, health: -0.05 },
-  work: { mood: -0.2, health: -0.1 },
-  eat: { mood: 0.5, health: 0.3 },
-  sleep: { mood: 0.5, health: 1.0 },
-  trade: { mood: 0.1, health: -0.05 },
-  patrol: { mood: -0.1, health: -0.1 }
+  idle:    { mood: 0.1,   health: 0.05 },
+  move:    { mood: -0.05, health: -0.05 },
+  work:    { mood: -0.2,  health: -0.1 },
+  eat:     { mood: 0.5,   health: 0.3 },
+  sleep:   { mood: 0.5,   health: 1.0 },
+  trade:   { mood: 0.1,   health: -0.05 },
+  patrol:  { mood: -0.1,  health: -0.1 },
+  read:    { mood: 0.15,  health: 0.02 },
+  perform: { mood: 0.3,   health: -0.05 },
+  craft:   { mood: 0.0,   health: -0.08 },
+  study:   { mood: 0.1,   health: 0.01 },
+  pray:    { mood: 0.25,  health: 0.05 },
+  write:   { mood: -0.05, health: -0.03 },
+  guard:   { mood: -0.05, health: -0.05 }
 }
 
 const INTERACT_PROBABILITY = 0.08 // 每對同 tile NPC，每 tick 觸發機率
@@ -297,7 +321,14 @@ const LABEL_EAT_PATTERN = /(eat|meal|breakfast|lunch|dinner|supper|tea|stew|nood
 const LABEL_ERRAND_PATTERN = /(errand|visit|social|walk|off.?duty|after-work)/
 const LABEL_TRADE_PATTERN = /(trade|trading|exchange|sell|selling|sale|stall|counter|market|customers|booth|fencing|café|cafe|tavern)/
 const LABEL_PATROL_PATTERN = /(patrol|watch|guard|scout|hunt|rounds|commute|running|runs|dash|loops|circling|exploring|delivering|delivery)/
-const LABEL_WORK_PATTERN = /(work|ledger|study|review|prepare|whisper|gossip|intel|brewing|forge|appraisal|stock|desk|office|tower|class|lecture|lectures|library|shelving|rehearsal|busking|gig|gigs|opening|stitch|fitting|prep|rush|dispatch|prayer|prayers|hall|courtyard|sweeping|washing|chart|divination|gathering|foraging|training|timber|carving|drying|grinding|consultation|supervising|swinging|loading|cargo|rigging|mending|bookkeeping|tally|seam|shaft|pick|bell|tuning|catalogue|inscription|rubble|handoff|headline)/
+// Fine-grained activity patterns — checked before LABEL_WORK_PATTERN so specific roles are not collapsed to 'work'
+const LABEL_READ_PATTERN = /(library|shelving|catalogue|reading|books|archive|scroll|manuscript)/
+const LABEL_PERFORM_PATTERN = /(busking|gig|gigs|rehearsal|performing|stage|concert|busker)/
+const LABEL_CRAFT_PATTERN = /(forge|crafting|carving|woodwork|weaving|pottery|smithing|timber|craft)/
+const LABEL_STUDY_PATTERN = /(study|lecture|lectures|class|research|lab|examine)/
+const LABEL_PRAY_PATTERN = /(prayer|prayers|ritual|ceremony|shrine|altar|blessing|divination|chant)/
+const LABEL_WRITE_PATTERN = /(ledger|bookkeeping|tally|inscription|headline|document|records|writing)/
+const LABEL_WORK_PATTERN = /(work|review|prepare|whisper|gossip|intel|brewing|appraisal|stock|desk|office|tower|opening|stitch|fitting|prep|rush|dispatch|hall|courtyard|sweeping|washing|chart|gathering|foraging|training|drying|grinding|consultation|supervising|swinging|loading|cargo|rigging|mending|seam|shaft|pick|bell|tuning|rubble|handoff)/
 
 /** Per-tick context from the runtime — area resources / world facts that
  * personality-based decisioning can read. Optional：舊測試不傳就走 schedule */
@@ -338,6 +369,7 @@ type ScheduleSlot = {
   toTickOfDay: number
   location: string
   activity: NpcActivity
+  buildingId?: string | null
 }
 
 export class NpcEngine {
@@ -941,6 +973,8 @@ function decideNextState(
   // intentOverride carries forward unchanged — expiry and resolution detection live in runtime.ts
   const intentOverride = before.intentOverride ?? null
   const targetTile = intentOverride?.targetTile ?? personalityOverride?.targetTile ?? scheduleTarget
+  // Only assign schedule building when NPC is on the slot's target tile and not traveling
+  const slotBuildingId = slot?.buildingId ?? null
 
   const finish = (
     nextTile: string,
@@ -963,6 +997,8 @@ function decideNextState(
       subCol = stepToward(before.subCol, anchor.col)
       subRow = stepToward(before.subRow, anchor.row)
     }
+    // Use slot's building only when NPC is at the scheduled tile and not traveling
+    const scheduledBuildingId = activity !== 'move' && nextTile === scheduleTarget ? slotBuildingId : null
     return {
       tile: nextTile,
       targetTile: effectiveTargetTile,
@@ -983,6 +1019,7 @@ function decideNextState(
       personalityOverride,
       intentOverride,
       travelRoute,
+      scheduledBuildingId,
       agent: buildNextAgentState({
         profile,
         previous: before.agent,
@@ -1491,7 +1528,8 @@ function deriveSchedule(profile: NpcProfile): ScheduleSlot[] {
       fromTickOfDay: slot.fromTickOfDay,
       toTickOfDay: slot.toTickOfDay,
       location: slot.location,
-      activity: inferActivityFromLabel(slot.label, profile)
+      activity: inferActivityFromLabel(slot.label, profile),
+      buildingId: slot.buildingId ?? null
     })
   }
   if (out.length === 0) {
@@ -1591,6 +1629,13 @@ function inferActivityFromLabel(label: string | undefined, profile: NpcProfile):
   if (LABEL_ERRAND_PATTERN.test(lower)) return inferErrandActivityFromProfile(profile)
   if (LABEL_TRADE_PATTERN.test(lower)) return 'trade'
   if (LABEL_PATROL_PATTERN.test(lower)) return 'patrol'
+  // Fine-grained work types — checked before the generic LABEL_WORK_PATTERN fallback
+  if (LABEL_READ_PATTERN.test(lower)) return 'read'
+  if (LABEL_PERFORM_PATTERN.test(lower)) return 'perform'
+  if (LABEL_CRAFT_PATTERN.test(lower)) return 'craft'
+  if (LABEL_STUDY_PATTERN.test(lower)) return 'study'
+  if (LABEL_PRAY_PATTERN.test(lower)) return 'pray'
+  if (LABEL_WRITE_PATTERN.test(lower)) return 'write'
   if (LABEL_WORK_PATTERN.test(lower)) return 'work'
   return inferActivityFromRole(profile)
 }
@@ -1646,7 +1691,11 @@ function isDutyAnchoredProfile(profile: NpcProfile): boolean {
 }
 
 function canEmitProductiveAction(state: NpcRuntimeState): boolean {
-  return state.activity === 'work' || state.activity === 'trade' || state.activity === 'patrol'
+  const PRODUCTIVE_ACTIVITIES: ReadonlySet<NpcActivity> = new Set([
+    'work', 'trade', 'patrol',
+    'craft', 'study', 'write', 'perform', 'pray', 'read', 'guard'
+  ])
+  return PRODUCTIVE_ACTIVITIES.has(state.activity)
 }
 
 function isBudgetActiveNpc(

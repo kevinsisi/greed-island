@@ -150,13 +150,20 @@ function isFactionId(v: unknown): v is FactionId {
 const ACTIVITY_RESOURCE_DELTA: Readonly<
   Record<NpcActivity, Partial<ResourceMap>>
 > = {
-  idle: {},
-  move: {},
-  work: { economy: 0.05 },
-  eat: { food: -0.25 },
-  sleep: {},
-  trade: { economy: 0.4 },
-  patrol: { safety: 0.25 }
+  idle:    {},
+  move:    {},
+  work:    { economy: 0.05 },
+  eat:     { food: -0.25 },
+  sleep:   {},
+  trade:   { economy: 0.4 },
+  patrol:  { safety: 0.25 },
+  read:    { economy: 0.02 },
+  perform: { economy: 0.08 },
+  craft:   { economy: 0.05 },
+  study:   { economy: 0.02 },
+  pray:    { safety: 0.1 },
+  write:   { economy: 0.03 },
+  guard:   { safety: 0.2 }
 }
 
 const WEATHER_RESOURCE_DELTA: Readonly<

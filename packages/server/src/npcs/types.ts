@@ -23,6 +23,8 @@ export type NpcRoutineSlot = Readonly<{
   location: string
   /** Optional human-readable label for ops/admin tooling. */
   label?: string
+  /** Building the NPC should occupy during this slot (advisory; falls back if building absent). */
+  buildingId?: string | null
 }>
 
 /** A trigger that fires when a deterministic predicate evaluates true. */
