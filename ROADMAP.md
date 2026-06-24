@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.94.0 ✅ local-ready — 2026-06-24
+
+**主題：NPC Autonomous Planner MVP（NPC 有 committed 短程自主計畫）**
+
+- ✅ **deterministic planner** — 新增 `npcAutonomousPlanner`，每個 eligible NPC 在錯相 cadence 上依 needs、life goal、belief intent stack、memory/life-goal boost、地區 safety/economy 選出下一個短程計畫。
+- ✅ **Command → Rule Engine → Event** — planner output 不直接改 state，而是提交 `NPC_AGENT_DECISION` command；accepted event 再透過既有 `applyAgentDecisionEvent` / intentOverride path 驅動後續 `NPC_MOVE`、activity、productive events。
+- ✅ **AI remains non-authoritative** — planner 不呼叫 AI provider；freeform AI agent 仍只做 server-resolved proposal，不能直接改世界。
+- ✅ **dynamic NPC included** — planner 使用 `npcEngine.listProfiles()`，runtime-born / matured born NPC 也會參與 autonomous planning。
+- ✅ **Verification** — planner/runtime/rule targeted tests（71 tests）、build、OpenSpec change strict、OpenSpec all 56 items 全過；CI/CD/live smoke pending。
+
+---
+
 ## v0.93.2 ✅ shipped — 2026-06-24
 
 **主題：NPC Movement Narration Follow-up（動態出生 NPC 移動不再顯示 raw id）**

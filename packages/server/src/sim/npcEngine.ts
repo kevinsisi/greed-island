@@ -156,7 +156,7 @@ export type NpcAgentState = Readonly<{
   activeTask: NpcAgentTask
   lastDecision: Readonly<{
     tick: number
-    source: 'bootstrap' | 'schedule' | 'personality' | 'movement' | 'social' | 'player'
+    source: 'bootstrap' | 'schedule' | 'personality' | 'movement' | 'social' | 'player' | 'agent'
     reason: string
   }>
 }>
@@ -1211,11 +1211,14 @@ function buildNextAgentState(input: {
   const nudgeReason = input.personalityOverride?.reason ?? null
   const isNudged = input.personalityOverride?.targetTile === input.targetTile && input.targetTile !== input.scheduleTarget
   const isBuildIntent = isBuildIntentReason(input.intentOverride?.reason)
-  const source = input.isTraveling ? 'movement' : isNudged ? 'personality' : 'schedule'
+  const agentIntentReason = input.intentOverride?.reason?.startsWith('agent:') ? input.intentOverride.reason : null
+  const source = agentIntentReason ? 'agent' : input.isTraveling ? 'movement' : isNudged ? 'personality' : 'schedule'
   const reason = input.isTraveling
-    ? nudgeReason ?? 'scheduled-travel'
+    ? agentIntentReason ?? nudgeReason ?? 'scheduled-travel'
     : isBuildIntent
       ? input.intentOverride?.reason ?? 'freeform-agent-build'
+    : agentIntentReason
+      ? agentIntentReason
     : isNudged
       ? nudgeReason ?? 'personality-nudge'
       : `schedule:${input.activity}`
@@ -2110,7 +2113,8 @@ function isAgentTaskKind(value: unknown): value is NpcAgentTaskKind {
       'travel',
       'local-activity',
       'social-interaction',
-      'player-dialog'
+      'player-dialog',
+      'build'
     ].includes(value)
   )
 }
@@ -2118,7 +2122,7 @@ function isAgentTaskKind(value: unknown): value is NpcAgentTaskKind {
 function isDecisionSource(value: unknown): value is NpcAgentState['lastDecision']['source'] {
   return (
     typeof value === 'string' &&
-    ['bootstrap', 'schedule', 'personality', 'movement', 'social', 'player'].includes(value)
+    ['bootstrap', 'schedule', 'personality', 'movement', 'social', 'player', 'agent'].includes(value)
   )
 }
 

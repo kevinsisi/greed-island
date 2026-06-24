@@ -275,7 +275,8 @@ import { IntentProjection, formatReflectionContext } from '../projections/intent
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
-import { computeIntentStack, selectHighestIntent } from './intentPlanner.js'
+import { computeIntentStack } from './intentPlanner.js'
+import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -3097,6 +3098,9 @@ export class SimulationRuntime {
     for (const command of this.planLifeGoalCommands(nextTick, submittedAt)) {
       commands.push(command)
     }
+    for (const command of this.planNpcAutonomousPlannerCommands(nextTick, submittedAt, areaSafety, areaEconomy)) {
+      commands.push(command)
+    }
     // Phase 1 §33.2 — NPC state now persists through typed
     // NPC_STATE_RECORDED events + NpcStateProjection. Legacy npc.state.*
     // FACT_SET facts remain boot fallback for pre-migration event logs.
@@ -5185,7 +5189,7 @@ export class SimulationRuntime {
 
     // Intent resolution detection — detect NPC intent success/failure; emit NPC_INTENT_RESOLVED.
     // Must run before intent recompute cadence so expired/arrived intents are cleared first.
-    for (const profile of this.profiles) {
+    for (const profile of this.npcEngine.listProfiles()) {
       const state = this.npcEngine.getState(profile.id)
       if (!state) continue
       const io = state.intentOverride
@@ -5211,40 +5215,6 @@ export class SimulationRuntime {
           )
         }
         this.npcEngine.clearIntentOverride(profile.id)
-      }
-    }
-
-    // Intent recompute cadence — phase-offset per NPC so load is spread across ticks.
-    // Uses belief state (decayed this tick) + learning weights from past resolutions.
-    for (const profile of this.profiles) {
-      const phase = this.profiles.indexOf(profile) % INTENT_RECOMPUTE_INTERVAL
-      if (nextTick % INTENT_RECOMPUTE_INTERVAL !== phase) continue
-
-      const state = this.npcEngine.getState(profile.id)
-      if (!state) continue
-
-      const beliefs = this.beliefProjection.getBeliefs(profile.id)
-      const weights = this.intentProjection.getLearningWeights(profile.id, nextTick)
-      const memoryBoost = this.npcMemory
-        ? this.npcMemory.getMemoryUrgencyBoost(profile.id, nextTick)
-        : 0
-      const lifeGoalBoost = this.computeLifeGoalIntentBoost(profile.id)
-      const stack = computeIntentStack(
-        profile.id, beliefs, profile, weights,
-        state.tile, state.faction || undefined, nextTick,
-        memoryBoost,
-        lifeGoalBoost,
-      )
-      const best = selectHighestIntent(stack, INTENT_URGENCY_THRESHOLD, state.intentOverride)
-
-      if (best) {
-        this.npcEngine.setIntentOverride(profile.id, {
-          targetTile: best.targetTile,
-          expiresAtTick: nextTick + INTENT_OVERRIDE_DURATION_TICKS,
-          intentType: best.kind,
-          urgency: best.urgency,
-          reason: best.reason,
-        })
       }
     }
 
@@ -5763,6 +5733,8 @@ export class SimulationRuntime {
             if (profile) this.npcEngine.registerDynamicNpc(profile)
           }
         }
+        if (ev.eventType === 'NPC_AGENT_DECISION') this.applyAgentDecisionEvent(ev)
+        if (ev.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') this.applyFreeformAgentActionEvent(ev)
         this.factionControlProjection.project(ev)
         this.factionDominanceProjection.project(ev)
         this.historyChronicleProjection.project(ev)
@@ -6009,7 +5981,7 @@ export class SimulationRuntime {
 
   private planLifeGoalCommands(nextTick: number, submittedAt: number): LivingWorldCommand[] {
     if (nextTick % LIFE_GOAL_CADENCE_TICKS !== 0) return []
-    return this.profiles
+    return this.npcEngine.listProfiles()
       .map((profile) => {
         const state = this.npcEngine.getState(profile.id)
         if (!state) return null
@@ -6046,6 +6018,95 @@ export class SimulationRuntime {
           }
         )
       })
+  }
+
+  private planNpcAutonomousPlannerCommands(
+    nextTick: number,
+    submittedAt: number,
+    areaSafety: ReadonlyMap<string, number>,
+    areaEconomy: ReadonlyMap<string, number>
+  ): LivingWorldCommand[] {
+    const profiles = this.npcEngine.listProfiles()
+    const generatedTiles = this.dynamicTileProjection.list()
+    const generatedTileIds = generatedTiles.map((tile) => tile.id)
+    const adjacency = getMapAdjacency(this.lifeExpansion.unlockedTileIds, generatedTileIds)
+    const tileNames = {
+      ...TILE_NAME_BY_ID,
+      ...Object.fromEntries(generatedTiles.map((tile) => [tile.id, tile.name])),
+    }
+    const commands: LivingWorldCommand[] = []
+    for (const [index, profile] of profiles.entries()) {
+      if (this.npcMortalityProjection.isDeceased(profile.id)) continue
+      const phase = index % INTENT_RECOMPUTE_INTERVAL
+      if (nextTick % INTENT_RECOMPUTE_INTERVAL !== phase) continue
+      const state = this.npcEngine.getState(profile.id)
+      if (!state) continue
+      const life = deriveNpcLifeView({
+        profile,
+        state,
+        areaState: this.getAreaState(state.tile),
+        lifeExpansion: this.lifeExpansion,
+        tick: nextTick,
+      })
+      const beliefs = this.beliefProjection.getBeliefs(profile.id)
+      const weights = this.intentProjection.getLearningWeights(profile.id, nextTick)
+      const memoryBoost = this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(profile.id, nextTick) : 0
+      const lifeGoalBoost = this.computeLifeGoalIntentBoost(profile.id)
+      const stack = computeIntentStack(
+        profile.id,
+        beliefs,
+        profile,
+        weights,
+        state.tile,
+        state.faction || undefined,
+        nextTick,
+        memoryBoost,
+        lifeGoalBoost,
+      )
+      const adjacentTiles = adjacency[state.tile] ?? []
+      const scoredTiles = [state.tile, profile.defaultLocation, ...adjacentTiles]
+      const tileScores = Object.fromEntries(
+        [...new Set(scoredTiles)].map((tileId) => [
+          tileId,
+          {
+            safety: areaSafety.get(tileId) ?? 50,
+            economy: areaEconomy.get(tileId) ?? 50,
+          },
+        ])
+      )
+      const decision = planNpcAutonomousDecision({
+        npcId: profile.id,
+        npcNameZh: profile.name.zh,
+        currentTile: state.tile,
+        defaultTile: profile.defaultLocation,
+        currentTick: nextTick,
+        threshold: INTENT_URGENCY_THRESHOLD,
+        needs: life.needs,
+        lifeGoal: life.goal,
+        intentEntries: stack.entries,
+        currentOverride: state.intentOverride ?? null,
+        adjacentTiles,
+        tileScores,
+        tileNames,
+      })
+      commands.push(makeLivingWorldCommand(
+        'NPC_AGENT_DECISION',
+        profile.id,
+        'npc',
+        nextTick,
+        submittedAt,
+        {
+          ...decision,
+          motivation: makeMotivation(
+            decision.chosenIntent === 'follow_schedule'
+              ? `${profile.name.zh}沒有更高優先級壓力，planner 讓他回到日程與職責。`
+              : `${profile.name.zh}以目前需求、信念、人生目標與地區壓力做出短程計畫：${decision.reason}`,
+            'NPC autonomous planner MVP'
+          ),
+        }
+      ))
+    }
+    return commands
   }
 
   private buildProductiveActionMotivation(

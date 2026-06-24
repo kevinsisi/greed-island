@@ -6,7 +6,8 @@ import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import { SettingsStore } from '../http/settings.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
 import type { NpcProfile } from '../npcs/types.js'
-import { TICKS_PER_DAY } from '../config/world.js'
+import { INTENT_RECOMPUTE_INTERVAL, TICKS_PER_DAY } from '../config/world.js'
+import { MAP_ADJACENCY } from './mapGraph.js'
 import { SimulationRuntime } from './runtime.js'
 
 type InternalRuntime = {
@@ -18,12 +19,13 @@ type InternalRuntime = {
       override: {
         targetTile: string
         expiresAtTick: number
-        intentType: 'survival' | 'social' | 'economic'
+        intentType: 'survival' | 'social' | 'economic' | 'ecosystem'
         urgency: number
         reason: string
       }
     ) => void
-    getState: (npcId: string) => { activity?: string; agent?: { activeTask?: { kind?: string } }; intentOverride?: { targetTile: string; reason: string } | null } | undefined
+    listProfiles: () => readonly NpcProfile[]
+    getState: (npcId: string) => { location?: string; tile?: string; activity?: string; agent?: { activeTask?: { kind?: string }; lastDecision?: { source?: string; reason?: string } }; intentOverride?: { targetTile: string; reason: string } | null } | undefined
   }
 }
 
@@ -207,6 +209,90 @@ describe('SimulationRuntime intent resolution', () => {
       const npcAgent = runtime.getSnapshot().facts.npcAgent as { enabled?: boolean; configured?: boolean } | null
 
       expect(npcAgent).toMatchObject({ enabled: false, configured: false })
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('commits deterministic autonomous planner decisions without an AI agent', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const internal = runtime as unknown as InternalRuntime
+      const nextTick = runtime.getSnapshot().tick + 1
+      const due = internal.npcEngine
+        .listProfiles()
+        .find((_, index) => nextTick % INTENT_RECOMPUTE_INTERVAL === index % INTENT_RECOMPUTE_INTERVAL)!
+      const start = internal.npcEngine.getState(due.id)!
+      const targetTile = (MAP_ADJACENCY[start.tile ?? due.defaultLocation] ?? []).find((tile) => tile !== start.tile) ?? 't_dock'
+      internal.npcEngine.setIntentOverride(due.id, {
+        targetTile,
+        expiresAtTick: 100,
+        intentType: 'economic',
+        urgency: 70,
+        reason: 'test-existing-plan',
+      })
+
+      internal.runTick()
+
+      const plannerEvents = eventStore
+        .readEvents()
+        .filter((row) => row.eventType === 'NPC_AGENT_DECISION')
+      expect(plannerEvents.length).toBeGreaterThan(0)
+      const event = plannerEvents.find((row) => row.actorId === due.id)
+      const payload = event?.payload as { data?: { chosenIntent?: string; targetTile?: string; reason?: string } } | undefined
+      expect(payload?.data?.chosenIntent).toBe('economic')
+      expect(payload?.data?.targetTile).toBe(targetTile)
+      expect(payload?.data?.reason).toContain('autonomous-planner')
+      expect(internal.npcEngine.getState(due.id)?.intentOverride?.reason).toContain('agent:autonomous-planner')
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
+  it('uses generated tile names in autonomous planner event prose', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      runtime.submitLivingWorldCommand(makeLivingWorldCommand('TILE_GENERATED', 'world', 'system', 0, 0, {
+        tileId: 't_frontier_badlands',
+        biome: 'ruin',
+        name: '荒土地帶',
+        x: 9,
+        y: 3,
+        adjacentTileIds: ['t_ruin'],
+        generatedAtTick: 0,
+        narration: '荒土地帶被納入可探索邊境。',
+      }))
+      const internal = runtime as unknown as InternalRuntime
+      const nextTick = runtime.getSnapshot().tick + 1
+      const due = internal.npcEngine
+        .listProfiles()
+        .find((_, index) => nextTick % INTENT_RECOMPUTE_INTERVAL === index % INTENT_RECOMPUTE_INTERVAL)!
+      internal.npcEngine.setIntentOverride(due.id, {
+        targetTile: 't_frontier_badlands',
+        expiresAtTick: 100,
+        intentType: 'survival',
+        urgency: 70,
+        reason: 'test-frontier-plan',
+      })
+
+      internal.runTick()
+
+      const event = eventStore
+        .readEvents()
+        .find((row) => row.eventType === 'NPC_AGENT_DECISION' && row.actorId === due.id)
+      const payload = event?.payload as { data?: { reason?: string; narration?: string; motivation?: { explanation?: string } } } | undefined
+      expect(payload?.data?.reason).toContain('荒土地帶')
+      expect(payload?.data?.narration).toContain('荒土地帶')
+      expect(payload?.data?.motivation?.explanation).toContain('荒土地帶')
+      expect(payload?.data?.reason).not.toContain('t_frontier_badlands')
+      expect(payload?.data?.narration).not.toContain('t_frontier_badlands')
+      expect(payload?.data?.motivation?.explanation).not.toContain('t_frontier_badlands')
     } finally {
       runtime.stop()
       db.close()

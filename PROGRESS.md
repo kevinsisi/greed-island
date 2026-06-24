@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-24 — Handoff Snapshot @ v0.94.0
+
+### Current Version
+`0.94.0` — NPC Autonomous Planner MVP：NPC 不再只靠 schedule/personality nudge 或外部 AI freeform proposal；server 會定期用 deterministic Cognitive Runtime planner 產生短程計畫，並把計畫先 commit 成 `NPC_AGENT_DECISION` 事件，再透過既有 intentOverride / Rule Engine path 驅動移動與行動。
+
+### What Shipped
+- **Deterministic planner module**：新增 `npcAutonomousPlanner.ts`，以 NPC current state、needs、life goal、belief intent stack、memory/life-goal boost、area safety/economy、相鄰 tile 分數選出 `survival` / `economic` / `social` / `ecosystem` / `follow_schedule`。
+- **Committed planning facts**：runtime cadence 現在提交 `NPC_AGENT_DECISION` command，通過 `LivingWorldRuleEngine` 後才套用 existing `applyAgentDecisionEvent`，不再直接由 intent recompute bypass 設定 `intentOverride`。
+- **AI boundary preserved**：planner 不呼叫 AI、不讀 wall-clock、不用 random；AI freeform agent 仍是 additive proposal，不是世界事實來源。
+- **Dynamic NPC coverage**：planner/life-goal loops 改用 `npcEngine.listProfiles()`，runtime-born / matured born NPC 也能進入 deterministic planning。
+- **Agent metadata repair**：`NpcEngine` 會把 agent/planner intent reason 帶入 active task / last decision；batched runTick append path 補上 `NPC_AGENT_DECISION` / `NPC_FREEFORM_ACTION_PROPOSED` apply hook，確保 committed decision 真的套用到 engine state。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.94.0`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts` — pass（10 tests / 2 files）
+- `npm run test -w @greed-island/server -- npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（71 tests / 3 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate npc-autonomous-planner-mvp --strict` — pass
+- `npx openspec validate --all --strict` — pass（56 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after commit/push.
+- This is the first executable autonomous-planner slice, not the full long-term human-like cognition system. It creates observable short-horizon planning facts and server-authoritative steering; deeper memory/relationship/career/family multi-step planning remains future Cognitive Runtime work.
+
+---
+
 ## 2026-06-24 — Handoff Snapshot @ v0.93.2
 
 ### Current Version
