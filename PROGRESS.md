@@ -5,10 +5,10 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-24 — Handoff Snapshot @ v0.94.0
+## 2026-06-24 — Handoff Snapshot @ v0.94.1
 
 ### Current Version
-`0.94.0` — NPC Autonomous Planner MVP：NPC 不再只靠 schedule/personality nudge 或外部 AI freeform proposal；server 會定期用 deterministic Cognitive Runtime planner 產生短程計畫，並把計畫先 commit 成 `NPC_AGENT_DECISION` 事件，再透過既有 intentOverride / Rule Engine path 驅動移動與行動。
+`0.94.1` — NPC Autonomous Planner MVP hotfix：NPC 不再只靠 schedule/personality nudge 或外部 AI freeform proposal；server 會用 deterministic Cognitive Runtime planner 持續產生短程計畫，並把計畫先 commit 成 `NPC_AGENT_DECISION` 事件，再透過既有 intentOverride / Rule Engine path 驅動移動與行動。
 
 ### What Shipped
 - **Deterministic planner module**：新增 `npcAutonomousPlanner.ts`，以 NPC current state、needs、life goal、belief intent stack、memory/life-goal boost、area safety/economy、相鄰 tile 分數選出 `survival` / `economic` / `social` / `ecosystem` / `follow_schedule`。
@@ -16,11 +16,13 @@ developer. Keep latest status at the top.
 - **AI boundary preserved**：planner 不呼叫 AI、不讀 wall-clock、不用 random；AI freeform agent 仍是 additive proposal，不是世界事實來源。
 - **Dynamic NPC coverage**：planner/life-goal loops 改用 `npcEngine.listProfiles()`，runtime-born / matured born NPC 也能進入 deterministic planning。
 - **Agent metadata repair**：`NpcEngine` 會把 agent/planner intent reason 帶入 active task / last decision；batched runTick append path 補上 `NPC_AGENT_DECISION` / `NPC_FREEFORM_ACTION_PROPOSED` apply hook，確保 committed decision 真的套用到 engine state。
-- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.94.0`.
+- **Cadence repair**：v0.94.1 修正 live planner phase gap，依 active NPC count 錯相，避免 1440 tick 週期中大部分時間沒有 planner decision。
+- **Indoor presence guard**：planner 不會在沒有既有 override 時把 scheduled/owner building 內的 NPC 拉出室內 presence，保留單一權威 presence invariant。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.94.1`.
 
 ### Verification Evidence
 - `npm run test -w @greed-island/server -- npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts` — pass（10 tests / 2 files）
-- `npm run test -w @greed-island/server -- runtimePresence.test.ts npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（72 tests / 4 files）
+- `npm run test -w @greed-island/server -- runtimeGoodsInventory.test.ts runtimePresence.test.ts npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（73 tests / 5 files）
 - `npm run test -w @greed-island/server` — pass（1247 tests / 157 files）
 - `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）

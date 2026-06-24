@@ -6027,6 +6027,7 @@ export class SimulationRuntime {
     areaEconomy: ReadonlyMap<string, number>
   ): LivingWorldCommand[] {
     const profiles = this.npcEngine.listProfiles()
+    const plannerCadence = Math.max(1, Math.min(INTENT_RECOMPUTE_INTERVAL, profiles.length))
     const generatedTiles = this.dynamicTileProjection.list()
     const generatedTileIds = generatedTiles.map((tile) => tile.id)
     const adjacency = getMapAdjacency(this.lifeExpansion.unlockedTileIds, generatedTileIds)
@@ -6037,8 +6038,8 @@ export class SimulationRuntime {
     const commands: LivingWorldCommand[] = []
     for (const [index, profile] of profiles.entries()) {
       if (this.npcMortalityProjection.isDeceased(profile.id)) continue
-      const phase = index % INTENT_RECOMPUTE_INTERVAL
-      if (nextTick % INTENT_RECOMPUTE_INTERVAL !== phase) continue
+      const phase = index % plannerCadence
+      if (nextTick % plannerCadence !== phase) continue
       const state = this.npcEngine.getState(profile.id)
       if (!state) continue
       const scheduledSlot = currentRoutineSlot(profile, nextTick)
