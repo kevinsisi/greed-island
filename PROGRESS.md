@@ -5,6 +5,27 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-24 — Handoff Snapshot @ v0.93.2
+
+### Current Version
+`0.93.2` — NPC Movement Narration Follow-up：v0.93.1 successfully made routed travellers visible live, but the first `NPC_MOVE` rows for runtime-born household children used raw `household.*` ids because movement narration looked up only constructor profiles.
+
+### What Shipped
+- **Dynamic NPC names in movement narration**：`runtime.ts` now uses `findProfile()` for `NPC_MOVE` event narration, so born/dynamic NPCs registered into `NpcEngine` resolve to their profile names instead of raw ids.
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.93.2`.
+
+### Verification Evidence
+- Live v0.93.1 smoke before follow-up：`/healthz` reported `version=0.93.1`; `/api/npcs` showed routed travellers persisted after ticks advanced (`travelCount=60`, then `66`, then `42`); recent `NPC_MOVE` rows appeared at tick `268785`, proving arrivals committed, but dynamic child rows still used raw `household.*` ids in narration.
+- `npm run test -w @greed-island/server -- npcEngine.test.ts runtimeIntentResolution.test.ts` — pass（62 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（55 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after commit/push.
+- v0.93.1 movement liveness fix itself is live and verified; v0.93.2 only fixes the public narration/name lookup gap exposed by that live smoke.
+
+---
+
 ## 2026-06-24 — Handoff Snapshot @ v0.93.1
 
 ### Current Version
@@ -23,7 +44,8 @@ developer. Keep latest status at the top.
 - `npx openspec validate --all --strict` — pass（55 items）
 
 ### Known Notes
-- CI/CD and live smoke are pending after commit/push.
+- CI `28094625081` and Deploy Dev `28094710504` passed; live `/healthz` reported `version=0.93.1`.
+- Live route smoke showed routed travellers persisted across ticks and `NPC_MOVE` arrivals committed, but also exposed raw `household.*` ids for dynamic child movement narration; superseded by v0.93.2.
 - This hotfix makes cross-district movement visibly observable; deeper NPC agency/personality is separate from the route visibility regression.
 
 ---

@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.93.2 ✅ local-ready — 2026-06-24
+
+**主題：NPC Movement Narration Follow-up（動態出生 NPC 移動不再顯示 raw id）**
+
+- ✅ **dynamic profile lookup** — `NPC_MOVE` narration 改用 `findProfile()`，讓 runtime-born household children 用中文名顯示，不再 fallback 成 `household.*` id。
+- ✅ **live finding addressed** — v0.93.1 live 已證明 routed travellers 可見且 arrival events 會 commit；v0.93.2 修正該 smoke 暴露的 raw-id narration gap。
+- ✅ **Verification** — targeted NPC engine/runtime tests、build、OpenSpec 55 items 全過；CI/CD/live smoke pending。
+
+---
+
 ## v0.93.1 ✅ local-ready — 2026-06-24
 
 **主題：NPC Movement Liveness Hotfix（跨區移動不再一閃而過）**

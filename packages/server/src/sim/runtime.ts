@@ -2416,7 +2416,7 @@ export class SimulationRuntime {
       plannedSaltMarshProgress >= SALT_MARSH_PROJECT_TARGET
     const plannedHuntedAnimalIds = new Set<string>()
     for (const event of npcResult.events) {
-      const profile = this.profiles.find((p) => p.id === ('npcId' in event ? event.npcId : ''))
+      const profile = 'npcId' in event ? this.findProfile(event.npcId) : null
       if (event.kind === 'move') {
         const name = profile?.name.zh ?? event.npcId
         const fromName = TILE_NAME_BY_ID[event.from] ?? event.from

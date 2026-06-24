@@ -5,11 +5,14 @@ import { SqliteEventStore } from '../kernel/eventStore.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import { SettingsStore } from '../http/settings.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
+import type { NpcProfile } from '../npcs/types.js'
+import { TICKS_PER_DAY } from '../config/world.js'
 import { SimulationRuntime } from './runtime.js'
 
 type InternalRuntime = {
   runTick: () => void
   npcEngine: {
+    registerDynamicNpc: (profile: NpcProfile) => void
     setIntentOverride: (
       npcId: string,
       override: {
@@ -24,7 +27,45 @@ type InternalRuntime = {
   }
 }
 
+function dynamicMoverProfile(): NpcProfile {
+  return {
+    id: 'runtime.dynamic.child',
+    name: { zh: '潮行', en: 'Tidewalker' },
+    role: { zh: '年輕旅人', en: 'Young Traveler' },
+    defaultLocation: 't_dock',
+    routine: [
+      { fromTickOfDay: 0, toTickOfDay: TICKS_PER_DAY, location: 't_central', label: 'market errand' }
+    ],
+    triggers: [],
+    memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+    personality: { factionLean: 'civilian', patience: 0.7, greed: 0.2 }
+  }
+}
+
 describe('SimulationRuntime intent resolution', () => {
+  it('uses dynamic NPC profile names in movement event narration', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const internal = runtime as unknown as InternalRuntime
+      internal.npcEngine.registerDynamicNpc(dynamicMoverProfile())
+
+      for (let i = 0; i < 30; i += 1) internal.runTick()
+
+      const move = eventStore
+        .readEvents()
+        .find((row) => row.eventType === 'NPC_MOVE' && row.actorId === 'runtime.dynamic.child')
+      const payload = move?.payload as { data?: { narration?: string; motivation?: { explanation?: string } } } | undefined
+      expect(payload?.data?.narration).toContain('潮行')
+      expect(payload?.data?.motivation?.explanation).toContain('潮行')
+      expect(payload?.data?.narration).not.toContain('runtime.dynamic.child')
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
   it('commits NPC_INTENT_RESOLVED as an event draft with a deterministic event id', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
