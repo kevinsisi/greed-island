@@ -5,7 +5,7 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.94.1 ✅ local-ready — 2026-06-24
+## v0.94.1 ✅ shipped — 2026-06-24
 
 **主題：NPC Autonomous Planner MVP（NPC 有 committed 短程自主計畫）**
 
@@ -14,7 +14,7 @@
 - ✅ **AI remains non-authoritative** — planner 不呼叫 AI provider；freeform AI agent 仍只做 server-resolved proposal，不能直接改世界。
 - ✅ **dynamic NPC included** — planner 使用 `npcEngine.listProfiles()`，runtime-born / matured born NPC 也會參與 autonomous planning。
 - ✅ **live cadence / presence fix** — v0.94.1 改用 active NPC count 錯相，讓 live 持續產生 planner decision；scheduled/owner building 內 NPC 不會被 generic planner 拉出室內。
-- ✅ **Verification** — planner/runtime/rule targeted tests（73 tests）、full server tests（1247 tests）、web tests（120 tests）、build、OpenSpec change strict、OpenSpec all 56 items 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — planner/runtime/rule targeted tests（73 tests）、full server tests（1247 tests）、web tests（120 tests）、build、OpenSpec change strict、OpenSpec all 56 items、CI `28115907179`、Deploy Dev `28116001994`、live `0.94.1` smoke 全過；live recent events showed `NPC_AGENT_DECISION=4` / `NPC_INTENT_RESOLVED=7` and `/api/npcs` showed 76 NPCs with `travellingCount=43` plus autonomous planner state。
 
 ---
 

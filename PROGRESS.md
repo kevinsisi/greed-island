@@ -28,9 +28,12 @@ developer. Keep latest status at the top.
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate npc-autonomous-planner-mvp --strict` — pass
 - `npx openspec validate --all --strict` — pass（56 items）
+- CI `28115907179` — pass（`e4c8d9d fix(v0.94.1): keep npc planner cadence live`）
+- Deploy Dev `28116001994` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.94.1` at tick `272908`；`/api/events?limit=100` returned recent planner rows (`NPC_AGENT_DECISION=4`, `NPC_INTENT_RESOLVED=7`, `NPC_MOVE=28`)；`/api/npcs` returned 76 NPCs with visible movement (`travellingCount=43`) and autonomous planner state present (`autonomousPlannerDecisionCount=3`, `autonomousPlannerTravellingCount=2`).
 
 ### Known Notes
-- CI/CD and live smoke are pending after commit/push.
+- v0.94.1 is live and supersedes v0.94.0; live smoke confirms committed planner decisions are now present in the recent event slice and NPCs are visibly travelling under server-authoritative routes.
 - This is the first executable autonomous-planner slice, not the full long-term human-like cognition system. It creates observable short-horizon planning facts and server-authoritative steering; deeper memory/relationship/career/family multi-step planning remains future Cognitive Runtime work.
 
 ---
