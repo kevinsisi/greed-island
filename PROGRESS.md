@@ -19,10 +19,13 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server -- npcEngine.test.ts runtimeIntentResolution.test.ts` — pass（62 tests / 2 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（55 items）
+- CI `28095469811` — pass（`fix(v0.93.2): name dynamic npc movement events`）
+- Deploy Dev `28095554946` — pass（Docker build/push + desktop deploy smoke）
+- Live smoke after deploy：`/healthz` reported `version=0.93.2` at tick `269037`; `/api/npcs` still showed routed travellers (`travelCount=49`); `/api/events?limit=100` returned recent `NPC_MOVE` rows (`moveCount=25`) with `rawMoveCount=0`, and sampled narration/motivation used names such as `汐丹`、`蘆煙`、`鹽柔` instead of `household.*` ids.
 
 ### Known Notes
-- CI/CD and live smoke are pending after commit/push.
-- v0.93.1 movement liveness fix itself is live and verified; v0.93.2 only fixes the public narration/name lookup gap exposed by that live smoke.
+- v0.93.2 is live and supersedes v0.93.1; movement remains visibly routed, and sampled movement narration no longer leaks raw dynamic household ids.
+- This release fixes the public movement narration/name lookup gap exposed by v0.93.1 live smoke. Deeper NPC agency/personality remains separate from the route visibility and narration regressions fixed here.
 
 ---
 

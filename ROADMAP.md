@@ -5,24 +5,24 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.93.2 ✅ local-ready — 2026-06-24
+## v0.93.2 ✅ shipped — 2026-06-24
 
 **主題：NPC Movement Narration Follow-up（動態出生 NPC 移動不再顯示 raw id）**
 
 - ✅ **dynamic profile lookup** — `NPC_MOVE` narration 改用 `findProfile()`，讓 runtime-born household children 用中文名顯示，不再 fallback 成 `household.*` id。
 - ✅ **live finding addressed** — v0.93.1 live 已證明 routed travellers 可見且 arrival events 會 commit；v0.93.2 修正該 smoke 暴露的 raw-id narration gap。
-- ✅ **Verification** — targeted NPC engine/runtime tests、build、OpenSpec 55 items 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted NPC engine/runtime tests、build、OpenSpec 55 items、CI `28095469811`、Deploy Dev `28095554946`、live `0.93.2` smoke 全過；live sample showed routed travellers (`travelCount=49`) and recent `NPC_MOVE` rows with `rawMoveCount=0`。
 
 ---
 
-## v0.93.1 ✅ local-ready — 2026-06-24
+## v0.93.1 ✅ shipped, superseded — 2026-06-24
 
 **主題：NPC Movement Liveness Hotfix（跨區移動不再一閃而過）**
 
 - ✅ **route visibility window** — `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS` 從 4 ticks 提高到 `TICKS_PER_MINUTE * 2`，讓 Hub routed traveller layer 能穩定看到 NPC 正在跨區移動。
 - ✅ **real-profile regression** — `npcEngine.test.ts` 以真實 profile 跑完整一天，確認 move events、route snapshots、長 route streak 都存在。
 - ✅ **version sync repair** — root package version 補到 `0.93.1`，避免 build script 從舊 root version 把 health 版本降回 `0.92.3`。
-- ✅ **Verification** — targeted NPC engine tests、built-code movement probe、build、OpenSpec 55 items 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted NPC engine tests、built-code movement probe、build、OpenSpec 55 items、CI `28094625081`、Deploy Dev `28094710504`、live `0.93.1` smoke 全過；live route smoke showed routed travellers persisted across ticks and `NPC_MOVE` arrivals committed, then v0.93.2 fixed the raw dynamic-child movement narration found during that smoke。
 
 ---
 
