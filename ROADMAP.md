@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.93.1 ✅ local-ready — 2026-06-24
+
+**主題：NPC Movement Liveness Hotfix（跨區移動不再一閃而過）**
+
+- ✅ **route visibility window** — `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS` 從 4 ticks 提高到 `TICKS_PER_MINUTE * 2`，讓 Hub routed traveller layer 能穩定看到 NPC 正在跨區移動。
+- ✅ **real-profile regression** — `npcEngine.test.ts` 以真實 profile 跑完整一天，確認 move events、route snapshots、長 route streak 都存在。
+- ✅ **version sync repair** — root package version 補到 `0.93.1`，避免 build script 從舊 root version 把 health 版本降回 `0.92.3`。
+- ✅ **Verification** — targeted NPC engine tests、built-code movement probe、build、OpenSpec 55 items 全過；CI/CD/live smoke pending。
+
+---
+
 ## v0.93.0 ✅ local-ready — 2026-06-16
 
 **主題：NPC Activity ↔ Building Consistency（NPC 行為類型與建築位置完全對齊）**

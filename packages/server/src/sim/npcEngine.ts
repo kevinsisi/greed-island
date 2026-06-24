@@ -172,8 +172,9 @@ const SUB_INNER_MIN_ROW = 1
 const SUB_INNER_MAX_ROW = AREA_SUB_ROWS - 2 // 8
 // 子格錨點刷新節奏：每 6 個 tick (≈30 秒) 換一個目標子格。
 export const NPC_LOCAL_WAYPOINT_REFRESH_TICKS = 6
-// Cross-tile routes stay visible long enough for the Hub traveller layer.
-export const NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS = 4
+// Cross-tile routes must stay visible across normal polling/SSE jitter.
+// Four ticks made travel a blink, so players saw NPCs as static or teleporting.
+export const NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS = TICKS_PER_MINUTE * 2
 
 export type NpcRuntimeState = {
   tile: string

@@ -9,7 +9,8 @@ import {
   type NpcRuntimeState
 } from './npcEngine.js'
 import type { NpcProfile } from '../npcs/types.js'
-import { TICKS_PER_DAY } from '../config/world.js'
+import { TICKS_PER_DAY, TICKS_PER_MINUTE } from '../config/world.js'
+import { loadNpcProfiles } from '../npcs/loader.js'
 
 function makeProfile(overrides: Partial<NpcProfile> = {}): NpcProfile {
   return {
@@ -120,6 +121,34 @@ describe('NpcEngine', () => {
       expect(ev.from).toBe('t_dock')
       expect(ev.to).toBe('t_central')
     }
+  })
+
+  it('keeps real-profile cross-tile travel observable for more than one poll window', () => {
+    const engine = new NpcEngine(loadNpcProfiles())
+    let moveEventCount = 0
+    let routeSnapshotTicks = 0
+    let maxRouteStreak = 0
+    const routeStreakByNpc = new Map<string, number>()
+
+    for (let tick = 1; tick <= TICKS_PER_DAY; tick += 1) {
+      const result = engine.tick(tick)
+      moveEventCount += result.events.filter((event) => event.kind === 'move').length
+
+      for (const [npcId, state] of engine.snapshotAll()) {
+        if (state.activity === 'move' && state.travelRoute) {
+          routeSnapshotTicks += 1
+          const streak = (routeStreakByNpc.get(npcId) ?? 0) + 1
+          routeStreakByNpc.set(npcId, streak)
+          maxRouteStreak = Math.max(maxRouteStreak, streak)
+        } else {
+          routeStreakByNpc.set(npcId, 0)
+        }
+      }
+    }
+
+    expect(moveEventCount).toBeGreaterThan(0)
+    expect(routeSnapshotTicks).toBeGreaterThan(TICKS_PER_MINUTE)
+    expect(maxRouteStreak).toBeGreaterThanOrEqual(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS - 1)
   })
 
   it('emits productive city actions beyond social arguments', () => {
@@ -765,7 +794,7 @@ describe('NpcEngine', () => {
   })
 
   it('keeps cross-district routes visible long enough for the Hub layer', () => {
-    expect(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS).toBe(4)
+    expect(NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS).toBe(TICKS_PER_MINUTE * 2)
   })
 
   it('marks NPC interaction participants with bounded social agent tasks', () => {

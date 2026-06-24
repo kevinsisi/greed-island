@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-24 — Handoff Snapshot @ v0.93.1
+
+### Current Version
+`0.93.1` — NPC Movement Liveness Hotfix：live v0.93.0 世界 tick / productive / social / ecology events 都有前進，但玩家看不到 NPC 跨區移動；`/api/npcs` 當下 76 位 NPC 全部 `travelRoute=null`，Hub route layer 沒有人在路上，看起來像 NPC 卡在各自地圖內。
+
+### What Shipped
+- **Route visibility window**：`NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS` 從 4 ticks（約 20 秒）改為 `TICKS_PER_MINUTE * 2`（24 ticks，約 2 分鐘），讓 server-authoritative `travelRoute` 足夠長，Hub/SSE/polling 能穩定看到 NPC 在跨區路上，而不是眨眼結束。
+- **Real-profile movement regression**：`npcEngine.test.ts` 新增以 `loadNpcProfiles()` 跑完整一天的測試，確認真實 NPC profile 會產生 `move` events、route snapshots，且至少一段 route streak 長於 poll window。
+- **Version sync repair**：root `package.json` 補到 `0.93.1` 並跑 `npm run version:sync`，避免 root 仍停在 `0.92.3` 導致下一次 build 把 server/web health version 降回舊版。
+
+### Verification Evidence
+- Live regression sample before fix：`/healthz` reported `version=0.93.0`；`/api/npcs` returned 76 NPCs distributed across districts, but `travelCount=0` and every `targetTile` matched current `location` in that snapshot；Hub map had outdoor NPCs across districts but no routed travellers.
+- `npm run test -w @greed-island/server -- npcEngine.test.ts` — pass（57 tests / 1 file）
+- Built-code movement probe：50 loaded profiles over one day produced `moveEvents=1791`, `routeSnapshots=42996`, `maxStreak=72`, and `NPC_CROSS_TILE_ROUTE_VISIBLE_TICKS=24`.
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（55 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after commit/push.
+- This hotfix makes cross-district movement visibly observable; deeper NPC agency/personality is separate from the route visibility regression.
+
+---
+
 ## 2026-06-16 — Handoff Snapshot @ v0.93.0
 
 ### Current Version
