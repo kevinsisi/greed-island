@@ -20,7 +20,9 @@ developer. Keep latest status at the top.
 
 ### Verification Evidence
 - `npm run test -w @greed-island/server -- npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts` — pass（10 tests / 2 files）
-- `npm run test -w @greed-island/server -- npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（71 tests / 3 files）
+- `npm run test -w @greed-island/server -- runtimePresence.test.ts npcAutonomousPlanner.test.ts runtimeIntentResolution.test.ts livingWorld.test.ts` — pass（72 tests / 4 files）
+- `npm run test -w @greed-island/server` — pass（1247 tests / 157 files）
+- `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate npc-autonomous-planner-mvp --strict` — pass
 - `npx openspec validate --all --strict` — pass（56 items）

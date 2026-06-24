@@ -13,7 +13,7 @@
 - ✅ **Command → Rule Engine → Event** — planner output 不直接改 state，而是提交 `NPC_AGENT_DECISION` command；accepted event 再透過既有 `applyAgentDecisionEvent` / intentOverride path 驅動後續 `NPC_MOVE`、activity、productive events。
 - ✅ **AI remains non-authoritative** — planner 不呼叫 AI provider；freeform AI agent 仍只做 server-resolved proposal，不能直接改世界。
 - ✅ **dynamic NPC included** — planner 使用 `npcEngine.listProfiles()`，runtime-born / matured born NPC 也會參與 autonomous planning。
-- ✅ **Verification** — planner/runtime/rule targeted tests（71 tests）、build、OpenSpec change strict、OpenSpec all 56 items 全過；CI/CD/live smoke pending。
+- ✅ **Verification** — planner/runtime/rule targeted tests（72 tests）、full server tests（1247 tests）、web tests（120 tests）、build、OpenSpec change strict、OpenSpec all 56 items 全過；CI/CD/live smoke pending。
 
 ---
 

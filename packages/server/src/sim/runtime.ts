@@ -6041,6 +6041,11 @@ export class SimulationRuntime {
       if (nextTick % INTENT_RECOMPUTE_INTERVAL !== phase) continue
       const state = this.npcEngine.getState(profile.id)
       if (!state) continue
+      const scheduledSlot = currentRoutineSlot(profile, nextTick)
+      const scheduledBuildingPresence = Boolean(
+        scheduledSlot?.buildingId && scheduledSlot.location === state.tile && isIndoorActivity(state.activity)
+      )
+      if (!state.intentOverride && (scheduledBuildingPresence || this.isNpcInsideOwnedBuilding(profile.id, state))) continue
       const life = deriveNpcLifeView({
         profile,
         state,
@@ -6107,6 +6112,14 @@ export class SimulationRuntime {
       ))
     }
     return commands
+  }
+
+  private isNpcInsideOwnedBuilding(npcId: string, state: NpcRuntimeState): boolean {
+    const ownedBuilding = [
+      ...listAllBuildings(this.lifeExpansion.unlockedBuildingIds),
+      ...this.completedConstructionBuildingDefs(),
+    ].find((building) => building.ownerNpcId === npcId)
+    return Boolean(ownedBuilding && state.tile === ownedBuilding.tileId && isIndoorActivity(state.activity))
   }
 
   private buildProductiveActionMotivation(
@@ -6852,6 +6865,15 @@ function isEventMotivation(value: unknown): value is EventMotivation {
   const record = value as Partial<EventMotivation>
   return typeof record.explanation === 'string' &&
     (record.projectPurpose === undefined || typeof record.projectPurpose === 'string')
+}
+
+function currentRoutineSlot(profile: NpcProfile, tick: number) {
+  const tickOfDay = ((tick % TICKS_PER_DAY) + TICKS_PER_DAY) % TICKS_PER_DAY
+  return profile.routine.find((slot) => tickOfDay >= slot.fromTickOfDay && tickOfDay < slot.toTickOfDay) ?? null
+}
+
+function isIndoorActivity(activity: NpcActivity): boolean {
+  return activity === 'work' || activity === 'trade' || activity === 'eat' || activity === 'sleep'
 }
 
 function makeFallbackProfile(npcId: string, fallbackTile: string): NpcProfile {
