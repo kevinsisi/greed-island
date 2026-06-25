@@ -278,6 +278,7 @@ import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
+import { commitNpcCognitiveUpdate, deriveNpcCognitiveEvolutionSummary, proposeDeterministicNpcReflection, validateNpcReflectionProposal, type NpcCognitiveEvolutionSummary, type NpcEvolutionRelationshipContext } from './npcCognitiveEvolution.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -484,6 +485,8 @@ export type SimNpcState = Readonly<{
   life: NpcLifeView
   /** Deterministic cognitive thought derived from personality, memory, beliefs, and needs. */
   cognitiveLine: { zh: string; en: string }
+  /** Mini-Hermes long-term reflection/personality/goal/relationship evolution summary. */
+  cognitiveEvolution: NpcCognitiveEvolutionSummary
   /** Deterministic personal economic and skill state derived from productive actions. */
   civic: NpcCivicRecord | null
   /** True when an NPC_DECEASED event has been recorded for this NPC. */
@@ -1593,15 +1596,17 @@ export class SimulationRuntime {
         lifeExpansion: this.lifeExpansion,
         tick: this.currentTick
       })
+      const memoryContext = this.getFormattedMemoryContext(profile.id)
       const cognitive = deriveNpcCognitiveProfileFromRuntime({
         profile,
         needs: life.needs,
         lifeGoal: life.goal,
         beliefs: this.beliefProjection.getBeliefs(profile.id),
         memoryUrgencyBoost: this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(profile.id, this.currentTick) : 0,
-        memoryContext: this.getFormattedMemoryContext(profile.id),
+        memoryContext,
         currentTick: this.currentTick,
       })
+      const cognitiveEvolution = this.deriveNpcCognitiveEvolutionSummary(profile.id, profile.name.zh, cognitive, life, memoryContext)
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
@@ -1629,6 +1634,7 @@ export class SimulationRuntime {
         intentLine: deriveNpcIntentLine(s),
         life,
         cognitiveLine: { zh: cognitive.thoughtZh, en: cognitive.thoughtEn },
+        cognitiveEvolution,
         civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null,
         deceased: this.npcMortalityProjection.isDeceased(profile.id),
         recentUtterance: (() => {
@@ -1638,6 +1644,68 @@ export class SimulationRuntime {
           return u
         })(),
       }
+    })
+  }
+
+
+  private deriveNpcCognitiveEvolutionSummary(
+    npcId: string,
+    npcNameZh: string,
+    cognitive: ReturnType<typeof deriveNpcCognitiveProfileFromRuntime>,
+    life: NpcLifeView,
+    memoryContext: string
+  ): NpcCognitiveEvolutionSummary {
+    const relationships = this.npcRelationships
+      ? this.npcRelationships.listFor(npcId).slice(0, 5).map((row): NpcEvolutionRelationshipContext => {
+          const targetNpcId = row.npcA === npcId ? row.npcB : row.npcA
+          const targetProfile = this.profiles.find((profile) => profile.id === targetNpcId)
+          const direction = this.npcRelationships?.readDirectional(npcId, targetNpcId) ?? row.dimensions.aToB
+          return {
+            npcId: targetNpcId,
+            nameZh: targetProfile?.name.zh ?? targetNpcId,
+            trust: direction.trust,
+            type: row.relationshipType,
+            dimensions: direction,
+          }
+        })
+      : []
+    const proposal = proposeDeterministicNpcReflection({
+      npcId,
+      npcNameZh,
+      currentTick: this.currentTick,
+      cognitive,
+      lifeGoal: life.goal,
+      needs: life.needs,
+      memoryContext,
+      reflectionContext: this.getFormattedReflectionContext(npcId),
+      relationships,
+    })
+    const validation = validateNpcReflectionProposal(proposal, {
+      npcId,
+      npcNameZh,
+      currentTick: this.currentTick,
+      cognitive,
+      lifeGoal: life.goal,
+      needs: life.needs,
+      memoryContext,
+      reflectionContext: this.getFormattedReflectionContext(npcId),
+      relationships,
+    })
+    const committed = validation.accepted ? [commitNpcCognitiveUpdate(proposal, validation, {
+      npcId,
+      npcNameZh,
+      currentTick: this.currentTick,
+      cognitive,
+      lifeGoal: life.goal,
+      needs: life.needs,
+      memoryContext,
+      reflectionContext: this.getFormattedReflectionContext(npcId),
+      relationships,
+    })] : []
+    return deriveNpcCognitiveEvolutionSummary({
+      currentTick: this.currentTick,
+      committedUpdates: committed,
+      currentThoughtZh: cognitive.thoughtZh,
     })
   }
 

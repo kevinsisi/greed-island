@@ -163,6 +163,15 @@ export type ServerNpc = {
   intentLine?: { zh: string; en: string }
   // v0.95.0+：deterministic cognitive thought derived from personality/memory/beliefs
   cognitiveLine?: { zh: string; en: string }
+  // v0.96.0+：Mini-Hermes long-term reflection/personality/goal/relationship evolution summary
+  cognitiveEvolution?: {
+    reflectionCount: number
+    currentThoughtZh: string
+    lastReflectionZh: string | null
+    personalityTraceZh: string | null
+    lifeGoalTraceZh: string | null
+    relationshipTraceZh: string | null
+  }
   // v0.15.32+：deterministic needs and long-term life goal projection
   life?: {
     needs: Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>

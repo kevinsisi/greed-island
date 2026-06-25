@@ -80,6 +80,15 @@ export interface NpcSummary {
   intentLine?: { zh: string; en: string }
   /** Deterministic cognitive thought derived from personality/memory/beliefs. */
   cognitiveLine?: { zh: string; en: string }
+  /** Mini-Hermes long-term reflection/personality/goal/relationship evolution summary. */
+  cognitiveEvolution?: {
+    reflectionCount: number
+    currentThoughtZh: string
+    lastReflectionZh: string | null
+    personalityTraceZh: string | null
+    lifeGoalTraceZh: string | null
+    relationshipTraceZh: string | null
+  }
   /** Deterministic life pressure and long-term goal projection (v0.15.32+) */
   life?: {
     needs: Record<'food' | 'rest' | 'money' | 'housing' | 'safety', number>

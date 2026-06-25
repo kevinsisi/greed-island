@@ -611,6 +611,11 @@ export function AreaPage() {
                                   {locale === 'zh' ? npc.cognitiveLine.zh : npc.cognitiveLine.en}
                                 </div>
                               )}
+                              {npc.cognitiveEvolution && (
+                                <div className="text-[10px] text-violet-200/80 truncate">
+                                  {npc.cognitiveEvolution.personalityTraceZh ?? npc.cognitiveEvolution.lastReflectionZh ?? npc.cognitiveEvolution.currentThoughtZh}
+                                </div>
+                              )}
                               <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
                                 {t('npc.relationship')}{' '}
                                 <span className="text-ground-200">{npc.relationshipScore}</span>

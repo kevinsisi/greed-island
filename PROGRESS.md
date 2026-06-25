@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-25 — Handoff Snapshot @ v0.96.0
+
+### Current Version
+`0.96.0` — NPC Long-Term Cognitive Evolution MVP：在 v0.95 cognitive runtime 上加入 Mini-Hermes 長期演化 slice。NPC reflection 現在走 proposal → validator → committed cognitive update，會把記憶依據轉成受限人格微調、self-authored life goal、關係維度調整與更細的 UI 摘要。
+
+### What Shipped
+- **Reflection proposal validator**：新增 `npcCognitiveEvolution.ts`，AI/ deterministic proposal 必須有記憶依據、合法 life goal kind、已知 relationship target，且 personality delta / relationship delta 都有上限。
+- **Committed cognitive update model**：合法 proposal 會轉成 bounded personality update、optional life goal、relationship updates 與中英 summary；拒絕 proposal 不可 commit。
+- **Mini-Hermes NPC summary**：server NPC snapshot 新增 additive `cognitiveEvolution`，包含 reflectionCount、current thought、last reflection、personality trace、life-goal trace、relationship trace。
+- **Frontend UI**：web API/state types 與 Area NPC list 顯示更細的 cognitive evolution trace。
+- **OpenSpec**：新增 `npc-long-term-cognitive-evolution` change，定義 validator boundary 與 UI surface。
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcCognitiveEvolution.test.ts npcCognitiveRuntime.test.ts npcAutonomousPlanner.test.ts` — pass（11 tests / 3 files）
+- `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate npc-long-term-cognitive-evolution --strict` — pass
+- `npx openspec validate --all --strict` — pass（58 items）
+
+### Known Notes
+- v0.96.0 implements the validator/committed-update model and public summary. Future slices should persist committed cognitive updates as explicit EventLog commands with replay cadence, instead of deriving the current committed summary only from snapshot context.
+
+---
+
 ## 2026-06-25 — Handoff Snapshot @ v0.95.1
 
 ### Current Version

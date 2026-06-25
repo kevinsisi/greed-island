@@ -388,6 +388,9 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(npc.cognitiveLine && typeof npc.cognitiveLine.zh === 'string' && typeof npc.cognitiveLine.en === 'string'
       ? { cognitiveLine: { zh: npc.cognitiveLine.zh, en: npc.cognitiveLine.en } }
       : {}),
+    ...(isCognitiveEvolution(npc.cognitiveEvolution)
+      ? { cognitiveEvolution: npc.cognitiveEvolution }
+      : {}),
     ...(npc.life && npc.life.goal && npc.life.needs
       ? { life: npc.life }
       : {}),
@@ -398,6 +401,20 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
         : {}),
   }
   return summary
+}
+
+
+function isCognitiveEvolution(value: unknown): value is NonNullable<NpcSummary['cognitiveEvolution']> {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<NonNullable<NpcSummary['cognitiveEvolution']>>
+  return (
+    typeof row.reflectionCount === 'number' &&
+    typeof row.currentThoughtZh === 'string' &&
+    (row.lastReflectionZh === null || typeof row.lastReflectionZh === 'string') &&
+    (row.personalityTraceZh === null || typeof row.personalityTraceZh === 'string') &&
+    (row.lifeGoalTraceZh === null || typeof row.lifeGoalTraceZh === 'string') &&
+    (row.relationshipTraceZh === null || typeof row.relationshipTraceZh === 'string')
+  )
 }
 
 function isTravelRoute(value: unknown): value is NonNullable<NpcSummary['travelRoute']> {

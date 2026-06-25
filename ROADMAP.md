@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.96.0 ✅ local-ready — 2026-06-25
+
+**主題：NPC Long-Term Cognitive Evolution MVP（NPC 開始有 Mini-Hermes 式反省與人格成長摘要）**
+
+- ✅ **proposal → validator → committed update** — 新增 `npcCognitiveEvolution`，任何 AI/deterministic reflection proposal 都必須通過記憶依據、life goal、personality delta、relationship delta 驗證。
+- ✅ **bounded personality evolution** — personality delta 限制在小幅度，合法 proposal 才能成為 committed cognitive update。
+- ✅ **self-authored life goal** — reflection 可形成受限 life goal（例如 seek_safety / earn_money / form_family），pressure 必須在 0..100。
+- ✅ **deep relationship rewrite slice** — reflection 可對既有關係的 trust/fear/respect/loyalty 等維度做小幅調整，且必須 target 已知 NPC。
+- ✅ **fine-grained NPC memory UI** — `/api/npcs` snapshot 新增 `cognitiveEvolution`，Area NPC list 顯示人格/反省/目標/關係摘要。
+- ✅ **Verification** — targeted server tests（11）、web tests（120）、build、OpenSpec change strict、OpenSpec all 58 items 通過。
+
+---
+
 ## v0.95.1 ✅ local-ready — 2026-06-25
 
 **主題：Hub Map Loading Hotfix（地圖不再卡在載入潮鳴市）**
