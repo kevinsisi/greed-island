@@ -5,7 +5,7 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.96.1 ✅ local-ready — 2026-06-25
+## v0.96.1 ✅ shipped — 2026-06-25
 
 **主題：NPC Cognitive Runtime Availability Hotfix（紀錄/API 不再因 tick 內部 heavy NPC snapshot 卡死）**
 
@@ -13,7 +13,7 @@
 - ✅ **cheap runtime snapshots** — tick 內部改用 `getLivingNpcRuntimeSnapshots()` / `getLivingNpcLocationMap()` 等 helper，只讀 `NpcEngine` state，不觸發 cognitive/memory DB work。
 - ✅ **light public NPC snapshots** — `/api/npcs` / `/api/world` 保留 cognitive 欄位，但列表 snapshot 不再逐 NPC 掃 `npc_memory`；完整 memory context 留在 dialog/planner 路徑。
 - ✅ **records preserved** — live 檢查確認 `event_log` 仍有 27,233,776 events、`npc_memory` 仍有 2,445,514 rows；問題是 API unavailability，不是資料遺失。
-- ✅ **Verification** — targeted server tests（25）、full server tests（1254）、web tests（120）、full build 通過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted server tests（25）、full server tests（1254）、web tests（120）、full build、CI `28171408794`、Deploy Dev `28171516473`、live smoke 通過；`/healthz` 已回 `version=0.96.1`，`/api/events` / `/api/world` / `/api/npcs` 不再 502。
 
 ---
 

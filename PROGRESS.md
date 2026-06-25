@@ -26,10 +26,15 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
 - `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- Pushed commit `4fcf6c1 fix(v0.96.1): keep cognitive snapshots non-blocking` to `origin/main`.
+- GitHub Actions CI `28171408794` — pass（OpenSpec validate + build/typecheck/server tests；Node.js 20 deprecation annotation remains known non-blocking）
+- GitHub Actions Deploy Dev `28171516473` — pass（Docker images built/pushed, desktop pull/restart, deployment smoke check）
+- Live smoke after deploy：`/healthz` returned `200` with `version=0.96.1`; `/api/events?limit=5` returned `200` with 5 events and `eventType=WORLD_TICK`; `/api/world` returned `200`; `/api/npcs` returned `200` with 76 NPCs and cognitive fields present.
+- Recent `greed-island-web`, `greed-island-server`, and edge Caddy logs showed no fresh `502` / proxy timeout / server error matches after smoke.
 
 ### Known Notes
-- CI/CD and live smoke are pending after this hotfix commit/push.
 - This does not delete or rewrite EventLog rows. The symptom was API unavailability from event-loop starvation, not lost records.
+- First post-deploy live smoke still showed slow but successful public snapshots (`/api/world` ~24.6s, `/api/npcs` ~16.7s); treat this as a follow-up performance watch item, not a v0.96.1 release blocker because the prior 502/event-loop timeout failure is cleared.
 
 ---
 
