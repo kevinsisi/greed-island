@@ -60,6 +60,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'NPC_INHERITANCE_GRANTED',
   'NPC_AGENT_DECISION',
   'NPC_FREEFORM_ACTION_PROPOSED',
+  'NPC_REFLECTION_COMMITTED',
   'NPC_RELATIONSHIP_DIMENSION_ADJUSTED',
   'NPC_PRODUCTIVE_ACTION',
   'CONSTRUCTION_INITIATE',
@@ -379,6 +380,26 @@ export type NpcRelationshipDimensionAdjustedCmd = Readonly<{
   tick: number
   motivation?: EventMotivation
   narration: string
+}>
+
+export type NpcReflectionCommittedCmd = Readonly<{
+  npcId: string
+  committedAtTick: number
+  sourceProposalTick: number
+  source: 'ai_reflection' | 'deterministic_reflection'
+  evidenceMemoryFragments: readonly string[]
+  personalityDeltas: Readonly<Partial<Record<'greed' | 'safetyWeight' | 'economyWeight' | 'factionLoyalty' | 'talkativeness' | 'patience', number>>>
+  lifeGoal: Readonly<{ kind: 'eat' | 'rest' | 'earn_money' | 'secure_home' | 'seek_safety' | 'form_family' | 'build_city' | 'learn_skill'; pressure: number; narration: string }> | null
+  relationshipDeltas: readonly Readonly<{
+    targetNpcId: string
+    dimension: 'trust' | 'fear' | 'respect' | 'attraction' | 'loyalty' | 'resentment' | 'dependency' | 'familiarity'
+    delta: number
+    reason: string
+  }>[]
+  summaryZh: string
+  summaryEn: string
+  motivation?: EventMotivation
+  narration: string | null
 }>
 
 // NPC AI agent decision（v0.89.0）— AI 以「意圖分類」身分替 NPC 在 server
@@ -1780,6 +1801,7 @@ export type LivingWorldCommandPayload =
   | NpcInheritanceGrantedCmd
   | NpcAgentDecisionCmd
   | NpcFreeformActionProposedCmd
+  | NpcReflectionCommittedCmd
   | NpcRelationshipDimensionAdjustedCmd
   | NpcProductiveActionCmd
   | ConstructionInitiateCmd
@@ -2141,6 +2163,41 @@ const VALIDATORS: Readonly<
     if (p.accepted && p.rejectionReason !== null) return 'accepted proposals must not have rejectionReason'
     if (!p.accepted && (typeof p.rejectionReason !== 'string' || p.rejectionReason.length === 0)) return 'rejected proposals require rejectionReason'
     if (typeof p.decidedAtTick !== 'number' || !Number.isInteger(p.decidedAtTick) || p.decidedAtTick < 0) return 'decidedAtTick must be non-negative integer'
+    if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
+    return null
+  },
+  NPC_REFLECTION_COMMITTED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (!isNonNegativeInteger(p.committedAtTick)) return 'committedAtTick must be non-negative integer'
+    if (!isNonNegativeInteger(p.sourceProposalTick)) return 'sourceProposalTick must be non-negative integer'
+    if (p.source !== 'ai_reflection' && p.source !== 'deterministic_reflection') return 'source invalid'
+    if (!Array.isArray(p.evidenceMemoryFragments) || p.evidenceMemoryFragments.length === 0) return 'evidenceMemoryFragments required'
+    if (!p.evidenceMemoryFragments.every((fragment) => typeof fragment === 'string' && fragment.trim().length > 0)) return 'evidenceMemoryFragments must be non-empty strings'
+    if (!isRecord(p.personalityDeltas)) return 'personalityDeltas required'
+    const allowedPersonalityKeys = ['greed', 'safetyWeight', 'economyWeight', 'factionLoyalty', 'talkativeness', 'patience']
+    for (const [key, value] of Object.entries(p.personalityDeltas)) {
+      if (!allowedPersonalityKeys.includes(key)) return 'invalid personality delta key'
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < -0.25 || value > 0.25) return 'personality delta must be within -0.25..0.25'
+    }
+    const validGoalKinds = ['eat', 'rest', 'earn_money', 'secure_home', 'seek_safety', 'form_family', 'build_city', 'learn_skill']
+    if (p.lifeGoal !== null) {
+      if (!isRecord(p.lifeGoal)) return 'lifeGoal must be object or null'
+      if (typeof p.lifeGoal.kind !== 'string' || !validGoalKinds.includes(p.lifeGoal.kind)) return 'lifeGoal.kind invalid'
+      if (typeof p.lifeGoal.pressure !== 'number' || !Number.isFinite(p.lifeGoal.pressure) || p.lifeGoal.pressure < 0 || p.lifeGoal.pressure > 100) return 'lifeGoal.pressure must be 0..100'
+      if (typeof p.lifeGoal.narration !== 'string' || p.lifeGoal.narration.trim().length === 0) return 'lifeGoal.narration required'
+    }
+    const validDims = ['trust', 'fear', 'respect', 'attraction', 'loyalty', 'resentment', 'dependency', 'familiarity']
+    if (!Array.isArray(p.relationshipDeltas)) return 'relationshipDeltas required'
+    for (const delta of p.relationshipDeltas) {
+      if (!isRecord(delta)) return 'relationshipDeltas entries must be objects'
+      if (typeof delta.targetNpcId !== 'string' || delta.targetNpcId.length === 0) return 'relationship targetNpcId required'
+      if (typeof delta.dimension !== 'string' || !validDims.includes(delta.dimension)) return 'invalid relationship dimension'
+      if (typeof delta.delta !== 'number' || !Number.isFinite(delta.delta) || delta.delta < -15 || delta.delta > 15) return 'relationship delta must be within -15..15'
+      if (typeof delta.reason !== 'string' || delta.reason.trim().length === 0) return 'relationship delta reason required'
+    }
+    if (typeof p.summaryZh !== 'string' || p.summaryZh.trim().length === 0) return 'summaryZh required'
+    if (typeof p.summaryEn !== 'string' || p.summaryEn.trim().length === 0) return 'summaryEn required'
     if (typeof p.narration !== 'string' && p.narration !== null) return 'narration must be string or null'
     return null
   },

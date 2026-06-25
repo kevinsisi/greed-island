@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.0
+
+### Current Version
+`0.97.0` — NPC Reflection Events MVP：把 v0.96 的 Mini-Hermes 反省模型往 EventLog 推進。NPC 長期反省現在有 `NPC_REFLECTION_COMMITTED` command/event、Rule Engine 邊界驗證，以及可從 EventLog replay 的 `NpcCognitiveProjection`，讓人格微調、life-goal override、關係反省 trace 不再只是即時計算摘要。
+
+### What Shipped
+- **Event-sourced reflection fact**：新增 `NPC_REFLECTION_COMMITTED` living-world command/event，payload 包含 npcId、commit/proposal tick、source、memory evidence、bounded personality deltas、optional life goal、bounded relationship deltas、summary 與 narration。
+- **Rule Engine guardrails**：反省事件必須有記憶依據；personality delta 限制在 `-0.25..0.25`；relationship delta 限制在 `-15..15`；life-goal kind 與 relationship dimension 都走白名單。
+- **Replayable cognitive projection**：新增 `npcCognitiveProjection.ts`，可由 EventLog 重建 per-NPC reflection count、累積 personality delta、目前 life-goal override、latest summary、evidence fragments 與 relationship reflection trace。
+- **Runtime wiring**：SimulationRuntime 在 small-log boot、deferred hydration、event fanout 都接上 `NpcCognitiveProjectionStore`，後續 accepted reflection event 會進入 runtime projection。
+- **OpenSpec**：新增 `npc-cognitive-reflection-events` change，明確定義 AI/deterministic reflection 只能作為 proposal，必須經 validator / Rule Engine / EventLog 才是世界事實。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.0`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcCognitiveProjection.test.ts npcCognitiveEvolution.test.ts` — pass（6 tests / 2 files）
+- `npm run build:server` — pass
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run test` — pass（server 1257 tests / 160 files；web 120 tests / 22 files）
+- `npm run openspec:check` — pass（12 active changes；installed `@fission-ai/openspec@1.2.0` globally because the CLI was missing locally）
+
+### Known Notes
+- This slice makes reflection durable/replayable, but it does not yet schedule automatic NPC reflection commits from runtime ticks. The next slice should add a bounded cadence that converts accepted cognitive proposals into `NPC_REFLECTION_COMMITTED` commands without doing side effects during public snapshot reads.
+- Relationship deltas are recorded as reflection trace here; a follow-up should route them into the formal relationship projection via dedicated relationship commands/events.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.96.3
 
 ### Current Version

@@ -279,6 +279,7 @@ import { computeIntentStack } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
 import { commitNpcCognitiveUpdate, deriveNpcCognitiveEvolutionSummary, proposeDeterministicNpcReflection, validateNpcReflectionProposal, type NpcCognitiveEvolutionSummary, type NpcEvolutionRelationshipContext } from './npcCognitiveEvolution.js'
+import { NpcCognitiveProjectionStore, NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES } from './npcCognitiveProjection.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -666,6 +667,7 @@ export class SimulationRuntime {
   private readonly beliefProjection = new BeliefProjection()
   private readonly intentProjection = new IntentProjection()
   private readonly lifeGoalsProjection = new LifeGoalsProjection()
+  private readonly npcCognitiveProjection = new NpcCognitiveProjectionStore()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -2181,6 +2183,7 @@ export class SimulationRuntime {
       this.beliefProjection.apply(ev, npcTileMap)
       this.intentProjection.project(ev)
       this.lifeGoalsProjection.project(ev)
+      this.npcCognitiveProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -6683,6 +6686,7 @@ export class SimulationRuntime {
       this.activeRuleOperatorsProjection.rebuildFromEvents(allEvents)
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
+      this.npcCognitiveProjection.rebuildFromEvents(allEvents)
       // v0.87.3 boot-bug fix: mortality / lineage / born-npc projections were
       // wired into the large-log else-branch but NOT here. Result was that
       // every small-world restart resurrected every deceased NPC (the very
@@ -6853,6 +6857,7 @@ export class SimulationRuntime {
       },
       { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
       { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
+      { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections

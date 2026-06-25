@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.0 ✅ local-ready — 2026-06-26
+
+**主題：NPC Reflection Events MVP（NPC 長期反省成為可 replay 的 EventLog 事實）**
+
+- ✅ **`NPC_REFLECTION_COMMITTED` event** — 新增 living-world command/event，把 accepted reflection 寫成世界事實，而不是只存在 snapshot summary。
+- ✅ **bounded validation** — Rule Engine 驗證 memory evidence、personality delta `-0.25..0.25`、relationship delta `-15..15`、life-goal kind、relationship dimension、summary/narration。
+- ✅ **`NpcCognitiveProjection`** — 從 EventLog 重建 per-NPC reflection count、累積 personality delta、life-goal override、latest summary、evidence fragments、relationship reflection trace。
+- ✅ **runtime projection wiring** — small-log boot、deferred hydration、committed event fanout 都接上 NPC cognitive projection，為後續自動 reflection cadence 鋪路。
+- ✅ **OpenSpec** — 新增 `npc-cognitive-reflection-events`，延續 AI read-only 準則：reflection proposal 必須經 Rule Engine 才能改變世界。
+- ✅ **Verification** — targeted server tests（6）、full server tests（1257）、web tests（120）、full build、OpenSpec check 通過。
+
+---
+
 ## v0.96.3 ✅ shipped — 2026-06-26
 
 **主題：Large-log Ecology Boot Hydration Hotfix（重啟後生物 overlay 不再從空投影開始）**
