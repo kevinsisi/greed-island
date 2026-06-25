@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.96.2 ✅ local-ready — 2026-06-25
+
+**主題：Simulation Tick Availability Hotfix（長 tick 不再餓死 HTTP / 地圖 / NPC / 生物載入）**
+
+- ✅ **root cause** — live 資料仍存在，但 `127.0.0.1:3000/healthz` / `/api/map` 在 container 內也會 timeout，表示 Node event loop 被 simulation tick 餓死，不是 Caddy 或資料刪失。
+- ✅ **scheduler fix** — runtime tick loop 從固定 `setInterval` 改成上一輪完成後才排下一輪的 one-shot `setTimeout`，避免長 tick 後 pending interval 連續補跑、讓 HTTP request 沒機會處理。
+- ✅ **observability** — 長 tick 會 log duration，下一步可針對真正慢的 simulation phase 做優化。
+- ✅ **Verification** — targeted server tests（15）、full server tests（1254）、server build、full build、OpenSpec all 58 items 通過；CI/CD/live smoke pending。
+
+---
+
 ## v0.96.1 ✅ shipped — 2026-06-25
 
 **主題：NPC Cognitive Runtime Availability Hotfix（紀錄/API 不再因 tick 內部 heavy NPC snapshot 卡死）**

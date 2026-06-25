@@ -564,6 +564,7 @@ export class SimulationRuntime {
   private readonly listeners = new Set<Listener>()
   private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
+  private tickLoopActive = false
   private deferredHydrationState: DeferredHydrationState = 'not_needed'
   private deferredHydrationPromise: Promise<void> | null = null
   private deferredHydrationError: string | null = null
@@ -851,19 +852,36 @@ export class SimulationRuntime {
   }
 
   start(): void {
-    if (this.timer !== null) return
-    this.timer = setInterval(() => this.runTickSafely(), this.tickDurationMs)
+    if (this.tickLoopActive) return
+    this.tickLoopActive = true
+    this.scheduleNextTick()
   }
 
   stop(): void {
+    this.tickLoopActive = false
     if (this.timer !== null) {
-      clearInterval(this.timer)
+      clearTimeout(this.timer)
       this.timer = null
     }
     // Combat Phase C Slice 1 — clear every per-combat sub-tick interval
     // when the world tick stops, so test teardown and production
     // shutdown both leave no orphaned timers behind.
     this.combatRuntime.shutdownAll()
+  }
+
+  private scheduleNextTick(): void {
+    if (!this.tickLoopActive || this.timer !== null) return
+    this.timer = setTimeout(() => {
+      this.timer = null
+      if (!this.tickLoopActive) return
+      const startedAt = Date.now()
+      this.runTickSafely()
+      const elapsedMs = Date.now() - startedAt
+      if (elapsedMs > this.tickDurationMs) {
+        console.warn(`[sim] tick ${this.currentTick} took ${elapsedMs}ms; delaying next tick to keep HTTP responsive`)
+      }
+      this.scheduleNextTick()
+    }, this.tickDurationMs)
   }
 
   attachCombatStore(store: CombatStore): void {

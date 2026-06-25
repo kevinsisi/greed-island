@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-25 — Handoff Snapshot @ v0.96.2
+
+### Current Version
+`0.96.2` — Simulation Tick Availability Hotfix：v0.96.1 清掉 public cognitive snapshot 造成的 memory DB 掃描後，live 仍出現「看不到 NPC / 生物 / 右下角地圖」；實測資料仍存在（`/api/npcs` 有 76 NPC、`/api/world` 有 `animalPopulation`），但 container 內直打 `127.0.0.1:3000/healthz` / `/api/map` 也會 10–30 秒 timeout，代表 Node event loop 被 runtime tick 餓死，不是 Caddy 或資料遺失。
+
+### What Shipped
+- **Tick scheduler availability fix**：`SimulationRuntime.start()` 從固定 `setInterval` 改成 one-shot `setTimeout` loop；每輪 tick 完成後才排下一輪。長 tick 只會降低模擬速度，不會讓 pending interval 連續補跑、阻塞 HTTP I/O。
+- **Slow tick observability**：單輪 tick 超過 `tickDurationMs` 時輸出 `[sim] tick ... took ...; delaying next tick to keep HTTP responsive`，方便 live 追蹤下一個重點優化點。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.96.2`.
+
+### Verification Evidence
+- Live reproduction before fix：`docker exec greed-island-server node fetch('http://127.0.0.1:3000/healthz')` timed out after 10s repeatedly；`/api/map` also timed out internally；external `/healthz` / `/api/map` / `/api/world` had 10–30s+ waits.
+- Live data was still present during failure：`/api/npcs` returned 76 NPCs; `/api/world` facts contained `animalPopulation` rows and predator hunger rows. The UI symptom was API starvation/timeouts, not missing NPC or creature records.
+- `npm run test -w @greed-island/server -- runtimeLargeLogHydration.test.ts runtimeIntentResolution.test.ts npcCognitiveRuntime.test.ts npcCognitiveEvolution.test.ts npcAgentRunner.test.ts` — pass（15 tests / 5 files）
+- `npm run build -w @greed-island/server` — pass
+- `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（58 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after this hotfix commit/push.
+- This does not disable AI/NPC agent and does not delete or rewrite EventLog rows.
+
+---
+
 ## 2026-06-25 — Handoff Snapshot @ v0.96.1
 
 ### Current Version
