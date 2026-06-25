@@ -8,7 +8,7 @@ developer. Keep latest status at the top.
 ## 2026-06-26 — Handoff Snapshot @ v0.96.3
 
 ### Current Version
-`0.96.3` — Large-log Ecology Boot Hydration Hotfix：v0.96.2 已恢復 HTTP availability，NPC / map API 不再被 long tick 餓死；但 live reboot 後 `/api/world` 顯示 `animalPopulation: 0`，代表大 EventLog 啟動分支為了保住 boot speed 跳過 full replay 時，也讓 ecology projections 從 default-empty 啟動，玩家仍會看不到生物 overlay。
+`0.96.3` — Large-log Ecology Boot Hydration Hotfix：v0.96.2 已恢復 HTTP availability，NPC / map API 不再被 long tick 餓死；但當時 live reboot 後 `/api/world` 顯示 `animalPopulation: 0`，代表大 EventLog 啟動分支為了保住 boot speed 跳過 full replay 時，也讓 ecology projections 從 default-empty 啟動。本版改成 bounded recent ecology hydration，讓生物 overlay 在 large-log restart 後恢復。
 
 ### What Shipped
 - **Bounded recent ecology hydration**：large-log boot 會在 deferred hydration 前讀最近 10,000 ticks、最多 50,000 筆 ecology boot events，重建近期生態投影，而不是 replay 全部 EventLog。
@@ -23,9 +23,15 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（58 items）
+- Separate general reviewer gate — first pass found the bounded read cap, player ecology event coverage, and test-window mock issues; fixes were applied; final pass returned `No findings`.
+- Pushed commit `5848235 fix(v0.96.3): hydrate recent ecology on large logs` to `origin/main`.
+- GitHub Actions CI `28190534867` — pass（OpenSpec validate + build/typecheck/server tests；Node.js 20 deprecation annotation remains known non-blocking）.
+- GitHub Actions Deploy Dev `28190635061` — pass（Docker images built/pushed, desktop pull/restart, deployment smoke check）.
+- Live smoke after deploy：`/healthz` returned `200` with `version=0.96.3`; `/api/map` returned 9 tiles; `/api/world` returned `animalPopulationCount=45`, `fisheryDensityCount=1`, and `predatorHungerCount=8`; `/api/npcs` returned 76 NPCs with 61 moving; `/api/events?limit=5` returned `eventType` rows and no legacy `type` field; sampled `/api/area/t_desert/ecology` returned 5 animal rows and 2 predator warnings.
+- Live runtime logs showed `[boot] hydrated recent ecology from 7167 events (ticks 275312-285312)` and deferred large-log hydration completed. The first post-restart `/healthz` hit overlapped a slow tick (~15.7s), but repeat checks returned `/healthz` 10ms, `/api/world` 10ms, and `/api/map` 4ms.
 
 ### Known Notes
-- CI/CD and live smoke are pending after this hotfix commit/push.
+- v0.96.3 is live and supersedes v0.96.2; creature/ecology projections are no longer empty after large-log restart.
 - This does not disable AI/NPC agent and does not delete, compact, or rewrite EventLog rows.
 
 ---
