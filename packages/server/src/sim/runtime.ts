@@ -277,6 +277,7 @@ import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
+import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
 import { planPlantRegrowth } from '../ecosystem/plantRegrowth.js'
 import { ecosystemRegionForTile } from '../ecosystem/animalSpawning.js'
@@ -481,6 +482,8 @@ export type SimNpcState = Readonly<{
   intentLine: NpcIntentLine
   /** Deterministic life pressure and current long-term goal. */
   life: NpcLifeView
+  /** Deterministic cognitive thought derived from personality, memory, beliefs, and needs. */
+  cognitiveLine: { zh: string; en: string }
   /** Deterministic personal economic and skill state derived from productive actions. */
   civic: NpcCivicRecord | null
   /** True when an NPC_DECEASED event has been recorded for this NPC. */
@@ -1583,6 +1586,22 @@ export class SimulationRuntime {
           subZ: 0
         } as NpcRuntimeState)
       const buildingId = this.getNpcBuildingId(profile.id)
+      const life = deriveNpcLifeView({
+        profile,
+        state: s,
+        areaState: this.getAreaState(s.tile),
+        lifeExpansion: this.lifeExpansion,
+        tick: this.currentTick
+      })
+      const cognitive = deriveNpcCognitiveProfileFromRuntime({
+        profile,
+        needs: life.needs,
+        lifeGoal: life.goal,
+        beliefs: this.beliefProjection.getBeliefs(profile.id),
+        memoryUrgencyBoost: this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(profile.id, this.currentTick) : 0,
+        memoryContext: this.getFormattedMemoryContext(profile.id),
+        currentTick: this.currentTick,
+      })
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
@@ -1608,13 +1627,8 @@ export class SimulationRuntime {
         color: deriveNpcColor(profile.id, s.faction),
         greetLine: derivePersonalityGreetLine(profile),
         intentLine: deriveNpcIntentLine(s),
-        life: deriveNpcLifeView({
-          profile,
-          state: s,
-          areaState: this.getAreaState(s.tile),
-          lifeExpansion: this.lifeExpansion,
-          tick: this.currentTick
-        }),
+        life,
+        cognitiveLine: { zh: cognitive.thoughtZh, en: cognitive.thoughtEn },
         civic: this.lifeExpansion.npcCivicRecords[profile.id] ?? null,
         deceased: this.npcMortalityProjection.isDeceased(profile.id),
         recentUtterance: (() => {
@@ -6057,6 +6071,16 @@ export class SimulationRuntime {
       const beliefs = this.beliefProjection.getBeliefs(profile.id)
       const weights = this.intentProjection.getLearningWeights(profile.id, nextTick)
       const memoryBoost = this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(profile.id, nextTick) : 0
+      const memoryContext = this.getFormattedMemoryContext(profile.id)
+      const cognitive = deriveNpcCognitiveProfileFromRuntime({
+        profile,
+        needs: life.needs,
+        lifeGoal: life.goal,
+        beliefs,
+        memoryUrgencyBoost: memoryBoost,
+        memoryContext,
+        currentTick: nextTick,
+      })
       const lifeGoalBoost = this.computeLifeGoalIntentBoost(profile.id)
       const stack = computeIntentStack(
         profile.id,
@@ -6094,6 +6118,7 @@ export class SimulationRuntime {
         adjacentTiles,
         tileScores,
         tileNames,
+        cognitive,
       })
       commands.push(makeLivingWorldCommand(
         'NPC_AGENT_DECISION',

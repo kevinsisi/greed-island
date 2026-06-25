@@ -223,6 +223,7 @@ export function AreaPage() {
         if (typeof npc.mood === 'number') base.mood = npc.mood
         if (typeof npc.health === 'number') base.health = npc.health
         if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
+        if (npc.cognitiveLine) base.cognitiveLine = locale === 'zh' ? npc.cognitiveLine.zh : npc.cognitiveLine.en
         if (npc.recentUtterance?.text) base.recentUtterance = npc.recentUtterance.text
         return base
       }),
@@ -603,6 +604,11 @@ export function AreaPage() {
                               {npc.intentLine && (
                                 <div className="text-[11px] text-ember-300 truncate">
                                   {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
+                                </div>
+                              )}
+                              {npc.cognitiveLine && (
+                                <div className="text-[10px] text-cyan-200/80 truncate">
+                                  {locale === 'zh' ? npc.cognitiveLine.zh : npc.cognitiveLine.en}
                                 </div>
                               )}
                               <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">

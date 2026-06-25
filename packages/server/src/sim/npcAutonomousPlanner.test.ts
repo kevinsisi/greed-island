@@ -67,4 +67,46 @@ describe('planNpcAutonomousDecision', () => {
     expect(decision.targetTile).toBeNull()
     expect(decision.urgency).toBe(0)
   })
+
+  it('lets cognition make different personalities choose different plans under equal pressure', () => {
+    const common = input({
+      needs: { food: 12, rest: 14, money: 70, housing: 20, safety: 70 },
+      lifeGoal: { kind: 'earn_money', pressure: 20, narration: '賺到下一筆穩定收入' },
+    })
+
+    const greedy = planNpcAutonomousDecision({
+      ...common,
+      cognitive: {
+        survivalBias: 0.82,
+        economicBias: 1.45,
+        socialBias: 1,
+        ecosystemBias: 1,
+        patienceBias: 0.9,
+        dominantTrait: 'economic',
+        thoughtZh: '潮策正在盤算生計、資源與下一個機會。',
+        thoughtEn: 'Chao Ce is weighing livelihood, resources, and opportunity.',
+      },
+    })
+    const cautious = planNpcAutonomousDecision({
+      ...common,
+      cognitive: {
+        survivalBias: 1.45,
+        economicBias: 0.82,
+        socialBias: 1,
+        ecosystemBias: 1,
+        patienceBias: 1.2,
+        dominantTrait: 'survival',
+        thoughtZh: '潮策先把安全與退路排在第一位。',
+        thoughtEn: 'Chao Ce puts safety and escape routes first.',
+      },
+    })
+
+    expect(greedy.chosenIntent).toBe('economic')
+    expect(greedy.targetTile).toBe('t_dock')
+    expect(greedy.reason).toContain('cognitive:economic')
+    expect(cautious.chosenIntent).toBe('survival')
+    expect(cautious.targetTile).toBe('t_forest')
+    expect(cautious.reason).toContain('cognitive:survival')
+  })
+
 })

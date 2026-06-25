@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-25 — Handoff Snapshot @ v0.95.0
+
+### Current Version
+`0.95.0` — NPC Cognitive Runtime MVP：在 v0.94.1 committed autonomous planner 上加入 deterministic cognitive profile，讓 NPC 依人格、記憶、信念、需求與人生目標形成不同思考傾向；planner 在相同世界壓力下會因個性而偏向生存、經濟、社交或生態。
+
+### What Shipped
+- **Cognitive profile module**：新增 `npcCognitiveRuntime.ts`，從 personality、belief rows、memory urgency/context、needs、life goal 純函式推導 `survivalBias` / `economicBias` / `socialBias` / `ecosystemBias`、dominant trait 與中英思考句。
+- **Planner personality divergence**：`npcAutonomousPlanner` 會用 cognitive bias 調整 belief/need/life-goal candidates；同樣 money/safety pressure 下，貪婪/經濟型 NPC 會偏經濟，謹慎/安全型 NPC 會偏生存。
+- **Memory/belief awareness**：runtime planner loop 把 `BeliefProjection` 與 `SqliteNpcMemoryStore` 的 urgency/context 注入 cognitive runtime，但世界變更仍只透過 `NPC_AGENT_DECISION` command → Rule Engine → event → intentOverride path。
+- **Public thought surface**：`/api/npcs` / world-state mapping / Area NPC list 新增 additive `cognitiveLine`，讓玩家看到 NPC 目前為何這樣想；既有 `intentLine`、`recentUtterance` 保持相容。
+- **OpenSpec**：新增 `openspec/changes/npc-cognitive-runtime`，紀錄 deterministic Mini-Hermes NPC 邊界、非目標與 public surface。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.95.0`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcCognitiveRuntime.test.ts npcAutonomousPlanner.test.ts` — pass（8 tests / 2 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate npc-cognitive-runtime --strict` — pass
+- `npx openspec validate --all --strict` — pass（57 items）
+
+### Known Notes
+- This is the first cognitive MVP: deterministic personality + memory/belief-aware scoring and visible thought. It is not yet per-NPC LLM reflection, long-term self-authored goals, or relationship strategy rewriting. Those remain future slices and must still commit through typed events.
+
+---
+
 ## 2026-06-24 — Handoff Snapshot @ v0.94.1
 
 ### Current Version

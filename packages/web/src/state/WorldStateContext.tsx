@@ -385,6 +385,9 @@ function toNpcSummary(npc: ServerNpc, locale: Locale): NpcSummary {
     ...(npc.intentLine && typeof npc.intentLine.zh === 'string' && typeof npc.intentLine.en === 'string'
       ? { intentLine: { zh: npc.intentLine.zh, en: npc.intentLine.en } }
       : {}),
+    ...(npc.cognitiveLine && typeof npc.cognitiveLine.zh === 'string' && typeof npc.cognitiveLine.en === 'string'
+      ? { cognitiveLine: { zh: npc.cognitiveLine.zh, en: npc.cognitiveLine.en } }
+      : {}),
     ...(npc.life && npc.life.goal && npc.life.needs
       ? { life: npc.life }
       : {}),

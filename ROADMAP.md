@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.95.0 ✅ local-ready — 2026-06-25
+
+**主題：NPC Cognitive Runtime MVP（NPC 開始有可觀測的個性化思考）**
+
+- ✅ **deterministic cognitive profile** — 新增 `npcCognitiveRuntime`，從 personality、beliefs、memory urgency/context、needs、life goal 推導 survival/economic/social/ecosystem bias、dominant trait 與公開 thought。
+- ✅ **personality-shaped planner** — `npcAutonomousPlanner` 不再只看最高壓力；同樣世界壓力下，不同個性會選出不同短程計畫，並在 reason/narration 留下 cognitive trace。
+- ✅ **memory/belief aware, still bounded** — 記憶與信念只影響 deterministic intent scoring；實際世界變更仍走 `NPC_AGENT_DECISION` command → Rule Engine → accepted event。
+- ✅ **visible thought surface** — `/api/npcs`、WorldState mapping、Area NPC list 新增 additive `cognitiveLine`，前端能看到 NPC 目前在想什麼。
+- ✅ **OpenSpec** — `npc-cognitive-runtime` proposal/design/spec/tasks 已建立並通過 strict validation。
+- ✅ **Verification** — cognitive/planner targeted server tests（8 tests）、build、OpenSpec change strict、OpenSpec all 57 items 通過。
+
+---
+
 ## v0.94.1 ✅ shipped — 2026-06-24
 
 **主題：NPC Autonomous Planner MVP（NPC 有 committed 短程自主計畫）**

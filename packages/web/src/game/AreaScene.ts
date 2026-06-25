@@ -106,6 +106,7 @@ export interface AreaMapNpc {
   intentLine?: string
   /** Most recent accepted AI freeform utterance from the NPC agent, if still visible. */
   recentUtterance?: string | null
+  cognitiveLine?: string | null
 }
 
 export interface AreaMapPlayer {

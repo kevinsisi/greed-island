@@ -2,6 +2,7 @@ import type { IntentKind, NpcAgentDecisionCmd } from '../kernel/livingWorldComma
 import type { NpcLifeNeedKey, NpcLifeView } from './cityLife.js'
 import type { IntentEntry } from './intentPlanner.js'
 import type { NpcRuntimeState } from './npcEngine.js'
+import { cognitiveBiasForIntent, type NpcCognitiveProfile } from './npcCognitiveRuntime.js'
 
 export type NpcAutonomousPlannerTileScore = Readonly<{
   safety: number
@@ -22,6 +23,7 @@ export type NpcAutonomousPlannerInput = Readonly<{
   adjacentTiles: readonly string[]
   tileScores: Readonly<Record<string, NpcAutonomousPlannerTileScore>>
   tileNames: Readonly<Record<string, string | undefined>>
+  cognitive?: NpcCognitiveProfile | null
 }>
 
 type Candidate = Readonly<{
@@ -97,24 +99,29 @@ function fromIntentEntry(input: NpcAutonomousPlannerInput, entry: IntentEntry): 
   return {
     chosenIntent: entry.kind,
     targetTile: entry.targetTile,
-    urgency: entry.urgency,
-    reason: `autonomous-planner:根據記憶與信念判斷，${intentLabel(entry.kind)}優先，前往${tileName(input, entry.targetTile)}。`,
+    urgency: applyCognitiveBias(input, entry.kind, entry.urgency),
+    reason: withCognitiveReason(input, `autonomous-planner:根據記憶與信念判斷，${intentLabel(entry.kind)}優先，前往${tileName(input, entry.targetTile)}。`),
     source: 'belief',
   }
 }
 
 function fromNeeds(input: NpcAutonomousPlannerInput): Candidate | null {
-  const strongest = strongestNeed(input.needs)
-  if (!strongest || strongest.value <= input.threshold) return null
-  const chosenIntent = NEED_TO_INTENT[strongest.key]
-  const targetTile = targetForIntent(input, chosenIntent, strongest.key)
-  return {
-    chosenIntent,
-    targetTile,
-    urgency: strongest.value,
-    reason: `autonomous-planner:${needLabel(strongest.key)}壓力 ${Math.round(strongest.value)}，因此把下一步排向${tileName(input, targetTile)}。`,
-    source: 'need',
+  const candidates: Candidate[] = []
+  for (const key of ['safety', 'food', 'rest', 'money', 'housing'] as const) {
+      const value = input.needs[key]
+      if (value <= input.threshold) continue
+      const chosenIntent = NEED_TO_INTENT[key]
+      const targetTile = targetForIntent(input, chosenIntent, key)
+      candidates.push({
+        chosenIntent,
+        targetTile,
+        urgency: applyCognitiveBias(input, chosenIntent, value),
+        reason: withCognitiveReason(input, `autonomous-planner:${needLabel(key)}壓力 ${Math.round(value)}，因此把下一步排向${tileName(input, targetTile)}。`),
+        source: 'need',
+      })
   }
+  candidates.sort((a, b) => b.urgency - a.urgency || compareId(a.targetTile, b.targetTile))
+  return candidates[0] ?? null
 }
 
 function fromLifeGoal(input: NpcAutonomousPlannerInput): Candidate | null {
@@ -124,8 +131,8 @@ function fromLifeGoal(input: NpcAutonomousPlannerInput): Candidate | null {
   return {
     chosenIntent,
     targetTile,
-    urgency: Math.max(input.threshold + 1, input.lifeGoal.pressure),
-    reason: `autonomous-planner:人生目標「${input.lifeGoal.narration}」壓力 ${Math.round(input.lifeGoal.pressure)}，先朝${tileName(input, targetTile)}行動。`,
+    urgency: applyCognitiveBias(input, chosenIntent, Math.max(input.threshold + 1, input.lifeGoal.pressure)),
+    reason: withCognitiveReason(input, `autonomous-planner:人生目標「${input.lifeGoal.narration}」壓力 ${Math.round(input.lifeGoal.pressure)}，先朝${tileName(input, targetTile)}行動。`),
     source: 'life-goal',
   }
 }
@@ -168,7 +175,9 @@ function followScheduleDecision(input: NpcAutonomousPlannerInput): NpcAgentDecis
     reason: 'autonomous-planner:沒有更高優先級的壓力，先照既有日程與職責行動。',
     utterance: null,
     decidedAtTick: input.currentTick,
-    narration: `${input.npcNameZh}檢視眼前狀況後，決定先照原本日程行動。`,
+    narration: input.cognitive
+      ? `${input.npcNameZh}檢視眼前狀況後，決定先照原本日程行動。${input.cognitive.thoughtZh}`
+      : `${input.npcNameZh}檢視眼前狀況後，決定先照原本日程行動。`,
   }
 }
 
@@ -186,7 +195,17 @@ function buildUtterance(input: NpcAutonomousPlannerInput, candidate: Candidate):
 }
 
 function buildNarration(input: NpcAutonomousPlannerInput, candidate: Candidate): string {
-  return `${input.npcNameZh}決定前往${tileName(input, candidate.targetTile)}，優先處理${intentLabel(candidate.chosenIntent)}。`
+  const base = `${input.npcNameZh}決定前往${tileName(input, candidate.targetTile)}，優先處理${intentLabel(candidate.chosenIntent)}。`
+  return input.cognitive ? `${base}${input.cognitive.thoughtZh}` : base
+}
+
+function applyCognitiveBias(input: NpcAutonomousPlannerInput, intent: IntentKind, urgency: number): number {
+  const biased = urgency * cognitiveBiasForIntent(input.cognitive, intent)
+  return Math.min(100, biased)
+}
+
+function withCognitiveReason(input: NpcAutonomousPlannerInput, reason: string): string {
+  return input.cognitive ? `${reason} cognitive:${input.cognitive.dominantTrait}:${input.cognitive.thoughtZh}` : reason
 }
 
 function score(input: NpcAutonomousPlannerInput, tileId: string, key: keyof NpcAutonomousPlannerTileScore): number {
