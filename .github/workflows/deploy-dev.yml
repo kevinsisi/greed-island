@@ -153,3 +153,5 @@ jobs:
           $hostPort = if ($hostPortLine) { $hostPortLine -replace '^GREED_ISLAND_HOST_PORT=', '' } else { '8100' }
           curl.exe -fsS "http://${bindAddr}:${hostPort}/" -o NUL
           Write-Host "web ok"
+          curl.exe -fsS "http://${bindAddr}:${hostPort}/api/world" -o NUL
+          Write-Host "api world ok"

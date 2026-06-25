@@ -37,12 +37,12 @@ export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs, map, events, source, world } = useWorldState()
   const { token, account } = useAuth()
-  // v0.15.45: one-way latch. Once we have seen authoritative server data
+  // v0.95.1 hotfix: mount immediately with fixture data, then keep the one-way latch once authoritative server data arrives
   // once, keep the Phaser canvas mounted forever — even if SSE/poll
   // briefly flips `source` back to 'fixture' on a transient error.
   // Without this latch, every short network blip tears down + recreates
   // the entire scene, which is what the user saw as "卡住、要頻繁重整".
-  const [hasServerWorld, setHasServerWorld] = useState(false)
+  const [hasServerWorld, setHasServerWorld] = useState(true)
   useEffect(() => {
     if (source === 'server' && !hasServerWorld) setHasServerWorld(true)
   }, [hasServerWorld, source])

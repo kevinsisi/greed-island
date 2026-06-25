@@ -5,6 +5,25 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-25 — Handoff Snapshot @ v0.95.1
+
+### Current Version
+`0.95.1` — Hub map loading hotfix：Hub Phaser map now mounts immediately with fixture-backed state while `/api/world` continues retrying, preventing mobile users from being stuck on `載入潮鳴市…` when the backend/proxy is slow or temporarily unavailable. Deploy smoke now checks `/api/world` as well as `/`.
+
+### What Shipped
+- **Hub fallback mount**：`HubPage` starts the one-way map latch as mounted, so the city map renders instead of a blank loader before the first authoritative world snapshot.
+- **Deploy smoke hardening**：Deploy Dev now curls the desktop-local `/api/world` endpoint, catching the exact class of issue where the static SPA is up but API world state is not.
+
+### Verification Evidence
+- `npm run build:web` — pass
+- `npm run build` — pass
+- `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
+
+### Known Notes
+- This hotfix prevents the frontend from staying blank. If `hunter.sisihome.org` still resets `/api/world`, deploy smoke will fail and expose the desktop/RPi proxy/backend issue directly.
+
+---
+
 ## 2026-06-25 — Handoff Snapshot @ v0.95.0
 
 ### Current Version

@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.95.1 ✅ local-ready — 2026-06-25
+
+**主題：Hub Map Loading Hotfix（地圖不再卡在載入潮鳴市）**
+
+- ✅ **fallback map mount** — Hub Phaser map immediately mounts with fixture-backed state while `/api/world` continues retrying, avoiding a blank loader when the backend/proxy is slow/unavailable.
+- ✅ **deploy smoke hardened** — Deploy Dev now checks `/api/world` in addition to `/`, so static SPA success no longer hides API/backend failure.
+- ✅ **Verification** — `npm run build:web`, `npm run build`, and web tests（120 tests）passed locally.
+
+---
+
 ## v0.95.0 ✅ local-ready — 2026-06-25
 
 **主題：NPC Cognitive Runtime MVP（NPC 開始有可觀測的個性化思考）**
