@@ -914,13 +914,13 @@ export class SimulationRuntime {
       }
     } else {
       const profile = this.findProfile(session.npc_id)
-      const npcSummary = this.getNpcs().find((npc) => npc.id === session.npc_id)
-      if (!profile || !npcSummary) return null
+      const npcState = this.npcEngine.getState(session.npc_id)
+      if (!profile || !npcState || this.npcMortalityProjection.isDeceased(session.npc_id)) return null
       npcTraits = {
         actorId: session.npc_id,
         patience: parseCombatTrait(profile.personality.patience),
         greed: parseCombatTrait(profile.personality.greed),
-        health: Math.max(20, Math.min(100, npcSummary.health ?? 80)),
+        health: Math.max(20, Math.min(100, npcState.health ?? 80)),
       }
     }
 
@@ -1596,13 +1596,17 @@ export class SimulationRuntime {
         lifeExpansion: this.lifeExpansion,
         tick: this.currentTick
       })
-      const memoryContext = this.getFormattedMemoryContext(profile.id)
+      // Public NPC list/world snapshots are hot HTTP paths and are also used by
+      // polling clients. Keep this cognitive surface light: full NPC memory DB
+      // context remains available to dialog/planner paths, but list snapshots
+      // must not synchronously scan npc_memory for every NPC.
+      const memoryContext = ''
       const cognitive = deriveNpcCognitiveProfileFromRuntime({
         profile,
         needs: life.needs,
         lifeGoal: life.goal,
         beliefs: this.beliefProjection.getBeliefs(profile.id),
-        memoryUrgencyBoost: this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(profile.id, this.currentTick) : 0,
+        memoryUrgencyBoost: 0,
         memoryContext,
         currentTick: this.currentTick,
       })
@@ -1647,6 +1651,36 @@ export class SimulationRuntime {
     })
   }
 
+  private getLivingNpcRuntimeSnapshots(): Array<Pick<SimNpcState, 'id' | 'location' | 'activity'>> {
+    return this.npcEngine.listProfiles()
+      .filter((profile) => !this.npcMortalityProjection.isDeceased(profile.id))
+      .map((profile) => {
+        const state = this.npcEngine.getState(profile.id)
+        return {
+          id: profile.id,
+          location: state?.tile ?? profile.defaultLocation,
+          activity: state?.activity ?? 'idle',
+        }
+      })
+  }
+
+  private getLivingNpcLocationMap(): Map<string, string> {
+    return new Map(this.getLivingNpcRuntimeSnapshots().map((npc) => [npc.id, npc.location]))
+  }
+
+  private getLivingNpcIdsOnTile(tileId: string): string[] {
+    return this.getLivingNpcRuntimeSnapshots()
+      .filter((npc) => npc.location === tileId)
+      .map((npc) => npc.id)
+  }
+
+  private getLivingNpcLocation(npcId: string): string | null {
+    if (this.npcMortalityProjection.isDeceased(npcId)) return null
+    const profile = this.findProfile(npcId)
+    if (!profile) return null
+    return this.npcEngine.getState(npcId)?.tile ?? profile.defaultLocation
+  }
+
 
   private deriveNpcCognitiveEvolutionSummary(
     npcId: string,
@@ -1655,6 +1689,7 @@ export class SimulationRuntime {
     life: NpcLifeView,
     memoryContext: string
   ): NpcCognitiveEvolutionSummary {
+    const reflectionContext = this.getFormattedReflectionContext(npcId)
     const relationships = this.npcRelationships
       ? this.npcRelationships.listFor(npcId).slice(0, 5).map((row): NpcEvolutionRelationshipContext => {
           const targetNpcId = row.npcA === npcId ? row.npcB : row.npcA
@@ -1677,7 +1712,7 @@ export class SimulationRuntime {
       lifeGoal: life.goal,
       needs: life.needs,
       memoryContext,
-      reflectionContext: this.getFormattedReflectionContext(npcId),
+      reflectionContext,
       relationships,
     })
     const validation = validateNpcReflectionProposal(proposal, {
@@ -1688,7 +1723,7 @@ export class SimulationRuntime {
       lifeGoal: life.goal,
       needs: life.needs,
       memoryContext,
-      reflectionContext: this.getFormattedReflectionContext(npcId),
+      reflectionContext,
       relationships,
     })
     const committed = validation.accepted ? [commitNpcCognitiveUpdate(proposal, validation, {
@@ -1699,7 +1734,7 @@ export class SimulationRuntime {
       lifeGoal: life.goal,
       needs: life.needs,
       memoryContext,
-      reflectionContext: this.getFormattedReflectionContext(npcId),
+      reflectionContext,
       relationships,
     })] : []
     return deriveNpcCognitiveEvolutionSummary({
@@ -2075,9 +2110,7 @@ export class SimulationRuntime {
     options: { projectCombatSubTicks?: boolean } = {}
   ): void {
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
-    const npcTileMap = this.npcMemory
-      ? new Map(this.getNpcs().map(n => [n.id, n.location]))
-      : null
+    const npcTileMap = this.getLivingNpcLocationMap()
     for (const ev of committed) {
       this.combatStore?.projectEvent(ev)
       this.playerJobsStore?.projectEvent(ev)
@@ -2110,7 +2143,7 @@ export class SimulationRuntime {
           }
         }
       }
-      if (this.npcMemory && npcTileMap) {
+      if (this.npcMemory) {
         this.npcMemory.project(ev)
         this.npcMemory.projectWithLocality(ev, npcTileMap)
       }
@@ -2123,7 +2156,7 @@ export class SimulationRuntime {
       this.dynamicTileProjection.project(ev)
       this.activeRuleOperatorsProjection.project(ev)
       this.npcIncapacitationProjection.project(ev)
-      this.beliefProjection.apply(ev, new Map(this.getNpcs().map(n => [n.id, n.location])))
+      this.beliefProjection.apply(ev, npcTileMap)
       this.intentProjection.project(ev)
       this.lifeGoalsProjection.project(ev)
       this.npcStateProjection.project(ev)
@@ -2472,8 +2505,8 @@ export class SimulationRuntime {
     // Phase E4: legendary hunt detection (per-tick, O(active world events))
     const activeWorldEvents = this.worldEventProjection.list()
     if (activeWorldEvents.length > 0) {
-      const npcInfoForHunt = this.getNpcs().map((n) => {
-        const rawRole = this.profiles.find((p) => p.id === n.id)?.role ?? ''
+      const npcInfoForHunt = this.getLivingNpcRuntimeSnapshots().map((n) => {
+        const rawRole = this.findProfile(n.id)?.role ?? ''
         const role = typeof rawRole === 'string' ? rawRole : Object.values(rawRole)[0] ?? ''
         return { npcId: n.id, tileId: n.location ?? '', role }
       })
@@ -4448,7 +4481,7 @@ export class SimulationRuntime {
 
     // Ecosystem health beliefs — every 2 in-game days
     if (nextTick % (2 * TICKS_PER_DAY) === 0) {
-      const npcLocs = new Map(this.getNpcs().map(n => [n.id, n.location]))
+      const npcLocs = this.getLivingNpcLocationMap()
       for (const region of this.ecosystemRegionProjection.list()) {
         const densityPct = 1 - (region.pressureLevel / 100)
         this.beliefProjection.updateEcosystemBeliefs(region.tileId, densityPct, nextTick, npcLocs)
@@ -5051,7 +5084,7 @@ export class SimulationRuntime {
         tick: nextTick,
         submittedAt,
         profiles: this.profiles,
-        npcStates: this.getNpcs(),
+        npcStates: this.getLivingNpcRuntimeSnapshots(),
         settlementsProjection: this.settlementsProjection,
         goodsInventoryProjection: this.goodsInventoryProjection,
         logisticsProjection: this.logisticsProjection,
@@ -5066,7 +5099,7 @@ export class SimulationRuntime {
     if (nextTick % NPC_LOCAL_TRADE_CADENCE_TICKS === 0) {
       const settlements = this.settlementsProjection.getAll()
       const settlementTiles: ReadonlyMap<string, string> = new Map(settlements.map(s => [s.id, s.tileId] as [string, string]))
-      const npcTileMap: ReadonlyMap<string, string> = new Map(this.getNpcs().map(n => [n.id, n.location ?? ''] as [string, string]))
+      const npcTileMap: ReadonlyMap<string, string> = this.getLivingNpcLocationMap()
       // Producer roles: hunters, fishers, craftsmen who accumulate personal goods
       const producerNpcIds = new Set(
         this.profiles
@@ -5110,7 +5143,7 @@ export class SimulationRuntime {
 
     // ---- Household Joint Decision cadence (v0.81.0) ----
     if (nextTick % HOUSEHOLD_JOINT_DECISION_CADENCE_TICKS === 0) {
-      const npcTileMap = new Map(this.getNpcs().map(n => [n.id, n.location ?? ''] as [string, string]))
+      const npcTileMap = this.getLivingNpcLocationMap()
       const jointDecisions = planHouseholdJointDecisions({
         npcLineage: this.npcLineageProjection,
         npcMortality: this.npcMortalityProjection,
@@ -5647,9 +5680,7 @@ export class SimulationRuntime {
           // Phase 3 Slice 1 — seed rumors onto NPCs present on the event tile.
           const tileId = readEventTileId(cmd.payload)
           if (tileId) {
-            const npcIdsOnTile = this.getNpcs()
-              .filter((n) => n.location === tileId)
-              .map((n) => n.id)
+            const npcIdsOnTile = this.getLivingNpcIdsOnTile(tileId)
             const seeds = seedRumorsFromEvent(
               { eventType: cmd.commandType, payload: cmd.payload, tick: nextTick },
               npcIdsOnTile,
@@ -5667,9 +5698,7 @@ export class SimulationRuntime {
           const tileId = readEventTileId(cmd.payload)
           const actorNpcId = readActorNpcId(cmd.payload)
           if (tileId) {
-            const npcIdsOnTile = this.getNpcs()
-              .filter((n) => n.location === tileId)
-              .map((n) => n.id)
+            const npcIdsOnTile = this.getLivingNpcIdsOnTile(tileId)
             const observations = planSkillObservations(
               { eventType: cmd.commandType, payload: cmd.payload, tick: nextTick },
               actorNpcId,
@@ -5704,7 +5733,7 @@ export class SimulationRuntime {
         if (cmd.commandType === 'NPC_OBSERVED_SKILL') {
           // Phase 3 §37.3 — norm seeder: track (tileId, skillId) pairs for post-loop norm check.
           const nsoPayload = cmd.payload as { npcId: string; skillId: string }
-          const npcLoc = this.getNpcs().find((n) => n.id === nsoPayload.npcId)?.location
+          const npcLoc = this.getLivingNpcLocation(nsoPayload.npcId)
           if (npcLoc) normCheckPairs.add(`${npcLoc}::${nsoPayload.skillId}`)
         }
       } else {
@@ -5727,7 +5756,7 @@ export class SimulationRuntime {
         if (cmd.commandType === 'NPC_OBSERVED_SKILL') {
           // Phase 3 §37.3 — also track from seeder-produced skill observations.
           const nsoPayload = cmd.payload as { npcId: string; skillId: string }
-          const npcLoc = this.getNpcs().find((n) => n.id === nsoPayload.npcId)?.location
+          const npcLoc = this.getLivingNpcLocation(nsoPayload.npcId)
           if (npcLoc) normCheckPairs.add(`${npcLoc}::${nsoPayload.skillId}`)
         }
       } else {
@@ -5740,7 +5769,7 @@ export class SimulationRuntime {
     // Phase 3 §37.3 — norm seeder: for each unique (tileId, skillId) pair observed this tick,
     // check if enough skilled NPCs exist to establish a cultural norm.
     if (normCheckPairs.size > 0) {
-      const allNpcLocations = this.getNpcs().map((n) => ({ npcId: n.id, tileId: n.location }))
+      const allNpcLocations = this.getLivingNpcRuntimeSnapshots().map((n) => ({ npcId: n.id, tileId: n.location }))
       for (const pair of normCheckPairs) {
         const sepIdx = pair.indexOf('::')
         const pairTileId = pair.slice(0, sepIdx)
@@ -5770,11 +5799,9 @@ export class SimulationRuntime {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
-      const npcTileMap = this.npcMemory
-        ? new Map(this.getNpcs().map(n => [n.id, n.location]))
-        : null
+      const npcTileMap = this.getLivingNpcLocationMap()
       for (const ev of committed) {
-        if (this.npcMemory && npcTileMap) {
+        if (this.npcMemory) {
           this.npcMemory.project(ev)
           this.npcMemory.projectWithLocality(ev, npcTileMap)
         }

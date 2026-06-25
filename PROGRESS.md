@@ -5,6 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-25 — Handoff Snapshot @ v0.96.1
+
+### Current Version
+`0.96.1` — NPC Cognitive Runtime Availability Hotfix：v0.96.0 把 `cognitiveEvolution` 掛進 `getNpcs()` 後，runtime tick 內部原本用來取得 NPC 位置的多個 cheap snapshot 呼叫也開始同步查 244 萬筆 `npc_memory` / reflection context，live Node event loop 被 CPU/SQLite 工作卡住，Caddy 對 `/healthz`、`/api/events`、`/api/world` 全部回 502，玩家看起來像「紀錄全部不見」。本版把 tick/projection 內部路徑改回 cheap living-NPC snapshot；只有 HTTP/API 對外 snapshot 保留 cognitive 顯示。
+
+### What Shipped
+- **Root-cause fix**：`runtime.ts` 不再於 tick/projection fanout 使用 `this.getNpcs()`；改用 `getLivingNpcRuntimeSnapshots()` / `getLivingNpcLocationMap()` / `getLivingNpcIdsOnTile()` / `getLivingNpcLocation()`，只讀 `NpcEngine` state，不查 memory DB、不做 cognitive evolution summary。
+- **Projection fanout reuse**：`publishCommittedEvents` 與 tick append fanout 只建立一次 NPC location map，`NpcMemory` locality 與 `BeliefProjection` 共用同一份 cheap map。
+- **Public snapshot light cognitive view**：`/api/npcs` / `/api/world` 保留 `cognitiveLine` / `cognitiveEvolution` 欄位，但列表 snapshot 不再為每個 NPC 同步掃 `npc_memory`；完整 memory context 仍保留給 dialog/planner 專用路徑。
+- **Carrier planner type narrow**：`planCarrierDispatches` 只要求 `id` / `activity` / `location`，避免呼叫完整 public `SimNpcState`。
+- **Version sync repair**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.96.1`，並修正 web `APP_VERSION` 仍停在 `0.95.0` 的問題。
+
+### Verification Evidence
+- Live failure before fix：`https://hunter.sisihome.org/healthz` and `/api/events?limit=5` returned `502 Bad Gateway`；`docker exec greed-island-server node fetch('http://127.0.0.1:3000/healthz')` timed out；server log stopped after `scheduling deferred large-log hydration in background`。
+- Live data was not deleted：`event_log` still had 27,233,776 events; top event types included `NPC_STATE_RECORDED=23,769,415`, `NPC_PRODUCTIVE_ACTION=571,059`, `WORLD_TICK=283,934`; `npc_memory` had 2,445,514 rows.
+- `npm run test -w @greed-island/server -- runtimeLargeLogHydration.test.ts runtimeIntentResolution.test.ts npcCognitiveRuntime.test.ts npcCognitiveEvolution.test.ts carrierPlanner.test.ts` — pass（25 tests / 5 files）
+- `npm run test -w @greed-island/server -- runtimeIntentResolution.test.ts npcCognitiveRuntime.test.ts npcCognitiveEvolution.test.ts carrierPlanner.test.ts` — pass（24 tests / 4 files）
+- `npm run build -w @greed-island/server` — pass
+- `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
+- `npm run test -w @greed-island/web` — pass（120 tests / 22 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- CI/CD and live smoke are pending after this hotfix commit/push.
+- This does not delete or rewrite EventLog rows. The symptom was API unavailability from event-loop starvation, not lost records.
+
+---
+
 ## 2026-06-25 — Handoff Snapshot @ v0.96.0
 
 ### Current Version

@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.96.1 ✅ local-ready — 2026-06-25
+
+**主題：NPC Cognitive Runtime Availability Hotfix（紀錄/API 不再因 tick 內部 heavy NPC snapshot 卡死）**
+
+- ✅ **root cause** — v0.96.0 把 `cognitiveEvolution` 掛進 public `getNpcs()`，但 runtime tick/projection fanout 原本也大量用 `getNpcs()` 只為取得 NPC id/location，導致每 tick 重複查 244 萬筆 `npc_memory` / reflection context，live Node event loop 被卡住，Caddy 全 API 502。
+- ✅ **cheap runtime snapshots** — tick 內部改用 `getLivingNpcRuntimeSnapshots()` / `getLivingNpcLocationMap()` 等 helper，只讀 `NpcEngine` state，不觸發 cognitive/memory DB work。
+- ✅ **light public NPC snapshots** — `/api/npcs` / `/api/world` 保留 cognitive 欄位，但列表 snapshot 不再逐 NPC 掃 `npc_memory`；完整 memory context 留在 dialog/planner 路徑。
+- ✅ **records preserved** — live 檢查確認 `event_log` 仍有 27,233,776 events、`npc_memory` 仍有 2,445,514 rows；問題是 API unavailability，不是資料遺失。
+- ✅ **Verification** — targeted server tests（25）、full server tests（1254）、web tests（120）、full build 通過；CI/CD/live smoke pending。
+
+---
+
 ## v0.96.0 ✅ local-ready — 2026-06-25
 
 **主題：NPC Long-Term Cognitive Evolution MVP（NPC 開始有 Mini-Hermes 式反省與人格成長摘要）**

@@ -100,11 +100,13 @@ function findBestDestination(
   return candidates[0]!.settlement
 }
 
+type CarrierNpcState = Pick<SimNpcState, 'id' | 'activity' | 'location'>
+
 export function planCarrierDispatches(input: {
   tick: number
   submittedAt: number
   profiles: readonly NpcProfile[]
-  npcStates: readonly SimNpcState[]
+  npcStates: readonly CarrierNpcState[]
   settlementsProjection: SettlementsProjection
   goodsInventoryProjection: GoodsInventoryProjection
   logisticsProjection: LogisticsProjection
