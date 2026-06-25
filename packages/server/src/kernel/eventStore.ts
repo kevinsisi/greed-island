@@ -189,7 +189,7 @@ export class SqliteEventStore {
   readEventsByTickWindow(input: EventTickWindowRead): EventTickWindowResult {
     const eventTypes = [...new Set(input.eventTypes.filter((type) => type.length > 0))]
     if (eventTypes.length === 0) return { events: [], limited: false }
-    const safeLimit = Math.max(1, Math.min(10_000, Math.floor(input.limit)))
+    const safeLimit = Math.max(1, Math.min(MAX_TICK_WINDOW_MERGE_ROWS, Math.floor(input.limit)))
     const requestedMergeRows = eventTypes.length * (safeLimit + 1)
     if (requestedMergeRows > MAX_TICK_WINDOW_MERGE_ROWS) {
       return this.readEventsByTickWindowSingleQuery(input, eventTypes, safeLimit)

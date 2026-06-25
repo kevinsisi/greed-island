@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.96.3
+
+### Current Version
+`0.96.3` — Large-log Ecology Boot Hydration Hotfix：v0.96.2 已恢復 HTTP availability，NPC / map API 不再被 long tick 餓死；但 live reboot 後 `/api/world` 顯示 `animalPopulation: 0`，代表大 EventLog 啟動分支為了保住 boot speed 跳過 full replay 時，也讓 ecology projections 從 default-empty 啟動，玩家仍會看不到生物 overlay。
+
+### What Shipped
+- **Bounded recent ecology hydration**：large-log boot 會在 deferred hydration 前讀最近 10,000 ticks、最多 50,000 筆 ecology boot events，重建近期生態投影，而不是 replay 全部 EventLog。
+- **Creature overlay projection coverage**：近期 hydration 覆蓋 `animalPopulation`、migration routes、predator hunger、fishery density、species extinction、ecosystem region、forest depletion、livestock registry。
+- **Availability-first failure mode**：hydration 失敗時只 log `[boot] skipped recent ecology hydration: ...`，不阻止 server boot，也不刪除或改寫任何歷史 EventLog。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.96.3`.
+
+### Verification Evidence
+- Live v0.96.2 finding before fix：HTTP endpoints were responsive after the tick scheduler fix, but `/api/world` returned `animalPopulation: 0` after large-log restart, matching the missing creature overlay symptom.
+- `npm run test -w @greed-island/server -- runtimeLargeLogHydration.test.ts runtimeAnimalSpawning.test.ts areaEcologyRouter.test.ts animalPopulation.test.ts runtimePredation.test.ts kernel.test.ts` — pass（42 tests / 6 files）
+- `npm run build -w @greed-island/server` — pass
+- `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（58 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after this hotfix commit/push.
+- This does not disable AI/NPC agent and does not delete, compact, or rewrite EventLog rows.
+
+---
+
 ## 2026-06-25 — Handoff Snapshot @ v0.96.2
 
 ### Current Version
@@ -23,9 +48,12 @@ developer. Keep latest status at the top.
 - `npm run test -w @greed-island/server` — pass（1254 tests / 159 files）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npx openspec validate --all --strict` — pass（58 items）
+- Pushed commit `9a0af0b fix(v0.96.2): keep tick loop from starving HTTP` to `origin/main`.
+- GitHub Actions CI `28188356355` — pass；Deploy Dev `28188463231` — pass。
+- Live smoke after deploy：`/healthz` returned `200` with `version=0.96.2`; `/api/map` returned 9 tiles quickly; `/api/world`, `/api/npcs`, `/api/events?limit=5`, and `/api/areas` returned `200`; `/api/npcs` showed 76 NPCs and 62 moving.
 
 ### Known Notes
-- CI/CD and live smoke are pending after this hotfix commit/push.
+- v0.96.2 restored API responsiveness but live reboot exposed empty ecology projections (`animalPopulation: 0`); superseded by v0.96.3.
 - This does not disable AI/NPC agent and does not delete or rewrite EventLog rows.
 
 ---

@@ -5,14 +5,25 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.96.2 ✅ local-ready — 2026-06-25
+## v0.96.3 ✅ local-ready — 2026-06-26
+
+**主題：Large-log Ecology Boot Hydration Hotfix（重啟後生物 overlay 不再從空投影開始）**
+
+- ✅ **root cause** — v0.96.2 已修掉 long tick 餓死 HTTP，但 live reboot 後 `/api/world` 顯示 `animalPopulation: 0`；原因是 large-log boot 為了避免全 EventLog replay 卡死，只從 defaults 啟動並 deferred 部分小投影，ecology projections 沒有近期資料就會讓生物 overlay 空白。
+- ✅ **bounded ecology hydration** — large-log boot 現在只讀最近 10,000 ticks、最多 50,000 筆 ecology boot events，重建 animal population / migration / predator hunger / fishery / extinction / region / forest / livestock projections。
+- ✅ **availability preserved** — hydration 失敗只 warn，不阻止 server boot；不刪除、不壓縮、不改寫 EventLog，也不關閉 AI/NPC agent。
+- ✅ **Verification** — targeted ecology/runtime/kernel tests（42）、full server tests（1254）、full build、OpenSpec all 58 items 通過；CI/CD/live smoke pending。
+
+---
+
+## v0.96.2 ✅ shipped, superseded — 2026-06-25
 
 **主題：Simulation Tick Availability Hotfix（長 tick 不再餓死 HTTP / 地圖 / NPC / 生物載入）**
 
 - ✅ **root cause** — live 資料仍存在，但 `127.0.0.1:3000/healthz` / `/api/map` 在 container 內也會 timeout，表示 Node event loop 被 simulation tick 餓死，不是 Caddy 或資料刪失。
 - ✅ **scheduler fix** — runtime tick loop 從固定 `setInterval` 改成上一輪完成後才排下一輪的 one-shot `setTimeout`，避免長 tick 後 pending interval 連續補跑、讓 HTTP request 沒機會處理。
 - ✅ **observability** — 長 tick 會 log duration，下一步可針對真正慢的 simulation phase 做優化。
-- ✅ **Verification** — targeted server tests（15）、full server tests（1254）、server build、full build、OpenSpec all 58 items 通過；CI/CD/live smoke pending。
+- ✅ **Verification** — targeted server tests（15）、full server tests（1254）、server build、full build、OpenSpec all 58 items、CI `28188356355`、Deploy Dev `28188463231`、live `0.96.2` smoke 通過；live smoke also exposed empty ecology projections, now addressed by v0.96.3。
 
 ---
 

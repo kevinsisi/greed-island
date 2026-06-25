@@ -336,6 +336,8 @@ const SEASON_CADENCE_TICKS = TICKS_PER_HOUR
 const RARE_WINDOW_PERIOD_TICKS = TICKS_PER_MINUTE * 10
 const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
+const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
+const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
 const COMBAT_BOOT_EVENT_TYPES = [
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
@@ -370,10 +372,12 @@ const ECOSYSTEM_BOOT_EVENT_TYPES = [
   'ANIMAL_REPRODUCED',
   'ANIMAL_MIGRATED',
   'ANIMAL_STARVED',
+  'PLAYER_HUNTED_ANIMAL',
   'MIGRATION_WAVE_STARTED',
   'FISHERY_HARVESTED',
   'FISHERY_COLLAPSED',
   'FISHERY_RECOVERED',
+  'PLAYER_FISHED',
   'SPECIES_EXTINCTION_WARNING',
   'SPECIES_EXTINCT',
   'SPECIES_RECOVERED',
@@ -6694,6 +6698,7 @@ export class SimulationRuntime {
       // local/live logs even the previously "small" typed subsets can still
       // block constructor-time boot on Windows bind mounts, so the remaining
       // replay work is deferred until after listen.
+      this.hydrateRecentEcologyForLargeLog()
       this.deferredHydrationState = 'pending'
     }
 
@@ -6872,6 +6877,35 @@ export class SimulationRuntime {
     this.reinitializePreviousProjectionCounts()
     this.deferredHydrationState = 'complete'
     console.log('[boot] deferred large-log hydration fully complete')
+  }
+
+  private hydrateRecentEcologyForLargeLog(): void {
+    const untilTick = this.currentTick
+    const sinceTick = Math.max(0, untilTick - LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS)
+    try {
+      const { events, limited } = this.store.readEventsByTickWindow({
+        eventTypes: ECOSYSTEM_BOOT_EVENT_TYPES,
+        sinceTick,
+        untilTick,
+        limit: LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT,
+      })
+      if (events.length === 0) return
+      this.animalPopulationProjection.rebuildFromEvents(events)
+      this.animalMigrationProjection.rebuildFromEvents(events)
+      this.predatorHungerProjection.rebuildFromEvents(events)
+      this.fisheryDensityProjection.rebuildFromEvents(events)
+      this.speciesExtinctionProjection.rebuildFromEvents(events)
+      this.ecosystemRegionProjection.rebuildFromEvents(events)
+      this.forestDepletionProjection.rebuildFromEvents(events)
+      this.livestockRegistryProjection.rebuildFromEvents(events)
+      console.log(
+        `[boot] hydrated recent ecology from ${events.length} events ` +
+          `(ticks ${sinceTick}-${untilTick}${limited ? ', limited' : ''})`
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`[boot] skipped recent ecology hydration: ${message}`)
+    }
   }
 
   private hydrateNpcEngineFromProjectionFacts(): void {
