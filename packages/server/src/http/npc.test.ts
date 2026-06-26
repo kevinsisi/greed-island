@@ -146,6 +146,90 @@ describe('npc router', () => {
     }
   })
 
+  it('handles local shout server-side by choosing one living NPC responder', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const store = new PlayerStateStore(db)
+    const settings = new SettingsStore(db)
+    const account = await accounts.createAccount('shout@example.test', 'hunter123')
+    accounts.updateProfile(account.id, { nickname: '小喜' })
+
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const profiles: NpcProfile[] = [
+      {
+        id: 'npc-a',
+        name: { zh: '星沉', en: 'Xingchen' },
+        role: { zh: '攤販', en: 'Vendor' },
+        defaultLocation: 't_central',
+        routine: [],
+        triggers: [],
+        memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+        personality: { trustBase: 50, patience: 0.8 },
+      },
+      {
+        id: 'npc-b',
+        name: { zh: '霧聲', en: 'Wusheng' },
+        role: { zh: '情報販子', en: 'Broker' },
+        defaultLocation: 't_central',
+        routine: [],
+        triggers: [],
+        memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+        personality: { trustBase: 50, patience: 0.8 },
+      },
+    ]
+    const submitted: unknown[] = []
+    const runtime = {
+      findProfile: (npcId: string) => profiles.find((p) => p.id === npcId) ?? null,
+      getCurrentTick: () => 99,
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
+      getNpcs: () => profiles.map((p) => ({ id: p.id, location: 't_central' })),
+      submitLivingWorldCommand: (command: unknown) => {
+        submitted.push(command)
+        return { eventId: 'evt-local-shout' }
+      },
+    } as unknown as SimulationRuntime
+
+    const app = express()
+    app.use(express.json())
+    app.use(createNpcRouter({ runtime, store, settings, accounts, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const token = jwt.sign(
+        { sub: account.id, email: account.email, role: account.role },
+        authConfig.jwtSecret
+      )
+      const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-a', 'npc-b'], message: '各位好' }),
+      })
+      const payload = (await response.json()) as { npcId?: string; worldEventId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.npcId).toBe('npc-a')
+      expect(payload.worldEventId).toBe('evt-local-shout')
+      expect(submitted).toHaveLength(1)
+      expect(submitted[0]).toMatchObject({
+        commandType: 'PLAYER_NPC_DIALOGUE',
+        payload: {
+          playerAccountId: String(account.id),
+          npcId: 'npc-a',
+          tile: 't_central',
+          intent: 'ask',
+          playerMessage: '各位好',
+        },
+      })
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
+
   it('posts a deterministic NPC dialog hold when a dialog opens', async () => {
     const db = new Database(':memory:')
     const accounts = new AccountStore(db, 4)

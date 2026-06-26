@@ -5,7 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.9 ✅ local-ready — 2026-06-26
+## v0.98.10 ✅ local-ready — 2026-06-26
+
+**主題：Server-side Local Shout（真正附近發話 endpoint）**
+
+- ✅ **new endpoint** — 新增 `POST /api/npc/local-shout`，前端只送一次附近發話。
+- ✅ **server responder selection** — 後端根據 `tileId + candidateNpcIds` 選一位合法、活著、同區 NPC 回應。
+- ✅ **replayable world fact** — 回應仍提交 `PLAYER_NPC_DIALOGUE` command/event，NPC 記憶與關係同步更新。
+- ✅ **frontend wired** — AreaPage 改用 `api.npcLocalShout()`，不再直接呼叫 single-NPC interact。
+- ✅ **Verification** — server npc router test（6）、web subtitle test（9）、full build 通過。
+
+---
+
+## v0.98.9 ✅ shipped — 2026-06-26
 
 **主題：Stable Local Shout（不要前端三連打假裝群聊）**
 

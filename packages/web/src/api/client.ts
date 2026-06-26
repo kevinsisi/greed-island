@@ -947,6 +947,25 @@ export const api = {
       }
     ).finally(() => window.clearTimeout(timer))
   },
+  npcLocalShout: (
+    token: string,
+    payload: { tileId: string; candidateNpcIds: readonly string[]; message: string },
+    options?: { timeoutMs?: number }
+  ) => {
+    const timeoutMs = options?.timeoutMs
+    const init: RequestInit = {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    }
+    if (!timeoutMs) return jsonFetch<ServerNpcInteraction>('/npc/local-shout', init)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+    return jsonFetch<ServerNpcInteraction>('/npc/local-shout', {
+      ...init,
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timer))
+  },
   npcDialogHold: (token: string, npcId: string) =>
     jsonFetch<ServerNpcDialogHold>(
       `/npc/${encodeURIComponent(npcId)}/dialog-hold`,

@@ -437,7 +437,11 @@ export function AreaPage() {
       try {
         const respondent = recipients[0]
         if (!respondent) return
-        const result = await api.npcInteract(token, respondent.id, { message }, { timeoutMs: 8000 })
+        const result = await api.npcLocalShout(token, {
+          tileId,
+          candidateNpcIds: recipients.map((npc) => npc.id),
+          message,
+        }, { timeoutMs: 8000 })
         const baseId = result.worldEventId ?? `local-${Date.now()}`
         const replacement = optimisticLocalShoutLines({
           baseId,

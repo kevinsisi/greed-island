@@ -115,6 +115,138 @@ export function createNpcRouter(input: {
     })
   })
 
+  router.post('/npc/local-shout', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const body = (req.body ?? {}) as { tileId?: unknown; candidateNpcIds?: unknown; message?: unknown }
+    const tileId = typeof body.tileId === 'string' ? body.tileId.trim() : ''
+    const candidateNpcIds = Array.isArray(body.candidateNpcIds)
+      ? body.candidateNpcIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : []
+    const message = readMessage(body.message)
+    if (!tileId || candidateNpcIds.length === 0 || !message) {
+      res.status(400).json({ error: 'INVALID_INPUT', message: 'tileId、candidateNpcIds、message 必填。' })
+      return
+    }
+    if (message.length > PLAYER_MESSAGE_MAX_CHARS) {
+      res.status(400).json({
+        error: 'MESSAGE_TOO_LONG',
+        message: `訊息不可超過 ${PLAYER_MESSAGE_MAX_CHARS} 字。`,
+      })
+      return
+    }
+
+    const liveNpcs = typeof (input.runtime as { getNpcs?: unknown }).getNpcs === 'function'
+      ? input.runtime.getNpcs()
+      : []
+    const liveNpcById = new Map(liveNpcs.map((npc) => [npc.id, npc] as const))
+    const npcId = candidateNpcIds.find((id) => {
+      const npc = liveNpcById.get(id)
+      return npc?.location === tileId && !input.runtime.getNpcMortalityProjection().isDeceased(id)
+    }) ?? null
+    if (!npcId) {
+      res.status(404).json({ error: 'NO_LOCAL_NPC', message: '附近沒有可回應的 NPC。' })
+      return
+    }
+    const profile = requireLivingNpc(input.runtime, npcId, res)
+    if (!profile) return
+
+    const tick = input.runtime.getCurrentTick()
+    const baseTrust = typeof profile.personality.trustBase === 'number'
+      ? clampTrust(profile.personality.trustBase)
+      : 50
+    const existing = input.store.getRelation(claims.sub, npcId)
+    const previousTrust = existing ? existing.trust : baseTrust
+    const previousCount = existing ? existing.interactionCount : 0
+    const resolvedIntent: InteractIntent = 'ask'
+    const tier: RelationshipTier = tierForRelationship(previousTrust)
+    const line = identityReplyFor(profile, message, resolvePlayerIdentity(input.accounts, claims.sub, claims.email).displayName)
+      ?? pickLine(npcId, resolvedIntent, tier, tick + Math.floor(previousTrust) + previousCount)
+    const trustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
+      tick,
+      lastInteractionTick: existing?.lastInteractionTick ?? 0,
+      interactionCount: previousCount,
+    })
+    const trustAfter = clampTrust(previousTrust + trustDelta)
+    const relation = input.store.upsertRelation({
+      accountId: claims.sub,
+      npcId,
+      trust: trustAfter,
+      interactionCount: previousCount + 1,
+      lastInteractionTick: tick,
+    })
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
+    const personalEvent = input.store.appendPersonalEvent({
+      accountId: claims.sub,
+      npcId,
+      intent: resolvedIntent,
+      playerMessage: message,
+      lineZh: line.zh,
+      lineEn: line.en,
+      tick,
+      trustAfter: relation.trust,
+    })
+    input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
+      npcId,
+      playerAccountId: String(claims.sub),
+      intent: resolvedIntent,
+      playerMessage: message,
+      replyZh: line.zh,
+      replyEn: line.en,
+      tick,
+      trustAfter: relation.trust,
+    })
+    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
+      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_NPC_DIALOGUE',
+          String(claims.sub),
+          'player',
+          tick,
+          Date.now(),
+          {
+            playerAccountId: String(claims.sub),
+            npcId,
+            tile: tileId,
+            intent: resolvedIntent,
+            playerMessage: message,
+            npcReplyZh: line.zh,
+            npcReplyEn: line.en,
+            trustDelta: relation.trust - previousTrust,
+            trustAfter: relation.trust,
+            interactionCount: relation.interactionCount,
+            narration: `${player.displayName}在${tileId}向附近發話：「${summarizeDialogLine(message, 48)}」，${profile.name.zh}回應並把這次對話記進自己的下一步判斷。`,
+          }
+        ))
+      : null
+
+    res.json({
+      npcId,
+      intent: resolvedIntent,
+      tick,
+      line: { zh: line.zh, en: line.en },
+      replySource: 'fallback',
+      aiError: null,
+      relationship: {
+        trust: relation.trust,
+        previousTrust,
+        delta: relation.trust - previousTrust,
+        tier: tierForRelationship(relation.trust),
+        interactionCount: relation.interactionCount,
+        min: RELATIONSHIP_MIN,
+        max: RELATIONSHIP_MAX,
+      },
+      personalEvent: {
+        id: personalEvent.id,
+        occurredAt: new Date(personalEvent.occurredAt).toISOString(),
+        intent: personalEvent.intent,
+      },
+      worldEventId: dialogueEvent?.eventId ?? null,
+    })
+  })
+
   router.post('/npc/:npcId/interact', auth, async (req: Request, res: Response) => {
     const claims = req.auth
     if (!claims) {

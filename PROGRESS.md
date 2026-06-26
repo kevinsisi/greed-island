@@ -5,6 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.10
+
+### Current Version
+`0.98.10` — Server-side Local Shout：新增 `POST /api/npc/local-shout`。前端 inline「附近發話」現在只送一次 local shout request，後端依 `tileId + candidateNpcIds` 選一位合法、活著、同區 NPC 回應，並提交 replayable `PLAYER_NPC_DIALOGUE` world command/event。這取代 v0.98.9 的前端單一 responder 熱修，避免前端假群聊與多請求 fan-out。
+
+### What Changed
+- **Server local shout endpoint**：新增 `/npc/local-shout`，驗證 `tileId/candidateNpcIds/message`，後端選 responder。
+- **Replayable event**：local shout 仍走 `PLAYER_NPC_DIALOGUE` command/event，NPC memory、player relation、personal event 同步寫入。
+- **Frontend integration**：AreaPage 改呼叫 `api.npcLocalShout()`，不再直接打 `/npc/:id/interact`。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.10`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（6 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.9
 
 ### Current Version
