@@ -5,7 +5,27 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-26 — Handoff Snapshot @ v0.98.13
+## 2026-06-26 — Handoff Snapshot @ v0.98.14
+
+### Current Version
+`0.98.14` — AI-backed Local Shout：修正 `local-shout` 實際沒有接 AI 的問題。`POST /api/npc/local-shout` 現在是 async；有 OpenCode/Gemini provider 時會呼叫 `generateAiReply()`，回傳 `replySource: "ai"`，只有 provider 失敗或沒設定才掉到 identity-grounded fallback。新增 mock OpenCode regression，證明 nearby shout 真的打到 AI message endpoint。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - `POST /api/npc/local-shout` 改為 async。
+  - local shout 先選單一同區 responder，再用該 NPC profile + player message + relation/history 建 `AiDialogContext`。
+  - AI 成功時使用 sanitize 後台詞、AI intent、`replySource: "ai"`。
+  - AI unavailable/fail 才使用 v0.98.13 identity-grounded fallback。
+  - `PLAYER_NPC_DIALOGUE` event 仍只允許 greet/ask/trade；AI 判 leave 時事件 intent 映射為 ask，避免 schema invalid。
+- `packages/server/src/http/npc.test.ts`
+  - 新增 `uses AI for local shout when an AI provider is configured`，用本機 mock OpenCode server 驗證 message endpoint 被呼叫一次。
+
+### Verified
+- `npm run test -w @greed-island/server -- npc.test.ts`
+- `npm run build -w @greed-island/server`
+
+### Next Slice
+- 若還覺得慢，下一步不是再改罐頭，而是讓前端 pending 狀態顯示「正在請星沉回應…」，並在 AI timeout 時明確顯示 fallback reason。
 
 ### Current Version
 `0.98.13` — Grounded Local Shout Fallback：修正 v0.98.12 只是字幕去重的治標問題。`POST /api/npc/local-shout` 在無 AI / AI fallback 時不再呼叫共用 `pickLine()` 罐頭（例如「夜市那條街，問阿鬼…」），改用 `localShoutFallbackLine()` 依 responder 的 NPC 名字、角色、玩家喊話摘要、tile、關係熟悉度產生 deterministic 回覆，從源頭降低 clone speech。

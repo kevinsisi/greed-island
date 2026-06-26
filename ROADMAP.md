@@ -5,7 +5,15 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.13 ✅ local-ready — 2026-06-26
+## v0.98.14 ✅ local-ready — 2026-06-26
+
+**主題：AI-backed Local Shout（附近發話真的接 AI）**
+
+- ✅ **async local shout** — `POST /api/npc/local-shout` 改成 async，支援等待 AI 生成。
+- ✅ **real AI path** — 有 OpenCode/Gemini provider 時呼叫 `generateAiReply()`，成功回 `replySource: "ai"`。
+- ✅ **tested with mock provider** — 新增 mock OpenCode regression，確認 nearby shout 真的打到 AI message endpoint，不是直接 fallback。
+- ✅ **fallback only on failure** — provider 未設定或 AI 失敗時才用 v0.98.13 grounded fallback。
+- ✅ **event schema safe** — AI intent 為 `leave` 時，world event intent 映射到 `ask`，避免 `PLAYER_NPC_DIALOGUE` schema 拒收。
 
 **主題：Grounded Local Shout Fallback（源頭不要產生罐頭複讀）**
 

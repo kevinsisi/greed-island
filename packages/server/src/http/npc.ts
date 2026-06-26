@@ -115,7 +115,7 @@ export function createNpcRouter(input: {
     })
   })
 
-  router.post('/npc/local-shout', auth, (req: Request, res: Response) => {
+  router.post('/npc/local-shout', auth, async (req: Request, res: Response) => {
     const claims = req.auth
     if (!claims) {
       res.status(401).json({ error: 'UNAUTHORIZED' })
@@ -173,15 +173,64 @@ export function createNpcRouter(input: {
     const existing = input.store.getRelation(claims.sub, npcId)
     const previousTrust = existing ? existing.trust : baseTrust
     const previousCount = existing ? existing.interactionCount : 0
-    const resolvedIntent: InteractIntent = 'ask'
+    let resolvedIntent: InteractIntent = 'ask'
     const tier: RelationshipTier = tierForRelationship(previousTrust)
-    const line = identityReplyFor(profile, message, resolvePlayerIdentity(input.accounts, claims.sub, claims.email).displayName)
-      ?? localShoutFallbackLine(profile, message, {
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
+    const identityLine = identityReplyFor(profile, message, player.displayName)
+    let line: LocalizedLine | null = identityLine
+    let replySource: ReplySource = 'fallback'
+    let aiError: string | null = null
+
+    const hasKeys = input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings)
+    if (!line && hasKeys) {
+      try {
+        const allProfiles = typeof (input.runtime as { getNpcsIncludingDeceased?: unknown }).getNpcsIncludingDeceased === 'function'
+          ? input.runtime.getNpcsIncludingDeceased()
+          : [profile]
+        const history = input.store.listPersonalEvents({
+          accountId: claims.sub,
+          npcId,
+          limit: 10,
+        })
+        const rawRumors = input.runtime.getActiveNpcRumors?.(npcId) ?? []
+        const rumorCtx = rawRumors.length > 0
+          ? rawRumors.map((r) => ({ topic: r.topic as string, subjectId: r.subjectId, tileId: r.tileId, accuracy: r.accuracy }))
+          : undefined
+        const dialogCtx: AiDialogContext = {
+          profile,
+          player,
+          trust: previousTrust,
+          tier,
+          history,
+          playerMessage: message,
+          worldTick: tick,
+          worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
+          ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
+        }
+        const ai = await generateAiReply(input.settings, dialogCtx)
+        const sanitized = sanitizeNpcReplyForUnknownEntities({
+          playerMessage: message,
+          replyZh: ai.zh,
+          replyEn: ai.en,
+          knownNpcNames: allProfiles.map((npc) => npc.name.zh),
+        })
+        line = sanitized
+        resolvedIntent = ai.intent
+        replySource = 'ai'
+      } catch (err) {
+        aiError = err instanceof AiDialogError ? err.message : String(err)
+        console.warn('[npc] local-shout AI dialog failed, using fallback', aiError)
+      }
+    }
+
+    if (!line) {
+      line = localShoutFallbackLine(profile, message, {
         tileId,
         tick,
         previousTrust,
         interactionCount: previousCount,
       })
+    }
     const trustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
       tick,
       lastInteractionTick: existing?.lastInteractionTick ?? 0,
@@ -195,7 +244,6 @@ export function createNpcRouter(input: {
       interactionCount: previousCount + 1,
       lastInteractionTick: tick,
     })
-    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
     const personalEvent = input.store.appendPersonalEvent({
       accountId: claims.sub,
       npcId,
@@ -216,6 +264,7 @@ export function createNpcRouter(input: {
       tick,
       trustAfter: relation.trust,
     })
+    const dialogueIntent: 'greet' | 'ask' | 'trade' = resolvedIntent === 'leave' ? 'ask' : resolvedIntent
     const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
       ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
           'PLAYER_NPC_DIALOGUE',
@@ -227,7 +276,7 @@ export function createNpcRouter(input: {
             playerAccountId: String(claims.sub),
             npcId,
             tile: tileId,
-            intent: resolvedIntent,
+            intent: dialogueIntent,
             playerMessage: message,
             npcReplyZh: line.zh,
             npcReplyEn: line.en,
@@ -244,8 +293,8 @@ export function createNpcRouter(input: {
       intent: resolvedIntent,
       tick,
       line: { zh: line.zh, en: line.en },
-      replySource: 'fallback',
-      aiError: null,
+      replySource,
+      aiError,
       relationship: {
         trust: relation.trust,
         previousTrust,
