@@ -2199,6 +2199,7 @@ export class SimulationRuntime {
   ): void {
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
     const npcTileMap = this.getLivingNpcLocationMap()
+    this.projectCommittedNpcSqliteStores(committed, npcTileMap)
     for (const ev of committed) {
       this.combatStore?.projectEvent(ev)
       this.playerJobsStore?.projectEvent(ev)
@@ -2231,11 +2232,6 @@ export class SimulationRuntime {
           }
         }
       }
-      if (this.npcMemory) {
-        this.npcMemory.project(ev)
-        this.npcMemory.projectWithLocality(ev, npcTileMap)
-      }
-      if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
       this.buildingOccupantsProjection.project(ev)
@@ -2449,6 +2445,29 @@ export class SimulationRuntime {
         }
       }
     }
+  }
+
+  private projectCommittedNpcSqliteStores(
+    committed: readonly Event[],
+    npcTileMap: ReadonlyMap<string, string>
+  ): void {
+    if (committed.length === 0) return
+    if (!this.npcMemory && !this.npcRelationships) return
+    // Live ticks may commit hundreds/thousands of events. Projecting NPC
+    // memory/relationship rows one event at a time used to pay SQLite's
+    // autocommit cost for every derived row, which can block the Node event
+    // loop long enough for HTTP refreshes to time out. Batch the SQLite-backed
+    // NPC projections in one transaction while keeping the same per-event order
+    // and idempotent INSERT/UPSERT semantics.
+    this.store.runInTransaction(() => {
+      for (const ev of committed) {
+        if (this.npcMemory) {
+          this.npcMemory.project(ev)
+          this.npcMemory.projectWithLocality(ev, npcTileMap)
+        }
+        if (this.npcRelationships) this.npcRelationships.project(ev)
+      }
+    })
   }
 
   private hydrateCombatRuntimeFromEvents(events: readonly Event[]): void {
@@ -5899,12 +5918,8 @@ export class SimulationRuntime {
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
       const npcTileMap = this.getLivingNpcLocationMap()
+      this.projectCommittedNpcSqliteStores(committed, npcTileMap)
       for (const ev of committed) {
-        if (this.npcMemory) {
-          this.npcMemory.project(ev)
-          this.npcMemory.projectWithLocality(ev, npcTileMap)
-        }
-        if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
         this.buildingOccupantsProjection.project(ev)

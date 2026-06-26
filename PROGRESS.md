@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.5
+
+### Current Version
+`0.97.5` — Tick Projection SQLite Batching：延續 v0.97.4 的 slow tick / HTTP timeout hotfix，開始修 tick 本身的同步阻塞來源。每輪 committed events fanout 到 NPC memory / relationship SQLite 投影時，改成單一 transaction，避免逐 event/row autocommit 把 Node.js event loop 卡住。
+
+### What Shipped
+- **Shared transaction primitive**：`SqliteEventStore.runInTransaction()`，讓同一個 SQLite connection 上的 projection writes 可被 runtime 批次包住。
+- **Batched NPC projection fanout**：新增 `projectCommittedNpcSqliteStores()`，把 `npcMemory.project()`、`npcMemory.projectWithLocality()`、`npcRelationships.project()` 對同一批 committed events 的寫入包成一個 transaction。
+- **Both commit paths covered**：regular simulation tick fanout 與 `publishCommittedEvents()` 都走同一個 batching helper。
+- **Determinism preserved**：仍照 committed event order 投影；既有 memory `INSERT OR IGNORE` 與 relationship upsert 語意不變，只改 SQLite transaction boundary。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.5`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- eventStoreTransaction.test.ts runtimeBudget.test.ts runtimeScheduler.test.ts` — pass（12 tests / 3 files）
+- `npm run build -w @greed-island/server` — pass
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- This targets the most likely synchronous SQLite fanout cost behind 13–24s live ticks. If live still shows long ticks after deploy, next slice should add phase-level timing around command planning, rule evaluation, append, SQLite projection fanout, and listener fanout to identify the next bottleneck.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.4
 
 ### Current Version

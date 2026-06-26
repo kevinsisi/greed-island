@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.5 ✅ local-ready — 2026-06-26
+
+**主題：Tick Projection SQLite Batching（降低 long tick 同步 SQLite fanout 阻塞）**
+
+- ✅ **root cause follow-up** — v0.97.4 先讓 HTTP 有空窗；v0.97.5 開始處理 tick 本身：每輪 committed events fanout 到 NPC memory / relationship SQLite 投影時，不再逐 event/row 支付 autocommit 成本。
+- ✅ **batched NPC projection transaction** — 新增 `SqliteEventStore.runInTransaction`，runtime 將 NPC memory locality rows 與 relationship projection 寫入包成單一 SQLite transaction，保留原本 per-event 順序與 idempotent INSERT/UPSERT 語意。
+- ✅ **shared path** — regular simulation tick 與 `publishCommittedEvents` 都使用同一個 batched projection helper。
+- ✅ **Verification** — targeted server tests（12）、full build、OpenSpec check（15 active changes）通過。
+
+---
+
 ## v0.97.4 ✅ local-ready — 2026-06-26
 
 **主題：Refresh Hydration Reliability Hotfix（重整不再因 long tick 直接落到錯誤/fixture 資料）**
