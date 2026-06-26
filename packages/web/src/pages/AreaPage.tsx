@@ -37,6 +37,7 @@ const AGGRESSIVE_SPECIES_IDS = new Set([
 import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
+import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -217,6 +218,7 @@ export function AreaPage() {
     () =>
       outdoorOccupants.map((npc) => {
         const activity: AreaNpcActivity = npc.activity ?? 'idle'
+        const behavior = npcBehaviorBadge(npc, localEvents)
         const base: AreaMapNpc = {
           id: npc.id,
           name: npc.name,
@@ -226,7 +228,10 @@ export function AreaPage() {
           subRow: typeof npc.subRow === 'number' ? npc.subRow : 5,
           ...(typeof npc.subZ === 'number' ? { subZ: npc.subZ } : {}),
           color: typeof npc.color === 'number' ? npc.color : 0xfff5b8,
-          activity
+          activity,
+          behaviorLabel: behavior.primary,
+          ...(behavior.tone === 'conflict' ? { behaviorIcon: '💢' } : {}),
+          ...(behavior.tone === 'food' ? { behaviorIcon: '🍚' } : {})
         }
         if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
         // v0.14.0：mood/health 給 AreaScene 視覺化用
@@ -237,7 +242,7 @@ export function AreaPage() {
         if (npc.recentUtterance?.text) base.recentUtterance = npc.recentUtterance.text
         return base
       }),
-    [locale, outdoorOccupants, t]
+    [locale, localEvents, outdoorOccupants, t]
   )
 
   const mapPlayers = useMemo<AreaMapPlayer[]>(
@@ -565,6 +570,27 @@ export function AreaPage() {
                         </div>
                       )}
                     </div>
+                    <div className="border border-lime-900/70 rounded-sharp px-2 py-2 bg-ground-950/50 sm:col-span-2">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-lime-300">
+                        動物行為證據
+                      </div>
+                      {ecology?.animals.length ? (
+                        <ul className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {ecology.animals.slice(0, 4).map((row) => {
+                            const behavior = animalBehaviorLabel(row)
+                            return (
+                              <li key={row.speciesId} className="text-[11px] text-ground-200 leading-snug">
+                                · {speciesLabel(row.speciesId)} ×{row.count}：{behavior.primary}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-ground-500 leading-snug">
+                          這一區沒有動物族群資料。
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {areaState && (
@@ -611,6 +637,7 @@ export function AreaPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {outdoorOccupants.map((npc) => {
                         const isNearby = nearbyNpcIds.has(npc.id)
+                        const behavior = npcBehaviorBadge(npc, localEvents)
                         return (
                           <button
                             key={npc.id}
@@ -643,6 +670,12 @@ export function AreaPage() {
                               </div>
                               <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                                 {npc.name}
+                              </div>
+                              <div className={[
+                                'mt-1 w-fit rounded-sharp border px-1.5 py-0.5 text-[10px] leading-none',
+                                behaviorToneClass(behavior.tone)
+                              ].join(' ')}>
+                                {behavior.primary}
                               </div>
                               {npc.intentLine && (
                                 <div className="text-[11px] text-ember-300 truncate">
@@ -834,6 +867,12 @@ function ResourceBar({ label, value, colorOk }: { label: string; value: number; 
       <span className="text-[10px] text-ground-300 w-8 text-right">{v}</span>
     </div>
   )
+}
+
+function speciesLabel(speciesId: string): string {
+  const words = speciesId.split('_').filter(Boolean)
+  if (words.length === 0) return speciesId
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
 function factionLabel(faction: string): string {

@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.1 ✅ local-ready — 2026-06-26
+## v0.98.2 ✅ local-ready — 2026-06-26
+
+**主題：Behavior-Aligned Area UI（吃飯就顯示吃飯，爭執就顯示爭執）**
+
+- ✅ **NPC behavior badges** — Area NPC list 新增 event-aware 行為 badge；`eat` 顯示「🍚 正在吃飯」，近期 `NPC_INTERACT(mode=argue)` 參與者顯示「💢 正在爭執」。
+- ✅ **map icon override** — AreaScene NPC sprite 右上角圖示支援行為覆蓋；吃飯/爭執不再只顯示泛用 activity。
+- ✅ **animal behavior labels** — 場景分頁新增「動物行為證據」；動物 sprite/群聚標籤依 ecology intent 顯示「覓食中 / 狩獵中 / 遷徙中 / 成群移動」。
+- ✅ **visual behavior fix** — 動物狩獵/遷徙不再套吃草 bob，只有覓食/成群才低頭吃草。
+- ✅ **tests** — 新增 `areaBehavior.test.ts` 覆蓋 NPC eat、NPC argue、animal intent 映射。
+- ✅ **Verification** — targeted web tests（13）、web build 通過。
+
+---
+
+## v0.98.1 ✅ shipped — 2026-06-26
 
 **主題：Player Dialogue World Consequences（玩家對話進 EventLog，NPC 下一步會被拉動）**
 

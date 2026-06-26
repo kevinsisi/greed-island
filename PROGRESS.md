@@ -5,6 +5,27 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.2
+
+### Current Version
+`0.98.2` — Behavior-Aligned Area UI：Area UI 現在直接把 NPC/動物行為翻成玩家看得懂的狀態；NPC 吃飯顯示「正在吃飯」，NPC_INTERACT argue 會顯示「正在爭執」，動物依 ecology intent 顯示「覓食中 / 狩獵中 / 遷徙中 / 成群移動」。
+
+### What Changed
+- **NPC behavior badges**：新增 `areaBehavior` helper，NPC list 以 event-aware badge 顯示當下行為；`eat` 不再只靠泛用 intent line，`argue` 會被近期 `NPC_INTERACT` 事件覆蓋成衝突狀態。
+- **Map sprite icon alignment**：AreaScene NPC sprite 的右上角圖示支援 behavior override；爭執顯示 💢，吃飯顯示 🍚。
+- **Animal behavior labels**：場景分頁新增「動物行為證據」；動物 sprite 與群聚 label 顯示 ecology intent，狩獵/遷徙不再套吃草 bob。
+- **Regression coverage**：新增 `areaBehavior.test.ts`，覆蓋吃飯、爭執、動物 intent 三種 UI 映射。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.2`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaCharacterVisualState.test.ts hubEcology.test.ts` — pass（13 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先把 UI 讀法對齊權威行為資料；下一步可把更多 server event types（吃飯消耗資源、交易、巡邏、受傷）接成同一套 `BehaviorBadge` surface。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.1
 
 ### Current Version
