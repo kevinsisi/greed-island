@@ -1211,7 +1211,8 @@ export class SimulationRuntime {
         this.buildingRuntime.snapshotForTile(
           tileId,
           this.npcEngine.snapshotAll(),
-          this.completedConstructionBuildingDefs()
+          this.completedConstructionBuildingDefs(),
+          { includeWorkplaces: true }
         )
       )
     )
@@ -1226,7 +1227,8 @@ export class SimulationRuntime {
   getAllBuildings(): readonly BuildingRuntimeView[] {
     const existing = this.buildingRuntime.snapshotAll(
       this.npcEngine.snapshotAll(),
-      this.completedConstructionBuildingDefs()
+      this.completedConstructionBuildingDefs(),
+      { includeWorkplaces: true }
     )
     const byId = new Map(existing.map((view) => [view.def.id, view] as const))
     for (const def of listAllBuildings(this.lifeExpansion.unlockedBuildingIds)) {

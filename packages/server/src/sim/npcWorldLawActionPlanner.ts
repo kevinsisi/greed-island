@@ -60,7 +60,34 @@ export function planNpcWorldLawAction(input: NpcWorldLawActionPlannerInput): Npc
     accepted: true,
     rejectionReason: null,
     decidedAtTick: input.currentTick,
-    narration: `${input.npcNameZh}${candidate.actionZh}，不是被排程推著走，而是在世界限制內選擇回應${targetName}的壓力。`,
+    narration: buildNarration(input.npcNameZh, candidate, targetName),
+  }
+}
+
+function buildNarration(npcNameZh: string, candidate: WorldLawCandidate, targetName: string): string {
+  switch (candidate.kind) {
+    case 'build':
+      return `${npcNameZh}在${targetName}查看空地、牆角與通道，試著把閒置角落整理成可用的公共空間。`
+    case 'custom_social_scene':
+      return `${npcNameZh}留在${targetName}和熟人交換近況與人情，順手打聽誰最近需要幫忙、誰又欠了誰一個回應。`
+    case 'travel':
+      return candidate.actionZh.includes('退路')
+        ? `${npcNameZh}離開壓力最高的街角，轉往${targetName}確認退路與下一步消息。`
+        : `${npcNameZh}把未走完的事放在心上，動身前往${targetName}。`
+    case 'work':
+      return candidate.actionZh.includes('水源') || candidate.actionZh.includes('棲地')
+        ? `${npcNameZh}前往${targetName}巡看水源、棲地與採集邊界，確認環境變化有沒有壓到居民日常。`
+        : `${npcNameZh}前往${targetName}接下一件能用上${candidate.actionZh.includes('身分') ? '自己手藝' : '自身能力'}的工作，把壓力換成收入與消息。`
+    case 'rest':
+      return `${npcNameZh}在${targetName}暫時收住腳步，先把體力與判斷力拉回來。`
+    case 'buy_card':
+      return `${npcNameZh}前往${targetName}尋找紋卡機會，把最近的壓力押在一次可能的轉機上。`
+    case 'challenge_combat':
+      return `${npcNameZh}在${targetName}接受挑戰，試著用正面衝突壓下眼前的威脅。`
+    case 'spread_rumor':
+      return `${npcNameZh}在${targetName}放出一句傳聞，讓消息先替自己探路。`
+    default:
+      return `${npcNameZh}在${targetName}做出一個臨場選擇，讓世界多了一條新的後續線索。`
   }
 }
 

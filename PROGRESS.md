@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.9
+
+### Current Version
+`0.97.9` — NPC Workplace Occupancy + Chronicle Naturalization：修正「建築有職缺但 NPC 沒人在工作」的世界畫面斷裂；非 owner NPC 只要在同 tile 做 `work` / `trade`，會被導入有 hiring slot 或相符用途的建築 occupant，讓職缺/建築/人物畫面接起來。同時把編年史 freeform 主文改得更像事件，不再反覆解釋「不是被排程推著走」。
+
+### What Changed
+- **BuildingRuntime root cause fix**：`resolveNpcBuildingId()` 可在 building API view 中把工作/交易中的非 owner NPC 導到同 tile 的工作建築；simulation hot paths 仍保留戶外輸入，避免阻斷採集、建設、家庭經濟等事件鏈。
+- **Occupant metadata**：非 owner workplace occupant 會帶第一個 hiring shift，UI 可看出不是空建築。
+- **Chronicle copy**：NPC freeform accepted motivation 縮短成系統驗證說明；主敘事由 planner 產出較自然事件句型。
+- **Regression coverage**：新增 building runtime 測試，先重現「非 owner NPC 在職缺建築外閒晃」再修正。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.9`.
+
+### Verification Evidence
+- `npm test` — pass（server 1273 tests + web 125 tests）
+- `npm run test -w @greed-island/server -- buildingRuntime.test.ts runtimeExpansion.test.ts runtimeGoodsInventory.test.ts buildingsRouter.test.ts` — pass（10 tests，覆蓋前一版 CI failure）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先讓「有人正在建築裡工作」出現在權威 building occupant surface。下一刀應把職缺容量、NPC 職責/技能、班表與薪資投影成更完整的 NPC employment economy，而不是只用 activity 對建築用途配對。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.8
 
 ### Current Version

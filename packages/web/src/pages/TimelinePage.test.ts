@@ -24,7 +24,7 @@ describe('Timeline event motivation', () => {
 
   it('explains common non-construction public events', () => {
     expect(eventMotivationFor(event('NPC_PRODUCTIVE_ACTION', { domain: 'trade', metric: 'supply' }))?.explanation).toContain('交易')
-    expect(eventMotivationFor(event('NPC_FREEFORM_ACTION_PROPOSED', { accepted: true, resolved: { kind: 'work' } }))?.explanation).toContain('NPC AI agent')
+    expect(eventMotivationFor(event('NPC_FREEFORM_ACTION_PROPOSED', { accepted: true, resolved: { kind: 'work' } }))?.explanation).toBe('NPC 依照需求、目標、信念與反思提出行動；server 驗證後接受為「工作 / 服務」。')
     expect(eventMotivationFor(event('NPC_INTERACT', { mode: 'argue' }))?.explanation).toContain('爭執')
     expect(eventMotivationFor(event('NPC_DEFENSE_PARTY_FORMED', { memberNpcIds: ['npc.a', 'npc.b'] }))?.explanation).toContain('保護同伴')
     expect(eventMotivationFor(event('AREA_PRESSURE', { kind: 'resource.low' }))?.explanation).toContain('資源')

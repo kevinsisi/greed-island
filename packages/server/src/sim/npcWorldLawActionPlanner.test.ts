@@ -84,6 +84,25 @@ describe('planNpcWorldLawAction', () => {
     expect(cautious?.proposal.action).toContain('避開')
   })
 
+  it('renders player-facing narration as world events instead of explaining scheduler agency', () => {
+    const buildAction = planNpcWorldLawAction(input({
+      needs: { food: 12, rest: 14, money: 20, housing: 88, safety: 10 },
+      lifeGoal: { kind: 'build_city', pressure: 85, narration: '整理公共空間' },
+      cognitive: { ...input().cognitive!, dominantTrait: 'steady' },
+    }))
+    const socialAction = planNpcWorldLawAction(input({
+      lifeGoal: { kind: 'form_family', pressure: 90, narration: '建立可靠的人情網' },
+      cognitive: { ...input().cognitive!, dominantTrait: 'social' },
+    }))
+
+    expect(buildAction?.narration).toContain('查看')
+    expect(buildAction?.narration).toContain('公共空間')
+    expect(socialAction?.narration).toContain('交換近況')
+    expect(socialAction?.narration).toContain('人情')
+    expect(buildAction?.narration).not.toContain('不是被排程')
+    expect(socialAction?.narration).not.toContain('不是被排程')
+  })
+
   it('stays quiet when no world pressure crosses the threshold', () => {
     const action = planNpcWorldLawAction(input({
       needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },

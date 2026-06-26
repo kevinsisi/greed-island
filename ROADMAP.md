@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.97.8 ✅ local-ready — 2026-06-26
+## v0.97.9 ✅ local-ready — 2026-06-26
+
+**主題：NPC Workplace Occupancy + Chronicle Naturalization（職缺和世界畫面接起來）**
+
+- ✅ **root cause** — 原本 BuildingRuntime 只把 owner NPC 放進 owner building；非 owner NPC 即使 activity 是 `work`，仍會留在戶外，所以玩家看到「有職缺，但完全沒人在工作」。
+- ✅ **NPC workplace routing** — building API view 可把工作/交易中的 NPC 導入同 tile 的 hiring building 或用途相符建築，simulation hot paths 仍保留戶外輸入，避免阻斷採集/建設/家庭經濟鏈。
+- ✅ **visible shift metadata** — 非 owner workplace occupant 會帶第一個 hiring shift，讓 API/UI 可顯示班別關聯。
+- ✅ **chronicle naturalization** — freeform accepted motivation 縮短；planner 主敘事改成事件語氣，減少模板式「不是被排程推著走」。
+- ✅ **Verification** — full `npm test`（server 1273 + web 125）、targeted CI-regression tests（10）、full build、OpenSpec check（15 active changes）、diff check 通過。
+- ⏳ **Next** — 把職缺容量、NPC 技能/職責、班表與薪資做成 replayable NPC employment economy，不只用 activity 對建築用途配對。
+
+---
+
+## v0.97.8 ✅ shipped — 2026-06-26
 
 **主題：Slow Tick Phase Timing Observability（long tick 分段計時）**
 
