@@ -5,7 +5,7 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.16 ✅ local-ready — 2026-06-27
+## v0.98.16 ✅ shipped — 2026-06-27
 
 **主題：OpenCode Timeout Strategy（慢 endpoint 可 failover，手機不先逾時）**
 
@@ -15,7 +15,7 @@
 - ✅ **client window aligned** — 前端附近發話 abort 提高到 18 秒，高於 server 15 秒 fallback budget。
 - ✅ **runtime endpoint direction** — live 設定應優先使用 direct `http://100.73.52.37:4096` 作 service-to-service OpenCode endpoint，不靠 mixed-tailnet provider DNS。
 - ✅ **regression** — mock slow-first/fast-second OpenCode endpoint 覆蓋 failover；慢 provider fallback 仍低於 client timeout。
-- ⏳ **ship gate** — local build/test/OpenSpec 通過；CI/CD 與 live `hunter.sisihome.org` smoke pending。
+- ✅ **ship gate** — local build/test/OpenSpec、CI `28259571138`、Deploy Dev `28259664683` 通過；live `hunter.sisihome.org` 回 `0.98.16`，local shout smoke `12508ms` 回 `replySource="ai"`。
 
 ---
 

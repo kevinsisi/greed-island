@@ -36,12 +36,24 @@ developer. Keep latest status at the top.
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npm run openspec:check` — pass
 - `git diff --check` — pass（Git line-ending warnings only）
-- CI/CD/live verification pending until push.
+- Reviewer gate — pass（separate reviewer found and rechecked the endpoint-deadline fix; final review: no findings）
+- GitHub Actions CI `28259571138` — pass（OpenSpec validate + build/typecheck/test；Node.js 20 deprecation annotation remains known non-blocking）
+- GitHub Actions Deploy Dev `28259664683` — pass（Docker build/push + desktop restart/smoke；Node.js 20 deprecation annotation remains known non-blocking）
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.16`, `ok=true`, tick `287976` during verification.
+- Provider health after DNS fix:
+  - `http://100.73.52.37:4096/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `https://provider-amd.sisihome.org/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `https://provider-home.sisihome.org/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `http://100.83.112.20:4098/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+- Live Greed provider settings patched in `/app/data/greed-island.sqlite`:
+  - `opencode_servers=http://100.73.52.37:4096\nhttp://100.83.112.20:4098`
+  - `opencode_base_url=http://100.73.52.37:4096`
+  - `provider_priority=opencode,gemini`
+- Live local shout smoke through deployed server — `200` in `12508ms`, `replySource="ai"`, `aiError=null`, `worldEventId=event_a2fa12a991e8a5dbf7e20f36897d04a3`, reply `聽到了，很清楚。潮鳴市的脈網這段時間很穩，你的紋卡訊號沒問題。`
 
 ### Next Slice
-- Track GitHub Actions CI/CD after push, then verify `https://hunter.sisihome.org/healthz` reports `0.98.16`.
-- Live provider setting target after deploy: prefer direct service runtime endpoint `http://100.73.52.37:4096` first（provider-amd direct Tailscale），with a working backup endpoint second; do not rely on mixed-tailnet provider DNS records for service-to-service runtime.
-- Verify live local shout can return `replySource="ai"` through the preferred OpenCode endpoint within the new budget.
+- Monitor live local shout latency now that `provider-amd` direct is first and provider-home direct is backup; if responses often exceed 15 seconds, tune prompt length/provider order rather than disabling AI.
+- Keep Gemini fallback unavailable noted until active keys are restored; current live route depends on OpenCode endpoints.
 
 ---
 
