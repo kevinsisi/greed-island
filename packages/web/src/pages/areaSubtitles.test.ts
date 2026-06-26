@@ -88,8 +88,9 @@ describe('areaSubtitles', () => {
         npc({ id: 'npc.b', name: '雨黎', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 87 } }),
         npc({ id: 'npc.c', name: '岸隅', cognitiveLine: { zh: '得找地方避雨。', en: 'Need shelter.' } }),
         npc({ id: 'npc.d', name: '海映', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 88 } }),
+        npc({ id: 'npc.e', name: '眠舟', activity: 'sleep', cognitiveLine: { zh: '夢裡仍聽見潮聲。', en: 'Dreaming.' } }),
       ],
-      nearbyNpcIds: new Set(['npc.a', 'npc.b', 'npc.c', 'npc.d']),
+      nearbyNpcIds: new Set(['npc.a', 'npc.b', 'npc.c', 'npc.d', 'npc.e']),
       tick: 88,
       limit: 3,
     })

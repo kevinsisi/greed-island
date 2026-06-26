@@ -5,6 +5,28 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.7
+
+### Current Version
+`0.98.7` — Behavior Plausibility Projection：把「行為合理性」從雨天特例抽成共用區域呈現規則。街景與附近字幕現在先判定 NPC 是否社交可用：移動中、睡覺、室內、死亡 NPC 不再被當成站在玩家旁邊可聊天/可字幕發聲的人；具體工作/交易/巡邏/表演等行為仍優先於 idle 人群顯示。
+
+### What Changed
+- **Generic social availability rule**：新增 `isAreaSociallyAvailableNpc()`，集中判斷區域街景/附近字幕可用 NPC。
+- **Not weather-only**：雨天避雨只是其中一個 affordance；核心規則改為 activity/presence first。
+- **No sleeping chatter**：sleep NPC 的 cognition 不再進附近 ambient subtitle，避免「睡覺的人在旁邊講話」。
+- **No travelling pileups**：move NPC 仍只走 hub travel route projection，不塞進 child area local social scene。
+- **Regression tests**：`npcProjection.test.ts` 覆蓋 socially unavailable NPC 排除；`areaSubtitles.test.ts` 覆蓋 sleep cognition 不當 ambient speech。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.7`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 141 tests）
+- `npm run test -w @greed-island/web -- npcProjection.test.ts areaSubtitles.test.ts` — pass（16 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.6
 
 ### Current Version

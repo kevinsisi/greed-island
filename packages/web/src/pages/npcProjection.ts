@@ -21,8 +21,14 @@ type AreaVisibilityWeather = 'clear' | 'overcast' | 'mist' | 'storm' | 'breeze'
 
 export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): NpcSummary[] {
   return npcs.filter(
-    (npc) => npc.location === tileId && !npc.buildingId && npc.activity !== 'move'
+    (npc) => npc.location === tileId && isAreaSociallyAvailableNpc(npc)
   )
+}
+
+export function isAreaSociallyAvailableNpc(npc: NpcSummary): boolean {
+  if (npc.deceased || npc.buildingId) return false
+  if (npc.activity === 'move' || npc.activity === 'sleep') return false
+  return true
 }
 
 export function areaVisibleNpcs(

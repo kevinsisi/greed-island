@@ -17,7 +17,7 @@ function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
 }
 
 describe('NPC scene projections', () => {
-  it('excludes travelling NPCs from area outdoor occupants', () => {
+  it('excludes socially unavailable NPCs from area outdoor occupants', () => {
     const people = [
       npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
       npc({
@@ -31,6 +31,7 @@ describe('NPC scene projections', () => {
           startedAtTick: 12
         }
       }),
+      npc({ id: 'sleeper', activity: 'sleep', buildingId: null, cognitiveLine: { zh: '夢見潮聲。', en: 'Dreaming of tides.' } }),
       npc({ id: 'inside', activity: 'work', buildingId: 'b_central_exchange' })
     ]
 

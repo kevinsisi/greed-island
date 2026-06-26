@@ -1,4 +1,5 @@
 import type { EventSummary, NpcSummary } from '../state/types'
+import { isAreaSociallyAvailableNpc } from './npcProjection'
 
 export type AreaSubtitleTone = 'npc' | 'player' | 'system'
 
@@ -108,7 +109,7 @@ export function ambientNpcChatterLines(input: {
 }): AreaSubtitleLine[] {
   const limit = input.limit ?? 3
   const seenText = new Set<string>()
-  const nearby = input.npcs.filter((npc) => input.nearbyNpcIds.has(npc.id))
+  const nearby = input.npcs.filter((npc) => input.nearbyNpcIds.has(npc.id) && isAreaSociallyAvailableNpc(npc))
   const lines: AreaSubtitleLine[] = []
   for (const npc of nearby) {
     const text = npc.recentUtterance?.text?.trim()

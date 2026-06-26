@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.6 ✅ local-ready — 2026-06-26
+## v0.98.7 ✅ local-ready — 2026-06-26
+
+**主題：Behavior Plausibility Projection（不是只修下雨，而是行為合理性）**
+
+- ✅ **generic social availability** — 新增 `isAreaSociallyAvailableNpc()`，街景與附近字幕共用同一套行為可用規則。
+- ✅ **sleep ≠ street chatter** — 睡覺 NPC 不再被當成室外可互動/可字幕發聲的人。
+- ✅ **move ≠ local crowd** — 移動中 NPC 維持 hub travel projection，不塞進區域街景與附近喊話對象。
+- ✅ **presence first** — 室內、死亡、移動、睡覺都不算「站在附近可聊天」。
+- ✅ **behavior priority kept** — 工作、交易、巡邏、表演、守衛等具體行為仍優先於 idle 人群顯示。
+- ✅ **Verification** — full `npm test`（server 1275 + web 141）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.6 ✅ shipped — 2026-06-26
 
 **主題：Rainy Crowd & Chatter Sanity Fix（下雨少塞人、有避雨、不要罐頭複讀）**
 
