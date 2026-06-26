@@ -166,33 +166,42 @@ export class AiDialogError extends Error {
   }
 }
 
+export type AiDialogOptions = Readonly<{
+  openCodeTimeoutMs?: number
+}>
+
 export async function generateAiReply(
   store: SettingsStore,
-  ctx: AiDialogContext
+  ctx: AiDialogContext,
+  options: AiDialogOptions = {},
 ): Promise<AiDialogReply> {
   const systemPrompt = buildSystemPrompt(ctx)
   const userPrompt = buildUserPrompt(ctx)
+  const providerOptions = {
+    systemPrompt,
+    userPrompt,
+    temperature: 0.9,
+    // Chinese is token-heavy. Gemini-2.5-flash often spends 800+
+    // tokens on the zh string alone for verbose NPCs (e.g. mountain
+    // porters explaining their job), then runs out of budget before
+    // closing the en field. 2048 gives comfortable headroom for the
+    // full {zh, en, intent, trustDelta} object.
+    maxOutputTokens: 2048,
+    // Force raw JSON output (no ```json fences). Gemini-2.5-flash
+    // honours this and emits a parseable object directly.
+    responseMimeType: 'application/json',
+    ...(typeof options.openCodeTimeoutMs === 'number'
+      ? { openCodeTimeoutMs: options.openCodeTimeoutMs }
+      : {}),
+    // v0.14.0：2.5-flash 預設會耗一部分 maxOutputTokens 在內部 CoT
+    // (chain-of-thought) tokens 上，對「短 JSON 對話」這種任務常常導致
+    // 實際 text candidate 為空字串、parser 失敗、整個 NPC 對話掉到
+    // fallback。把 thinking budget 設成 0 → 全部 budget 留給輸出。
+    thinkingBudget: 0,
+  }
   let raw: string
   try {
-    const result = await generateWithProviders(store, {
-      systemPrompt,
-      userPrompt,
-      temperature: 0.9,
-      // Chinese is token-heavy. Gemini-2.5-flash often spends 800+
-      // tokens on the zh string alone for verbose NPCs (e.g. mountain
-      // porters explaining their job), then runs out of budget before
-      // closing the en field. 2048 gives comfortable headroom for the
-      // full {zh, en, intent, trustDelta} object.
-      maxOutputTokens: 2048,
-      // Force raw JSON output (no ```json fences). Gemini-2.5-flash
-      // honours this and emits a parseable object directly.
-      responseMimeType: 'application/json',
-      // v0.14.0：2.5-flash 預設會耗一部分 maxOutputTokens 在內部 CoT
-      // (chain-of-thought) tokens 上，對「短 JSON 對話」這種任務常常導致
-      // 實際 text candidate 為空字串、parser 失敗、整個 NPC 對話掉到
-      // fallback。把 thinking budget 設成 0 → 全部 budget 留給輸出。
-      thinkingBudget: 0,
-    })
+    const result = await generateWithProviders(store, providerOptions)
     raw = result.text
   } catch (err) {
     if (err instanceof AiUnavailableError || err instanceof GeminiUnavailableError) {

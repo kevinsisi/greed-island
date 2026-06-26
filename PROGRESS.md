@@ -5,6 +5,37 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.15
+
+### Current Version
+`0.98.15` — Local Shout AI Timeout Guard：修正 v0.98.14 把附近發話接回 AI 後，手機前端 8 秒 timeout 會先於慢 OpenCode 回覆發生，導致「NPC 回應逾時」。`POST /api/npc/local-shout` 現在對整條 AI provider chain 最多等 6 秒；超時就回到 v0.98.13 grounded fallback，保留 AI 可用時的回覆，但不讓手機 UI 先失敗。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - local shout 加入 `LOCAL_SHOUT_AI_TIMEOUT_MS = 6_000`，包住整條 AI provider chain。
+  - `createNpcRouter()` 支援測試用 `localShoutAiTimeoutMs` 覆寫。
+  - local shout 呼叫 `generateAiReply()` 時同時傳入 OpenCode timeout，讓 server 在前端 8 秒 timeout 前 fallback。
+- `packages/server/src/npcs/openCodeClient.ts`
+  - OpenCode generation 支援 per-call `timeoutMs`。
+  - message fetch + response body parsing 都受 AbortController timeout 保護；AbortError 會明確回 `OpenCode send-message timeout after ...ms`。
+- `packages/server/src/npcs/aiDialog.ts` / `aiProvider.ts`
+  - 將 local shout 的 OpenCode timeout option 傳到 provider client。
+- `packages/server/src/http/npc.test.ts`
+  - 新增慢 OpenCode mock：message endpoint 不回應時，local shout 仍在 1 秒內回 `replySource: "fallback"`。
+
+### Verified
+- User-path repro before fix: live `POST /api/npc/:id/interact` over `https://hunter.sisihome.org/api` succeeded but took `86,621ms`, confirming provider works but AI path can exceed mobile UX timeout.
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（9 tests；slow OpenCode local-shout fallback regression included）
+- `npm run build -w @greed-island/server` — pass
+- `npm test` — pass（server 1279 tests + web 141 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+
+### Next Slice
+- 若仍想提升體驗，可把 local shout pending 文案改成「正在等附近 NPC 回應…」，但根因修正是 server-side timeout/fallback，不是只改 UI。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.14
 
 ### Current Version

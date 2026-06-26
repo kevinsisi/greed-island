@@ -23,6 +23,10 @@ import {
 
 export type AiProviderId = 'opencode' | 'gemini'
 
+export type ProviderGenerationOptions = GeminiGenerationOptions & Readonly<{
+  openCodeTimeoutMs?: number
+}>
+
 export class AiUnavailableError extends Error {
   constructor(message: string) {
     super(message)
@@ -50,7 +54,7 @@ export function getProviderPriority(store: SettingsStore): readonly AiProviderId
  */
 export async function generateWithProviders(
   store: SettingsStore,
-  options: GeminiGenerationOptions,
+  options: ProviderGenerationOptions,
 ): Promise<{ text: string; provider: AiProviderId }> {
   const errors: string[] = []
   for (const provider of getProviderPriority(store)) {
@@ -65,11 +69,15 @@ export async function generateWithProviders(
         let lastErr: string | null = null
         for (const serverUrl of servers) {
           try {
-            const text = await generateWithOpenCode(serverUrl, {
+            const openCodeOptions = {
               systemPrompt: options.systemPrompt,
               userPrompt: options.userPrompt,
               model,
-            })
+              ...(typeof options.openCodeTimeoutMs === 'number'
+                ? { timeoutMs: options.openCodeTimeoutMs }
+                : {}),
+            }
+            const text = await generateWithOpenCode(serverUrl, openCodeOptions)
             return { text, provider }
           } catch (err) {
             lastErr =

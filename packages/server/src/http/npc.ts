@@ -56,6 +56,7 @@ import { TICKS_PER_HOUR, TICKS_PER_DAY } from '../config/world.js'
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
 const PLAYER_MESSAGE_MAX_CHARS = 800
+const LOCAL_SHOUT_AI_TIMEOUT_MS = 6_000
 
 // v0.87.3 — deceased NPC gate. Used by /interact, /dialog-hold, /greet, /intervene.
 // Returns the profile when the NPC exists and is alive; otherwise writes the proper
@@ -94,9 +95,11 @@ export function createNpcRouter(input: {
   settings: SettingsStore
   accounts: AccountStore
   authConfig: AuthConfig
+  localShoutAiTimeoutMs?: number
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+  const localShoutAiTimeoutMs = Math.max(1, input.localShoutAiTimeoutMs ?? LOCAL_SHOUT_AI_TIMEOUT_MS)
 
   router.post('/npc/:npcId/dialog-hold', auth, (req: Request, res: Response) => {
     const claims = req.auth
@@ -207,7 +210,12 @@ export function createNpcRouter(input: {
           worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
         }
-        const ai = await generateAiReply(input.settings, dialogCtx)
+        const ai = await withLocalShoutAiTimeout(
+          generateAiReply(input.settings, dialogCtx, {
+            openCodeTimeoutMs: localShoutAiTimeoutMs,
+          }),
+          localShoutAiTimeoutMs,
+        )
         const sanitized = sanitizeNpcReplyForUnknownEntities({
           playerMessage: message,
           replyZh: ai.zh,
@@ -1144,6 +1152,25 @@ function localShoutFallbackLine(
   const seed = ctx.tick + ctx.interactionCount + profile.id.length + Math.floor(ctx.previousTrust)
   const idx = ((seed % variants.length) + variants.length) % variants.length
   return variants[idx]!
+}
+
+function withLocalShoutAiTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new AiDialogError(`Local shout AI timeout after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err: unknown) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
 }
 
 function readMessage(raw: unknown): string | null {
