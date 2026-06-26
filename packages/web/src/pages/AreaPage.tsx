@@ -38,7 +38,7 @@ import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
 import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
-import { areaSubtitleLines, nearestSpeakTarget, type AreaSubtitleLine } from './areaSubtitles'
+import { areaSubtitleLines, nearestSpeakTarget, optimisticSpeechLines, type AreaSubtitleLine } from './areaSubtitles'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -398,36 +398,49 @@ export function AreaPage() {
       if (!message) return
       setSubtitleBusy(true)
       setSubtitleError(null)
+      const pendingBaseId = `pending-${Date.now()}`
+      const pendingTick = events[0]?.tick ?? world.tick ?? 0
+      setOptimisticSubtitles((prev) => [
+        ...prev.filter((line) => !line.id.startsWith(`${pendingBaseId}:`)),
+        ...optimisticSpeechLines({
+          baseId: pendingBaseId,
+          tick: pendingTick,
+          playerMessage: message,
+          npcId: subtitleTargetNpc.id,
+          npcName: subtitleTargetNpc.name,
+          npcReplyZh: null,
+        })
+      ].slice(-8))
+      setSubtitleDraft('')
       try {
         const result = await api.npcInteract(token, subtitleTargetNpc.id, { message })
         const baseId = result.worldEventId ?? `local-${Date.now()}`
-        const playerLine: AreaSubtitleLine = {
-          id: `${baseId}:player`,
+        const replacement = optimisticSpeechLines({
+          baseId,
           tick: result.tick,
-          speaker: '你',
-          text: message,
-          tone: 'player',
+          playerMessage: message,
           npcId: subtitleTargetNpc.id,
-        }
-        const npcLine: AreaSubtitleLine = {
-          id: `${baseId}:npc`,
-          tick: result.tick,
-          speaker: subtitleTargetNpc.name,
-          text: result.line.zh,
-          tone: 'npc',
-          npcId: subtitleTargetNpc.id,
-        }
-        setOptimisticSubtitles((prev) => [...prev, playerLine, npcLine].slice(-8))
-        setSubtitleDraft('')
+          npcName: subtitleTargetNpc.name,
+          npcReplyZh: result.line.zh,
+        })
+        setOptimisticSubtitles((prev) => [
+          ...prev.filter((line) => !line.id.startsWith(`${pendingBaseId}:`)),
+          ...replacement,
+        ].slice(-8))
       } catch (err) {
         const msg = err instanceof Error ? err.message : '發話失敗'
         setSubtitleError(msg)
+        setOptimisticSubtitles((prev) => prev.map((line) =>
+          line.id === `${pendingBaseId}:npc`
+            ? { ...line, text: `發話失敗：${msg}`, tone: 'system' }
+            : line
+        ))
         showFeedback(false, msg)
       } finally {
         setSubtitleBusy(false)
       }
     },
-    [showFeedback, subtitleBusy, subtitleDraft, subtitleTargetNpc, token]
+    [events, showFeedback, subtitleBusy, subtitleDraft, subtitleTargetNpc, token, world.tick]
   )
 
   const refreshEcology = useCallback(() => {
@@ -586,7 +599,7 @@ export function AreaPage() {
             disabled={!token || !subtitleTargetNpc || subtitleBusy || subtitleDraft.trim().length === 0}
             className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border border-cyan-600 text-cyan-200 hover:bg-cyan-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {subtitleBusy ? '…' : '發話'}
+            {subtitleBusy ? '發話中' : '發話'}
           </button>
         </form>
         {subtitleError && <div className="mt-1 text-[11px] text-rust-300">{subtitleError}</div>}

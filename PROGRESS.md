@@ -5,6 +5,28 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.4
+
+### Current Version
+`0.98.4` — Mobile Subtitle Send Feedback Fix：修正手機上字幕發話看起來「沒用」的體感；送出後會立即在字幕 feed 顯示「你」的訊息與 NPC 等待回覆，成功後替換成真實 NPC 回覆，失敗也直接在字幕行顯示錯誤；送出按鈕不再只顯示省略號。
+
+### What Changed
+- **Immediate subtitle echo**：玩家按「發話」後先插入 optimistic「你：訊息」與「NPC：……」，避免等待 API 時 UI 像沒反應。
+- **Response replacement**：NPC API 成功後用真實 `worldEventId` / tick / NPC 回覆替換 pending 字幕。
+- **Visible failure state**：API 失敗時把 pending NPC 行改成「發話失敗：...」，並保留 toast/error。
+- **Clearer mobile button**：busy label 從 `…` 改成 `發話中`，手機上不會誤以為按鈕沒作用。
+- **Regression coverage**：`areaSubtitles.test.ts` 新增 optimistic speech line 測試。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.4`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（4 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先修發話回饋；若 live API 偶發慢 tick，字幕至少會先顯示玩家已送出與等待回覆。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.3
 
 ### Current Version

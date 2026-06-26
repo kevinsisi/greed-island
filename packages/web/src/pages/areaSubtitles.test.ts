@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EventSummary } from '../state/types'
-import { areaSubtitleLines, nearestSpeakTarget } from './areaSubtitles'
+import { areaSubtitleLines, nearestSpeakTarget, optimisticSpeechLines } from './areaSubtitles'
 
 function ev(input: Partial<EventSummary> & Pick<EventSummary, 'eventType' | 'payload'>): EventSummary {
   return {
@@ -53,5 +53,19 @@ describe('areaSubtitles', () => {
   it('prefers a nearby NPC as inline speech target', () => {
     expect(nearestSpeakTarget(['npc.b'], ['npc.a', 'npc.b'])).toBe('npc.b')
     expect(nearestSpeakTarget([], ['npc.a', 'npc.b'])).toBe('npc.a')
+  })
+
+  it('builds an immediate optimistic player line before the server replies', () => {
+    expect(optimisticSpeechLines({
+      baseId: 'tmp.1',
+      tick: 77,
+      playerMessage: '大家好',
+      npcId: 'npc.a',
+      npcName: '靈狗',
+      npcReplyZh: null,
+    }).map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '你: 大家好',
+      '靈狗: ……',
+    ])
   })
 })

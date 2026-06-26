@@ -75,6 +75,33 @@ export function nearestSpeakTarget(nearbyNpcIds: readonly string[], outdoorNpcId
   return outdoorNpcIds[0] ?? null
 }
 
+export function optimisticSpeechLines(input: {
+  baseId: string
+  tick: number
+  playerMessage: string
+  npcId: string
+  npcName: string
+  npcReplyZh: string | null
+}): AreaSubtitleLine[] {
+  const playerLine: AreaSubtitleLine = {
+    id: `${input.baseId}:player`,
+    tick: input.tick,
+    speaker: '你',
+    text: input.playerMessage,
+    tone: 'player',
+    npcId: input.npcId,
+  }
+  const npcLine: AreaSubtitleLine = {
+    id: `${input.baseId}:npc`,
+    tick: input.tick,
+    speaker: input.npcName,
+    text: input.npcReplyZh?.trim() || '……',
+    tone: 'npc',
+    npcId: input.npcId,
+  }
+  return [playerLine, npcLine]
+}
+
 function payloadData(payload: Record<string, unknown>): Record<string, unknown> {
   const data = payload.data
   return isRecord(data) ? data : payload

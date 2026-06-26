@@ -5,7 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.3 ✅ local-ready — 2026-06-26
+## v0.98.4 ✅ local-ready — 2026-06-26
+
+**主題：Mobile Subtitle Send Feedback Fix（手機發話不再像沒反應）**
+
+- ✅ **immediate player echo** — 按「發話」後立刻顯示 `你：...`，不等 API 回來。
+- ✅ **pending NPC line** — 同時顯示 `NPC：……`，讓玩家知道正在等回覆。
+- ✅ **response replacement** — API 成功後用真實 NPC 回覆替換 pending 字幕。
+- ✅ **visible failure** — API 失敗會在字幕行顯示「發話失敗：...」，不只靠 toast。
+- ✅ **mobile button clarity** — busy 狀態從 `…` 改成 `發話中`。
+- ✅ **tests** — `areaSubtitles.test.ts` 新增 optimistic speech line regression。
+- ✅ **Verification** — targeted web test（4）、web build 通過。
+
+---
+
+## v0.98.3 ✅ shipped — 2026-06-26
 
 **主題：Area Dialogue Subtitles（走近 NPC 就看得到附近對話，也能直接發話）**
 
