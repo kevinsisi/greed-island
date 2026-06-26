@@ -5,6 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.7
+
+### Current Version
+`0.97.7` — Long Tick Data Timeout Mitigation：v0.97.6 live 仍可重現資料 API 在 long tick 期間整批 8 秒 timeout。這版把 slow-tick 後的 HTTP recovery window 拉長，並把 world-state 前端 timeout 提高，優先讓手機 UI 拿到真實資料，不再太早掉 fallback / incomplete state。
+
+### Live Evidence Before Fix
+- v0.97.6 live batch probe 每 5 秒打 `/api/version`、`/api/world`、`/api/map`、`/api/npcs`、`/api/events`、`/api/areas`。
+- 多數輪次 < 1s，但撞到 long tick 時出現連續輪次 8s timeout；最嚴重一輪 6/6 endpoints 全 timeout。
+- 同一批 endpoint 等 long tick 結束後可在約 2.5s 內回正確資料，表示資料仍在，問題仍是 Node event loop 被同步 tick 卡住。
+
+### What Shipped
+- **Longer slow-tick cooldown**：`computeNextTickDelayMs()` slow tick cooldown 從 30–60s 改成 120–240s，明確降低玩家刷新撞到下一輪 long tick 的機率。
+- **Longer app-level world refresh timeout**：`MOBILE_LOAD_TIMEOUT_MS` 從 45s 提高到 120s。
+- **Regression coverage**：更新 scheduler cooldown 與 resilientLoad timeout tests。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.7`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimeScheduler.test.ts` — pass（3 tests）
+- `npm run test -w @greed-island/web -- resilientLoad.test.ts` — pass（4 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- This is still a mitigation, not the permanent architecture fix. Permanent fix remains phase-level timing + splitting/yielding the actual slow tick phases so HTTP can run during simulation work.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.6
 
 ### Current Version

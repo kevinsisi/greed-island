@@ -5,6 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.7 ✅ local-ready — 2026-06-26
+
+**主題：Long Tick Data Timeout Mitigation（降低資料 UI 撞 tick timeout）**
+
+- ✅ **live repro** — v0.97.6 live batch probe 仍重現 8 秒 cutoff：同一批 `/api/world`、`/api/map`、`/api/npcs`、`/api/events`、`/api/areas` 在 long tick 中會整批 timeout；等 tick 結束後 45 秒 probe 可在約 2.5 秒拿到正確資料。
+- ✅ **longer recovery window** — slow tick 後下一輪 tick cooldown 從 30–60 秒提高到 120–240 秒，讓手機 UI 有更大的資料讀取空窗；這是明確犧牲 simulation cadence 來保住玩家資料載入。
+- ✅ **frontend timeout guard** — world-state `resilientLoad` timeout 從 45 秒提高到 120 秒，避免還在等待 live tick unblock 時過早切到 fallback / incomplete state。
+- ✅ **Verification** — targeted scheduler/resilient tests（7）、full build、OpenSpec check（15 active changes）、diff check 通過。
+
+---
+
 ## v0.97.6 ✅ local-ready — 2026-06-26
 
 **主題：Hub Map Action Placement Hotfix（地圖互動按鈕回到地圖旁）**

@@ -1,6 +1,9 @@
 // Live simulation ticks can currently take 20s+ on large logs. Keep initial
 // refresh from falling back to fixture data just because the request hit a tick.
-export const MOBILE_LOAD_TIMEOUT_MS = 45_000
+// v0.97.7: live probes still show 8s client cutoffs during a long tick; keep
+// the app-level world-state timeout above the worst observed stall while the
+// server gets a longer HTTP recovery window.
+export const MOBILE_LOAD_TIMEOUT_MS = 120_000
 export const MOBILE_LOAD_RETRIES = 2
 export const MOBILE_LOAD_RETRY_BACKOFF_MS = 700
 

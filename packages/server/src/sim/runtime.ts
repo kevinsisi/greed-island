@@ -346,9 +346,9 @@ const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
-const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 30_000
-const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 60_000
-const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 2
+const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 120_000
+const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 240_000
+const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 4
 
 export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedMs: number }): number {
   if (input.elapsedMs <= input.tickDurationMs) return input.tickDurationMs
