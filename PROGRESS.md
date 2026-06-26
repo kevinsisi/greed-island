@@ -5,6 +5,28 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.0
+
+### Current Version
+`0.98.0` — NPC Interaction Visibility：把「可以跟誰互動」和「NPC 彼此真的有社交事件」直接放到區域場景；NPC 分頁不再因距離把同區 NPC 全部鎖死，登入後可直接點名字對話。NPC_INTERACT 事件也會在場景卡片顯示成最近人際互動證據。
+
+### What Changed
+- **Player interaction affordance**：Area NPC list 登入後可直接點任何同區室外 NPC 開啟對話，不再只靠地圖 proximity click；附近 NPC 仍標示「身邊，可地圖點擊」。
+- **Social proof surface**：場景分頁新增「NPC 互動證據」，把最近 `NPC_INTERACT` 事件格式化顯示，避免世界看起來只有一群人在走路。
+- **Social cadence tuning**：NPC 同 tile 社交事件機率從 `0.08` 提到 `0.25`、互動距離從 2 格放寬到 5 格，讓 live 玩家更常看見交談/爭執事件。
+- **Regression coverage**：新增 `areaSocial.test.ts`，覆蓋 NPC_INTERACT 辨識、姓名格式化、narration 優先。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.0`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcEngine.test.ts runtimePresence.test.ts` — pass（58 tests）
+- `npm run test -w @greed-island/web -- areaSocial.test.ts` — pass（3 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先把互動入口與社交證據露出來。下一刀應做「室內 NPC 彼此互動」與「對話後改變 NPC 計畫/關係」的更深層世界因果，而不是只顯示社交事件。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.9
 
 ### Current Version

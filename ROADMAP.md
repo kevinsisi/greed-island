@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.97.9 ✅ local-ready — 2026-06-26
+## v0.98.0 ✅ local-ready — 2026-06-26
+
+**主題：NPC Interaction Visibility（玩家能直接對話，也看得到 NPC 彼此互動）**
+
+- ✅ **player interaction affordance** — Area NPC 分頁登入後可直接點任何同區室外 NPC 開啟對話；附近 NPC 仍標示可地圖點擊，但不再讓距離規則把整個 NPC list 變成死按鈕。
+- ✅ **social proof surface** — 場景分頁新增「NPC 互動證據」，直接顯示最近 `NPC_INTERACT` 的交談/爭執敘事。
+- ✅ **social cadence tuning** — NPC 同 tile 社交事件機率 `0.08 → 0.25`、互動距離 `2 → 5`，讓 live 更常出現可見社交事件。
+- ✅ **tests** — 新增 `areaSocial.test.ts` 覆蓋互動事件辨識與格式化；server NPC interaction regression tests 仍通過。
+- ✅ **Verification** — targeted server tests（58）、web social tests（3）、full build 通過。
+- ⏳ **Next** — 室內 NPC 彼此互動、玩家對話真正推動 NPC 關係/計畫，避免互動只停在 UI 對話框。
+
+---
+
+## v0.97.9 ✅ shipped — 2026-06-26
 
 **主題：NPC Workplace Occupancy + Chronicle Naturalization（職缺和世界畫面接起來）**
 

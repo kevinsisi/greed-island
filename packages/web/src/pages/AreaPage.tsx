@@ -36,6 +36,7 @@ const AGGRESSIVE_SPECIES_IDS = new Set([
 ])
 import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
+import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -189,6 +190,8 @@ export function AreaPage() {
     return acc
   }, [map.tiles])
 
+  const npcNameById = useMemo(() => new Map(npcs.map((npc) => [npc.id, npc.name] as const)), [npcs])
+
   const occupants = useMemo(
     () => npcs.filter((npc) => npc.location === tileId),
     [npcs, tileId]
@@ -202,6 +205,13 @@ export function AreaPage() {
       .filter((event) => eventBelongsToArea(event, tileId, occupantIds))
       .slice(0, 12)
   }, [events, occupants, tile, tileId])
+
+  const localSocialEvents = useMemo(
+    () => localEvents.filter(isNpcInteractionEvent).slice(0, 3),
+    [localEvents]
+  )
+
+  const interactionReadyCount = outdoorOccupants.length
 
   const mapNpcs = useMemo<AreaMapNpc[]>(
     () =>
@@ -524,6 +534,39 @@ export function AreaPage() {
                   </p>
                   <p className="text-[11px] text-ground-500 italic leading-relaxed">{lore.whisper[locale]}</p>
 
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="border border-ember-800/70 rounded-sharp px-2 py-2 bg-ground-950/50">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-ember-500">
+                        可互動 NPC
+                      </div>
+                      <div className="mt-1 text-[12px] text-ground-100 leading-snug">
+                        {token
+                          ? interactionReadyCount > 0
+                            ? `此區有 ${interactionReadyCount} 位室外 NPC，可在 NPC 分頁直接點名字對話。`
+                            : '此區室外暫時沒有人；進入有人的建築可以對話。'
+                          : '登入後可以點 NPC 名字對話、問事情或交易。'}
+                      </div>
+                    </div>
+                    <div className="border border-cyan-900/70 rounded-sharp px-2 py-2 bg-ground-950/50">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-cyan-300">
+                        NPC 互動證據
+                      </div>
+                      {localSocialEvents.length > 0 ? (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {localSocialEvents.map((event) => (
+                            <li key={event.sequence} className="text-[11px] text-ground-200 leading-snug">
+                              · {formatNpcInteractionEvent(event, npcNameById)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-ground-500 leading-snug">
+                          這一區最近沒有 NPC 對談或爭執；切到「事件」可以看所有活動紀錄。
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {areaState && (
                     <div className="mt-2 pt-2 border-t border-ground-700 flex flex-col gap-1.5">
                       <div className="font-display text-[10px] uppercase tracking-tightest text-ground-400">
@@ -572,22 +615,22 @@ export function AreaPage() {
                           <button
                             key={npc.id}
                             type="button"
-                            disabled={!token || !isNearby}
+                            disabled={!token}
                             onClick={() =>
-                              token && isNearby ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
+                              token ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
                             }
                             className={[
                               'text-left flex items-center gap-3 px-2 py-2 rounded-sharp border transition-colors',
-                              token && isNearby
+                              token
                                 ? 'border-ground-700 hover:border-ember-600 cursor-pointer'
                                 : 'border-ground-800 opacity-50 cursor-not-allowed'
                             ].join(' ')}
-                            title={!token ? '登入後才能互動' : isNearby ? '' : t('npc.tooFarHint')}
+                            title={!token ? '登入後才能互動' : '點擊對話'}
                           >
                             <span
                               className={[
                                 'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
-                                token && isNearby
+                                token
                                   ? 'border-ember-600/60 text-ember-300'
                                   : 'border-ground-700 text-ground-500'
                               ].join(' ')}
@@ -619,11 +662,15 @@ export function AreaPage() {
                               <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
                                 {t('npc.relationship')}{' '}
                                 <span className="text-ground-200">{npc.relationshipScore}</span>
-                                {!isNearby && (
-                                  <span className="ml-2 text-ground-600 normal-case tracking-normal">
-                                    · {t('npc.tooFarBadge')}
+                                {isNearby ? (
+                                  <span className="ml-2 text-ember-400 normal-case tracking-normal">
+                                    · 身邊，可地圖點擊
                                   </span>
-                                )}
+                                ) : token ? (
+                                  <span className="ml-2 text-ground-400 normal-case tracking-normal">
+                                    · 可點名字對話
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </button>
