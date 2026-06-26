@@ -5,7 +5,17 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.97.7 ✅ local-ready — 2026-06-26
+## v0.97.8 ✅ local-ready — 2026-06-26
+
+**主題：Slow Tick Phase Timing Observability（long tick 分段計時）**
+
+- ✅ **phase timing** — scheduled simulation tick 現在會量測 `plan-commands`、`rule-evaluation`、`append-events`、`npc-sqlite-projections`、`projection-fanout`、`tick-listeners`。
+- ✅ **actionable warning** — slow tick warning 會附上最慢 phase summary，例如 `slow phases: projection-fanout=9250ms rule-evaluation=4100ms ...`，下一刀可以直接鎖定真正慢段，而不是再猜。
+- ✅ **regression coverage** — 新增 phase summary helper 測試，保證慢段排序、threshold 過濾穩定。
+- ✅ **Verification** — targeted tests（5）、full build、OpenSpec check（15 active changes）、diff check 通過。
+- ⏳ **Next** — 部署後觀察 live warning，依實際最慢 phase 拆 chunk/yield 或繼續降低同步 fanout。
+
+## v0.97.7 ✅ shipped — 2026-06-26
 
 **主題：Long Tick Data Timeout Mitigation（降低資料 UI 撞 tick timeout）**
 

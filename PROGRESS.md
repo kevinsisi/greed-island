@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.8
+
+### Current Version
+`0.97.8` — Slow Tick Phase Timing Observability：在 scheduled simulation tick 內加入 phase-level timing，slow tick warning 會列出最慢 phase，讓下一刀能根據 live log 鎖定真正卡 HTTP 的同步段。
+
+### What Changed
+- **Server runtime**：`runTick()` 現在回傳 `TickPhaseTiming[]`，scheduled loop 在 tick 超過 cadence 時把 slow phase summary 接到 warning。
+- **Measured phases**：`plan-commands`、`rule-evaluation`、`append-events`、`npc-sqlite-projections`、`projection-fanout`、`tick-listeners`。
+- **Pure helper**：新增 `summarizeSlowTickPhaseTimings()`，threshold 過濾、duration desc 排序、最多顯示 6 段。
+- **Tests**：新增 `runtimePhaseTiming.test.ts`，先 RED 後 GREEN 覆蓋排序與 threshold 行為。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.8`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimePhaseTiming.test.ts runtimeScheduler.test.ts` — pass（5 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版是 observability slice，不直接拆 chunk。下一步應該先看 live slow tick warning 的 `slow phases:`，再對最慢段做 yield/chunk 或 fanout 降載。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.7
 
 ### Current Version

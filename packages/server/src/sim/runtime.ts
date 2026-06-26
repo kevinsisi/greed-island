@@ -349,6 +349,9 @@ const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
 const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 120_000
 const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 240_000
 const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 4
+const SLOW_TICK_PHASE_REPORT_THRESHOLD_MS = 250
+
+export type TickPhaseTiming = Readonly<{ label: string; elapsedMs: number }>
 
 export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedMs: number }): number {
   if (input.elapsedMs <= input.tickDurationMs) return input.tickDurationMs
@@ -356,6 +359,18 @@ export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedM
     SLOW_TICK_MAX_HTTP_COOLDOWN_MS,
     Math.max(SLOW_TICK_MIN_HTTP_COOLDOWN_MS, Math.ceil(input.elapsedMs * SLOW_TICK_HTTP_COOLDOWN_FACTOR))
   )
+}
+
+export function summarizeSlowTickPhaseTimings(
+  timings: readonly TickPhaseTiming[],
+  thresholdMs = SLOW_TICK_PHASE_REPORT_THRESHOLD_MS,
+): string {
+  return timings
+    .filter((phase) => phase.elapsedMs >= thresholdMs)
+    .sort((a, b) => b.elapsedMs - a.elapsedMs)
+    .slice(0, 6)
+    .map((phase) => `${phase.label}=${phase.elapsedMs}ms`)
+    .join(' ')
 }
 
 const COMBAT_BOOT_EVENT_TYPES = [
@@ -916,13 +931,15 @@ export class SimulationRuntime {
       this.timer = null
       if (!this.tickLoopActive) return
       const startedAt = Date.now()
-      this.runTickSafely()
+      const phaseTimings = this.runTickSafely()
       const elapsedMs = Date.now() - startedAt
       const nextDelayMs = computeNextTickDelayMs({ tickDurationMs: this.tickDurationMs, elapsedMs })
       if (elapsedMs > this.tickDurationMs) {
+        const phaseSummary = summarizeSlowTickPhaseTimings(phaseTimings)
         console.warn(
           `[sim] tick ${this.currentTick} took ${elapsedMs}ms; ` +
-            `delaying next tick by ${nextDelayMs}ms to keep HTTP responsive`
+            `delaying next tick by ${nextDelayMs}ms to keep HTTP responsive` +
+            (phaseSummary ? `; slow phases: ${phaseSummary}` : '')
         )
       }
       this.scheduleNextTick(nextDelayMs)
@@ -2479,11 +2496,12 @@ export class SimulationRuntime {
     }
   }
 
-  private runTickSafely(): void {
+  private runTickSafely(): readonly TickPhaseTiming[] {
     try {
-      this.runTick()
+      return this.runTick()
     } catch (err) {
       console.error('[sim] tick failed', err)
+      return []
     }
   }
 
@@ -2516,8 +2534,15 @@ export class SimulationRuntime {
     return this.npcMortalityProjection
   }
 
-  private runTick(): void {
+  private runTick(): readonly TickPhaseTiming[] {
     const nextTick = this.currentTick + 1
+    const phaseTimings: TickPhaseTiming[] = []
+    let phaseStartedAt = Date.now()
+    const recordPhase = (label: string): void => {
+      const now = Date.now()
+      phaseTimings.push({ label, elapsedMs: now - phaseStartedAt })
+      phaseStartedAt = now
+    }
     // Two parallel collections per Living Deterministic World law:
     //   1. stateDrafts — FACT_SET state snapshots (npc state, area
     //      state, building occupants, weather, season, rare window,
@@ -5364,6 +5389,7 @@ export class SimulationRuntime {
     })) {
       commands.push(command)
     }
+    recordPhase('plan-commands')
 
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
@@ -5908,17 +5934,20 @@ export class SimulationRuntime {
         }
       }
     }
+    recordPhase('rule-evaluation')
 
     // Append in one transaction. Normal state snapshots stay before typed events;
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
     const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
+    recordPhase('append-events')
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
       const npcTileMap = this.getLivingNpcLocationMap()
       this.projectCommittedNpcSqliteStores(committed, npcTileMap)
+      recordPhase('npc-sqlite-projections')
       for (const ev of committed) {
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
@@ -6002,6 +6031,7 @@ export class SimulationRuntime {
           }
         }
       }
+      recordPhase('projection-fanout')
     }
 
     this.currentTick = nextTick
@@ -6013,6 +6043,8 @@ export class SimulationRuntime {
         console.error('[sim] tick listener error', err)
       }
     }
+    recordPhase('tick-listeners')
+    return phaseTimings
   }
 
   /**
