@@ -30,7 +30,7 @@ type HubPosition = { x: number; y: number; z: number }
 /**
  * HubPage 採用「地圖主視覺 + 輕量 overlay」設計：
  * - 地圖 (PhaserGame) 是主視覺
- * - 「進入 XXX →」按鈕放在地圖外下方，避免蓋住 NPC 與最下方街區
+ * - 「進入 XXX →」與文明面板按鈕緊貼地圖下方，避免被後續資訊面板隔開
  * - 城市標題列放在地圖外上方，避免遮住主地圖
  * - 行動裝置仍保留 44px 以上觸控目標
  */
@@ -277,41 +277,40 @@ export function HubPage() {
         )}
       </div>
 
+      {/* 地圖互動：緊貼地圖，避免被世界目標/科技等資訊面板隔開。 */}
+      {token && (
+        <div className="mt-2 px-2 flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-2">
+          {currentName && currentDistrict ? (
+            <button
+              type="button"
+              onClick={handleOpenCurrentArea}
+              className="gi-touch min-h-[44px] flex-1 px-5 py-2 inline-flex flex-col items-center justify-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
+            >
+              <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
+                {t('hub.currentArea')}
+              </span>
+              <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
+                {t('hub.openArea', { name: currentName })}
+              </span>
+            </button>
+          ) : (
+            <div className="hidden sm:block flex-1" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCivPanel((v) => !v)}
+            className="gi-touch min-h-[44px] px-4 py-2 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors"
+          >
+            ⚔ 文明面板
+          </button>
+        </div>
+      )}
+
       <WorldCivilizationPanel snapshot={world.worldCivilization} />
 
       {!token && (
         <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
           登入後才能移動、進入街區與互動；目前是只讀瀏覽模式。
-        </div>
-      )}
-
-      {/* 地圖外：進入街區按鈕 (玩家在街區內時才顯示)，不覆蓋 NPC / 碼頭區 */}
-      {token && currentName && currentDistrict && (
-        <div className="mt-3 px-2 flex justify-center">
-          <button
-            type="button"
-            onClick={handleOpenCurrentArea}
-            className="gi-touch min-h-[44px] w-full max-w-[360px] px-5 py-2 inline-flex flex-col items-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
-          >
-            <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
-              {t('hub.currentArea')}
-            </span>
-            <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
-              {t('hub.openArea', { name: currentName })}
-            </span>
-          </button>
-        </div>
-      )}
-
-      {token && (
-        <div className="mt-2 mx-2 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowCivPanel((v) => !v)}
-            className="gi-touch px-3 py-1.5 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors"
-          >
-            ⚔ 文明面板
-          </button>
         </div>
       )}
 

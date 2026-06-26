@@ -5,6 +5,16 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.6 ✅ local-ready — 2026-06-26
+
+**主題：Hub Map Action Placement Hotfix（地圖互動按鈕回到地圖旁）**
+
+- ✅ **map-first controls** — `進入目前位置` 與 `文明面板` 現在緊貼 Hub 地圖下方，不再被「世界目標與科技」資訊面板隔開。
+- ✅ **mobile layout** — 行動版維持 44px+ 觸控目標，按鈕直向排列；桌面版同列排列。
+- ✅ **Verification** — web build、server build、diff check 通過。
+
+---
+
 ## v0.97.5 ✅ local-ready — 2026-06-26
 
 **主題：Tick Projection SQLite Batching（降低 long tick 同步 SQLite fanout 阻塞）**

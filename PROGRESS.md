@@ -5,6 +5,26 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.6
+
+### Current Version
+`0.97.6` — Hub Map Action Placement Hotfix：修正 Hub 行動版地圖互動按鈕被「世界目標與科技」面板擠到下方的反直覺排序。玩家選到街區後，`目前位置 / 進入 {name}` 與 `文明面板` 都緊貼地圖下方。
+
+### What Shipped
+- **Map-adjacent action row**：`HubPage` 將 `進入目前位置` 與 `文明面板` 移到 `PhaserGame` 後、`WorldCivilizationPanel` 前。
+- **Mobile-friendly controls**：行動版維持直向排列與 44px+ 觸控高度；桌面版改為同列排列。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.6`.
+
+### Verification Evidence
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+- `npm run build -w @greed-island/server` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這是 UI placement hotfix；不改地圖狀態、API、simulation 或 EventLog。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.5
 
 ### Current Version
