@@ -921,16 +921,32 @@ export const api = {
   npcInteract: (
     token: string,
     npcId: string,
-    payload: { message?: string; intent?: NpcInteractIntent }
-  ) =>
-    jsonFetch<ServerNpcInteraction>(
+    payload: { message?: string; intent?: NpcInteractIntent },
+    options?: { timeoutMs?: number }
+  ) => {
+    const timeoutMs = options?.timeoutMs
+    if (!timeoutMs) {
+      return jsonFetch<ServerNpcInteraction>(
+        `/npc/${encodeURIComponent(npcId)}/interact`,
+        {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(payload)
+        }
+      )
+    }
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+    return jsonFetch<ServerNpcInteraction>(
       `/npc/${encodeURIComponent(npcId)}/interact`,
       {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       }
-    ),
+    ).finally(() => window.clearTimeout(timer))
+  },
   npcDialogHold: (token: string, npcId: string) =>
     jsonFetch<ServerNpcDialogHold>(
       `/npc/${encodeURIComponent(npcId)}/dialog-hold`,

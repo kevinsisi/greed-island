@@ -5,7 +5,22 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.7 ✅ local-ready — 2026-06-26
+## v0.98.9 ✅ local-ready — 2026-06-26
+
+**主題：Stable Local Shout（不要前端三連打假裝群聊）**
+
+- ✅ **single responder** — inline 附近發話不再對 3 位 NPC 各打一個 `/interact`；一次只送第一順位/最近 NPC，降低等待與失敗率。
+- ✅ **no repeated AI replies** — 字幕最多一位 NPC pending/reply，不再三個人同時回同型句。
+- ✅ **friendly failure** — 失敗只顯示單一「NPC 暫時沒有回應，稍後再試。」或逾時訊息，不再逐人洗 `Load failed`。
+- ✅ **timeout** — inline speech request 加 8s timeout，避免手機 UI 卡太久。
+- ✅ **also includes v0.98.8** — `cognitiveLine` 內心摘要不再進「附近對話字幕」。
+- ✅ **Verification** — `areaSubtitles.test.ts`（9）與 web build 通過。
+
+> 後續正解：新增 server-side local shout command/event，讓附近 NPC 在後端選一兩個回應；不要前端 fan-out single-NPC API。
+
+---
+
+## v0.98.7 ✅ shipped — 2026-06-26
 
 **主題：Behavior Plausibility Projection（不是只修下雨，而是行為合理性）**
 

@@ -81,12 +81,12 @@ describe('areaSubtitles', () => {
     ])
   })
 
-  it('builds ambient nearby NPC chatter from live utterance or cognition, not static canned greetings', () => {
+  it('builds ambient nearby NPC chatter only from actual utterances, not cognition summaries', () => {
     const lines = ambientNpcChatterLines({
       npcs: [
         npc({ id: 'npc.a', name: '靈狗', greetLine: { zh: '「你聞到潮味了嗎？」', en: 'Do you smell the tide?' } }),
         npc({ id: 'npc.b', name: '雨黎', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 87 } }),
-        npc({ id: 'npc.c', name: '岸隅', cognitiveLine: { zh: '得找地方避雨。', en: 'Need shelter.' } }),
+        npc({ id: 'npc.c', name: '岸隅', cognitiveLine: { zh: '岸隅觀察眼前局勢，正在盤算生計、資源與下一個機會。', en: 'Watching the situation.' } }),
         npc({ id: 'npc.d', name: '海映', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 88 } }),
         npc({ id: 'npc.e', name: '眠舟', activity: 'sleep', cognitiveLine: { zh: '夢裡仍聽見潮聲。', en: 'Dreaming.' } }),
       ],
@@ -97,7 +97,6 @@ describe('areaSubtitles', () => {
 
     expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
       '雨黎: 雨太大，攤子先收半邊。',
-      '岸隅: 得找地方避雨。',
     ])
   })
 
@@ -112,7 +111,7 @@ describe('areaSubtitles', () => {
     expect(nearestSpeakTarget([], ['npc.a', 'npc.b'])).toBe('npc.a')
   })
 
-  it('builds one player line and multiple nearby NPC pending lines for local shout', () => {
+  it('builds one player line and at most one NPC pending reply for local shout', () => {
     expect(optimisticLocalShoutLines({
       baseId: 'tmp.2',
       tick: 90,
@@ -124,7 +123,6 @@ describe('areaSubtitles', () => {
     }).map((line) => `${line.speaker}: ${line.text}`)).toEqual([
       '你: 大家聽得到嗎？',
       '阿甲: ……',
-      '阿乙: 聽得到。',
     ])
   })
 

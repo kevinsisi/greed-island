@@ -435,31 +435,32 @@ export function AreaPage() {
       ].slice(-8))
       setSubtitleDraft('')
       try {
-        const results = await Promise.all(recipients.map(async (npc) => {
-          const result = await api.npcInteract(token, npc.id, { message })
-          return { npc, result }
-        }))
-        const baseId = results[0]?.result.worldEventId ?? `local-${Date.now()}`
+        const respondent = recipients[0]
+        if (!respondent) return
+        const result = await api.npcInteract(token, respondent.id, { message }, { timeoutMs: 8000 })
+        const baseId = result.worldEventId ?? `local-${Date.now()}`
         const replacement = optimisticLocalShoutLines({
           baseId,
-          tick: results[0]?.result.tick ?? pendingTick,
+          tick: result.tick ?? pendingTick,
           playerMessage: message,
-          recipients: results.map(({ npc, result }) => ({
-            id: npc.id,
-            name: npc.name,
+          recipients: [{
+            id: respondent.id,
+            name: respondent.name,
             replyZh: result.line.zh,
-          })),
+          }],
         })
         setOptimisticSubtitles((prev) => [
           ...prev.filter((line) => !line.id.startsWith(`${pendingBaseId}:`)),
           ...replacement,
         ].slice(-8))
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '發話失敗'
+        const msg = err instanceof DOMException && err.name === 'AbortError'
+          ? 'NPC 回應逾時，稍後再試。'
+          : 'NPC 暫時沒有回應，稍後再試。'
         setSubtitleError(msg)
         setOptimisticSubtitles((prev) => prev.map((line) =>
           line.id.startsWith(`${pendingBaseId}:npc`)
-            ? { ...line, text: `發話失敗：${msg}`, tone: 'system' }
+            ? { ...line, text: msg, tone: 'system' }
             : line
         ))
         showFeedback(false, msg)

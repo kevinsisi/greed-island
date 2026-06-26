@@ -113,7 +113,6 @@ export function ambientNpcChatterLines(input: {
   const lines: AreaSubtitleLine[] = []
   for (const npc of nearby) {
     const text = npc.recentUtterance?.text?.trim()
-      || npc.cognitiveLine?.zh?.trim()
     if (!text || seenText.has(text)) continue
     seenText.add(text)
     lines.push({
@@ -142,14 +141,17 @@ export function optimisticLocalShoutLines(input: {
     text: input.playerMessage,
     tone: 'player',
   }
-  const npcLines = input.recipients.map((npc): AreaSubtitleLine => ({
-    id: `${input.baseId}:npc:${npc.id}`,
-    tick: input.tick,
-    speaker: npc.name,
-    text: npc.replyZh?.trim() || '……',
-    tone: 'npc',
-    npcId: npc.id,
-  }))
+  const respondent = input.recipients[0] ?? null
+  const npcLines = respondent
+    ? [{
+      id: `${input.baseId}:npc:${respondent.id}`,
+      tick: input.tick,
+      speaker: respondent.name,
+      text: respondent.replyZh?.trim() || '……',
+      tone: 'npc' as const,
+      npcId: respondent.id,
+    }]
+    : []
   return [playerLine, ...npcLines]
 }
 

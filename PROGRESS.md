@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.9
+
+### Current Version
+`0.98.9` — Stable Local Shout：修正附近發話慢、重複、失敗洗版。前端不再用三次 `/npc/:id/interact` 假裝群聊；一次發話只送第一順位/最近的可用 NPC，避免三個 AI 回同型句與任一失敗拖垮整批。字幕仍保留「你」的即時喊話，但最多只顯示一位 NPC 的 pending/reply。失敗時改成單一友善系統訊息，不再逐人顯示 `發話失敗：Load failed`。
+
+Also includes v0.98.8 behavior: nearby subtitles no longer treat `cognitiveLine` inner-state summaries as spoken dialogue, so NPCs stop repeating「觀察眼前局勢，正在盤算生計、資源與下一個機會」。
+
+### What Changed
+- **Single responder**：inline 附近發話不再 fan-out 3 個 single-NPC API request；只送第一順位/最近 NPC。
+- **No repeated pending replies**：`optimisticLocalShoutLines` 最多產生一位 NPC pending/reply，避免三人同時 `……` 或同型句。
+- **Timeout**：inline speech request 加 8s timeout，避免手機 UI 卡太久。
+- **Friendly failure**：失敗只顯示單一「NPC 暫時沒有回應，稍後再試。」或逾時訊息，不再暴露 `Load failed`。
+- **No cognition subtitles**：`ambientNpcChatterLines` 不再 fallback 到 `cognitiveLine.zh`。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.9`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Notes / Next
+- 這是熱修。真正的群體喊話應改為 server-side local shout command/event，讓後端選 1–2 位附近 NPC 回應；不要前端 fan-out 多個 single-NPC interact request。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.7
 
 ### Current Version
