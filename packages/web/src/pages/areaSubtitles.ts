@@ -159,7 +159,9 @@ export function dedupeSubtitleLines(lines: readonly AreaSubtitleLine[], limit = 
   const seen = new Set<string>()
   const deduped: AreaSubtitleLine[] = []
   for (const line of lines) {
-    const key = `${line.speaker}\u0000${line.text}`
+    const key = line.tone === 'player'
+      ? `${line.tone}\u0000${line.speaker}\u0000${line.text}`
+      : `${line.tone}\u0000${line.text}`
     if (seen.has(key)) continue
     seen.add(key)
     deduped.push(line)

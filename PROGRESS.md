@@ -5,6 +5,23 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.12
+
+### Current Version
+`0.98.12` — Clone Subtitle Dedup：修正附近對話字幕仍可能顯示多位 NPC 講完全相同一句（例如「夜市那條街，問阿鬼，他什麼都聽得見。」）。字幕去重現在對 NPC/system 行以文字內容去重，不再用 speaker+text；玩家行仍保留 speaker+text，避免不同玩家同句被誤刪。
+
+### What Changed
+- **Cross-speaker NPC dedupe**：`dedupeSubtitleLines()` 對非玩家字幕用 `tone + text` 作 key。
+- **Player-safe dedupe**：玩家字幕仍用 `tone + speaker + text`。
+- **Regression test**：新增 clone NPC speech 測試，覆蓋海石/星沉同句只留一行。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.12`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.11
 
 ### Current Version

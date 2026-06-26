@@ -126,12 +126,12 @@ describe('areaSubtitles', () => {
     ])
   })
 
-  it('dedupes repeated subtitle lines from optimistic echo and committed events', () => {
+  it('dedupes repeated subtitle lines from optimistic echo and clone NPC speech', () => {
     const lines = dedupeSubtitleLines([
       { id: 'a', tick: 1, speaker: '你', text: '阿伽好', tone: 'player' },
       { id: 'b', tick: 2, speaker: '海石', text: '「夜市那條街，問阿鬼，他什麼都聽得見。」', tone: 'npc', npcId: 'npc.a' },
       { id: 'c', tick: 3, speaker: '你', text: '阿伽好', tone: 'player' },
-      { id: 'd', tick: 4, speaker: '海石', text: '「夜市那條街，問阿鬼，他什麼都聽得見。」', tone: 'npc', npcId: 'npc.a' },
+      { id: 'd', tick: 4, speaker: '星沉', text: '「夜市那條街，問阿鬼，他什麼都聽得見。」', tone: 'npc', npcId: 'npc.b' },
     ])
 
     expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([

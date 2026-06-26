@@ -5,7 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.11 ✅ local-ready — 2026-06-26
+## v0.98.12 ✅ local-ready — 2026-06-26
+
+**主題：Clone Subtitle Dedup（多位 NPC 同句只顯示一次）**
+
+- ✅ **cross-speaker NPC dedupe** — 附近字幕現在對 NPC/system 行用文字內容去重，不再讓海石、星沉同一句各佔一行。
+- ✅ **player-safe** — 玩家字幕仍保留 speaker+text key，避免不同玩家同句被誤刪。
+- ✅ **regression** — 新增 clone NPC speech 測試。
+- ✅ **Verification** — web subtitle test（9）、web build 通過。
+
+---
+
+## v0.98.11 ✅ shipped — 2026-06-26
 
 **主題：Local Shout Responder Rotation（附近喊話不要每次同一人接）**
 
