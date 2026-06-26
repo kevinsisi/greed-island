@@ -430,6 +430,7 @@ export type ServerNpcInteraction = {
     occurredAt: string
     intent: NpcInteractIntent
   }
+  worldEventId?: string | null
 }
 
 export type ServerApiKeySummary = {

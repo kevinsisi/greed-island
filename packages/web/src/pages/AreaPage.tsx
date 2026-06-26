@@ -38,6 +38,7 @@ import { areaOutdoorNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
 import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
+import { areaSubtitleLines, nearestSpeakTarget, type AreaSubtitleLine } from './areaSubtitles'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -96,6 +97,10 @@ export function AreaPage() {
   const [animalCombatConfirm, setAnimalCombatConfirm] = useState<{ speciesId: string; animalId: string } | null>(null)
   const [animalCombatSession, setAnimalCombatSession] = useState<ServerCombatSession | null>(null)
   const [animalCombatHand, setAnimalCombatHand] = useState<ServerCombatHandCard[] | null>(null)
+  const [subtitleDraft, setSubtitleDraft] = useState('')
+  const [subtitleBusy, setSubtitleBusy] = useState(false)
+  const [subtitleError, setSubtitleError] = useState<string | null>(null)
+  const [optimisticSubtitles, setOptimisticSubtitles] = useState<AreaSubtitleLine[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -157,6 +162,9 @@ export function AreaPage() {
 
   useEffect(() => {
     setPlayerPosition(null)
+    setSubtitleDraft('')
+    setSubtitleError(null)
+    setOptimisticSubtitles([])
   }, [tileId])
 
   usePresenceTouch(tile ? tileId : null, playerPosition?.tileId === tileId ? playerPosition : null)
@@ -210,6 +218,33 @@ export function AreaPage() {
   const localSocialEvents = useMemo(
     () => localEvents.filter(isNpcInteractionEvent).slice(0, 3),
     [localEvents]
+  )
+
+  const nearbyNpcIdList = useMemo(
+    () => outdoorOccupants.filter((npc) => nearbyNpcIds.has(npc.id)).map((npc) => npc.id),
+    [nearbyNpcIds, outdoorOccupants]
+  )
+  const subtitleTargetNpcId = useMemo(
+    () => nearestSpeakTarget(nearbyNpcIdList, outdoorOccupants.map((npc) => npc.id)),
+    [nearbyNpcIdList, outdoorOccupants]
+  )
+  const subtitleTargetNpc = useMemo(
+    () => outdoorOccupants.find((npc) => npc.id === subtitleTargetNpcId) ?? null,
+    [outdoorOccupants, subtitleTargetNpcId]
+  )
+  const liveSubtitles = useMemo(
+    () => areaSubtitleLines({
+      events: localEvents,
+      npcNameById,
+      nearbyNpcIds: new Set(nearbyNpcIdList.length > 0 ? nearbyNpcIdList : outdoorOccupants.map((npc) => npc.id)),
+      playerAccountId: account ? String(account.id) : null,
+      limit: 6,
+    }),
+    [account, localEvents, nearbyNpcIdList, npcNameById, outdoorOccupants]
+  )
+  const subtitleFeed = useMemo(
+    () => [...liveSubtitles, ...optimisticSubtitles].slice(-8),
+    [liveSubtitles, optimisticSubtitles]
   )
 
   const interactionReadyCount = outdoorOccupants.length
@@ -355,6 +390,46 @@ export function AreaPage() {
     window.setTimeout(() => setActionFeedback(null), 2000)
   }, [])
 
+  const handleSubtitleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (!token || !subtitleTargetNpc || subtitleBusy) return
+      const message = subtitleDraft.trim()
+      if (!message) return
+      setSubtitleBusy(true)
+      setSubtitleError(null)
+      try {
+        const result = await api.npcInteract(token, subtitleTargetNpc.id, { message })
+        const baseId = result.worldEventId ?? `local-${Date.now()}`
+        const playerLine: AreaSubtitleLine = {
+          id: `${baseId}:player`,
+          tick: result.tick,
+          speaker: '你',
+          text: message,
+          tone: 'player',
+          npcId: subtitleTargetNpc.id,
+        }
+        const npcLine: AreaSubtitleLine = {
+          id: `${baseId}:npc`,
+          tick: result.tick,
+          speaker: subtitleTargetNpc.name,
+          text: result.line.zh,
+          tone: 'npc',
+          npcId: subtitleTargetNpc.id,
+        }
+        setOptimisticSubtitles((prev) => [...prev, playerLine, npcLine].slice(-8))
+        setSubtitleDraft('')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '發話失敗'
+        setSubtitleError(msg)
+        showFeedback(false, msg)
+      } finally {
+        setSubtitleBusy(false)
+      }
+    },
+    [showFeedback, subtitleBusy, subtitleDraft, subtitleTargetNpc, token]
+  )
+
   const refreshEcology = useCallback(() => {
     api.areaEcology(tileId).then((eco) => setEcology(eco)).catch(() => {})
   }, [tileId])
@@ -464,6 +539,57 @@ export function AreaPage() {
           onFish={handleFish}
           controlsEnabled={!!token}
         />
+      </div>
+
+      <div className="mt-2 mx-2 border border-cyan-800/70 bg-ground-950/90 rounded-sharp p-2 shadow-lg">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="font-display text-[10px] uppercase tracking-tightest text-cyan-300">
+            附近對話字幕
+          </div>
+          <div className="text-[10px] text-ground-500 truncate">
+            {subtitleTargetNpc
+              ? nearbyNpcIdList.length > 0
+                ? `對 ${subtitleTargetNpc.name} 發話`
+                : `同區發話：${subtitleTargetNpc.name}`
+              : '靠近 NPC 就能聽見與發話'}
+          </div>
+        </div>
+        <div className="max-h-28 overflow-y-auto flex flex-col gap-1 pr-1">
+          {subtitleFeed.length > 0 ? (
+            subtitleFeed.map((line) => (
+              <div key={line.id} className="text-[12px] leading-snug text-ground-200">
+                <span className={[
+                  'font-display text-[10px] uppercase tracking-tightest mr-1',
+                  line.tone === 'player' ? 'text-ember-300' : line.tone === 'npc' ? 'text-cyan-200' : 'text-ground-500'
+                ].join(' ')}>
+                  {line.speaker}
+                </span>
+                <span>{line.text}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-[12px] text-ground-500 italic">
+              走近 NPC 後，附近說話、NPC 對談、玩家發話都會出現在這裡。
+            </div>
+          )}
+        </div>
+        <form onSubmit={handleSubtitleSubmit} className="mt-2 flex gap-2">
+          <input
+            value={subtitleDraft}
+            onChange={(event) => setSubtitleDraft(event.target.value)}
+            disabled={!token || !subtitleTargetNpc || subtitleBusy}
+            placeholder={subtitleTargetNpc ? `對 ${subtitleTargetNpc.name} 說話…` : '靠近 NPC 後可以發話'}
+            className="min-w-0 flex-1 bg-ground-900 border border-ground-700 focus:border-cyan-500 rounded-sharp px-2 py-2 text-[13px] text-ground-100 placeholder:text-ground-600 outline-none disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!token || !subtitleTargetNpc || subtitleBusy || subtitleDraft.trim().length === 0}
+            className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border border-cyan-600 text-cyan-200 hover:bg-cyan-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {subtitleBusy ? '…' : '發話'}
+          </button>
+        </form>
+        {subtitleError && <div className="mt-1 text-[11px] text-rust-300">{subtitleError}</div>}
       </div>
 
       {!token && (

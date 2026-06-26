@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.2 ✅ local-ready — 2026-06-26
+## v0.98.3 ✅ local-ready — 2026-06-26
+
+**主題：Area Dialogue Subtitles（走近 NPC 就看得到附近對話，也能直接發話）**
+
+- ✅ **nearby subtitle feed** — Area 地圖下方新增「附近對話字幕」，把附近 `NPC_INTERACT`、`PLAYER_NPC_DIALOGUE` 顯示成字幕行。
+- ✅ **player speech input** — 字幕欄可直接輸入發話；送出走既有 `/api/npc/:id/interact`，仍會提交 replayable `PLAYER_NPC_DIALOGUE` world event。
+- ✅ **nearby target** — 優先對身邊 NPC 發話；沒有目標時提示靠近 NPC。
+- ✅ **optimistic transcript** — 成功送出後立即顯示「你」與 NPC 回覆，世界事件 refresh 追上後仍可回放。
+- ✅ **tests** — 新增 `areaSubtitles.test.ts` 覆蓋 NPC 對談字幕、玩家/NPC 對話字幕、發話目標選擇。
+- ✅ **Verification** — full `npm test`（server 1275 + web 134）、targeted web tests（9）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.2 ✅ shipped — 2026-06-26
 
 **主題：Behavior-Aligned Area UI（吃飯就顯示吃飯，爭執就顯示爭執）**
 

@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.3
+
+### Current Version
+`0.98.3` — Area Dialogue Subtitles：區域地圖下方新增「附近對話字幕」即時紀錄，玩家走近 NPC 時可看到附近 NPC 對談、爭執、玩家/NPC 對話回合，也能直接在字幕欄對附近 NPC 發話。
+
+### What Changed
+- **Subtitle feed helper**：新增 `areaSubtitles`，把 `NPC_INTERACT` 與 `PLAYER_NPC_DIALOGUE` event 轉成玩家可讀的字幕行，支援 rule-engine `payload.data`。
+- **Inline speech input**：AreaPage 新增字幕輸入欄；送出後呼叫既有 `/api/npc/:id/interact`，因此玩家發話仍提交 replayable `PLAYER_NPC_DIALOGUE` world event。
+- **Nearby target selection**：字幕欄優先對玩家身邊 NPC 發話；沒有附近 NPC 時提示靠近 NPC。
+- **Optimistic transcript**：發話成功後立即把「你」與 NPC 回覆補到字幕 feed，等 SSE/event refresh 追上。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.3`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 134 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts areaSocial.test.ts areaBehavior.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先接同區/附近字幕與玩家發話入口；下一刀可把 subtitle feed 改成 server-side area conversation projection，避免只依賴目前 world-state recent events window。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.2
 
 ### Current Version
