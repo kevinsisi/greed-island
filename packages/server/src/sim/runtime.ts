@@ -283,6 +283,7 @@ import {
   WorldCivilizationProjection,
   planWorldCivilizationCommands,
   type WorldCivilizationEvidence,
+  type WorldCivilizationSnapshot,
 } from './worldCivilizationRuntime.js'
 import { commitNpcCognitiveUpdate, deriveNpcCognitiveEvolutionSummary, proposeDeterministicNpcReflection, validateNpcReflectionProposal, type NpcCognitiveEvolutionSummary, type NpcEvolutionRelationshipContext } from './npcCognitiveEvolution.js'
 import { NpcCognitiveProjectionStore, NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES } from './npcCognitiveProjection.js'
@@ -550,6 +551,7 @@ export type WorldSnapshot = Readonly<{
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldCivilization: WorldCivilizationSnapshot
   worldConfig: Readonly<{
     tickDurationMs: number
     ticksPerDay: number
@@ -1121,7 +1123,9 @@ export class SimulationRuntime {
         migrationRoutes: this.animalMigrationProjection.list(),
         predatorHunger: this.predatorHungerProjection.list(),
         npcRumors: this.rumorProjection.list(),
+        worldCivilization: this.worldCivilizationProjection.snapshot(),
       },
+      worldCivilization: this.worldCivilizationProjection.snapshot(),
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
         ticksPerDay: TICKS_PER_DAY,

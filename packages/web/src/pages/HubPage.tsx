@@ -6,6 +6,7 @@ import { useAuth } from '../state/AuthContext'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { SinceLastVisitPanel } from '../components/game/SinceLastVisitPanel'
 import { PlayerCivilizationPanel } from '../components/game/PlayerCivilizationPanel'
+import { WorldCivilizationPanel } from '../components/game/WorldCivilizationPanel'
 import { PhaserGame } from '../game/PhaserGame'
 import { api, type ServerAreaState, type ServerNearbyPlayer } from '../api/client'
 import {
@@ -275,6 +276,8 @@ export function HubPage() {
           </div>
         )}
       </div>
+
+      <WorldCivilizationPanel snapshot={world.worldCivilization} />
 
       {!token && (
         <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">

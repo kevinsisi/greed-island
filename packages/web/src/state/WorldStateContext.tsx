@@ -253,6 +253,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
           eventCount: serverWorld.eventCount,
           npcCount: serverWorld.npcCount,
           facts: serverWorld.facts,
+          worldCivilization: serverWorld.worldCivilization ?? { goals: [], technologies: [] },
           worldConfig: normalizeWorldConfig(serverWorld.worldConfig),
           generatedAt: serverWorld.generatedAt
         }

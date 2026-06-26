@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.3
+
+### Current Version
+`0.97.3` — World Civilization Visibility：把 v0.97.2 的世界目標 / 科技 substrate 從後端投影推到玩家可見層。`/api/world`、dashboard world snapshot 與 SSE snapshot 現在有一級 `worldCivilization` 欄位，Hub 會顯示世界目標、完成目標、科技數、目標進度與 technology evidence count。
+
+### What Shipped
+- **World API visibility**：`WorldSnapshot` 新增 `worldCivilization`，同時保留 `facts.worldCivilization` 給 generic fact consumers。
+- **Frontend contracts**：web API/state types 新增 `WorldCivilizationGoal`、`WorldTechnology`、`WorldCivilizationSnapshot`。
+- **Hub panel**：新增 `WorldCivilizationPanel`，在 Hub 地圖下方顯示世界目標與科技，玩家不用看 log 才知道島正在演化。
+- **Deterministic display projection**：新增 `summarizeWorldCivilizationPanel`，active goals 優先、高進度優先、科技 newest-first，並有單元測試。
+- **Fixture visibility**：fixture mode 也有示範 civilization data，離線/載入前不會是空畫面。
+- **OpenSpec**：新增 `world-civilization-visibility`。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.3`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- worldCivilizationPanelData.test.ts` — pass（2 tests）
+- `npm run test -w @greed-island/server -- worldCivilizationRuntime.test.ts` — pass（4 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+
+### Known Notes
+- This is the first player-facing civilization surface, still intentionally compact. Next valuable step is to link each technology back to Chronicle / evidence events so players can inspect 「這項技術是怎麼被世界學出來的」。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.2
 
 ### Current Version

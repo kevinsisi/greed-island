@@ -75,6 +75,31 @@ export const fixtureWorld: WorldSnapshot = {
     economy: { gold: 12048, manaIndex: 0.62 },
     season: '雨之月',
   },
+  worldCivilization: {
+    goals: [
+      {
+        goalId: 'goal.fixture.construction',
+        domain: 'construction',
+        title: '建造知識體系',
+        rationale: '潮鳴市開始整理重複出現的建造經驗。',
+        targetProgress: 100,
+        progress: 35,
+        declaredAtTick: 4080,
+        completed: false,
+        completedAtTick: null,
+      },
+    ],
+    technologies: [
+      {
+        techId: 'tech.fixture.learning',
+        domain: 'learning',
+        title: '學徒筆記',
+        discoveredAtTick: 4100,
+        evidenceEventIds: ['fixture.event.1', 'fixture.event.2', 'fixture.event.3'],
+        unlocks: ['learning-coordination'],
+      },
+    ],
+  },
   worldConfig: { tickDurationMs: 5000, ticksPerDay: 17280, timezone: 'GMT+8', timezoneOffsetMinutes: 480 },
   generatedAt: new Date().toISOString(),
 }

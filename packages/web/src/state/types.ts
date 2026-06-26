@@ -3,12 +3,39 @@
 // types here in v1 — once a packages/shared workspace exists, they
 // will move there.
 
+export interface WorldCivilizationGoal {
+  goalId: string
+  domain: string
+  title: string
+  rationale: string
+  targetProgress: number
+  progress: number
+  declaredAtTick: number
+  completed: boolean
+  completedAtTick: number | null
+}
+
+export interface WorldTechnology {
+  techId: string
+  domain: string
+  title: string
+  discoveredAtTick: number
+  evidenceEventIds: readonly string[]
+  unlocks: readonly string[]
+}
+
+export interface WorldCivilizationSnapshot {
+  goals: readonly WorldCivilizationGoal[]
+  technologies: readonly WorldTechnology[]
+}
+
 export interface WorldSnapshot {
   tick: number
   lastSequence: number
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldCivilization?: WorldCivilizationSnapshot
   worldConfig: {
     tickDurationMs: number
     ticksPerDay: number

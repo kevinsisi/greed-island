@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.3 ✅ local-ready — 2026-06-26
+
+**主題：World Civilization Visibility（讓玩家看見世界目標與科技）**
+
+- ✅ **World API snapshot** — `/api/world` / dashboard / SSE snapshot expose 一級 `worldCivilization`，同時保留 `facts.worldCivilization`。
+- ✅ **Hub civilization panel** — Hub 地圖下方顯示 active goals、completed goals、technologies、目標進度與科技 evidence count。
+- ✅ **frontend contracts** — 新增 web API/state civilization types，fixture mode 也有示範資料。
+- ✅ **deterministic display helper** — `summarizeWorldCivilizationPanel` 保證 active/high-progress/newest-first ordering，並有 web 單元測試。
+- ✅ **Verification** — targeted web/server tests（6）、full build、OpenSpec check（15 active changes）通過。
+
+---
+
 ## v0.97.2 ✅ local-ready — 2026-06-26
 
 **主題：World Civilization Goals & Technology Substrate（世界開始有自己的目標與科技事實）**

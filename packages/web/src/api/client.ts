@@ -91,12 +91,39 @@ export type ServerNpcPartitionStats = {
   period: number
 }
 
+export type ServerWorldCivilizationGoal = {
+  goalId: string
+  domain: string
+  title: string
+  rationale: string
+  targetProgress: number
+  progress: number
+  declaredAtTick: number
+  completed: boolean
+  completedAtTick: number | null
+}
+
+export type ServerWorldTechnology = {
+  techId: string
+  domain: string
+  title: string
+  discoveredAtTick: number
+  evidenceEventIds: readonly string[]
+  unlocks: readonly string[]
+}
+
+export type ServerWorldCivilizationSnapshot = {
+  goals: readonly ServerWorldCivilizationGoal[]
+  technologies: readonly ServerWorldTechnology[]
+}
+
 export type ServerWorldSnapshot = {
   tick: number
   lastSequence: number
   eventCount: number
   npcCount: number
   facts: Record<string, unknown>
+  worldCivilization?: ServerWorldCivilizationSnapshot
   worldConfig?: {
     tickDurationMs: number
     ticksPerDay: number
