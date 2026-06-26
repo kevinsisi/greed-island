@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.1
+
+### Current Version
+`0.97.1` — NPC World-Law Freeform Agency：把預設 NPC 自主行動從固定 `survival/economic/social/ecosystem` intent menu 往「世界準則內的具體自由行動」推進。runtime 現在會優先把有意義的壓力轉成 `NPC_FREEFORM_ACTION_PROPOSED`，讓居民依需求、人生目標、記憶、認知傾向、職業與地區條件提出 work / build / travel / social / ecosystem 類具體行為；`NPC_AGENT_DECISION` 保留為無壓力 fallback。
+
+### What Shipped
+- **World-law agency planner**：新增 `npcWorldLawActionPlanner.ts`，把 needs、life goal、memory context、cognitive profile、tile scores、current intent override 轉成 bounded freeform command payload。
+- **Runtime preference shift**：autonomous tick 若能形成世界準則下的具體行為，改 commit `NPC_FREEFORM_ACTION_PROPOSED`，不再優先輸出重複的 generic planner decision。
+- **Personality divergence**：同樣壓力下，economic NPC 會偏向職業工作與經濟 tile；survival NPC 會偏向安全 tile；build/social/ecosystem 也各有具體行為路徑。
+- **Generated tile naming**：world-law summary / narration / motivation 使用 generated tile 中文名，不把 raw tile id 洩到玩家可見文字。
+- **OpenSpec**：新增 `npc-world-law-freeform-agency` change，明確定義「NPC 最大自由度仍必須通過 Rule Engine / EventLog」的安全邊界。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.1`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcWorldLawActionPlanner.test.ts runtimeIntentResolution.test.ts npcAgent.test.ts` — pass（20 tests / 3 files）
+- `npm run build:server` — pass
+- `npm run openspec:check` — pass（13 active changes）
+
+### Known Notes
+- This slice changes the runtime event source so the main Chronicle has more concrete grounded freeform events available, but it does not yet redesign Chronicle aggregation/UI filtering itself.
+- The AI freeform agent path remains bounded and additive; deterministic world-law agency now gives the world better behavior even when no AI provider is available.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.0
 
 ### Current Version

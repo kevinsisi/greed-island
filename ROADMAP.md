@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.1 ✅ local-ready — 2026-06-26
+
+**主題：NPC World-Law Freeform Agency（NPC 依世界準則提出具體自由行動）**
+
+- ✅ **world-law agency planner** — 新增 `npcWorldLawActionPlanner`，由 needs、life goal、memory、cognitive profile、tile scores、職業與 current intent override 推導 bounded freeform action。
+- ✅ **generic decision demotion** — autonomous runtime 在壓力有意義時優先 commit `NPC_FREEFORM_ACTION_PROPOSED`；`NPC_AGENT_DECISION` 只保留為無壓力 fallback，降低「某某前往某區處理生計與資源」洗版。
+- ✅ **concrete action variety** — economic → role-grounded work、survival → safe travel、housing/build-city → build、social/form-family → social scene、ecosystem → environment work；同樣壓力下人格會分歧。
+- ✅ **generated tile display names** — summary / narration / motivation 使用中文 tile name，不把 raw generated tile id 顯示給玩家。
+- ✅ **OpenSpec** — 新增 `npc-world-law-freeform-agency`，把「NPC 最大自由度，但 Rule Engine / EventLog 仍是唯一世界事實來源」寫成規格。
+- ✅ **Verification** — targeted server tests（20）、server build、OpenSpec check（13 active changes）通過。
+
+---
+
 ## v0.97.0 ✅ local-ready — 2026-06-26
 
 **主題：NPC Reflection Events MVP（NPC 長期反省成為可 replay 的 EventLog 事實）**

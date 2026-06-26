@@ -278,6 +278,7 @@ import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
+import { planNpcWorldLawAction } from './npcWorldLawActionPlanner.js'
 import { commitNpcCognitiveUpdate, deriveNpcCognitiveEvolutionSummary, proposeDeterministicNpcReflection, validateNpcReflectionProposal, type NpcCognitiveEvolutionSummary, type NpcEvolutionRelationshipContext } from './npcCognitiveEvolution.js'
 import { NpcCognitiveProjectionStore, NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES } from './npcCognitiveProjection.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
@@ -6240,6 +6241,40 @@ export class SimulationRuntime {
         tileNames,
         cognitive,
       })
+      const worldLawAction = planNpcWorldLawAction({
+        npcId: profile.id,
+        npcNameZh: profile.name.zh,
+        roleZh: profile.role.zh,
+        currentTile: state.tile,
+        defaultTile: profile.defaultLocation,
+        currentTick: nextTick,
+        threshold: INTENT_URGENCY_THRESHOLD,
+        needs: life.needs,
+        lifeGoal: life.goal,
+        currentOverride: state.intentOverride ?? null,
+        adjacentTiles,
+        tileScores,
+        tileNames,
+        cognitive,
+        memoryContext,
+      })
+      if (worldLawAction) {
+        commands.push(makeLivingWorldCommand(
+          'NPC_FREEFORM_ACTION_PROPOSED',
+          profile.id,
+          'npc',
+          nextTick,
+          submittedAt,
+          {
+            ...worldLawAction,
+            motivation: makeMotivation(
+              `${profile.name.zh}不是從固定 intent menu 被派工，而是依世界準則、個人需求、記憶與職業身分提出自由行動：${worldLawAction.resolved.summary}`,
+              'NPC deterministic world-law freeform agency'
+            ),
+          }
+        ))
+        continue
+      }
       commands.push(makeLivingWorldCommand(
         'NPC_AGENT_DECISION',
         profile.id,

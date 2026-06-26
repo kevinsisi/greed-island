@@ -215,7 +215,7 @@ describe('SimulationRuntime intent resolution', () => {
     }
   })
 
-  it('commits deterministic autonomous planner decisions without an AI agent', () => {
+  it('commits deterministic world-law freeform actions without an AI agent', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
     const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
@@ -237,16 +237,18 @@ describe('SimulationRuntime intent resolution', () => {
 
       internal.runTick()
 
-      const plannerEvents = eventStore
+      const freeformEvents = eventStore
         .readEvents()
-        .filter((row) => row.eventType === 'NPC_AGENT_DECISION')
-      expect(plannerEvents.length).toBeGreaterThan(0)
-      const event = plannerEvents.find((row) => row.actorId === due.id)
-      const payload = event?.payload as { data?: { chosenIntent?: string; targetTile?: string; reason?: string } } | undefined
-      expect(payload?.data?.chosenIntent).toBe('economic')
-      expect(payload?.data?.targetTile).toBe(targetTile)
-      expect(payload?.data?.reason).toContain('autonomous-planner')
-      expect(internal.npcEngine.getState(due.id)?.intentOverride?.reason).toContain('agent:autonomous-planner')
+        .filter((row) => row.eventType === 'NPC_FREEFORM_ACTION_PROPOSED')
+      expect(freeformEvents.length).toBeGreaterThan(0)
+      const event = freeformEvents.find((row) => row.actorId === due.id)
+      const payload = event?.payload as { data?: { accepted?: boolean; proposal?: { action?: string; reason?: string }; resolved?: { kind?: string; targetTile?: string; summary?: string } } } | undefined
+      expect(payload?.data?.accepted).toBe(true)
+      expect(payload?.data?.resolved?.kind).toBe('travel')
+      expect(payload?.data?.resolved?.targetTile).toBe(targetTile)
+      expect(payload?.data?.proposal?.reason).toContain('世界壓力')
+      expect(payload?.data?.resolved?.summary).not.toContain('生計與資源')
+      expect(internal.npcEngine.getState(due.id)?.intentOverride?.reason).toContain('freeform-agent')
     } finally {
       runtime.stop()
       db.close()
@@ -285,12 +287,12 @@ describe('SimulationRuntime intent resolution', () => {
 
       const event = eventStore
         .readEvents()
-        .find((row) => row.eventType === 'NPC_AGENT_DECISION' && row.actorId === due.id)
-      const payload = event?.payload as { data?: { reason?: string; narration?: string; motivation?: { explanation?: string } } } | undefined
-      expect(payload?.data?.reason).toContain('荒土地帶')
+        .find((row) => row.eventType === 'NPC_FREEFORM_ACTION_PROPOSED' && row.actorId === due.id)
+      const payload = event?.payload as { data?: { proposal?: { reason?: string }; narration?: string; motivation?: { explanation?: string }; resolved?: { summary?: string } } } | undefined
+      expect(payload?.data?.resolved?.summary).toContain('荒土地帶')
       expect(payload?.data?.narration).toContain('荒土地帶')
       expect(payload?.data?.motivation?.explanation).toContain('荒土地帶')
-      expect(payload?.data?.reason).not.toContain('t_frontier_badlands')
+      expect(payload?.data?.resolved?.summary).not.toContain('t_frontier_badlands')
       expect(payload?.data?.narration).not.toContain('t_frontier_badlands')
       expect(payload?.data?.motivation?.explanation).not.toContain('t_frontier_badlands')
     } finally {
