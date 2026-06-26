@@ -346,6 +346,18 @@ const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
+const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 30_000
+const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 60_000
+const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 2
+
+export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedMs: number }): number {
+  if (input.elapsedMs <= input.tickDurationMs) return input.tickDurationMs
+  return Math.min(
+    SLOW_TICK_MAX_HTTP_COOLDOWN_MS,
+    Math.max(SLOW_TICK_MIN_HTTP_COOLDOWN_MS, Math.ceil(input.elapsedMs * SLOW_TICK_HTTP_COOLDOWN_FACTOR))
+  )
+}
+
 const COMBAT_BOOT_EVENT_TYPES = [
   'COMBAT_INITIATE',
   'COMBAT_PLAYER_ACTION',
@@ -898,7 +910,7 @@ export class SimulationRuntime {
     this.combatRuntime.shutdownAll()
   }
 
-  private scheduleNextTick(): void {
+  private scheduleNextTick(delayMs = this.tickDurationMs): void {
     if (!this.tickLoopActive || this.timer !== null) return
     this.timer = setTimeout(() => {
       this.timer = null
@@ -906,11 +918,15 @@ export class SimulationRuntime {
       const startedAt = Date.now()
       this.runTickSafely()
       const elapsedMs = Date.now() - startedAt
+      const nextDelayMs = computeNextTickDelayMs({ tickDurationMs: this.tickDurationMs, elapsedMs })
       if (elapsedMs > this.tickDurationMs) {
-        console.warn(`[sim] tick ${this.currentTick} took ${elapsedMs}ms; delaying next tick to keep HTTP responsive`)
+        console.warn(
+          `[sim] tick ${this.currentTick} took ${elapsedMs}ms; ` +
+            `delaying next tick by ${nextDelayMs}ms to keep HTTP responsive`
+        )
       }
-      this.scheduleNextTick()
-    }, this.tickDurationMs)
+      this.scheduleNextTick(nextDelayMs)
+    }, delayMs)
   }
 
   attachCombatStore(store: CombatStore): void {

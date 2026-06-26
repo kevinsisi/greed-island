@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.4 ✅ local-ready — 2026-06-26
+
+**主題：Refresh Hydration Reliability Hotfix（重整不再因 long tick 直接落到錯誤/fixture 資料）**
+
+- ✅ **root cause** — live v0.97.3 refresh-like concurrent API probe 在 8 秒 timeout 下常整批失敗；server 同時每輪 tick 仍可達 13–24 秒，前端 timeout 短於實際 long tick block window。
+- ✅ **adaptive tick cooldown** — slow tick 後下一輪延後 30–60 秒，降低 HTTP 被連續 long tick 壓住的機率，優先保住玩家 refresh/data hydration。
+- ✅ **load timeout alignment** — web `resilientLoad` timeout 提高到 45 秒；current live 用同 timeout profile 可成功等到 map/world/NPC 真實資料。
+- ✅ **single-flight refresh** — 15 秒 poll / mobile refresh / recovery retry 不再疊出多批 concurrent world/map/NPC/events/cards requests。
+- ✅ **Verification** — targeted scheduler/web refresh tests（21）、full server tests（1267）、full web tests（125）、full build、OpenSpec all 62 items 通過；CI/CD/live smoke pending。
+
+---
+
 ## v0.97.3 ✅ local-ready — 2026-06-26
 
 **主題：World Civilization Visibility（讓玩家看見世界目標與科技）**

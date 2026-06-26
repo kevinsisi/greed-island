@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resilientLoad, withTimeout } from './resilientLoad'
+import { MOBILE_LOAD_TIMEOUT_MS, resilientLoad, withTimeout } from './resilientLoad'
 
 describe('resilientLoad', () => {
   afterEach(() => {
@@ -41,5 +41,9 @@ describe('resilientLoad', () => {
     await vi.advanceTimersByTimeAsync(10)
 
     await assertion
+  })
+
+  it('keeps refresh loads longer than the live slow-tick window', () => {
+    expect(MOBILE_LOAD_TIMEOUT_MS).toBeGreaterThanOrEqual(45_000)
   })
 })

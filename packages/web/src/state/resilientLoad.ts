@@ -1,4 +1,6 @@
-export const MOBILE_LOAD_TIMEOUT_MS = 8_000
+// Live simulation ticks can currently take 20s+ on large logs. Keep initial
+// refresh from falling back to fixture data just because the request hit a tick.
+export const MOBILE_LOAD_TIMEOUT_MS = 45_000
 export const MOBILE_LOAD_RETRIES = 2
 export const MOBILE_LOAD_RETRY_BACKOFF_MS = 700
 

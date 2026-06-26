@@ -5,6 +5,35 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.4
+
+### Current Version
+`0.97.4` — Refresh Hydration Reliability Hotfix：live v0.97.3 在重整時仍容易顯示 fixture / 不完整資料。重現顯示一組瀏覽器 refresh 會同時打的 `/healthz`、`/api/map`、`/api/world`、`/api/npcs`、`/api/events`、`/api/areas` 在 8 秒 timeout 下常整批失敗；server logs 同時顯示 simulation tick 仍需 13–24 秒，表示問題是單輪 long tick 阻塞 HTTP event loop，而前端 8 秒 cutoff 太短。
+
+### What Shipped
+- **Adaptive slow-tick cooldown**：`SimulationRuntime` 在 tick 超過 configured cadence 時，下一輪 tick 改延後 30–60 秒（依 elapsed time 計算），替 HTTP 留出更大的安靜窗，避免 20 秒 tick 之後 5 秒內又立刻開始下一輪。
+- **Refresh timeout widened**：web `resilientLoad` timeout 從 8 秒提高到 45 秒，讓重整剛好撞到 live long tick 時仍能等到 server 真實資料，而不是直接判失敗回 fixture。
+- **Single-flight refresh guard**：`WorldStateContext` 的 15 秒 poll / mobile refresh / fixture recovery 共用 single-flight guard；前一批 refresh 還在等 server 時不會再疊新的 5-request 批次。
+- **Regression coverage**：新增 scheduler cooldown、single-flight refresh guard 單元測試，並讓 `resilientLoad` 測試鎖住 45 秒以上 timeout。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.4`.
+
+### Verification Evidence
+- Live reproduction before fix：8 秒 refresh-like concurrent probe 連續多輪整批 timeout；同一組 endpoint 用 45 秒 timeout 在 current live v0.97.3 全部成功（約 19–23 秒），包含 map 9 tiles、world animalPopulation 47、NPC 76。
+- Live server logs before fix：recent ticks took 13,571ms、20,639ms、19,356ms、16,735ms、23,989ms，仍會撞到 frontend 8 秒 timeout。
+- `npm run test -w @greed-island/server -- runtimeScheduler.test.ts runtimeLargeLogHydration.test.ts npcCognitiveProjection.test.ts worldCivilizationRuntime.test.ts` — pass（11 tests / 4 files）
+- `npm run test -w @greed-island/web -- resilientLoad.test.ts singleFlight.test.ts visibleFixtureRecovery.test.ts refreshGeneration.test.ts` — pass（10 tests / 4 files）
+- `npm run test -w @greed-island/server` — pass（1267 tests / 163 files）
+- `npm run test -w @greed-island/web` — pass（125 tests / 24 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npx openspec validate --all --strict` — pass（62 items）
+
+### Known Notes
+- CI/CD and live smoke are pending after this hotfix commit/push.
+- This deliberately slows simulation cadence after pathological slow ticks; it does not disable AI/NPC agent and does not bypass Command → Rule Engine → Event.
+- Long-term root cause remains tick workload optimization / yielding inside tick phases. This hotfix restores refresh reliability without rewriting the simulation pipeline.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.3
 
 ### Current Version

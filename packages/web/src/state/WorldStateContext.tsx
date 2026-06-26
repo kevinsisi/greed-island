@@ -32,6 +32,7 @@ import { createFixtureRecoveryScheduler } from './fixtureRecoveryRetry'
 import { installMobileRefreshTriggers } from './mobileRefreshTriggers'
 import { createRefreshGenerationGuard } from './refreshGeneration'
 import { resilientLoad } from './resilientLoad'
+import { createSingleFlight } from './singleFlight'
 
 interface WorldStateValue {
   world: WorldSnapshot
@@ -109,6 +110,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     const refreshGuard = createRefreshGenerationGuard()
+    const refreshSingleFlight = createSingleFlight<void>()
     const fixtureRecovery = createFixtureRecoveryScheduler({
       hasServerWorld: () => hasServerWorldRef.current,
       refresh: () => void refreshAll(),
@@ -129,7 +131,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       if (!cancelled && (generation === undefined || isCurrentRefresh(generation))) setServerNpcs(npcs)
     }
 
-    const refreshAll = async () => {
+    const refreshAll = () => refreshSingleFlight.run(async () => {
       const generation = refreshGuard.next()
       const requests = [
         refreshWorld(),
@@ -156,7 +158,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
           : null
       )
       if (failed) fixtureRecovery.schedule()
-    }
+    })
 
     refreshAll()
     const pollTimer = window.setInterval(refreshAll, POLL_FALLBACK_MS)
