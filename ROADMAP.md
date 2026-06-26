@@ -5,7 +5,7 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.15 ✅ local-ready — 2026-06-26
+## v0.98.15 ✅ shipped — 2026-06-26
 
 **主題：Local Shout AI Timeout Guard（附近發話不等到手機先逾時）**
 
@@ -13,6 +13,7 @@
 - ✅ **fallback before UI failure** — OpenCode 慢回或不回時，server 改回 v0.98.13 identity-grounded fallback，仍回 `200` / `replySource: "fallback"`。
 - ✅ **AI still enabled** — 快速 OpenCode 回覆仍走 `replySource: "ai"`；不是關閉 agent。
 - ✅ **regression** — mock 慢 OpenCode message endpoint 不回應時，local shout 在 1 秒內 fallback。
+- ✅ **live verified** — `hunter.sisihome.org` health 回 `0.98.15`；live local-shout smoke `7022ms` 回 fallback，低於前端 8 秒 timeout。
 
 ---
 

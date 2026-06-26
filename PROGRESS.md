@@ -8,7 +8,7 @@ developer. Keep latest status at the top.
 ## 2026-06-26 — Handoff Snapshot @ v0.98.15
 
 ### Current Version
-`0.98.15` — Local Shout AI Timeout Guard：修正 v0.98.14 把附近發話接回 AI 後，手機前端 8 秒 timeout 會先於慢 OpenCode 回覆發生，導致「NPC 回應逾時」。`POST /api/npc/local-shout` 現在對整條 AI provider chain 最多等 6 秒；超時就回到 v0.98.13 grounded fallback，保留 AI 可用時的回覆，但不讓手機 UI 先失敗。
+`0.98.15` — Local Shout AI Timeout Guard 已部署到 dev/live。修正 v0.98.14 把附近發話接回 AI 後，手機前端 8 秒 timeout 會先於慢 OpenCode 回覆發生，導致「NPC 回應逾時」。`POST /api/npc/local-shout` 現在對整條 AI provider chain 最多等 6 秒；超時就回到 v0.98.13 grounded fallback，保留 AI 可用時的回覆，但不讓手機 UI 先失敗。
 
 ### What Changed
 - `packages/server/src/http/npc.ts`
@@ -30,6 +30,11 @@ developer. Keep latest status at the top.
 - `npm test` — pass（server 1279 tests + web 141 tests）
 - `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
 - `npm run openspec:check` — pass
+- GitHub Actions CI `28245805348` — pass（OpenSpec validate + build/typecheck/test；Node.js 20 deprecation annotation remains known non-blocking）
+- GitHub Actions Deploy Dev `28245908417` — pass（Docker build/push + desktop restart/smoke；Node.js 20 deprecation annotation remains known non-blocking）
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.15`, `ok=true`, tick `287776` during verification.
+- Live local shout smoke over `https://hunter.sisihome.org/api/npc/local-shout` — `200` in `7022ms`, `replySource="fallback"`, `aiError="Local shout AI timeout after 6000ms"`, `worldEventId=event_83bf86ea596d1e1c0ec9b94aff6cb729`.
+- Live logs after smoke: `greed-island-server` showed expected `[npc] local-shout AI dialog failed, using fallback Local shout AI timeout after 6000ms`; `provider-home` had no new `ConfigInvalidError` / config errors.
 
 ### Next Slice
 - 若仍想提升體驗，可把 local shout pending 文案改成「正在等附近 NPC 回應…」，但根因修正是 server-side timeout/fallback，不是只改 UI。
