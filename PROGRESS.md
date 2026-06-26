@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.5
+
+### Current Version
+`0.98.5` — Local Shout & Subtitle Dedupe：字幕輸入改成「向附近 NPC 喊話」，不再鎖死單一目標；附近多位 NPC 會一起收到玩家發話並各自回應；字幕 feed 會去除 optimistic echo / committed events 造成的重複行，並補上 NPC 自主 utterance 與附近 ambient chatter。
+
+### What Changed
+- **Local shout audience**：新增 `nearbySpeechRecipients`，優先選玩家身邊 NPC，最多 3 位；沒有距離資料時 fallback 到同區 1 位。
+- **Multi-NPC optimistic transcript**：新增 `optimisticLocalShoutLines`，一次顯示一行「你」與多位 NPC pending/reply 行。
+- **Subtitle dedupe**：新增 `dedupeSubtitleLines`，避免同一句玩家發話或 NPC 回覆在 optimistic / SSE / EventLog 追上後重複出現。
+- **Real speech sources**：字幕 feed 支援 `NPC_FREEFORM_ACTION_PROPOSED.proposal.utterance`，沒有近期事件時也會用附近 NPC 的 `recentUtterance` / greeting / cognitive line 當 ambient chatter。
+- **UI copy**：手機上改顯示 `向附近 N 人發話` / `向附近 N 人說話…`，不再誤導成只能對單一 NPC 私訊。
+- **Regression coverage**：`areaSubtitles.test.ts` 覆蓋 freeform utterance、ambient chatter、local shout audience、多 NPC optimistic lines、dedupe。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.5`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 140 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這版仍透過既有 `/api/npc/:id/interact` 對多位 NPC fan-out；每位 NPC 都會產生自己的 replayable `PLAYER_NPC_DIALOGUE` event，但前端字幕會把重複的玩家發話壓成一行。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.4
 
 ### Current Version

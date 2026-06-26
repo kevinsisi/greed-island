@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { EventSummary } from '../state/types'
-import { areaSubtitleLines, nearestSpeakTarget, optimisticSpeechLines } from './areaSubtitles'
+import type { EventSummary, NpcSummary } from '../state/types'
+import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, nearestSpeakTarget, optimisticLocalShoutLines, optimisticSpeechLines } from './areaSubtitles'
 
 function ev(input: Partial<EventSummary> & Pick<EventSummary, 'eventType' | 'payload'>): EventSummary {
   return {
@@ -11,6 +11,20 @@ function ev(input: Partial<EventSummary> & Pick<EventSummary, 'eventType' | 'pay
     occurredAt: input.occurredAt ?? '2026-06-26T00:00:00.000Z',
     payload: input.payload,
     narration: input.narration ?? null,
+  }
+}
+
+function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
+  return {
+    ...input,
+    id: input.id,
+    name: input.name ?? '阿甲',
+    role: input.role ?? '旅人',
+    location: input.location ?? 't_central',
+    relationshipScore: input.relationshipScore ?? 50,
+    lastActedTick: input.lastActedTick ?? 0,
+    internalState: input.internalState ?? {},
+    deceased: input.deceased ?? false,
   }
 }
 
@@ -50,9 +64,75 @@ describe('areaSubtitles', () => {
     ])
   })
 
+  it('turns NPC freeform utterances into spoken subtitle lines', () => {
+    const lines = areaSubtitleLines({
+      events: [ev({
+        eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
+        payload: { npcId: 'npc.a', tile: 't_central', proposal: { utterance: '得先量出空地。' } },
+        narration: '阿甲查看空地。',
+      })],
+      npcNameById: new Map([['npc.a', '海石']]),
+      nearbyNpcIds: new Set(['npc.a']),
+      playerAccountId: 'acct.1',
+    })
+
+    expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '海石: 得先量出空地。',
+    ])
+  })
+
+  it('builds ambient nearby NPC chatter when no recent speech event exists', () => {
+    const lines = ambientNpcChatterLines({
+      npcs: [npc({ id: 'npc.a', name: '靈狗', greetLine: { zh: '「你聞到潮味了嗎？」', en: 'Do you smell the tide?' } })],
+      nearbyNpcIds: new Set(['npc.a']),
+      tick: 88,
+      limit: 2,
+    })
+
+    expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '靈狗: 「你聞到潮味了嗎？」',
+    ])
+  })
+
+  it('targets nearby NPCs as a local shout instead of locking speech to one NPC', () => {
+    expect(nearbySpeechRecipients(['npc.b', 'npc.c'], ['npc.a', 'npc.b', 'npc.c'])).toEqual(['npc.b', 'npc.c'])
+    expect(nearbySpeechRecipients([], ['npc.a', 'npc.b'])).toEqual(['npc.a'])
+    expect(nearbySpeechRecipients(['npc.a', 'npc.b', 'npc.c', 'npc.d'], ['npc.a', 'npc.b', 'npc.c', 'npc.d'])).toEqual(['npc.a', 'npc.b', 'npc.c'])
+  })
+
   it('prefers a nearby NPC as inline speech target', () => {
     expect(nearestSpeakTarget(['npc.b'], ['npc.a', 'npc.b'])).toBe('npc.b')
     expect(nearestSpeakTarget([], ['npc.a', 'npc.b'])).toBe('npc.a')
+  })
+
+  it('builds one player line and multiple nearby NPC pending lines for local shout', () => {
+    expect(optimisticLocalShoutLines({
+      baseId: 'tmp.2',
+      tick: 90,
+      playerMessage: '大家聽得到嗎？',
+      recipients: [
+        { id: 'npc.a', name: '阿甲', replyZh: null },
+        { id: 'npc.b', name: '阿乙', replyZh: '聽得到。' },
+      ],
+    }).map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '你: 大家聽得到嗎？',
+      '阿甲: ……',
+      '阿乙: 聽得到。',
+    ])
+  })
+
+  it('dedupes repeated subtitle lines from optimistic echo and committed events', () => {
+    const lines = dedupeSubtitleLines([
+      { id: 'a', tick: 1, speaker: '你', text: '阿伽好', tone: 'player' },
+      { id: 'b', tick: 2, speaker: '海石', text: '「夜市那條街，問阿鬼，他什麼都聽得見。」', tone: 'npc', npcId: 'npc.a' },
+      { id: 'c', tick: 3, speaker: '你', text: '阿伽好', tone: 'player' },
+      { id: 'd', tick: 4, speaker: '海石', text: '「夜市那條街，問阿鬼，他什麼都聽得見。」', tone: 'npc', npcId: 'npc.a' },
+    ])
+
+    expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '你: 阿伽好',
+      '海石: 「夜市那條街，問阿鬼，他什麼都聽得見。」',
+    ])
   })
 
   it('builds an immediate optimistic player line before the server replies', () => {

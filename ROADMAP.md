@@ -5,7 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.4 ✅ local-ready — 2026-06-26
+## v0.98.5 ✅ local-ready — 2026-06-26
+
+**主題：Local Shout & Subtitle Dedupe（地圖附近喊話、多 NPC 回應、字幕不重複）**
+
+- ✅ **local shout audience** — 字幕輸入改成向附近 NPC 喊話，最多 3 位附近 NPC 接收；沒有距離資料時 fallback 同區 1 位。
+- ✅ **multi-NPC replies** — 同一句玩家發話只顯示一次，多位 NPC 各自顯示 pending / 回覆。
+- ✅ **dedupe feed** — optimistic echo、SSE、EventLog 追上後不再把同一句 `你：...` / NPC 回覆刷兩次。
+- ✅ **more real speech** — 字幕支援 NPC 自主 `utterance`，沒有近期 event 時顯示附近 NPC ambient chatter。
+- ✅ **mobile copy** — UI 改為 `向附近 N 人發話` / `向附近 N 人說話…`，不再像只能私訊一個目標。
+- ✅ **tests** — `areaSubtitles.test.ts` 覆蓋 freeform utterance、ambient chatter、local shout audience、多 NPC optimistic lines、dedupe。
+- ✅ **Verification** — full `npm test`（server 1275 + web 140）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.4 ✅ shipped — 2026-06-26
 
 **主題：Mobile Subtitle Send Feedback Fix（手機發話不再像沒反應）**
 

@@ -1,4 +1,4 @@
-import type { EventSummary } from '../state/types'
+import type { EventSummary, NpcSummary } from '../state/types'
 
 export type AreaSubtitleTone = 'npc' | 'player' | 'system'
 
@@ -64,15 +64,103 @@ export function areaSubtitleLines(input: {
         })
       }
     }
+
+    if (event.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') {
+      const data = payloadData(event.payload)
+      const npcId = typeof data.npcId === 'string' ? data.npcId : null
+      if (!npcId || !input.nearbyNpcIds.has(npcId)) continue
+      const proposal = isRecord(data.proposal) ? data.proposal : null
+      const utterance = typeof proposal?.utterance === 'string' ? proposal.utterance.trim() : ''
+      if (!utterance) continue
+      lines.push({
+        id: `${event.sequence}:freeform-utterance`,
+        tick: event.tick,
+        speaker: input.npcNameById.get(npcId) ?? npcId,
+        text: utterance,
+        tone: 'npc',
+        npcId,
+      })
+    }
   }
   return lines.slice(-limit)
 }
 
 export function nearestSpeakTarget(nearbyNpcIds: readonly string[], outdoorNpcIds: readonly string[]): string | null {
-  for (const id of nearbyNpcIds) {
-    if (outdoorNpcIds.includes(id)) return id
+  return nearbySpeechRecipients(nearbyNpcIds, outdoorNpcIds, 1)[0] ?? null
+}
+
+export function nearbySpeechRecipients(
+  nearbyNpcIds: readonly string[],
+  outdoorNpcIds: readonly string[],
+  limit = 3
+): string[] {
+  const outdoor = new Set(outdoorNpcIds)
+  const nearby = nearbyNpcIds.filter((id) => outdoor.has(id))
+  const recipients = nearby.length > 0 ? nearby : outdoorNpcIds.slice(0, 1)
+  return recipients.slice(0, limit)
+}
+
+export function ambientNpcChatterLines(input: {
+  npcs: readonly NpcSummary[]
+  nearbyNpcIds: ReadonlySet<string>
+  tick: number
+  limit?: number
+}): AreaSubtitleLine[] {
+  const limit = input.limit ?? 3
+  const nearby = input.npcs.filter((npc) => input.nearbyNpcIds.has(npc.id))
+  return nearby
+    .map((npc): AreaSubtitleLine | null => {
+      const text = npc.recentUtterance?.text?.trim()
+        || npc.greetLine?.zh?.trim()
+        || npc.cognitiveLine?.zh?.trim()
+      if (!text) return null
+      return {
+        id: `ambient:${npc.id}`,
+        tick: input.tick,
+        speaker: npc.name,
+        text,
+        tone: 'npc',
+        npcId: npc.id,
+      }
+    })
+    .filter((line): line is AreaSubtitleLine => line !== null)
+    .slice(0, limit)
+}
+
+export function optimisticLocalShoutLines(input: {
+  baseId: string
+  tick: number
+  playerMessage: string
+  recipients: readonly { id: string; name: string; replyZh: string | null }[]
+}): AreaSubtitleLine[] {
+  const playerLine: AreaSubtitleLine = {
+    id: `${input.baseId}:player`,
+    tick: input.tick,
+    speaker: '你',
+    text: input.playerMessage,
+    tone: 'player',
   }
-  return outdoorNpcIds[0] ?? null
+  const npcLines = input.recipients.map((npc): AreaSubtitleLine => ({
+    id: `${input.baseId}:npc:${npc.id}`,
+    tick: input.tick,
+    speaker: npc.name,
+    text: npc.replyZh?.trim() || '……',
+    tone: 'npc',
+    npcId: npc.id,
+  }))
+  return [playerLine, ...npcLines]
+}
+
+export function dedupeSubtitleLines(lines: readonly AreaSubtitleLine[], limit = 8): AreaSubtitleLine[] {
+  const seen = new Set<string>()
+  const deduped: AreaSubtitleLine[] = []
+  for (const line of lines) {
+    const key = `${line.speaker}\u0000${line.text}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(line)
+  }
+  return deduped.slice(-limit)
 }
 
 export function optimisticSpeechLines(input: {
