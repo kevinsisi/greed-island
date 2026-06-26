@@ -143,10 +143,22 @@ export function createNpcRouter(input: {
       ? input.runtime.getNpcs()
       : []
     const liveNpcById = new Map(liveNpcs.map((npc) => [npc.id, npc] as const))
-    const npcId = candidateNpcIds.find((id) => {
+    const localCandidateIds = candidateNpcIds.filter((id) => {
       const npc = liveNpcById.get(id)
       return npc?.location === tileId && !input.runtime.getNpcMortalityProjection().isDeceased(id)
-    }) ?? null
+    })
+    const npcId = [...localCandidateIds]
+      .sort((a, b) => {
+        const relA = input.store.getRelation(claims.sub, a)
+        const relB = input.store.getRelation(claims.sub, b)
+        const lastA = relA?.lastInteractionTick ?? Number.NEGATIVE_INFINITY
+        const lastB = relB?.lastInteractionTick ?? Number.NEGATIVE_INFINITY
+        if (lastA !== lastB) return lastA - lastB
+        const countA = relA?.interactionCount ?? 0
+        const countB = relB?.interactionCount ?? 0
+        if (countA !== countB) return countA - countB
+        return localCandidateIds.indexOf(a) - localCandidateIds.indexOf(b)
+      })[0] ?? null
     if (!npcId) {
       res.status(404).json({ error: 'NO_LOCAL_NPC', message: '附近沒有可回應的 NPC。' })
       return

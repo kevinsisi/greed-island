@@ -5,6 +5,22 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.11
+
+### Current Version
+`0.98.11` — Local Shout Responder Rotation：後端 `POST /api/npc/local-shout` 不再永遠挑 candidate 第一位 NPC。現在同區可回應 NPC 會依玩家對該 NPC 的 `lastInteractionTick`、`interactionCount` 排序，優先讓最近沒回過的人接話，降低連續喊話一直同一人、同一種 fallback 句型的重複感。
+
+### What Changed
+- **Responder rotation**：local shout 選擇 responder 時避開剛回答過玩家的 NPC。
+- **Deterministic ordering**：同分時保留 candidate 原順序，仍可 replay/debug。
+- **Regression test**：新增「剛回過的 NPC 不應優先接下一次附近發話」測試。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.11`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（7 tests）
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.10
 
 ### Current Version

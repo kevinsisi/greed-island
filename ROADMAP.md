@@ -5,7 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.10 ✅ local-ready — 2026-06-26
+## v0.98.11 ✅ local-ready — 2026-06-26
+
+**主題：Local Shout Responder Rotation（附近喊話不要每次同一人接）**
+
+- ✅ **recent responder avoidance** — `POST /api/npc/local-shout` 選 responder 時，優先挑玩家最近沒互動過的同區 NPC。
+- ✅ **less repetition** — 連續喊話不再一直 candidate 第一位 NPC 回，降低同 NPC / 同 fallback 句型重複感。
+- ✅ **deterministic tie-break** — 同分時保留前端候選順序，方便 replay/debug。
+- ✅ **Verification** — server npc router test（7）通過。
+
+---
+
+## v0.98.10 ✅ shipped — 2026-06-26
 
 **主題：Server-side Local Shout（真正附近發話 endpoint）**
 
