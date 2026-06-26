@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.97.2
+
+### Current Version
+`0.97.2` — World Civilization Goals & Technology Substrate：把專案主軸「會自主運轉、建造、學習、發展科技與目標的 Greed Island」落成第一個 durable substrate。世界現在能從已 committed 的學習 / 建造 / 生產 evidence 形成 `WORLD_GOAL_DECLARED` 與 `WORLD_TECH_DISCOVERED`，並用 `WorldCivilizationProjection` 從 EventLog replay 出目前世界目標與技術。
+
+### What Shipped
+- **World-civilization commands/events**：新增 `WORLD_GOAL_DECLARED`、`WORLD_GOAL_PROGRESS_RECORDED`、`WORLD_TECH_DISCOVERED`，全部走 LivingWorld Rule Engine。
+- **Technology must have evidence**：技術發現必須帶非空 `evidenceEventIds`；沒有已存在事件證據的技術會被拒絕，避免 AI 或 runtime 憑空創造文明真相。
+- **Replayable projection**：新增 `WorldCivilizationProjection`，可從 EventLog 重建世界目標進度與已發現技術。
+- **Deterministic planner**：新增 `planWorldCivilizationCommands`，把重複出現的 NPC 學習、師徒完成、建造進度、道路/牆/升級/加工等 evidence 轉成世界層級目標與技術。
+- **Runtime wiring**：tick 會收集近期 committed evidence，產生世界文明 commands；small-log boot、deferred hydration、event fanout 都接上 projection。
+- **OpenSpec**：新增 `world-civilization-goals-tech`，把世界目標 / 技術 substrate 寫成規格。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.2`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- worldCivilizationRuntime.test.ts npcWorldLawActionPlanner.test.ts runtimeIntentResolution.test.ts` — pass（14 tests / 3 files）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（14 active changes）
+
+### Known Notes
+- This is substrate, not final gameplay UI：世界已有可 replay 的 goals / tech facts，但還沒有玩家-facing technology tree UI。
+- 下一步應把 Chronicle / World API 顯示世界目標與技術，讓玩家看見島正在自主演化。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.97.1
 
 ### Current Version

@@ -77,6 +77,9 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'SEASON_CHANGE',
   'WORLD_EVENT_SPAWN',
   'WORLD_EVENT_END',
+  'WORLD_GOAL_DECLARED',
+  'WORLD_GOAL_PROGRESS_RECORDED',
+  'WORLD_TECH_DISCOVERED',
   'BUILDING_ENTER',
   'BUILDING_LEAVE',
   'RARE_WINDOW_OPEN',
@@ -904,6 +907,35 @@ export type WorldEventEndCmd = Readonly<{
   type: string
   scope: string
   motivation?: EventMotivation
+}>
+
+export type WorldGoalDeclaredCmd = Readonly<{
+  goalId: string
+  domain: string
+  title: string
+  rationale: string
+  targetProgress: number
+  declaredAtTick: number
+  narration: string
+}>
+
+export type WorldGoalProgressRecordedCmd = Readonly<{
+  goalId: string
+  progressDelta: number
+  sourceEventType: string
+  sourceId: string
+  recordedAtTick: number
+  narration: string
+}>
+
+export type WorldTechDiscoveredCmd = Readonly<{
+  techId: string
+  domain: string
+  title: string
+  discoveredAtTick: number
+  evidenceEventIds: readonly string[]
+  unlocks: readonly string[]
+  narration: string
 }>
 
 export type BuildingEnterCmd = Readonly<{
@@ -1821,6 +1853,9 @@ export type LivingWorldCommandPayload =
   | SeasonChangeCmd
   | WorldEventSpawnCmd
   | WorldEventEndCmd
+  | WorldGoalDeclaredCmd
+  | WorldGoalProgressRecordedCmd
+  | WorldTechDiscoveredCmd
   | BuildingEnterCmd
   | BuildingLeaveCmd
   | RareWindowOpenCmd
@@ -2416,6 +2451,38 @@ const VALIDATORS: Readonly<
     if (typeof p.templateId !== 'string') return 'templateId required'
     if (typeof p.type !== 'string') return 'type required'
     if (typeof p.scope !== 'string') return 'scope required'
+    return null
+  },
+  WORLD_GOAL_DECLARED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.goalId !== 'string' || p.goalId.length === 0) return 'goalId required'
+    if (typeof p.domain !== 'string' || p.domain.length === 0) return 'domain required'
+    if (typeof p.title !== 'string' || p.title.length === 0) return 'title required'
+    if (typeof p.rationale !== 'string' || p.rationale.length === 0) return 'rationale required'
+    if (typeof p.targetProgress !== 'number' || !Number.isFinite(p.targetProgress) || p.targetProgress <= 0) return 'targetProgress required (>0)'
+    if (typeof p.declaredAtTick !== 'number' || !Number.isInteger(p.declaredAtTick) || p.declaredAtTick < 0) return 'declaredAtTick required'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  WORLD_GOAL_PROGRESS_RECORDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.goalId !== 'string' || p.goalId.length === 0) return 'goalId required'
+    if (typeof p.progressDelta !== 'number' || !Number.isFinite(p.progressDelta) || p.progressDelta <= 0) return 'progressDelta required (>0)'
+    if (typeof p.sourceEventType !== 'string' || p.sourceEventType.length === 0) return 'sourceEventType required'
+    if (typeof p.sourceId !== 'string' || p.sourceId.length === 0) return 'sourceId required'
+    if (typeof p.recordedAtTick !== 'number' || !Number.isInteger(p.recordedAtTick) || p.recordedAtTick < 0) return 'recordedAtTick required'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
+    return null
+  },
+  WORLD_TECH_DISCOVERED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.techId !== 'string' || p.techId.length === 0) return 'techId required'
+    if (typeof p.domain !== 'string' || p.domain.length === 0) return 'domain required'
+    if (typeof p.title !== 'string' || p.title.length === 0) return 'title required'
+    if (typeof p.discoveredAtTick !== 'number' || !Number.isInteger(p.discoveredAtTick) || p.discoveredAtTick < 0) return 'discoveredAtTick required'
+    if (!Array.isArray(p.evidenceEventIds) || p.evidenceEventIds.length === 0 || p.evidenceEventIds.some((id) => typeof id !== 'string' || id.length === 0)) return 'evidenceEventIds required'
+    if (!Array.isArray(p.unlocks) || p.unlocks.some((id) => typeof id !== 'string' || id.length === 0)) return 'unlocks must be string array'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   },
   BUILDING_ENTER: (p) => {

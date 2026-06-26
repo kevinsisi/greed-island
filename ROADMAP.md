@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.97.2 ✅ local-ready — 2026-06-26
+
+**主題：World Civilization Goals & Technology Substrate（世界開始有自己的目標與科技事實）**
+
+- ✅ **world-civilization events** — 新增 `WORLD_GOAL_DECLARED`、`WORLD_GOAL_PROGRESS_RECORDED`、`WORLD_TECH_DISCOVERED`，把世界目標與科技發現變成 Rule Engine 驗證後的 EventLog 事實。
+- ✅ **evidence-gated technology** — 技術發現必須帶 `evidenceEventIds`，不能由 AI 或 planner 憑空生成；無證據技術會被 Rule Engine reject。
+- ✅ **`WorldCivilizationProjection`** — 從 EventLog replay 目前世界 goals、progress、completed 狀態與 discovered technologies。
+- ✅ **deterministic civilization planner** — 近期 NPC learning / mentorship / construction / infrastructure / goods-processing evidence 累積後，世界會形成知識體系 goal 與 technology。
+- ✅ **runtime wiring** — tick evidence collector、planner、projection fanout、small-log boot、large-log deferred hydration 已接上。
+- ✅ **OpenSpec** — 新增 `world-civilization-goals-tech`，正式把「世界有自己的科技與目標」寫成規格 substrate。
+- ✅ **Verification** — targeted server tests（14）、full build、OpenSpec check（14 active changes）通過。
+
+---
+
 ## v0.97.1 ✅ local-ready — 2026-06-26
 
 **主題：NPC World-Law Freeform Agency（NPC 依世界準則提出具體自由行動）**

@@ -279,6 +279,11 @@ import { computeIntentStack } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
 import { planNpcWorldLawAction } from './npcWorldLawActionPlanner.js'
+import {
+  WorldCivilizationProjection,
+  planWorldCivilizationCommands,
+  type WorldCivilizationEvidence,
+} from './worldCivilizationRuntime.js'
 import { commitNpcCognitiveUpdate, deriveNpcCognitiveEvolutionSummary, proposeDeterministicNpcReflection, validateNpcReflectionProposal, type NpcCognitiveEvolutionSummary, type NpcEvolutionRelationshipContext } from './npcCognitiveEvolution.js'
 import { NpcCognitiveProjectionStore, NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES } from './npcCognitiveProjection.js'
 import { PLANT_SPECIES_CATALOG, plantSpeciesForBiome, getPlantSpecies } from '../ecosystem/plantSpecies.js'
@@ -366,6 +371,20 @@ const COMBAT_RULE_ENGINE_OWNED_COMMANDS = new Set<string>([
   'COMBAT_RESOLVE',
 ])
 const PLAYER_JOBS_BOOT_EVENT_TYPES = ['PLAYER_ENERGY_SET'] as const
+const WORLD_CIVILIZATION_BOOT_EVENT_TYPES = [
+  'WORLD_GOAL_DECLARED',
+  'WORLD_GOAL_PROGRESS_RECORDED',
+  'WORLD_TECH_DISCOVERED',
+] as const
+const WORLD_CIVILIZATION_EVIDENCE_EVENT_TYPES = new Set<string>([
+  'NPC_OBSERVED_SKILL',
+  'NPC_MENTORSHIP_COMPLETED',
+  'CONSTRUCTION_PROJECT_PROGRESS',
+  'ROAD_CONSTRUCTED',
+  'WALL_BUILT',
+  'BUILDING_UPGRADED',
+  'GOODS_PROCESSED',
+])
 // Ecosystem projection event types — read selectively during fast-boot so
 // animal/fishery/migration projections survive restarts on large event logs.
 const ECOSYSTEM_BOOT_EVENT_TYPES = [
@@ -657,6 +676,7 @@ export class SimulationRuntime {
   private readonly historyChronicleProjection = new HistoryChronicleProjection()
   private readonly areaStateProjection = new AreaStateProjection()
   private readonly worldStateProjection = new WorldStateProjection()
+  private readonly worldCivilizationProjection = new WorldCivilizationProjection()
   private readonly bioNodeProjection = new BioNodeProjection()
   private readonly buildingStateProjection = new BuildingStateProjection()
   private readonly buildingOccupantsProjection = new BuildingOccupantsProjection()
@@ -2111,6 +2131,29 @@ export class SimulationRuntime {
     return committed[0] ?? null
   }
 
+  private collectWorldCivilizationEvidence(limit = 250): WorldCivilizationEvidence[] {
+    const evidence: WorldCivilizationEvidence[] = []
+    for (const ev of this.store.readRecentEvents(limit)) {
+      if (!WORLD_CIVILIZATION_EVIDENCE_EVENT_TYPES.has(ev.eventType)) continue
+      const data = (ev.payload as { data?: Record<string, unknown> })?.data ?? {}
+      const domain = inferWorldCivilizationDomain(ev.eventType, data)
+      const sourceId =
+        typeof data.skillId === 'string' ? data.skillId :
+        typeof data.buildingId === 'string' ? data.buildingId :
+        typeof data.roadId === 'string' ? data.roadId :
+        typeof data.recipeId === 'string' ? data.recipeId :
+        ev.eventType
+      evidence.push({
+        eventId: ev.eventId,
+        eventType: ev.eventType,
+        subjectId: sourceId,
+        domain,
+        tick: ev.tick ?? 0,
+      })
+    }
+    return evidence
+  }
+
   private processCombatSubTick(input: { combatId: string; combatTick: number }): void {
     this.combatSubTicks.processTick({
       combatId: input.combatId,
@@ -2225,6 +2268,7 @@ export class SimulationRuntime {
       this.historyChronicleProjection.project(ev)
       this.areaStateProjection.project(ev)
       this.worldStateProjection.project(ev)
+      this.worldCivilizationProjection.projectEvent(ev)
       this.bioNodeProjection.project(ev)
       // Card rule operator activation — when a card with a ruleOperator is played (Phase 4)
       if (ev.eventType === 'PLAYER_PLAYED_CARD') {
@@ -5273,6 +5317,15 @@ export class SimulationRuntime {
       }
     }
 
+    for (const command of planWorldCivilizationCommands({
+      tick: nextTick,
+      submittedAt,
+      projection: this.worldCivilizationProjection.snapshot(),
+      recentEvidence: this.collectWorldCivilizationEvidence(),
+    })) {
+      commands.push(command)
+    }
+
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
     // warn once per tick when over the soft cap.
@@ -6700,6 +6753,7 @@ export class SimulationRuntime {
       this.forestDepletionProjection.rebuildFromEvents(allEvents)
       this.livestockRegistryProjection.rebuildFromEvents(allEvents)
       this.worldEventProjection.rebuildFromEvents(allEvents)
+      this.worldCivilizationProjection.rebuild(allEvents)
       this.playerCivilizationProjection.rebuildFromEvents(allEvents)
       this.goodsInventoryProjection.rebuildFromEvents(allEvents)
       this.logisticsProjection.rebuildFromEvents(allEvents)
@@ -6892,6 +6946,7 @@ export class SimulationRuntime {
       },
       { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
       { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
+      { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
@@ -7474,6 +7529,20 @@ function readActorNpcId(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null
   const p = payload as Record<string, unknown>
   return typeof p.npcId === 'string' ? p.npcId : null
+}
+
+function inferWorldCivilizationDomain(eventType: string, data: Record<string, unknown>): string {
+  if (eventType === 'ROAD_CONSTRUCTED' || eventType === 'WALL_BUILT') return 'infrastructure'
+  if (eventType === 'BUILDING_UPGRADED' || eventType === 'CONSTRUCTION_PROJECT_PROGRESS') return 'construction'
+  if (eventType === 'GOODS_PROCESSED') return 'economy'
+  if (typeof data.skillId === 'string') {
+    const skillId = data.skillId.toLowerCase()
+    if (skillId.includes('build') || skillId.includes('construction') || skillId.includes('craft')) return 'construction'
+    if (skillId.includes('road') || skillId.includes('wall') || skillId.includes('logistics')) return 'infrastructure'
+    if (skillId.includes('fish') || skillId.includes('hunt') || skillId.includes('forage') || skillId.includes('ecology')) return 'ecology'
+    if (skillId.includes('trade') || skillId.includes('market') || skillId.includes('cook')) return 'economy'
+  }
+  return 'learning'
 }
 
 
