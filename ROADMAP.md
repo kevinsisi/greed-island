@@ -5,7 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.5 ✅ local-ready — 2026-06-26
+## v0.98.6 ✅ local-ready — 2026-06-26
+
+**主題：Rainy Crowd & Chatter Sanity Fix（下雨少塞人、有避雨、不要罐頭複讀）**
+
+- ✅ **storm crowd cap** — 街景平時最多顯示 24 位，驟雨最多 12 位，避免小地圖塞 60+ 人。
+- ✅ **speech-aware visibility** — 降載時優先保留有 recent utterance / cognition / 非 idle 行為的 NPC。
+- ✅ **rain affordance** — 驟雨中 idle NPC 顯示 `☂️` / `正在避雨`，地圖下方說明多數人進騎樓或室內避雨。
+- ✅ **no canned ambient clones** — ambient 字幕不再用靜態 `greetLine`，並去除相同文字，避免多人講同一句。
+- ✅ **crowd disclosure** — NPC tab / 場景說明顯示可見/總室外人數，不偷改世界真相。
+- ✅ **tests** — `areaSubtitles.test.ts` + `npcProjection.test.ts` 覆蓋雨天 crowd cap、speech priority、ambient 去罐頭/去重。
+- ✅ **Verification** — full `npm test`（server 1275 + web 141）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.5 ✅ shipped — 2026-06-26
 
 **主題：Local Shout & Subtitle Dedupe（地圖附近喊話、多 NPC 回應、字幕不重複）**
 

@@ -34,7 +34,7 @@ import {
 const AGGRESSIVE_SPECIES_IDS = new Set([
   'moss_boar', 'fog_wolf', 'ash_serpent', 'mountain_bear', 'iron_hound', 'white_marsh_leviathan'
 ])
-import { areaOutdoorNpcs } from './npcProjection'
+import { areaOutdoorNpcs, areaVisibleNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
 import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
@@ -205,7 +205,8 @@ export function AreaPage() {
     () => npcs.filter((npc) => npc.location === tileId),
     [npcs, tileId]
   )
-  const outdoorOccupants = useMemo(() => areaOutdoorNpcs(npcs, tileId), [npcs, tileId])
+  const allOutdoorOccupants = useMemo(() => areaOutdoorNpcs(npcs, tileId), [npcs, tileId])
+  const outdoorOccupants = useMemo(() => areaVisibleNpcs(npcs, tileId, weather), [npcs, tileId, weather])
 
   const localEvents = useMemo(() => {
     if (!tile) return []
@@ -287,7 +288,8 @@ export function AreaPage() {
           activity,
           behaviorLabel: behavior.primary,
           ...(behavior.tone === 'conflict' ? { behaviorIcon: '💢' } : {}),
-          ...(behavior.tone === 'food' ? { behaviorIcon: '🍚' } : {})
+          ...(behavior.tone === 'food' ? { behaviorIcon: '🍚' } : {}),
+          ...(weather === 'storm' && behavior.tone === 'idle' ? { behaviorIcon: '☂️', behaviorLabel: '正在避雨' } : {})
         }
         if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
         // v0.14.0：mood/health 給 AreaScene 視覺化用
@@ -298,7 +300,7 @@ export function AreaPage() {
         if (npc.recentUtterance?.text) base.recentUtterance = npc.recentUtterance.text
         return base
       }),
-    [locale, localEvents, outdoorOccupants, t]
+    [locale, localEvents, outdoorOccupants, t, weather]
   )
 
   const mapPlayers = useMemo<AreaMapPlayer[]>(
@@ -577,6 +579,13 @@ export function AreaPage() {
           onFish={handleFish}
           controlsEnabled={!!token}
         />
+        {allOutdoorOccupants.length > outdoorOccupants.length && (
+          <div className="mt-1 px-2 text-[10px] text-ground-500 leading-snug">
+            {weather === 'storm'
+              ? `驟雨中，多數人進騎樓或室內避雨；街上只顯示 ${outdoorOccupants.length}/${allOutdoorOccupants.length} 位。`
+              : `此區人潮擁擠；街景只顯示 ${outdoorOccupants.length}/${allOutdoorOccupants.length} 位。`}
+          </div>
+        )}
       </div>
 
       <div className="mt-2 mx-2 border border-cyan-800/70 bg-ground-950/90 rounded-sharp p-2 shadow-lg">
@@ -667,7 +676,7 @@ export function AreaPage() {
             onClick={() => toggleTab('scene')}
           />
           <DrawerTabButton
-            label={`${t('area.npcs')} ${outdoorOccupants.length}`}
+            label={`${t('area.npcs')} ${outdoorOccupants.length}${allOutdoorOccupants.length > outdoorOccupants.length ? `/${allOutdoorOccupants.length}` : ''}`}
             active={drawerTab === 'npcs'}
             onClick={() => toggleTab('npcs')}
           />
@@ -709,7 +718,9 @@ export function AreaPage() {
                       <div className="mt-1 text-[12px] text-ground-100 leading-snug">
                         {token
                           ? interactionReadyCount > 0
-                            ? `此區有 ${interactionReadyCount} 位室外 NPC，可在 NPC 分頁直接點名字對話。`
+                            ? allOutdoorOccupants.length > outdoorOccupants.length
+                              ? `此區有 ${allOutdoorOccupants.length} 位室外 NPC；街景目前顯示 ${outdoorOccupants.length} 位可互動代表。`
+                              : `此區有 ${interactionReadyCount} 位室外 NPC，可在 NPC 分頁直接點名字對話。`
                             : '此區室外暫時沒有人；進入有人的建築可以對話。'
                           : '登入後可以點 NPC 名字對話、問事情或交易。'}
                       </div>

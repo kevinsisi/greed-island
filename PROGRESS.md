@@ -5,6 +5,32 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.6
+
+### Current Version
+`0.98.6` — Rainy Crowd & Chatter Sanity Fix：修正區域畫面在驟雨中仍塞滿大量 NPC、NPC 不撐傘/不避雨、附近字幕用罐頭 greeting 造成多人講一樣話的不合理感。雨天街景會降載顯示室外人群、顯示避雨/雨具狀態，並明示街景只顯示部分人；ambient 字幕只採用近期自主發話或 cognition，不再拿靜態 greetLine 充當多人同時發言。
+
+### What Changed
+- **Storm crowd cap**：新增 `areaVisibleNpcs`；區域街景平時最多顯示 24 位，驟雨最多顯示 12 位，避免 600x400 地圖塞 60+ 人。
+- **Move/presence rule preserved**：仍以 `areaOutdoorNpcs` 排除 `activity=move` 與室內 NPC；街景 cap 只影響顯示，不改 EventLog/world truth。
+- **Speech-aware priority**：街景降載時優先保留有 `recentUtterance`、`cognitiveLine`、非 idle 行為的 NPC，避免把正在說話的人藏掉。
+- **Rain affordance**：驟雨中 idle NPC sprite 顯示 `☂️ / 正在避雨`，地圖下方提示「多數人進騎樓或室內避雨」。
+- **No canned ambient clones**：`ambientNpcChatterLines` 不再 fallback 到靜態 `greetLine`，並去除相同文字，避免三個人同時講一樣罐頭句。
+- **UI crowd disclosure**：NPC tab 與場景說明顯示 `可見/總室外` 人數，避免玩家以為世界實際只剩可見那幾位。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.6`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 141 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts npcProjection.test.ts` — pass（16 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先修玩家可見的合理性；更深層的「為什麼 64 位 NPC 同時被 server location 歸到 t_central」仍應在後續從 movement/settlement planner 做世界規則層修正。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.5
 
 ### Current Version

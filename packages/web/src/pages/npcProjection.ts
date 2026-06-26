@@ -14,10 +14,43 @@ const KNOWN_DISTRICTS = new Set<DistrictId>([
   't_salt_marsh'
 ])
 
+const CLEAR_AREA_VISIBLE_NPC_LIMIT = 24
+const STORM_AREA_VISIBLE_NPC_LIMIT = 12
+
+type AreaVisibilityWeather = 'clear' | 'overcast' | 'mist' | 'storm' | 'breeze'
+
 export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): NpcSummary[] {
   return npcs.filter(
     (npc) => npc.location === tileId && !npc.buildingId && npc.activity !== 'move'
   )
+}
+
+export function areaVisibleNpcs(
+  npcs: readonly NpcSummary[],
+  tileId: string,
+  weather: AreaVisibilityWeather = 'clear'
+): NpcSummary[] {
+  const outdoor = areaOutdoorNpcs(npcs, tileId)
+  const limit = weather === 'storm' ? STORM_AREA_VISIBLE_NPC_LIMIT : CLEAR_AREA_VISIBLE_NPC_LIMIT
+  if (outdoor.length <= limit) return outdoor
+  return outdoor
+    .slice()
+    .sort((a, b) => areaVisibilityScore(b) - areaVisibilityScore(a) || areaNpcStableKey(a).localeCompare(areaNpcStableKey(b)))
+    .slice(0, limit)
+}
+
+function areaVisibilityScore(npc: NpcSummary): number {
+  let score = 0
+  if (npc.recentUtterance?.text?.trim()) score += 100
+  if (npc.cognitiveLine?.zh?.trim() || npc.cognitiveLine?.en?.trim()) score += 20
+  if (npc.activity && npc.activity !== 'idle') score += 10
+  return score
+}
+
+function areaNpcStableKey(npc: NpcSummary): string {
+  const row = typeof npc.subRow === 'number' ? npc.subRow.toString().padStart(2, '0') : '99'
+  const col = typeof npc.subCol === 'number' ? npc.subCol.toString().padStart(2, '0') : '99'
+  return `${row}:${col}:${npc.id}`
 }
 
 export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'zh'): MapNpc[] {

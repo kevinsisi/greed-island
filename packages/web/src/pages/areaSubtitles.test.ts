@@ -81,16 +81,22 @@ describe('areaSubtitles', () => {
     ])
   })
 
-  it('builds ambient nearby NPC chatter when no recent speech event exists', () => {
+  it('builds ambient nearby NPC chatter from live utterance or cognition, not static canned greetings', () => {
     const lines = ambientNpcChatterLines({
-      npcs: [npc({ id: 'npc.a', name: '靈狗', greetLine: { zh: '「你聞到潮味了嗎？」', en: 'Do you smell the tide?' } })],
-      nearbyNpcIds: new Set(['npc.a']),
+      npcs: [
+        npc({ id: 'npc.a', name: '靈狗', greetLine: { zh: '「你聞到潮味了嗎？」', en: 'Do you smell the tide?' } }),
+        npc({ id: 'npc.b', name: '雨黎', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 87 } }),
+        npc({ id: 'npc.c', name: '岸隅', cognitiveLine: { zh: '得找地方避雨。', en: 'Need shelter.' } }),
+        npc({ id: 'npc.d', name: '海映', recentUtterance: { text: '雨太大，攤子先收半邊。', tick: 88 } }),
+      ],
+      nearbyNpcIds: new Set(['npc.a', 'npc.b', 'npc.c', 'npc.d']),
       tick: 88,
-      limit: 2,
+      limit: 3,
     })
 
     expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
-      '靈狗: 「你聞到潮味了嗎？」',
+      '雨黎: 雨太大，攤子先收半邊。',
+      '岸隅: 得找地方避雨。',
     ])
   })
 

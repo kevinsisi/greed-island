@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { areaOutdoorNpcs, hubMapNpcs } from './npcProjection'
+import { areaOutdoorNpcs, areaVisibleNpcs, hubMapNpcs } from './npcProjection'
 import type { NpcSummary } from '../state/types'
 
 function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
@@ -92,6 +92,28 @@ describe('NPC scene projections', () => {
 
     expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
     expect(areaOutdoorNpcs(people, 't_salt_marsh').map((p) => p.id)).toEqual(['builder'])
+  })
+
+  it('reduces visible area crowds during storm and prefers NPCs with live speech evidence', () => {
+    const people = Array.from({ length: 30 }, (_, index) => npc({
+      id: `idle.${index.toString().padStart(2, '0')}`,
+      activity: 'idle',
+      subCol: index % 15,
+      subRow: Math.floor(index / 15),
+    }))
+    people.push(npc({
+      id: 'speaker',
+      activity: 'idle',
+      subCol: 14,
+      subRow: 9,
+      recentUtterance: { text: '雨太大，先找騎樓。', tick: 88 },
+    }))
+
+    const visible = areaVisibleNpcs(people, 't_central', 'storm')
+
+    expect(visible).toHaveLength(12)
+    expect(visible.map((p) => p.id)).toContain('speaker')
+    expect(areaVisibleNpcs(people, 't_central', 'clear')).toHaveLength(24)
   })
 
   it('keeps local outdoor NPCs on the child area map only', () => {
