@@ -176,7 +176,12 @@ export function createNpcRouter(input: {
     const resolvedIntent: InteractIntent = 'ask'
     const tier: RelationshipTier = tierForRelationship(previousTrust)
     const line = identityReplyFor(profile, message, resolvePlayerIdentity(input.accounts, claims.sub, claims.email).displayName)
-      ?? pickLine(npcId, resolvedIntent, tier, tick + Math.floor(previousTrust) + previousCount)
+      ?? localShoutFallbackLine(profile, message, {
+        tileId,
+        tick,
+        previousTrust,
+        interactionCount: previousCount,
+      })
     const trustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
       tick,
       lastInteractionTick: existing?.lastInteractionTick ?? 0,
@@ -1056,6 +1061,40 @@ function identityReplyFor(
     zh: `「我是${npcZh}，${roleZh}。你要問事就直接問。」`,
     en: `"I am ${npcEn}, ${roleEn}. Ask plainly if you need something."`,
   }
+}
+
+function localShoutFallbackLine(
+  profile: NpcProfile,
+  playerMessage: string,
+  ctx: { tileId: string; tick: number; previousTrust: number; interactionCount: number }
+): LocalizedLine {
+  const nameZh = profile.name.zh
+  const roleZh = profile.role.zh
+  const nameEn = profile.name.en
+  const roleEn = profile.role.en
+  const summary = summarizeDialogLine(playerMessage, 22)
+  const familiarity = ctx.previousTrust >= 60
+    ? '我認得你的聲音'
+    : ctx.interactionCount > 0
+      ? '我記得你剛才也問過'
+      : '我先聽到了'
+  const variants: readonly LocalizedLine[] = [
+    {
+      zh: `「我是${nameZh}，${roleZh}。你剛喊『${summary}』，${familiarity}；這裡是${ctx.tileId}，先說你要找什麼。」`,
+      en: `"I am ${nameEn}, ${roleEn}. I heard you shout '${summary}'; this is ${ctx.tileId}. Say what you need."`,
+    },
+    {
+      zh: `「${nameZh}在。${roleZh}不會替全城答話，但你這句『${summary}』我聽見了。」`,
+      en: `"${nameEn} here. A ${roleEn} cannot answer for the whole city, but I heard '${summary}'."`,
+    },
+    {
+      zh: `「${nameZh}，${roleZh}。附近有人聽見了，不過輪到我回：把問題講清楚。」`,
+      en: `"${nameEn}, ${roleEn}. Someone nearby heard you; I am answering. Ask clearly."`,
+    },
+  ]
+  const seed = ctx.tick + ctx.interactionCount + profile.id.length + Math.floor(ctx.previousTrust)
+  const idx = ((seed % variants.length) + variants.length) % variants.length
+  return variants[idx]!
 }
 
 function readMessage(raw: unknown): string | null {

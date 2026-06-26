@@ -208,11 +208,14 @@ describe('npc router', () => {
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-a', 'npc-b'], message: '各位好' }),
       })
-      const payload = (await response.json()) as { npcId?: string; worldEventId?: string }
+      const payload = (await response.json()) as { npcId?: string; worldEventId?: string; line?: { zh?: string } }
 
       expect(response.status).toBe(200)
       expect(payload.npcId).toBe('npc-a')
       expect(payload.worldEventId).toBe('evt-local-shout')
+      expect(payload.line?.zh).toContain('星沉')
+      expect(payload.line?.zh).toContain('攤販')
+      expect(payload.line?.zh).not.toContain('阿鬼')
       expect(submitted).toHaveLength(1)
       expect(submitted[0]).toMatchObject({
         commandType: 'PLAYER_NPC_DIALOGUE',

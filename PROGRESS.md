@@ -5,6 +5,24 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.13
+
+### Current Version
+`0.98.13` — Grounded Local Shout Fallback：修正 v0.98.12 只是字幕去重的治標問題。`POST /api/npc/local-shout` 在無 AI / AI fallback 時不再呼叫共用 `pickLine()` 罐頭（例如「夜市那條街，問阿鬼…」），改用 `localShoutFallbackLine()` 依 responder 的 NPC 名字、角色、玩家喊話摘要、tile、關係熟悉度產生 deterministic 回覆，從源頭降低 clone speech。
+
+### What Changed
+- **Root-cause fallback fix**：local shout fallback 不再使用共用 rumor line pool。
+- **Grounded response**：fallback 回覆包含 responder identity/role/player shout/tile/familiarity。
+- **Deterministic variants**：仍以 tick / interactionCount / trust / npc id 長度選 deterministic variant，保留可 replay/debug。
+- **Regression test**：local shout fallback 測試要求回覆包含 NPC 名字與角色，且不含「阿鬼」共用罐頭。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.13`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（7 tests）
+- `npm run build -w @greed-island/server` — pass
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.12
 
 ### Current Version

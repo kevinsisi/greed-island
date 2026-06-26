@@ -5,7 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.12 ✅ local-ready — 2026-06-26
+## v0.98.13 ✅ local-ready — 2026-06-26
+
+**主題：Grounded Local Shout Fallback（源頭不要產生罐頭複讀）**
+
+- ✅ **no shared rumor fallback** — `local-shout` fallback 不再呼叫共用 `pickLine()`，避免多 NPC 抽到同一句「夜市那條街，問阿鬼…」。
+- ✅ **identity-grounded reply** — fallback 直接帶入 responder 名字、角色、玩家喊話、tile、熟悉度。
+- ✅ **deterministic** — 仍用 tick / trust / interactionCount / npc id 產生可重播 variant。
+- ✅ **regression** — 測試要求 local shout fallback 包含 NPC 名字/角色且不含阿鬼罐頭。
+- ✅ **Verification** — server npc router test（7）、server build 通過。
+
+---
+
+## v0.98.12 ✅ shipped — 2026-06-26
 
 **主題：Clone Subtitle Dedup（多位 NPC 同句只顯示一次）**
 
