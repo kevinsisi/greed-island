@@ -5,7 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.0 ✅ local-ready — 2026-06-26
+## v0.98.1 ✅ local-ready — 2026-06-26
+
+**主題：Player Dialogue World Consequences（玩家對話進 EventLog，NPC 下一步會被拉動）**
+
+- ✅ **replayable dialogue fact** — 新增 `PLAYER_NPC_DIALOGUE` command/event，玩家訊息、NPC 回覆、intent、信任變化與 tile 都成為可 replay 的世界事實。
+- ✅ **interact endpoint consequence** — `/api/npc/:id/interact` 仍保存私有聊天紀錄，但同步提交 LivingWorld event，response 回傳 `worldEventId`。
+- ✅ **NPC plan steering** — runtime 收到 `PLAYER_NPC_DIALOGUE` 後會更新 NPC speech bubble，並設定短期 `intentOverride`：`trade` → economic，`greet`/`ask` → social。
+- ✅ **tests** — router 測試覆蓋 world-event submission；runtime 測試覆蓋 event-driven intent override。
+- ✅ **Verification** — full `npm test`（server 1275 + web 128）、targeted server tests（13）、full build、OpenSpec check、diff check 通過。
+- ⏳ **Next** — 把玩家對話累積到長期 cognition / relationship projection，讓 NPC 反覆被問、被騙、被幫忙後真的改變信念與人生目標。
+
+---
+
+## v0.98.0 ✅ shipped — 2026-06-26
 
 **主題：NPC Interaction Visibility（玩家能直接對話，也看得到 NPC 彼此互動）**
 

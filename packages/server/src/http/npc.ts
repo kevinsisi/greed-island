@@ -400,6 +400,30 @@ export function createNpcRouter(input: {
       trustAfter: relation.trust,
     })
 
+    const npcTile = resolveNpcTileForDialog(input.runtime, npcId, profile.defaultLocation)
+    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
+      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_NPC_DIALOGUE',
+          String(claims.sub),
+          'player',
+          tick,
+          Date.now(),
+          {
+            playerAccountId: String(claims.sub),
+            npcId,
+            tile: npcTile,
+            intent: resolvedIntent === 'trade' ? 'trade' : resolvedIntent === 'greet' ? 'greet' : 'ask',
+            playerMessage,
+            npcReplyZh: replyZh,
+            npcReplyEn: replyEn,
+            trustDelta: relation.trust - previousTrust,
+            trustAfter: relation.trust,
+            interactionCount: relation.interactionCount,
+            narration: `${player.displayName}在${npcTile}向${profile.name.zh}說：「${summarizeDialogLine(playerMessage, 48)}」，${profile.name.zh}把這次對話記進自己的下一步判斷。`,
+          }
+        ))
+      : null
+
     res.json({
       npcId,
       intent: resolvedIntent,
@@ -421,6 +445,7 @@ export function createNpcRouter(input: {
         occurredAt: new Date(personalEvent.occurredAt).toISOString(),
         intent: personalEvent.intent,
       },
+      worldEventId: dialogueEvent?.eventId ?? null,
     })
   })
 
@@ -906,6 +931,20 @@ function fallbackMessageFor(intent: InteractIntent): string {
     case 'leave':
       return '（玩家準備告辭。）'
   }
+}
+
+function resolveNpcTileForDialog(runtime: SimulationRuntime, npcId: string, fallbackTile: string): string {
+  const npcs = typeof (runtime as { getNpcs?: unknown }).getNpcs === 'function'
+    ? runtime.getNpcs()
+    : []
+  const row = npcs.find((npc) => npc.id === npcId)
+  return row?.location ?? fallbackTile
+}
+
+function summarizeDialogLine(input: string, maxChars: number): string {
+  const collapsed = input.replace(/\s+/g, ' ').trim()
+  if (collapsed.length <= maxChars) return collapsed
+  return `${collapsed.slice(0, maxChars)}…`
 }
 
 function staticTrustDelta(

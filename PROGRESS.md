@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-26 — Handoff Snapshot @ v0.98.1
+
+### Current Version
+`0.98.1` — Player Dialogue World Consequences：玩家與 NPC 對話不再只是私有聊天紀錄；每次 `/api/npc/:id/interact` 會提交 replayable `PLAYER_NPC_DIALOGUE` 事件，並讓 runtime 將該事件套成短期 NPC intent override，NPC 接下來的行動會被玩家對話拉向社交/交易脈絡。
+
+### What Changed
+- **Replayable player dialogue event**：新增 `PLAYER_NPC_DIALOGUE` command/event schema，包含 player、npc、tile、intent、玩家訊息、NPC 回覆、信任變化與 narration。
+- **Router integration**：NPC interact endpoint 仍保留 per-player private history，但同時把對話送入 LivingWorld RuleEngine / EventLog；response 回傳 `worldEventId`。
+- **Runtime consequence**：`PLAYER_NPC_DIALOGUE` publish 後會更新 NPC speech bubble，並設定短期 `intentOverride`；`trade` 導向 economic，`greet`/`ask` 導向 social。
+- **Regression coverage**：新增 router 測試證明 interact 會提交 world event；新增 runtime 測試證明 event 會改變 NPC intent override。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.1`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 128 tests）
+- `npm run test -w @greed-island/server -- npc.test.ts runtimeIntentResolution.test.ts` — pass（13 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先讓玩家對話進入 EventLog 並影響短期 NPC 行動。下一刀可把 `PLAYER_NPC_DIALOGUE` 接到更長期的 NPC cognition / relationship projection，讓反覆對話真正改變性格、信念、關係與人生目標。
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.0
 
 ### Current Version

@@ -70,6 +70,82 @@ describe('npc router', () => {
     }
   })
 
+  it('commits player dialog as a replayable world event so NPC plans can react', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const store = new PlayerStateStore(db)
+    const settings = new SettingsStore(db)
+    const account = await accounts.createAccount('dialogue@example.test', 'hunter123')
+    accounts.updateProfile(account.id, { nickname: '奇犽' })
+
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const profile: NpcProfile = {
+      id: 'npc-dialogue',
+      name: { zh: '雲漪', en: 'Yunyi' },
+      role: { zh: '情報販子', en: 'Broker' },
+      defaultLocation: 't_central',
+      routine: [],
+      triggers: [],
+      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+      personality: { trustBase: 50, patience: 0.8 },
+    }
+    const submitted: unknown[] = []
+    const runtime = {
+      findProfile: (npcId: string) => (npcId === profile.id ? profile : null),
+      getCurrentTick: () => 42,
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
+      getNpcs: () => [{ id: profile.id, location: 't_central' }],
+      submitLivingWorldCommand: (command: unknown) => {
+        submitted.push(command)
+        return { eventId: 'evt-player-dialogue' }
+      },
+    } as unknown as SimulationRuntime
+
+    const app = express()
+    app.use(express.json())
+    app.use(createNpcRouter({ runtime, store, settings, accounts, authConfig }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const token = jwt.sign(
+        { sub: account.id, email: account.email, role: account.role },
+        authConfig.jwtSecret
+      )
+      const response = await fetch(`http://127.0.0.1:${address.port}/npc/${profile.id}/interact`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ intent: 'greet', message: '你好，雲漪。' }),
+      })
+      const payload = (await response.json()) as { worldEventId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.worldEventId).toBe('evt-player-dialogue')
+      expect(submitted).toHaveLength(1)
+      expect(submitted[0]).toMatchObject({
+        commandType: 'PLAYER_NPC_DIALOGUE',
+        actorId: String(account.id),
+        actorType: 'player',
+        tick: 42,
+        payload: {
+          playerAccountId: String(account.id),
+          npcId: profile.id,
+          tile: 't_central',
+          intent: 'greet',
+          playerMessage: '你好，雲漪。',
+          trustDelta: 1,
+          trustAfter: 51,
+        },
+      })
+    } finally {
+      await close(server)
+      db.close()
+    }
+  })
+
   it('posts a deterministic NPC dialog hold when a dialog opens', async () => {
     const db = new Database(':memory:')
     const accounts = new AccountStore(db, 4)

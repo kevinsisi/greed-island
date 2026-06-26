@@ -68,6 +68,40 @@ describe('SimulationRuntime intent resolution', () => {
     }
   })
 
+  it('applies player dialogue events as short social intent overrides', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const npc = runtime.getNpcs()[0]!
+      const command = makeLivingWorldCommand('PLAYER_NPC_DIALOGUE', 'player-1', 'player', 5, 5, {
+        playerAccountId: 'player-1',
+        npcId: npc.id,
+        tile: npc.location,
+        intent: 'ask',
+        playerMessage: '你接下來想做什麼？',
+        npcReplyZh: '我會去找線索。',
+        npcReplyEn: 'I will look for clues.',
+        trustDelta: 0,
+        trustAfter: 50,
+        interactionCount: 1,
+        narration: '玩家向 NPC 詢問下一步。',
+      })
+
+      runtime.submitLivingWorldCommand(command)
+
+      const override = (runtime as unknown as InternalRuntime).npcEngine.getState(npc.id)?.intentOverride
+      expect(override).toMatchObject({
+        targetTile: npc.location,
+        intentType: 'social',
+      })
+      expect(override?.reason).toContain('player-dialogue:ask')
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
   it('commits NPC_INTENT_RESOLVED as an event draft with a deterministic event id', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)

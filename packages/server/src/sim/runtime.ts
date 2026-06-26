@@ -2152,6 +2152,27 @@ export class SimulationRuntime {
     })
   }
 
+  /** Player dialogue is now a replayable EventLog fact, not only private chat history. */
+  private applyPlayerNpcDialogueEvent(ev: Event): void {
+    const data = (ev.payload as { data?: unknown } | null)?.data as Record<string, unknown> | undefined
+    if (!data) return
+    const npcId = typeof data.npcId === 'string' ? data.npcId : null
+    const targetTile = typeof data.tile === 'string' ? data.tile : null
+    if (!npcId || !targetTile) return
+    const intent = data.intent === 'trade' || data.intent === 'greet' || data.intent === 'ask' ? data.intent : 'ask'
+    const reply = typeof data.npcReplyZh === 'string' && data.npcReplyZh.trim().length > 0
+      ? data.npcReplyZh.trim()
+      : null
+    if (reply) this.npcUtteranceMap.set(npcId, { text: reply, tick: ev.tick ?? this.currentTick })
+    this.npcEngine.setIntentOverride(npcId, {
+      targetTile,
+      expiresAtTick: (ev.tick ?? this.currentTick) + Math.max(4, Math.floor(INTENT_OVERRIDE_DURATION_TICKS / 2)),
+      intentType: intent === 'trade' ? 'economic' : 'social',
+      urgency: intent === 'trade' ? 62 : 58,
+      reason: `player-dialogue:${intent}`,
+    })
+  }
+
   private commitLivingWorldCommand(command: LivingWorldCommand): Event | null {
     const result = this.livingWorldRuleEngine.evaluate(command)
     if (!result.accepted) {
@@ -2298,6 +2319,7 @@ export class SimulationRuntime {
       // v0.89.0 — NPC AI agent 決策事件：套用（或解除）intentOverride。
       if (ev.eventType === 'NPC_AGENT_DECISION') this.applyAgentDecisionEvent(ev)
       if (ev.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') this.applyFreeformAgentActionEvent(ev)
+      if (ev.eventType === 'PLAYER_NPC_DIALOGUE') this.applyPlayerNpcDialogueEvent(ev)
       this.factionControlProjection.project(ev)
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)

@@ -86,6 +86,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
   'PLAYER_INTERVENE',
+  'PLAYER_NPC_DIALOGUE',
   'PLAYER_ENERGY_SET',
   'NPC_DIALOG_HOLD',
   // v0.15.0 — Combat Phase B (single-shot judgement)
@@ -993,6 +994,23 @@ export type PlayerIntervenecmd = Readonly<{
   narration: string
 }>
 
+export type PlayerDialogIntent = 'greet' | 'ask' | 'trade'
+
+export type PlayerNpcDialogueCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tile: string
+  intent: PlayerDialogIntent
+  playerMessage: string
+  npcReplyZh: string
+  npcReplyEn: string
+  trustDelta: number
+  trustAfter: number
+  interactionCount: number
+  /** 一行敘事，讓玩家對話成為可 replay 的世界事件，而不是私有聊天紀錄。 */
+  narration: string
+}>
+
 export type PlayerEnergySetCmd = Readonly<{
   playerAccountId: string
   energy: number
@@ -1862,6 +1880,7 @@ export type LivingWorldCommandPayload =
   | RareWindowCloseCmd
   | WorldTickCmd
   | PlayerIntervenecmd
+  | PlayerNpcDialogueCmd
   | PlayerEnergySetCmd
   | NpcDialogHoldCmd
   | CombatInitiateCmd
@@ -2602,6 +2621,21 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.message !== 'string') return 'message required (can be empty string)'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  PLAYER_NPC_DIALOGUE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (p.intent !== 'greet' && p.intent !== 'ask' && p.intent !== 'trade') return 'intent invalid'
+    if (typeof p.playerMessage !== 'string' || p.playerMessage.length === 0) return 'playerMessage required'
+    if (typeof p.npcReplyZh !== 'string' || p.npcReplyZh.length === 0) return 'npcReplyZh required'
+    if (typeof p.npcReplyEn !== 'string' || p.npcReplyEn.length === 0) return 'npcReplyEn required'
+    if (typeof p.trustDelta !== 'number' || !Number.isFinite(p.trustDelta)) return 'trustDelta required'
+    if (typeof p.trustAfter !== 'number' || !Number.isFinite(p.trustAfter)) return 'trustAfter required'
+    if (typeof p.interactionCount !== 'number' || !Number.isInteger(p.interactionCount) || p.interactionCount <= 0) return 'interactionCount required'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   },
   PLAYER_ENERGY_SET: (p) => {
