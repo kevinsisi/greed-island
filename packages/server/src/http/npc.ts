@@ -56,7 +56,8 @@ import { TICKS_PER_HOUR, TICKS_PER_DAY } from '../config/world.js'
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
 const PLAYER_MESSAGE_MAX_CHARS = 800
-const LOCAL_SHOUT_AI_TIMEOUT_MS = 6_000
+const LOCAL_SHOUT_AI_TIMEOUT_MS = 15_000
+const OPENCODE_ENDPOINT_TIMEOUT_MS = 8_000
 
 // v0.87.3 — deceased NPC gate. Used by /interact, /dialog-hold, /greet, /intervene.
 // Returns the profile when the NPC exists and is alive; otherwise writes the proper
@@ -96,10 +97,12 @@ export function createNpcRouter(input: {
   accounts: AccountStore
   authConfig: AuthConfig
   localShoutAiTimeoutMs?: number
+  openCodeEndpointTimeoutMs?: number
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
   const localShoutAiTimeoutMs = Math.max(1, input.localShoutAiTimeoutMs ?? LOCAL_SHOUT_AI_TIMEOUT_MS)
+  const openCodeEndpointTimeoutMs = Math.max(1, input.openCodeEndpointTimeoutMs ?? OPENCODE_ENDPOINT_TIMEOUT_MS)
 
   router.post('/npc/:npcId/dialog-hold', auth, (req: Request, res: Response) => {
     const claims = req.auth
@@ -212,7 +215,7 @@ export function createNpcRouter(input: {
         }
         const ai = await withLocalShoutAiTimeout(
           generateAiReply(input.settings, dialogCtx, {
-            openCodeTimeoutMs: localShoutAiTimeoutMs,
+            openCodeTimeoutMs: openCodeEndpointTimeoutMs,
           }),
           localShoutAiTimeoutMs,
         )
@@ -539,7 +542,9 @@ export function createNpcRouter(input: {
           ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
           ...(buildingContext ? { buildingContext } : {}),
         }
-        const ai = await generateAiReply(input.settings, dialogCtx)
+        const ai = await generateAiReply(input.settings, dialogCtx, {
+          openCodeTimeoutMs: openCodeEndpointTimeoutMs,
+        })
         const sanitized = sanitizeNpcReplyForUnknownEntities({
           playerMessage,
           replyZh: ai.zh,

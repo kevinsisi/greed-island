@@ -316,6 +316,121 @@ describe('npc router', () => {
     }
   })
 
+  it('tries the next OpenCode endpoint when the first local shout endpoint times out', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const store = new PlayerStateStore(db)
+    const settings = new SettingsStore(db)
+    const account = await accounts.createAccount('ai-shout-failover@example.test', 'hunter123')
+    settings.setSetting('provider_priority', 'opencode')
+
+    const slowAiApp = express()
+    let slowSessionCalls = 0
+    let slowMessageCalls = 0
+    slowAiApp.use(express.json())
+    slowAiApp.post('/session', (_req, res) => {
+      slowSessionCalls += 1
+      setTimeout(() => res.json({ id: 'slow-session' }), 100)
+    })
+    slowAiApp.post('/session/:id/message', (_req, res) => {
+      slowMessageCalls += 1
+      // This must share the same endpoint deadline as create-session, not get another full timeout.
+      setTimeout(() => res.json({ parts: [{ type: 'text', text: 'too late' }] }), 300)
+    })
+    slowAiApp.delete('/session/:id', (_req, res) => res.status(204).end())
+    const slowAiServer = await listen(slowAiApp)
+    const slowAiAddress = slowAiServer.address() as AddressInfo
+
+    const fastAiApp = express()
+    let fastMessageCalls = 0
+    fastAiApp.use(express.json())
+    fastAiApp.post('/session', (_req, res) => res.json({ id: 'fast-session' }))
+    fastAiApp.post('/session/:id/message', (_req, res) => {
+      fastMessageCalls += 1
+      res.json({
+        parts: [{
+          type: 'text',
+          text: JSON.stringify({
+            zh: '「第一個訊號斷了，但星沉還是聽見你了。」',
+            en: 'The first signal failed, but Xingchen still heard you.',
+            intent: 'greet',
+            trustDelta: 0,
+          }),
+        }],
+      })
+    })
+    fastAiApp.delete('/session/:id', (_req, res) => res.status(204).end())
+    const fastAiServer = await listen(fastAiApp)
+    const fastAiAddress = fastAiServer.address() as AddressInfo
+    settings.setSetting('opencode_servers', [
+      `http://127.0.0.1:${slowAiAddress.port}`,
+      `http://127.0.0.1:${fastAiAddress.port}`,
+    ].join('\n'))
+
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const profile: NpcProfile = {
+      id: 'npc-ai-failover',
+      name: { zh: '星沉', en: 'Xingchen' },
+      role: { zh: '攤販', en: 'Vendor' },
+      defaultLocation: 't_central',
+      routine: [],
+      triggers: [],
+      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+      personality: { trustBase: 50, patience: 0.8 },
+    }
+    const runtime = {
+      findProfile: (npcId: string) => (npcId === profile.id ? profile : null),
+      getCurrentTick: () => 132,
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
+      getNpcs: () => [{ id: profile.id, location: 't_central' }],
+      getNpcsIncludingDeceased: () => [profile],
+      submitLivingWorldCommand: () => ({ eventId: 'evt-ai-local-shout-failover' }),
+    } as unknown as SimulationRuntime
+
+    const app = express()
+    app.use(express.json())
+    app.use(createNpcRouter({
+      runtime,
+      store,
+      settings,
+      accounts,
+      authConfig,
+      localShoutAiTimeoutMs: 260,
+      openCodeEndpointTimeoutMs: 200,
+    }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const token = jwt.sign(
+        { sub: account.id, email: account.email, role: account.role },
+        authConfig.jwtSecret
+      )
+      const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-ai-failover'], message: '大家好' }),
+      })
+      const payload = (await response.json()) as { replySource?: string; aiError?: string | null; line?: { zh?: string } }
+
+      expect(response.status).toBe(200)
+      expect(payload.replySource).toBe('ai')
+      expect(payload.aiError).toBeNull()
+      expect(payload.line?.zh).toContain('第一個訊號斷了')
+      expect(slowSessionCalls).toBe(1)
+      expect(slowMessageCalls).toBeLessThanOrEqual(1)
+      expect(fastMessageCalls).toBe(1)
+    } finally {
+      await close(server)
+      await close(slowAiServer)
+      await close(fastAiServer)
+      db.close()
+    }
+  })
+
   it('falls back before mobile local shout timeout when AI is slow', async () => {
     const db = new Database(':memory:')
     const accounts = new AccountStore(db, 4)
@@ -328,9 +443,10 @@ describe('npc router', () => {
     let aiMessageCalls = 0
     aiApp.use(express.json())
     aiApp.post('/session', (_req, res) => res.json({ id: 'slow-session' }))
-    aiApp.post('/session/:id/message', (_req, _res) => {
+    aiApp.post('/session/:id/message', (_req, res) => {
       aiMessageCalls += 1
-      // Intentionally never responds; the router should not let mobile UI time out first.
+      // Respond after the endpoint timeout; the router should not let mobile UI time out first.
+      setTimeout(() => res.json({ parts: [{ type: 'text', text: 'too late' }] }), 100)
     })
     aiApp.delete('/session/:id', (_req, res) => res.status(204).end())
     const aiServer = await listen(aiApp)
@@ -365,7 +481,8 @@ describe('npc router', () => {
       settings,
       accounts,
       authConfig,
-      localShoutAiTimeoutMs: 20,
+      localShoutAiTimeoutMs: 80,
+      openCodeEndpointTimeoutMs: 20,
     }))
     const server = await listen(app)
 
@@ -389,7 +506,7 @@ describe('npc router', () => {
 
       expect(response.status).toBe(200)
       expect(payload.replySource).toBe('fallback')
-      expect(payload.aiError).toMatch(/timeout after 20ms/)
+      expect(payload.aiError).toMatch(/OpenCode send-message timeout after 20ms/)
       expect(payload.line?.zh).toContain('星沉')
       expect(aiMessageCalls).toBe(1)
       expect(elapsedMs).toBeLessThan(1_000)
@@ -570,5 +687,6 @@ function listen(app: express.Express): Promise<Server> {
 function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()))
+    server.closeAllConnections?.()
   })
 }

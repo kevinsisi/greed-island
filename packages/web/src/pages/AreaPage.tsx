@@ -34,6 +34,7 @@ import {
 const AGGRESSIVE_SPECIES_IDS = new Set([
   'moss_boar', 'fog_wolf', 'ash_serpent', 'mountain_bear', 'iron_hound', 'white_marsh_leviathan'
 ])
+const LOCAL_SHOUT_CLIENT_TIMEOUT_MS = 18_000
 import { areaOutdoorNpcs, areaVisibleNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
@@ -441,7 +442,7 @@ export function AreaPage() {
           tileId,
           candidateNpcIds: recipients.map((npc) => npc.id),
           message,
-        }, { timeoutMs: 8000 })
+        }, { timeoutMs: LOCAL_SHOUT_CLIENT_TIMEOUT_MS })
         const baseId = result.worldEventId ?? `local-${Date.now()}`
         const replacement = optimisticLocalShoutLines({
           baseId,

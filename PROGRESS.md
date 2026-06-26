@@ -5,6 +5,46 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.16
+
+### Current Version
+`0.98.16` — OpenCode Local Shout Timeout Strategy：修正 v0.98.15 把「整條 local shout AI provider chain」和「單一 OpenCode endpoint 呼叫」共用 6 秒 timeout 的問題。現在附近發話整體最多等 15 秒、每個 OpenCode endpoint 最多等 8 秒，第一個 endpoint 慢或壞掉時會嘗試下一個 endpoint；前端 local shout abort 提高到 18 秒，避免 browser 比 server fallback 更早取消。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - `LOCAL_SHOUT_AI_TIMEOUT_MS` 調整為 `15_000`，作為附近發話整體 AI budget。
+  - 新增 `OPENCODE_ENDPOINT_TIMEOUT_MS = 8_000`，拆開 OpenCode endpoint timeout 與 local shout outer guard。
+  - `createNpcRouter()` 支援測試用 `openCodeEndpointTimeoutMs` 覆寫。
+  - local shout 與 direct `/npc/:npcId/interact` 都將 OpenCode endpoint timeout 傳入 AI provider chain，避免壞 endpoint 用 60 秒 default 卡住互動。
+- `packages/server/src/npcs/openCodeClient.ts`
+  - per-call `timeoutMs` 現在是單一 OpenCode endpoint 的總 deadline，涵蓋 create-session + send-message，不再讓一個 endpoint 各吃一次 timeout。
+- `packages/server/src/http/npc.test.ts`
+  - 新增 regression：第一個 OpenCode endpoint message timeout 後，第二個 endpoint 成功時仍回 `replySource: "ai"`。
+  - regression 也覆蓋 first endpoint create-session 幾乎吃完整個 endpoint budget 的情境，防止 outer local-shout budget 先於 failover 觸發。
+  - 更新慢 provider regression：endpoint timeout 後 server 在 mobile/client timeout 前回 fallback。
+  - 測試 close helper 會關閉 test HTTP connections，避免 aborted mock request 被 keep-alive idle timeout 拖慢。
+- `packages/web/src/pages/AreaPage.tsx`
+  - nearby local shout client timeout 改為 `18_000ms`，高於 server 15 秒 fallback budget。
+- Version bump：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.16`。
+
+### Verified
+- `npm install` — pass（fresh worktree dependency install；`npm audit` 既有 8 vulnerabilities remains known non-blocking）
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（10 tests；OpenCode endpoint failover + slow provider fallback regressions included）
+- `npm run version:sync` — pass（version synced: `0.98.16`）
+- `npm run build -w @greed-island/server` — pass
+- `npm test` — pass（server 1280 tests + web 141 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass（Git line-ending warnings only）
+- CI/CD/live verification pending until push.
+
+### Next Slice
+- Track GitHub Actions CI/CD after push, then verify `https://hunter.sisihome.org/healthz` reports `0.98.16`.
+- Live provider setting target after deploy: prefer direct service runtime endpoint `http://100.73.52.37:4096` first（provider-amd direct Tailscale），with a working backup endpoint second; do not rely on mixed-tailnet provider DNS records for service-to-service runtime.
+- Verify live local shout can return `replySource="ai"` through the preferred OpenCode endpoint within the new budget.
+
+---
+
 ## 2026-06-26 — Handoff Snapshot @ v0.98.15
 
 ### Current Version

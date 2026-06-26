@@ -77,6 +77,10 @@ type OpenCodeSessionResponse = { id?: string }
 type OpenCodeMessagePart = { type: string; text?: string; synthetic?: boolean }
 type OpenCodeMessageResponse = { parts?: OpenCodeMessagePart[] }
 
+function remainingTimeoutMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now())
+}
+
 async function readJson<T>(res: Response, op: string): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -98,12 +102,13 @@ export async function generateWithOpenCode(
   const rawModel = options.model ?? OPENCODE_DEFAULT_MODEL
   const model = parseModel(rawModel)
   const timeoutMs = Math.max(1, options.timeoutMs ?? OPENCODE_REQUEST_TIMEOUT_MS)
+  const deadline = Date.now() + timeoutMs
   const sessionModel = { providerID: model.providerID, id: model.modelID }
   const headers = { 'Content-Type': 'application/json' }
 
   // 1. Create session
   const abortCreate = new AbortController()
-  const timerCreate = setTimeout(() => abortCreate.abort(), timeoutMs)
+  const timerCreate = setTimeout(() => abortCreate.abort(), remainingTimeoutMs(deadline))
   let sessionID: string
   try {
     const sessionRes = await fetch(`${baseURL}/session`, {
@@ -129,7 +134,7 @@ export async function generateWithOpenCode(
   // 2. Send message → read response
   try {
     const abortMsg = new AbortController()
-    const timerMsg = setTimeout(() => abortMsg.abort(), timeoutMs)
+    const timerMsg = setTimeout(() => abortMsg.abort(), remainingTimeoutMs(deadline))
     try {
       const msgRes = await fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}/message`, {
         method: 'POST',

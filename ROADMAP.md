@@ -5,6 +5,20 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.16 ✅ local-ready — 2026-06-27
+
+**主題：OpenCode Timeout Strategy（慢 endpoint 可 failover，手機不先逾時）**
+
+- ✅ **split budgets** — local shout AI 整體 budget 改為 15 秒；單一 OpenCode endpoint（create-session + send-message）總 timeout 改為 8 秒，不再共用 v0.98.15 的 6 秒硬切。
+- ✅ **endpoint failover** — 第一個 OpenCode endpoint message timeout 時，provider chain 會繼續嘗試下一個 endpoint；第二個成功就回 `replySource: "ai"`。
+- ✅ **direct dialog protected** — direct `/npc/:id/interact` 也傳入 8 秒 OpenCode endpoint timeout，避免壞 endpoint 走 60 秒 default 卡住互動。
+- ✅ **client window aligned** — 前端附近發話 abort 提高到 18 秒，高於 server 15 秒 fallback budget。
+- ✅ **runtime endpoint direction** — live 設定應優先使用 direct `http://100.73.52.37:4096` 作 service-to-service OpenCode endpoint，不靠 mixed-tailnet provider DNS。
+- ✅ **regression** — mock slow-first/fast-second OpenCode endpoint 覆蓋 failover；慢 provider fallback 仍低於 client timeout。
+- ⏳ **ship gate** — local build/test/OpenSpec 通過；CI/CD 與 live `hunter.sisihome.org` smoke pending。
+
+---
+
 ## v0.98.15 ✅ shipped — 2026-06-26
 
 **主題：Local Shout AI Timeout Guard（附近發話不等到手機先逾時）**
