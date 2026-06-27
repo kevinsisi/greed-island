@@ -1,7 +1,7 @@
 ## 2026-06-27 — Handoff Snapshot @ v0.98.29
 
 - Shipped npc-life-action-consequences: accepted `buy_goods` freeform actions rebuild into NPC `daily_supplies`; accepted `learn` actions rebuild into `learning` XP; accepted `invent` actions rebuild into world technology evidence. Boot/hydration filters now include freeform events for the affected projections.
-- Tests: targeted server projection/hydration tests passed; server build passed.
+- Tests: targeted server projection/hydration tests passed; full server/web tests passed (`server 1298`, `web 148`); server/web builds passed; live health reached `v0.98.29`.
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.28
 
