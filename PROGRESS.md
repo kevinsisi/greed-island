@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.18
+
+### Current Version
+`0.98.18` — Player Relationship Influences NPC Planner：玩家和 NPC 的長期關係不只影響 AI 回話，現在會進 deterministic intent planner。高怨懟或低信任的玩家歷史會讓 NPC 產生 `social` caution intent，未來行動選擇開始受玩家過往互動影響。
+
+### What Changed
+- `packages/server/src/sim/intentPlanner.ts`
+  - `computeIntentStack()` 新增 `PlayerRelationshipPlannerBias` input。
+  - 當 `maxResentment >= 65` 或 `minTrust <= 30` 時，產生 `social` caution intent，reason 含 `player_relationship`。
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - 新增 `plannerBiasForNpc()`，由 replayed player↔NPC arcs 聚合 `maxResentment`、`minTrust`、`interactionCount`。
+- `packages/server/src/sim/runtime.ts`
+  - deterministic runtime planning 與 NPC agent legal-option generation 都讀取 player relationship planner bias。
+- `openspec/changes/player-relationship-influences-npc-planner/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（36 tests）
+- `npm run build -w @greed-island/server` — pass
+
+### Next Slice
+- 讓 `social` caution intent 實際落到更具體的世界行動：拒絕幫忙、避開玩家、通知同伴、或提高交易門檻。
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.17
 
 ### Current Version

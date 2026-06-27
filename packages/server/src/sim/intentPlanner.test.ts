@@ -255,6 +255,25 @@ describe('computeIntentStack', () => {
     expect(boostedEconomic).toBeCloseTo(baseEconomic * 1.25)
     expect(boostedSurvival).toBeCloseTo(baseSurvival)
   })
+
+  it('high player resentment creates a social caution intent even without faction pressure', () => {
+    const base = computeIntentStack('npc_test', [], makeProfile(), {}, CURRENT_TILE, undefined, 0)
+    expect(base.entries).toHaveLength(0)
+
+    const hostilePlayer = computeIntentStack(
+      'npc_test', [], makeProfile(), {}, CURRENT_TILE, undefined, 0,
+      0,
+      {},
+      { maxResentment: 82, minTrust: 18, interactionCount: 5 },
+    )
+
+    expect(hostilePlayer.entries[0]).toMatchObject({
+      kind: 'social',
+      targetTile: 't_dock',
+    })
+    expect(hostilePlayer.entries[0]!.urgency).toBeGreaterThan(60)
+    expect(hostilePlayer.entries[0]!.reason).toContain('player_relationship')
+  })
 })
 
 // ─── selectHighestIntent ──────────────────────────────────────────────────────

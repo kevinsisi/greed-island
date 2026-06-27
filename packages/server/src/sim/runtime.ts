@@ -828,7 +828,7 @@ export class SimulationRuntime {
         return computeIntentStack(
           npcId, beliefs, profile, weights,
           state.tile, state.faction || undefined, this.currentTick,
-          memoryBoost, lifeGoalBoost,
+          memoryBoost, lifeGoalBoost, this.playerNpcRelationshipProjection.plannerBiasForNpc(npcId),
         ).entries
       },
       getNeedsLine: (npcId) => {
@@ -6365,6 +6365,7 @@ export class SimulationRuntime {
         nextTick,
         memoryBoost,
         lifeGoalBoost,
+        this.playerNpcRelationshipProjection.plannerBiasForNpc(profile.id),
       )
       const adjacentTiles = adjacency[state.tile] ?? []
       const scoredTiles = [state.tile, profile.defaultLocation, ...adjacentTiles]

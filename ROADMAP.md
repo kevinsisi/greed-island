@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.18 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Influences NPC Planner（玩家關係影響 NPC 行動規劃）**
+
+- ✅ **planner bias** — `PlayerNpcRelationshipProjection` 提供每個 NPC 的 hostile player bias：最高怨懟、最低信任、互動總次數。
+- ✅ **social caution intent** — 高怨懟/低信任玩家歷史會讓 `computeIntentStack()` 產生 `social` caution intent。
+- ✅ **runtime wired** — deterministic runtime planning 與 NPC agent legal-option generation 都吃同一份 replayed relationship bias。
+- ✅ **not AI-mutated** — AI 不決定 urgency；所有 bias 來自 `PLAYER_NPC_DIALOGUE` EventLog 重放。
+- ✅ **OpenSpec** — `player-relationship-influences-npc-planner`。
+- ✅ **Verification** — server planner/projection/router tests（36）、server build 通過。
+
+---
+
 ## v0.98.17 ✅ local-ready — 2026-06-27
 
 **主題：Player Dialogue Long-term Relationship Consequences（玩家說過的話留下長期後果）**

@@ -56,10 +56,25 @@ describe('PlayerNpcRelationshipProjection', () => {
     expect(formatPlayerRelationshipContext(projection.read('7', 'npc-a'))).toContain('怨懟 55')
   })
 
+  it('summarizes hostile player relationships as planner bias for an NPC', () => {
+    const projection = new PlayerNpcRelationshipProjection()
+    projection.rebuildFromEvents([
+      ev(10, { playerAccountId: 'kind', npcId: 'npc-a', intent: 'greet', playerMessage: '謝謝', trustDelta: 2, trustAfter: 74, interactionCount: 3 }),
+      ev(20, { playerAccountId: 'hostile', npcId: 'npc-a', intent: 'ask', playerMessage: '滾開', trustDelta: -12, trustAfter: 18, interactionCount: 5 }),
+    ])
+
+    expect(projection.plannerBiasForNpc('npc-a')).toEqual({
+      maxResentment: 60,
+      minTrust: 18,
+      interactionCount: 8,
+    })
+  })
+
   it('ignores malformed or unrelated events', () => {
     const projection = new PlayerNpcRelationshipProjection()
     projection.apply({ ...ev(1, { npcId: 'npc-a' }), eventType: 'WORLD_TICK' } as Event)
     projection.apply(ev(2, { playerAccountId: '', npcId: 'npc-a', trustAfter: 50 }))
     expect(projection.read('7', 'npc-a')).toBeNull()
+    expect(projection.plannerBiasForNpc('npc-a')).toBeUndefined()
   })
 })

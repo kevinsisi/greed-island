@@ -1,5 +1,6 @@
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
+import type { PlayerRelationshipPlannerBias } from '../sim/intentPlanner.js'
 
 export const PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES = ['PLAYER_NPC_DIALOGUE'] as const
 
@@ -69,6 +70,16 @@ export class PlayerNpcRelationshipProjection {
     return [...this.rows.values()]
       .filter((row) => row.npcId === npcId)
       .sort((a, b) => b.lastTick - a.lastTick || a.playerAccountId.localeCompare(b.playerAccountId))
+  }
+
+  plannerBiasForNpc(npcId: string): PlayerRelationshipPlannerBias | undefined {
+    const rows = this.listForNpc(npcId)
+    if (rows.length === 0) return undefined
+    return {
+      maxResentment: Math.max(...rows.map((row) => row.resentment)),
+      minTrust: Math.min(...rows.map((row) => row.trust)),
+      interactionCount: rows.reduce((sum, row) => sum + row.interactionCount, 0),
+    }
   }
 
   canonicalHash(): string {

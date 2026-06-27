@@ -24,6 +24,12 @@ export interface IntentStack {
   computedAtTick: number
 }
 
+export type PlayerRelationshipPlannerBias = Readonly<{
+  maxResentment: number
+  minTrust: number
+  interactionCount: number
+}>
+
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
 /** Returns val if it is a finite number, otherwise returns def. */
@@ -153,6 +159,27 @@ function computeSocialIntent(
   }
 }
 
+function computePlayerRelationshipSocialIntent(
+  profile: NpcProfile,
+  currentTile: string,
+  bias: PlayerRelationshipPlannerBias | undefined,
+): IntentEntry | null {
+  if (!bias || bias.interactionCount <= 0) return null
+  if (bias.maxResentment < 65 && bias.minTrust > 30) return null
+
+  const resentmentPressure = Math.max(0, bias.maxResentment - 50) * 1.35
+  const distrustPressure = Math.max(0, 50 - bias.minTrust) * 0.8
+  const familiarityPressure = Math.min(12, bias.interactionCount * 2)
+  const urgency = Math.min(100, Math.round(35 + resentmentPressure + distrustPressure + familiarityPressure))
+
+  return {
+    kind: 'social',
+    urgency,
+    targetTile: profile.defaultLocation || currentTile,
+    reason: `player_relationship resentment=${bias.maxResentment} minTrust=${bias.minTrust} interactions=${bias.interactionCount}`,
+  }
+}
+
 /**
  * Ecosystem intent: fires when ecosystem_health 'depleted' is believed on currentTile.
  * Target: first adjacent tile with no depleted ecosystem belief, fallback defaultLocation.
@@ -206,6 +233,7 @@ export function computeIntentStack(
   // v0.88.0 — NPC 自己立下的人生目標回饋到行動層：目標方向對應的
   // intent kind 得到額外 multiplier 偏壓（與 memoryUrgencyBoost 同型）。
   lifeGoalBoost: Readonly<Partial<Record<IntentKind, number>>> = {},
+  playerRelationshipBias?: PlayerRelationshipPlannerBias,
 ): IntentStack {
   const entries: IntentEntry[] = []
 
@@ -222,6 +250,9 @@ export function computeIntentStack(
 
   const social = computeSocialIntent(beliefs, profile, currentTile, npcFaction, socialMultiplier)
   if (social) entries.push(social)
+
+  const playerRelationshipSocial = computePlayerRelationshipSocialIntent(profile, currentTile, playerRelationshipBias)
+  if (playerRelationshipSocial) entries.push(playerRelationshipSocial)
 
   const ecosystem = computeEcosystemIntent(beliefs, profile, currentTile, ecosystemMultiplier)
   if (ecosystem) entries.push(ecosystem)
