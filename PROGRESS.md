@@ -24,8 +24,12 @@ developer. Keep latest status at the top.
   - 新增 proposal / tasks / spec。
 
 ### Verified
+- `npm run version:sync` — pass（version synced: `0.98.20`）
+- `npx openspec validate player-relationship-pressure-actions --strict` — pass
 - `npm run test -w @greed-island/server -- npcWorldLawActionPlanner.test.ts intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（45 tests）
 - `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.20`, `ok=true`, tick `288352` during verification.
+- GitHub Actions API still rate-limited during post-push status polling; deploy was verified by live health.
 
 ### Next Slice
 - 把 relationship action 的結果投影到玩家可見 UI/API：附近動態、字幕、NPC 狀態標籤，讓「提醒同伴 / 主動靠近 / 留給熟客」能被玩家直接看見。
