@@ -22,8 +22,13 @@ developer. Keep latest status at the top.
   - 新增 proposal / tasks / spec。
 
 ### Verified
+- `npm run version:sync` — pass（version synced: `0.98.18`）
+- `npx openspec validate player-relationship-influences-npc-planner --strict` — pass
 - `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（36 tests）
 - `npm run build -w @greed-island/server` — pass
+- GitHub Actions CI `28277532696` — pass
+- GitHub Actions Deploy Dev `28277569443` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.18`, `ok=true`, tick `288288` during verification.
 
 ### Next Slice
 - 讓 `social` caution intent 實際落到更具體的世界行動：拒絕幫忙、避開玩家、通知同伴、或提高交易門檻。
