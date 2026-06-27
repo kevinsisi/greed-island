@@ -23,8 +23,12 @@ developer. Keep latest status at the top.
   - 新增 proposal / tasks / spec。
 
 ### Verified
+- `npm run version:sync` — pass（version synced: `0.98.19`）
+- `npx openspec validate player-relationship-complexity-planner --strict` — pass
 - `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（38 tests）
 - `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.19`, `ok=true`, tick `288342` during verification.
+- GitHub Actions API hit unauthenticated rate limit while polling after CI run `28277902792` started; deployment was verified by live health.
 
 ### Next Slice
 - 把這三種 relationship pressure 落到更具體 action：靠近/避開玩家、給折扣/加價、提醒同伴、主動提供幫助或拒絕協助。
