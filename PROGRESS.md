@@ -5,6 +5,29 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.21
+
+### Current Version
+`0.98.21` — Player Relationship Action Visibility：v0.98.20 的關係行動現在在區域 NPC 狀態上看得到。NPC 會顯示「戒備玩家 / 想找玩家聊天 / 保留交易機會」。
+
+### What Changed
+- `packages/web/src/pages/areaBehavior.ts`
+  - 從 replayed `NPC_FREEFORM_ACTION_PROPOSED` 偵測 relationship action。
+  - caution → `⚠️ 戒備玩家` / danger tone。
+  - affinity → `🤝 想找玩家聊天` / active tone。
+  - reciprocity → `💰 保留交易機會` / trade tone。
+- `packages/web/src/pages/areaBehavior.test.ts`
+  - 新增 relationship caution / affinity / reciprocity badge regression。
+- `openspec/changes/player-relationship-action-visibility/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（14 tests）
+- `npm run build -w @greed-island/web` — pass
+
+### Next Slice
+- 後端提供 dedicated relationship-action projection/API，讓前端不必從 freeform proposal 字串推斷 badge；同時可做歷史保留與更精準排序。
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.20
 
 ### Current Version

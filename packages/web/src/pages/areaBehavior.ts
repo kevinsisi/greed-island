@@ -9,6 +9,8 @@ export type BehaviorBadge = Readonly<{
   tone: BehaviorTone
 }>
 
+type RelationshipActionKind = 'caution' | 'affinity' | 'reciprocity'
+
 const NPC_ACTIVITY_BADGES: Readonly<Record<NpcActivity, BehaviorBadge>> = {
   idle: { primary: '待機中', detail: '暫時沒有明確行動', tone: 'idle' },
   move: { primary: '👣 正在移動', detail: '位置正在改變', tone: 'active' },
@@ -30,6 +32,8 @@ export function npcBehaviorBadge(npc: NpcSummary, recentEvents: readonly EventSu
   if (isNpcArguing(npc.id, recentEvents)) {
     return { primary: '💢 正在爭執', detail: '近期 NPC_INTERACT 記錄為 argue，場景應顯示衝突', tone: 'conflict' }
   }
+  const relationshipBadge = npcRelationshipActionBadge(npc.id, recentEvents)
+  if (relationshipBadge) return relationshipBadge
   return NPC_ACTIVITY_BADGES[npc.activity ?? 'idle'] ?? NPC_ACTIVITY_BADGES.idle
 }
 
@@ -40,6 +44,59 @@ export function isNpcArguing(npcId: string, recentEvents: readonly EventSummary[
     const participants = event.payload?.participants
     return Array.isArray(participants) && participants.includes(npcId)
   })
+}
+
+function npcRelationshipActionBadge(npcId: string, recentEvents: readonly EventSummary[]): BehaviorBadge | null {
+  const event = [...recentEvents]
+    .reverse()
+    .find((candidate) => candidate.eventType === 'NPC_FREEFORM_ACTION_PROPOSED' && payloadNpcId(candidate) === npcId)
+  if (!event) return null
+  const kind = relationshipActionKind(event)
+  const detail = relationshipActionDetail(event)
+  switch (kind) {
+    case 'caution':
+      return { primary: '⚠️ 戒備玩家', detail: detail || '正在提醒附近人提高警覺。', tone: 'danger' }
+    case 'affinity':
+      return { primary: '🤝 想找玩家聊天', detail: detail || '正在主動維持玩家關係。', tone: 'active' }
+    case 'reciprocity':
+      return { primary: '💰 保留交易機會', detail: detail || '正在為熟客保留交易或工作機會。', tone: 'trade' }
+    default:
+      return null
+  }
+}
+
+function relationshipActionKind(event: EventSummary): RelationshipActionKind | null {
+  const proposal = proposalRecord(event)
+  const reason = typeof proposal?.reason === 'string' ? proposal.reason : ''
+  const action = typeof proposal?.action === 'string' ? proposal.action : ''
+  const haystack = `${reason}\n${action}`
+  if (haystack.includes('戒備') || haystack.includes('別太靠近')) return 'caution'
+  if (haystack.includes('親近') || haystack.includes('信任的玩家') || haystack.includes('找信任')) return 'affinity'
+  if (haystack.includes('交易互惠') || haystack.includes('熟客') || haystack.includes('留一手')) return 'reciprocity'
+  return null
+}
+
+function relationshipActionDetail(event: EventSummary): string {
+  const proposal = proposalRecord(event)
+  const reason = typeof proposal?.reason === 'string' ? proposal.reason.trim() : ''
+  const action = typeof proposal?.action === 'string' ? proposal.action.trim() : ''
+  return reason || action
+}
+
+function payloadNpcId(event: EventSummary): string | null {
+  const payload = event.payload
+  const data = isRecord(payload.data) ? payload.data : payload
+  return typeof data.npcId === 'string' ? data.npcId : null
+}
+
+function proposalRecord(event: EventSummary): Record<string, unknown> | null {
+  const payload = event.payload
+  const data = isRecord(payload.data) ? payload.data : payload
+  return isRecord(data.proposal) ? data.proposal : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function animalBehaviorLabel(row: AnimalGroupRow): BehaviorBadge {

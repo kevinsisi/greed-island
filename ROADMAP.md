@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.21 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Action Visibility（玩家關係行動玩家可見）**
+
+- ✅ **caution visible** — 關係戒備 action 會在 NPC badge 顯示 `⚠️ 戒備玩家`。
+- ✅ **affinity visible** — 親近 action 會顯示 `🤝 想找玩家聊天`。
+- ✅ **reciprocity visible** — 交易互惠 action 會顯示 `💰 保留交易機會`。
+- ✅ **event-derived** — badge 從 recent `NPC_FREEFORM_ACTION_PROPOSED` event 派生，不新增 hidden client state。
+- ✅ **Verification** — web area behavior/subtitle tests（14）、web production build 通過。
+
+---
+
 ## v0.98.20 ✅ local-ready — 2026-06-27
 
 **主題：Player Relationship Pressure Actions（玩家關係壓力落到具體世界行動）**
