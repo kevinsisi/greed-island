@@ -8,33 +8,29 @@ developer. Keep latest status at the top.
 ## 2026-06-27 — Handoff Snapshot @ v0.98.23
 
 ### Current Version
-`0.98.22` — Player Relationship Action Projection：關係行動現在由後端 typed projection/API 提供，前端優先讀 `npc.relationshipAction`，不再需要從 raw freeform 字串猜 badge。
+`0.98.23` — Player Relationship Action Subtitles：server-projected `npc.relationshipAction` 現在會進附近字幕/動態 feed。玩家不只看到 badge，也能看到 NPC 說出提醒、靠近、留機會等關係行動。
 
 ### What Changed
-- `packages/server/src/projections/playerRelationshipActions.ts`
-  - 新增 event-sourced `PlayerRelationshipActionProjection`。
-  - accepted `NPC_FREEFORM_ACTION_PROPOSED` 會分類成 `caution` / `affinity` / `reciprocity`。
-  - rejected 或非關係 freeform action 不覆蓋 projection。
-- `packages/server/src/sim/runtime.ts`
-  - commit fanout 與 boot hydration 都重建/更新 relationship action projection。
-  - `getNpcs()` 現在回傳 `relationshipAction`。
-- `packages/web/src/pages/areaBehavior.ts`
-  - NPC badge 優先使用 server projection；raw recent event parsing 只保留 fallback。
-- `openspec/changes/player-relationship-action-projection/`
+- `packages/web/src/pages/areaSubtitles.ts`
+  - `ambientNpcChatterLines()` 現在讀 `npc.relationshipAction`。
+  - 優先使用 `recentUtterance.text`；沒有時使用 `relationshipAction.utteranceZh`。
+  - 若 action 沒有 utterance，fallback 到 `relationshipAction.detailZh`。
+  - 保留 socially available NPC 過濾與跨 NPC 同文 dedupe。
+- `packages/web/src/pages/areaSubtitles.test.ts`
+  - 新增 server relationship action → nearby subtitle regression。
+- `openspec/changes/player-relationship-action-subtitles/`
   - 新增 proposal / tasks / spec。
 
 ### Verified
-- `npm run version:sync` — pass（version synced: `0.98.22`）
-- `npx openspec validate player-relationship-action-projection --strict` — pass
-- `npm run test -w @greed-island/server -- playerRelationshipActions.test.ts runtimeIntentResolution.test.ts npcWorldLawActionPlanner.test.ts` — pass（18 tests）
-- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（15 tests）
-- `npm run build -w @greed-island/server` — pass
+- `npm run version:sync` — pass（version synced: `0.98.23`）
+- `npx openspec validate player-relationship-action-subtitles --strict` — pass
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts areaBehavior.test.ts` — pass（16 tests）
 - `npm run build -w @greed-island/web` — pass
-- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.22`, `ok=true`, tick `288372` during verification.
-- Live `/api/npcs` — 76 NPCs，NPC rows include `relationshipAction` key.
+- `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.23`, `ok=true`, tick `288377` during verification.
 
 ### Next Slice
-- 把 `relationshipAction` 從 NPC badge 擴展到附近動態/字幕 timeline，讓玩家不只看到狀態，也看到 NPC 實際說了什麼、對誰提醒/靠近/留貨。
+- 把 relationship subtitle 從 ambient fallback 再推進為 dedicated event/timeline row：當 relationship action commit 時，即使同區有其他 live speech，也能和玩家/NPC 對話混排顯示。
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.20
 
