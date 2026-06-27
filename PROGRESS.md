@@ -8,29 +8,30 @@ developer. Keep latest status at the top.
 ## 2026-06-27 — Handoff Snapshot @ v0.98.25
 
 ### Current Version
-`0.98.24` — Player Relationship Action Timeline：relationship action 字幕不再只是 ambient fallback；現在會以 dedicated subtitle rows 和 live dialogue / NPC social events 混排。
+`0.98.25` — Player Relationship Action Card Marker：NPC drawer/card 現在會直接顯示 compact relationship action marker，讓玩家不用只靠字幕或地圖 badge 才知道誰正在警告、靠近、或保留交易機會。
 
 ### What Changed
-- `packages/web/src/pages/areaSubtitles.ts`
-  - 新增 `relationshipActionSubtitleLines()`。
-  - 對 nearby socially-available NPC 產生 `relationship-action:{npcId}:{sequence}` 穩定字幕 row。
-  - 若 NPC 已有 `recentUtterance.text`，不重複產生 relationship action line。
+- `packages/web/src/pages/areaBehavior.ts`
+  - 新增 `npcRelationshipActionMarker()`。
+  - marker label：`關係行動 · {labelZh}`。
+  - marker detail 優先用 `utteranceZh`，沒有時 fallback 到 `detailZh`。
 - `packages/web/src/pages/AreaPage.tsx`
-  - subtitle feed 現在組合：live subtitles + relationship subtitles + optimistic player lines。
-  - ambient chatter 僅在沒有 live / relationship subtitle 時作 fallback。
-- `openspec/changes/player-relationship-action-timeline/`
+  - NPC drawer card 在 behavior badge 下方渲染 relationship action marker。
+- `packages/web/src/pages/areaBehavior.test.ts`
+  - 新增 compact marker regression。
+- `openspec/changes/player-relationship-action-card-marker/`
   - 新增 proposal / tasks / spec。
 
 ### Verified
-- `npm run version:sync` — pass（version synced: `0.98.24`）
-- `npx openspec validate player-relationship-action-timeline --strict` — pass
-- `npm run test -w @greed-island/web -- areaSubtitles.test.ts areaBehavior.test.ts` — pass（17 tests）
+- `npm run version:sync` — pass（version synced: `0.98.25`）
+- `npx openspec validate player-relationship-action-card-marker --strict` — pass
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（18 tests）
 - `npm run build -w @greed-island/web` — pass
 - `npm run build -w @greed-island/server` — pass
-- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.24`, `ok=true`, tick `288392` during verification.
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.25`, `ok=true`, tick `288398` during verification.
 
-### Next Slice
-- Continue player-visible consequences: add compact relationship action markers to the NPC list/card so players can see who is warning, approaching, or reserving trade opportunities without relying on subtitles.
+### Continue
+- Continue player-visible consequences by adding relationship action context into the NPC dialog header/body so direct conversations expose why the NPC is warning, approaching, or reserving trade opportunities.
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.20
 
