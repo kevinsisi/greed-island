@@ -1,7 +1,7 @@
 ## 2026-06-27 — Handoff Snapshot @ v0.98.27
 
 - Shipped npc-life-action-diversity: NPC world-law planner now emits validated `buy_goods`, `learn`, and `invent` freeform actions for food/procurement, learning/apprenticeship, and idea/prototype pressure instead of collapsing everything into build/work.
-- Tests: OpenSpec strict validation passed; targeted server tests passed (`npcWorldLawActionPlanner.test.ts`, `npcAgent.test.ts`); server build passed; web build passed; full repo tests passed (`server 1295`, `web 147`).
+- Tests: OpenSpec strict validation passed; targeted server tests passed (`npcWorldLawActionPlanner.test.ts`, `npcAgent.test.ts`); server build passed; web build passed; full repo tests passed (`server 1295`, `web 147`); live health verified `https://hunter.sisihome.org/healthz` => `version=0.98.27`, `tick=288485`.
 
 # Greed Island Progress Handoff
 
