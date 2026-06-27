@@ -39,6 +39,18 @@ function relationshipAction(npcId: string, reason: string, action: string): Even
   }
 }
 
+function freeformAction(npcId: string, kind: string, narration: string): EventSummary {
+  return {
+    sequence: 10,
+    tick: 103,
+    eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
+    actorId: npcId,
+    occurredAt: '2026-06-26T00:00:00.000Z',
+    payload: { npcId, accepted: true, resolved: { kind }, proposal: { reason: narration, action: narration, utterance: null } },
+    narration,
+  }
+}
+
 function animal(input: Partial<AnimalGroupRow>): AnimalGroupRow {
   return {
     speciesId: input.speciesId ?? 'forest_deer',
@@ -93,6 +105,20 @@ describe('areaBehavior', () => {
       label: '關係行動 · 💰 保留交易機會',
       detail: '我替你留了一手貨。',
     })
+  })
+
+  it('renders life freeform actions as matching NPC behavior badges', () => {
+    expect(npcBehaviorBadge(npc({ id: 'npc.a', activity: 'idle' }), [
+      freeformAction('npc.a', 'buy_goods', '雲簾前往夜潮區採買食物、工具與日用品。'),
+    ]).primary).toBe('🛒 正在採買')
+
+    expect(npcBehaviorBadge(npc({ id: 'npc.a', activity: 'idle' }), [
+      freeformAction('npc.a', 'learn', '學徒在夜潮區找人請教並練習技能。'),
+    ]).primary).toBe('📚 正在學習')
+
+    expect(npcBehaviorBadge(npc({ id: 'npc.a', activity: 'idle' }), [
+      freeformAction('npc.a', 'invent', '發明家攤開草圖與材料嘗試原型。'),
+    ]).primary).toBe('💡 正在發想')
   })
 
   it('renders relationship caution freeform actions as visible NPC badges', () => {

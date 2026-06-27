@@ -36,6 +36,8 @@ export function npcBehaviorBadge(npc: NpcSummary, recentEvents: readonly EventSu
   if (projectedRelationshipBadge) return projectedRelationshipBadge
   const relationshipBadge = npcRelationshipActionBadge(npc.id, recentEvents)
   if (relationshipBadge) return relationshipBadge
+  const freeformBadge = npcFreeformActionBadge(npc.id, recentEvents)
+  if (freeformBadge) return freeformBadge
   return NPC_ACTIVITY_BADGES[npc.activity ?? 'idle'] ?? NPC_ACTIVITY_BADGES.idle
 }
 
@@ -98,6 +100,32 @@ function npcRelationshipActionBadge(npcId: string, recentEvents: readonly EventS
   }
 }
 
+function npcFreeformActionBadge(npcId: string, recentEvents: readonly EventSummary[]): BehaviorBadge | null {
+  const event = [...recentEvents]
+    .reverse()
+    .find((candidate) => candidate.eventType === 'NPC_FREEFORM_ACTION_PROPOSED' && payloadNpcId(candidate) === npcId)
+  if (!event) return null
+  const resolved = resolvedRecord(event)
+  const kind = typeof resolved?.kind === 'string' ? resolved.kind : ''
+  const detail = event.narration || relationshipActionDetail(event)
+  switch (kind) {
+    case 'buy_goods':
+      return { primary: '🛒 正在採買', detail: detail || '正在補充食物、工具或日用品。', tone: 'trade' }
+    case 'learn':
+      return { primary: '📚 正在學習', detail: detail || '正在請教、觀察或練習技能。', tone: 'active' }
+    case 'invent':
+      return { primary: '💡 正在發想', detail: detail || '正在整理草圖、假設或原型點子。', tone: 'active' }
+    case 'rest':
+      return { primary: '💤 正在休息', detail: detail || '正在恢復體力與判斷力。', tone: 'rest' }
+    case 'work':
+      return { primary: '🛠️ 正在工作', detail: detail || '正在處理工作或服務。', tone: 'active' }
+    case 'build':
+      return { primary: '🏗️ 正在建設', detail: detail || '正在整理、修建或開墾公共空間。', tone: 'active' }
+    default:
+      return null
+  }
+}
+
 function relationshipActionKind(event: EventSummary): RelationshipActionKind | null {
   const proposal = proposalRecord(event)
   const reason = typeof proposal?.reason === 'string' ? proposal.reason : ''
@@ -126,6 +154,12 @@ function proposalRecord(event: EventSummary): Record<string, unknown> | null {
   const payload = event.payload
   const data = isRecord(payload.data) ? payload.data : payload
   return isRecord(data.proposal) ? data.proposal : null
+}
+
+function resolvedRecord(event: EventSummary): Record<string, unknown> | null {
+  const payload = event.payload
+  const data = isRecord(payload.data) ? payload.data : payload
+  return isRecord(data.resolved) ? data.resolved : null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

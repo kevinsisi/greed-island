@@ -1,3 +1,8 @@
+## 2026-06-27 — Handoff Snapshot @ v0.98.28
+
+- Shipped npc-life-action-ui-alignment: Timeline now labels `buy_goods`/`learn`/`invent` as shopping/learning/invention, and area NPC badges show recent committed freeform actions as採買/學習/發想 instead of idle.
+- Tests: targeted web tests passed (`TimelinePage.test.ts`, `areaBehavior.test.ts`, `areaSubtitles.test.ts`); web build passed; server build passed.
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.27
 
 - Shipped npc-life-action-diversity: NPC world-law planner now emits validated `buy_goods`, `learn`, and `invent` freeform actions for food/procurement, learning/apprenticeship, and idea/prototype pressure instead of collapsing everything into build/work.
