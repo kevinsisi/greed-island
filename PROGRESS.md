@@ -22,8 +22,12 @@ developer. Keep latest status at the top.
   - 新增 proposal / tasks / spec。
 
 ### Verified
+- `npm run version:sync` — pass（version synced: `0.98.21`）
+- `npx openspec validate player-relationship-action-visibility --strict` — pass
 - `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（14 tests）
 - `npm run build -w @greed-island/web` — pass
+- `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.21`, `ok=true`, tick `288363` during verification.
 
 ### Next Slice
 - 後端提供 dedicated relationship-action projection/API，讓前端不必從 freeform proposal 字串推斷 badge；同時可做歷史保留與更精準排序。
