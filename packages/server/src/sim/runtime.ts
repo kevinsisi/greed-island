@@ -273,6 +273,7 @@ import { BuildingOccupantsProjection, BUILDING_OCCUPANTS_BOOT_EVENT_TYPES } from
 import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
+import { PlayerNpcRelationshipProjection, formatPlayerRelationshipContext, PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES } from '../projections/playerNpcRelationshipProjection.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
@@ -718,6 +719,7 @@ export class SimulationRuntime {
   private readonly intentProjection = new IntentProjection()
   private readonly lifeGoalsProjection = new LifeGoalsProjection()
   private readonly npcCognitiveProjection = new NpcCognitiveProjectionStore()
+  private readonly playerNpcRelationshipProjection = new PlayerNpcRelationshipProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1529,6 +1531,11 @@ export class SimulationRuntime {
     })
   }
 
+  /** Phase 3 — player dialog leaves replayable, long-term relationship context. */
+  getFormattedPlayerRelationshipContext(playerAccountId: string | number, npcId: string): string {
+    return formatPlayerRelationshipContext(this.playerNpcRelationshipProjection.read(playerAccountId, npcId)) ?? ''
+  }
+
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
   getBioNodesOnTile(tileId: string): readonly BioNodeRow[] {
     return this.bioNodeProjection.listOnTile(tileId)
@@ -2284,6 +2291,7 @@ export class SimulationRuntime {
       this.intentProjection.project(ev)
       this.lifeGoalsProjection.project(ev)
       this.npcCognitiveProjection.project(ev)
+      this.playerNpcRelationshipProjection.apply(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -6867,6 +6875,7 @@ export class SimulationRuntime {
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
       this.npcCognitiveProjection.rebuildFromEvents(allEvents)
+      this.playerNpcRelationshipProjection.rebuildFromEvents(allEvents)
       // v0.87.3 boot-bug fix: mortality / lineage / born-npc projections were
       // wired into the large-log else-branch but NOT here. Result was that
       // every small-world restart resurrected every deceased NPC (the very
@@ -7039,6 +7048,7 @@ export class SimulationRuntime {
       { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
       { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
+      { label: 'player-npc-relationships', eventTypes: PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES, apply: (events) => this.playerNpcRelationshipProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections

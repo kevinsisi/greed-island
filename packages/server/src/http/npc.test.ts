@@ -216,6 +216,9 @@ describe('npc router', () => {
       expect(payload.line?.zh).toContain('星沉')
       expect(payload.line?.zh).toContain('攤販')
       expect(payload.line?.zh).not.toContain('阿鬼')
+      expect(payload.line?.zh).not.toContain('不會替全城答話')
+      expect(payload.line?.zh).not.toContain('把問題講清楚')
+      expect(payload.line?.zh).not.toContain('附近有人聽見了')
       expect(submitted).toHaveLength(1)
       expect(submitted[0]).toMatchObject({
         commandType: 'PLAYER_NPC_DIALOGUE',

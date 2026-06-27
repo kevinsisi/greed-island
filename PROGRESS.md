@@ -5,6 +5,34 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.17
+
+### Current Version
+`0.98.17` — Player Dialogue Long-term Relationship Consequences：玩家對 NPC 說過的話現在會形成可重播的長期關係投影，後續 NPC AI 對話會讀到信任、怨懟、熟悉度、互動次數與最近玩家訊息，讓回應自然反映累積後果。
+
+### What Changed
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - 新增 `PlayerNpcRelationshipProjection`，從 `PLAYER_NPC_DIALOGUE` EventLog 重建 `(playerAccountId, npcId)` 關係弧。
+  - 追蹤 `trust`、`resentment`、`familiarity`、`interactionCount`、`lastIntent`、`lastPlayerMessage`、`lastTick`。
+- `packages/server/src/sim/runtime.ts`
+  - live fanout、小 log boot、large-log deferred hydration 都接上 player↔NPC relationship projection。
+  - 新增 `getFormattedPlayerRelationshipContext()` 供對話 prompt 讀取。
+- `packages/server/src/npcs/aiDialog.ts` / `packages/server/src/http/npc.ts`
+  - direct interact 與 local shout 的 AI prompt 會注入 EventLog 重放出的長期關係摘要。
+  - prompt 明確要求低信任/高怨懟時保留警覺，高信任時較願意提供資訊。
+- `openspec/changes/player-dialogue-long-term-relationship-consequences/`
+  - 新增 proposal / tasks / spec。
+- Version bump：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.17`。
+
+### Verified
+- `npx openspec validate player-dialogue-long-term-relationship-consequences --strict` — pass
+- `npm run test -w @greed-island/server -- playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（10 tests）
+- `npm run build -w @greed-island/server` — pass
+
+### Next Slice
+- 把這個長期關係投影接到 deterministic planner：同一個 world state 下，高怨懟玩家觸發的 NPC 應更可能拒絕、避開、警戒或找人抱怨。
+---
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.16
 
 ### Current Version

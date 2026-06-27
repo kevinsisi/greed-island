@@ -152,6 +152,7 @@ export type AiDialogContext = Readonly<{
   parentLineage?: readonly LineageContextRow[]
   playerAlias?: string
   socialHistoryContext?: SocialHistoryContext
+  playerRelationshipContext?: string | undefined
   beliefContext?: string
   reflectionContext?: string
   memoryContext?: string
@@ -276,6 +277,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildLineageBlock(ctx.parentLineage),
     ...buildPlayerAliasBlock(ctx.playerAlias),
     ...buildSocialHistoryBlock(ctx.socialHistoryContext),
+    ...buildPlayerRelationshipBlock(ctx.playerRelationshipContext),
     ...buildAntiHallucinationBlock(
       ctx.knownPersonNames ?? [],
       [
@@ -593,6 +595,16 @@ export function buildSocialHistoryBlock(ctx: SocialHistoryContext | undefined): 
   }
   lines.push(`這些資訊幫助你體現長期關係的積累，但不要逐字唸出這份摘要——用它作背景知識，讓回應自然反映你們的關係深度。`, '')
   return lines
+}
+
+export function buildPlayerRelationshipBlock(ctx: string | undefined): string[] {
+  if (!ctx || ctx.trim().length === 0) return []
+  return [
+    `### 你對這位玩家的長期關係投影`,
+    ctx.trim(),
+    `這是 EventLog 重放得到的長期後果，不是本回合 AI 臨場決定。你必須讓語氣自然反映它：低信任或高怨懟時保留、警覺；高信任時較願意提供資訊。`,
+    '',
+  ]
 }
 
 export function buildAntiHallucinationBlock(knownNames: readonly string[], knownSpecies: readonly string[]): string[] {

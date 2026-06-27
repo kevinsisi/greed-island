@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.17 ✅ local-ready — 2026-06-27
+
+**主題：Player Dialogue Long-term Relationship Consequences（玩家說過的話留下長期後果）**
+
+- ✅ **replayable relationship arc** — 新增 `PlayerNpcRelationshipProjection`，由 `PLAYER_NPC_DIALOGUE` EventLog 重建玩家↔NPC 關係弧。
+- ✅ **long-term dimensions** — 追蹤信任、怨懟、熟悉度、互動次數、最近意圖與最近玩家訊息。
+- ✅ **AI prompt grounding** — direct interact / local shout 的 AI 對話 prompt 會讀取長期關係摘要，讓 NPC 語氣反映累積信任或怨懟。
+- ✅ **boot/fanout wired** — live projection、小 log boot、large-log deferred hydration 都接上，避免重啟後遺失。
+- ✅ **OpenSpec** — `player-dialogue-long-term-relationship-consequences`。
+- ✅ **Verification** — OpenSpec validate、server projection + npc router tests（10）、server build 通過。
+
+---
+
 ## v0.98.16 ✅ shipped — 2026-06-27
 
 **主題：OpenCode Timeout Strategy（慢 endpoint 可 failover，手機不先逾時）**

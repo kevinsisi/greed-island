@@ -202,6 +202,7 @@ export function createNpcRouter(input: {
         const rumorCtx = rawRumors.length > 0
           ? rawRumors.map((r) => ({ topic: r.topic as string, subjectId: r.subjectId, tileId: r.tileId, accuracy: r.accuracy }))
           : undefined
+        const playerRelationshipCtx = input.runtime.getFormattedPlayerRelationshipContext?.(String(claims.sub), npcId) || undefined
         const dialogCtx: AiDialogContext = {
           profile,
           player,
@@ -211,6 +212,7 @@ export function createNpcRouter(input: {
           playerMessage: message,
           worldTick: tick,
           worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
+          ...(playerRelationshipCtx ? { playerRelationshipContext: playerRelationshipCtx } : {}),
           ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
         }
         const ai = await withLocalShoutAiTimeout(
@@ -494,6 +496,7 @@ export function createNpcRouter(input: {
         const reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined
         const memoryCtx = input.runtime.getFormattedMemoryContext(npcId) || undefined
         const lifeGoalCtx = input.runtime.getFormattedLifeGoalContext(npcId) || undefined
+        const playerRelationshipCtx = input.runtime.getFormattedPlayerRelationshipContext?.(String(claims.sub), npcId) || undefined
 
         // building context — tells AI which building the NPC is currently in
         const npcBuildingId = input.runtime.getNpcBuildingId(npcId)
@@ -540,6 +543,7 @@ export function createNpcRouter(input: {
           ...(reflectionCtx ? { reflectionContext: reflectionCtx } : {}),
           ...(memoryCtx ? { memoryContext: memoryCtx } : {}),
           ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
+          ...(playerRelationshipCtx ? { playerRelationshipContext: playerRelationshipCtx } : {}),
           ...(buildingContext ? { buildingContext } : {}),
         }
         const ai = await generateAiReply(input.settings, dialogCtx, {
@@ -1134,29 +1138,57 @@ function localShoutFallbackLine(
   const roleZh = profile.role.zh
   const nameEn = profile.name.en
   const roleEn = profile.role.en
-  const summary = summarizeDialogLine(playerMessage, 22)
+  const normalized = playerMessage.replace(/\s+/g, '')
+  const isRude = /廢物|白癡|智障|垃圾|滾|低能|蠢/.test(normalized)
+  const asksDestination = /去哪|去哪裡|去哪儿|要去哪|往哪|走哪/.test(normalized)
+  const asksDoing = /幹嘛|在幹嘛|做什麼|做什么|忙什麼|忙什么/.test(normalized)
+  const asksIdentity = /誰|谁|名字|叫什麼|叫什么/.test(normalized)
+  const asksHelp = /幫|帮|找|需要|怎麼|怎么|在哪|哪裡|哪里/.test(normalized)
   const familiarity = ctx.previousTrust >= 60
     ? '我認得你的聲音'
     : ctx.interactionCount > 0
-      ? '我記得你剛才也問過'
-      : '我先聽到了'
-  const variants: readonly LocalizedLine[] = [
-    {
-      zh: `「我是${nameZh}，${roleZh}。你剛喊『${summary}』，${familiarity}；這裡是${ctx.tileId}，先說你要找什麼。」`,
-      en: `"I am ${nameEn}, ${roleEn}. I heard you shout '${summary}'; this is ${ctx.tileId}. Say what you need."`,
-    },
-    {
-      zh: `「${nameZh}在。${roleZh}不會替全城答話，但你這句『${summary}』我聽見了。」`,
-      en: `"${nameEn} here. A ${roleEn} cannot answer for the whole city, but I heard '${summary}'."`,
-    },
-    {
-      zh: `「${nameZh}，${roleZh}。附近有人聽見了，不過輪到我回：把問題講清楚。」`,
-      en: `"${nameEn}, ${roleEn}. Someone nearby heard you; I am answering. Ask clearly."`,
-    },
-  ]
-  const seed = ctx.tick + ctx.interactionCount + profile.id.length + Math.floor(ctx.previousTrust)
-  const idx = ((seed % variants.length) + variants.length) % variants.length
-  return variants[idx]!
+      ? '剛才那句我也記著'
+      : '我聽到了'
+
+  if (isRude) {
+    return {
+      zh: `「${nameZh}皺了下眉。嘴巴放乾淨點，我是${roleZh}，不是站在雨裡給你撒氣的。要問事就問。」`,
+      en: `"${nameEn} frowns. Watch your mouth. I am a ${roleEn}, not someone standing in the rain for you to vent at. Ask your question."`,
+    }
+  }
+
+  if (asksDestination) {
+    return {
+      zh: `「${nameZh}，${roleZh}。我在${ctx.tileId}附近辦自己的事；你要找路、找人，還是想跟著走？」`,
+      en: `"${nameEn}, ${roleEn}. I am handling my own business near ${ctx.tileId}. Are you looking for a route, a person, or trying to follow?"`,
+    }
+  }
+
+  if (asksDoing) {
+    return {
+      zh: `「${nameZh}在這。${familiarity}。雨這麼大，我先把${roleZh}該顧的事收完；你有急事就直說。」`,
+      en: `"${nameEn} is here. ${familiarity}. With rain this heavy, I am finishing what a ${roleEn} has to watch over. Say it if it is urgent."`,
+    }
+  }
+
+  if (asksIdentity) {
+    return {
+      zh: `「我是${nameZh}，${roleZh}。你在${ctx.tileId}附近喊話，我聽見了。」`,
+      en: `"I am ${nameEn}, ${roleEn}. You called out near ${ctx.tileId}; I heard you."`,
+    }
+  }
+
+  if (asksHelp) {
+    return {
+      zh: `「${nameZh}抬頭看你。${familiarity}。你要找什麼，講一個名字或地點，我才知道怎麼回。」`,
+      en: `"${nameEn} looks up. ${familiarity}. Give me a name or place so I know how to answer."`,
+    }
+  }
+
+  return {
+    zh: `「${nameZh}，${roleZh}。${familiarity}。你是要問路、找人，還是只是想叫住附近的人？」`,
+    en: `"${nameEn}, ${roleEn}. ${familiarity}. Are you asking for directions, looking for someone, or just trying to stop people nearby?"`,
+  }
 }
 
 function withLocalShoutAiTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
