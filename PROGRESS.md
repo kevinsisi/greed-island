@@ -1,7 +1,7 @@
 ## 2026-06-27 — Handoff Snapshot @ v0.98.28
 
 - Shipped npc-life-action-ui-alignment: Timeline now labels `buy_goods`/`learn`/`invent` as shopping/learning/invention, and area NPC badges show recent committed freeform actions as採買/學習/發想 instead of idle.
-- Tests: targeted web tests passed (`TimelinePage.test.ts`, `areaBehavior.test.ts`, `areaSubtitles.test.ts`); web build passed; server build passed.
+- Tests: OpenSpec strict validation passed; targeted web tests passed (`TimelinePage.test.ts`, `areaBehavior.test.ts`, `areaSubtitles.test.ts`); web build passed; server build passed; live health verified `version=0.98.28`, `tick=288497`.
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.27
 
