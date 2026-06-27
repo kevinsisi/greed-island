@@ -5,6 +5,31 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.20
+
+### Current Version
+`0.98.20` — Player Relationship Pressure Actions：玩家↔NPC 關係不只進 planner，現在會落到具體 world-law action。戒備會提醒/放話，親近會主動靠近聊天，交易互惠會保留合適工作/貨物給熟客。
+
+### What Changed
+- `packages/server/src/sim/npcWorldLawActionPlanner.ts`
+  - `NpcWorldLawActionPlannerInput` 新增 `intentEntries`。
+  - `player_relationship_caution` → `spread_rumor` warning action。
+  - `player_relationship_affinity` → `custom_social_scene` approach/check-in action。
+  - `player_relationship_reciprocity` → `work` trade-opportunity action。
+- `packages/server/src/sim/runtime.ts`
+  - runtime 將 `stack.entries` 傳進 world-law action planner，讓 replayed relationship pressure 進入 `NPC_FREEFORM_ACTION_PROPOSED`。
+- `packages/server/src/sim/npcWorldLawActionPlanner.test.ts`
+  - 新增三個 relationship pressure → concrete action regression。
+- `openspec/changes/player-relationship-pressure-actions/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run test -w @greed-island/server -- npcWorldLawActionPlanner.test.ts intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（45 tests）
+- `npm run build -w @greed-island/server` — pass
+
+### Next Slice
+- 把 relationship action 的結果投影到玩家可見 UI/API：附近動態、字幕、NPC 狀態標籤，讓「提醒同伴 / 主動靠近 / 留給熟客」能被玩家直接看見。
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.19
 
 ### Current Version

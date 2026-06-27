@@ -5,6 +5,19 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.20 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Pressure Actions（玩家關係壓力落到具體世界行動）**
+
+- ✅ **relationship → action** — planner 的關係壓力現在會進 world-law action planner。
+- ✅ **caution** — `player_relationship_caution` 產生 `spread_rumor`：提醒附近人別太靠近讓 NPC 戒備的玩家。
+- ✅ **affinity** — `player_relationship_affinity` 產生 `custom_social_scene`：主動靠近信任玩家聊天/維持關係。
+- ✅ **reciprocity** — `player_relationship_reciprocity` 產生 `work`：為熟客保留合適貨物或工作機會。
+- ✅ **event-routed** — 仍走 `NPC_FREEFORM_ACTION_PROPOSED`，不是 hidden runtime mutation。
+- ✅ **Verification** — world-law planner/planner/projection/router tests（45）、server build 通過。
+
+---
+
 ## v0.98.19 ✅ local-ready — 2026-06-27
 
 **主題：Player Relationship Complexity Planner（玩家關係複雜度進入 NPC planner）**

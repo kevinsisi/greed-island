@@ -6404,6 +6404,7 @@ export class SimulationRuntime {
         threshold: INTENT_URGENCY_THRESHOLD,
         needs: life.needs,
         lifeGoal: life.goal,
+        intentEntries: stack.entries,
         currentOverride: state.intentOverride ?? null,
         adjacentTiles,
         tileScores,

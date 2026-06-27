@@ -12,6 +12,7 @@ function input(overrides: Partial<NpcWorldLawActionPlannerInput> = {}): NpcWorld
     threshold: 30,
     needs: { food: 12, rest: 14, money: 82, housing: 20, safety: 10 },
     lifeGoal: { kind: 'earn_money', pressure: 61, narration: '累積買卡資金' },
+    intentEntries: [],
     currentOverride: null,
     adjacentTiles: ['t_forest', 't_dock', 't_ruin'],
     tileScores: {
@@ -101,6 +102,51 @@ describe('planNpcWorldLawAction', () => {
     expect(socialAction?.narration).toContain('人情')
     expect(buildAction?.narration).not.toContain('不是被排程')
     expect(socialAction?.narration).not.toContain('不是被排程')
+  })
+
+  it('turns relationship caution pressure into a concrete warning action', () => {
+    const action = planNpcWorldLawAction(input({
+      needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },
+      lifeGoal: { kind: 'earn_money', pressure: 20, narration: '慢慢存錢' },
+      memoryContext: '',
+      intentEntries: [{ kind: 'social', urgency: 76, targetTile: 't_central', reason: 'player_relationship_caution resentment=82 minTrust=18 interactions=5' }],
+    }))
+
+    expect(action?.resolved.kind).toBe('spread_rumor')
+    expect(action?.resolved.targetTile).toBe('t_central')
+    expect(action?.proposal.action).toContain('提醒')
+    expect(action?.proposal.reason).toContain('玩家關係')
+    expect(action?.proposal.utterance).toContain('別太靠近')
+  })
+
+  it('turns relationship affinity pressure into a concrete social approach action', () => {
+    const action = planNpcWorldLawAction(input({
+      needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },
+      lifeGoal: { kind: 'earn_money', pressure: 20, narration: '慢慢存錢' },
+      memoryContext: '',
+      intentEntries: [{ kind: 'social', urgency: 61, targetTile: 't_central', reason: 'player_relationship_affinity trust=86 affinity=42 familiarity=9 positives=7' }],
+    }))
+
+    expect(action?.resolved.kind).toBe('custom_social_scene')
+    expect(action?.resolved.targetTile).toBe('t_central')
+    expect(action?.proposal.action).toContain('主動')
+    expect(action?.proposal.reason).toContain('親近')
+    expect(action?.proposal.utterance).toContain('聊一下')
+  })
+
+  it('turns relationship reciprocity pressure into a concrete trade-work action', () => {
+    const action = planNpcWorldLawAction(input({
+      needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },
+      lifeGoal: { kind: 'earn_money', pressure: 20, narration: '慢慢存錢' },
+      memoryContext: '',
+      intentEntries: [{ kind: 'economic', urgency: 66, targetTile: 't_dock', reason: 'player_relationship_reciprocity trust=78 trades=3 affinity=28' }],
+    }))
+
+    expect(action?.resolved.kind).toBe('work')
+    expect(action?.resolved.targetTile).toBe('t_dock')
+    expect(action?.proposal.action).toContain('留一手')
+    expect(action?.proposal.reason).toContain('交易互惠')
+    expect(action?.proposal.utterance).toContain('留給熟客')
   })
 
   it('stays quiet when no world pressure crosses the threshold', () => {

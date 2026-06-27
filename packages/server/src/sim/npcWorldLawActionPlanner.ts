@@ -1,6 +1,7 @@
 import type { NpcFreeformActionProposedCmd, NpcFreeformActionKind } from '../kernel/livingWorldCommands.js'
 import type { NpcLifeNeedKey, NpcLifeView } from './cityLife.js'
 import type { NpcRuntimeState } from './npcEngine.js'
+import type { IntentEntry } from './intentPlanner.js'
 import type { NpcAutonomousPlannerTileScore } from './npcAutonomousPlanner.js'
 import type { NpcCognitiveProfile } from './npcCognitiveRuntime.js'
 
@@ -14,6 +15,7 @@ export type NpcWorldLawActionPlannerInput = Readonly<{
   threshold: number
   needs: NpcLifeView['needs']
   lifeGoal: NpcLifeView['goal']
+  intentEntries: readonly IntentEntry[]
   currentOverride: NpcRuntimeState['intentOverride']
   adjacentTiles: readonly string[]
   tileScores: Readonly<Record<string, NpcAutonomousPlannerTileScore>>
@@ -92,6 +94,9 @@ function buildNarration(npcNameZh: string, candidate: WorldLawCandidate, targetN
 }
 
 function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLawCandidate | null {
+  const relationshipCandidate = fromRelationshipPressure(input)
+  if (relationshipCandidate) return relationshipCandidate
+
   if (input.currentOverride && input.currentOverride.targetTile !== input.currentTile) {
     return {
       kind: 'travel',
@@ -179,9 +184,67 @@ function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLaw
   }
 }
 
+function fromRelationshipPressure(input: NpcWorldLawActionPlannerInput): WorldLawCandidate | null {
+  const entry = input.intentEntries
+    .filter((candidate) => candidate.urgency > input.threshold && candidate.reason.includes('player_relationship_'))
+    .sort((a, b) => b.urgency - a.urgency || a.targetTile.localeCompare(b.targetTile))[0]
+  if (!entry) return null
+  const targetTile = entry.targetTile || input.currentTile
+
+  if (entry.reason.includes('player_relationship_caution')) {
+    return {
+      kind: 'spread_rumor',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `在${tileName(input, targetTile)}提醒熟人別太靠近讓自己戒備的玩家`,
+      riskZh: '提醒同伴可能被玩家聽見，也可能讓原本的誤會變得更深。',
+      expectedOutcomeZh: '讓附近同伴提高警覺，自己也保留退路。',
+      utteranceZh: '先別太靠近那個人。',
+    }
+  }
+
+  if (entry.reason.includes('player_relationship_affinity')) {
+    return {
+      kind: 'custom_social_scene',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `主動在${tileName(input, targetTile)}找信任的玩家聊一下近況`,
+      riskZh: '太主動可能顯得露骨，也可能耽誤原本工作。',
+      expectedOutcomeZh: '維持親近感，交換近況，留下下一次合作的理由。',
+      utteranceZh: '有空聊一下嗎？',
+    }
+  }
+
+  if (entry.reason.includes('player_relationship_reciprocity')) {
+    return {
+      kind: 'work',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `去${tileName(input, targetTile)}留一手合適的貨或工作機會給熟客`,
+      riskZh: '偏向熟客會壓縮其他人的機會，也可能讓庫存調度變緊。',
+      expectedOutcomeZh: '把重複交易累積成可回報的交易互惠。',
+      utteranceZh: '這個留給熟客。',
+    }
+  }
+
+  return null
+}
+
 function buildReason(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate, targetName: string): string {
   const primary = strongestNeed(input.needs)
   const memory = input.memoryContext.trim()
+  if (candidate.actionZh.includes('讓自己戒備的玩家')) {
+    return `玩家關係形成戒備壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
+  if (candidate.actionZh.includes('信任的玩家')) {
+    return `玩家關係累積親近壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
+  if (candidate.actionZh.includes('熟客')) {
+    return `玩家關係形成交易互惠壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
   const memoryLine = memory ? `記憶線索「${truncate(memory, 42)}」也指向${targetName}。` : ''
   const thought = input.cognitive?.thoughtZh ? ` ${input.cognitive.thoughtZh}` : ''
   const needText = candidate.need === 'life_goal'
