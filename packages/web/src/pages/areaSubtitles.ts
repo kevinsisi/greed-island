@@ -112,7 +112,7 @@ export function ambientNpcChatterLines(input: {
   const nearby = input.npcs.filter((npc) => input.nearbyNpcIds.has(npc.id) && isAreaSociallyAvailableNpc(npc))
   const lines: AreaSubtitleLine[] = []
   for (const npc of nearby) {
-    const text = npc.recentUtterance?.text?.trim()
+    const text = ambientNpcSubtitleText(npc)
     if (!text || seenText.has(text)) continue
     seenText.add(text)
     lines.push({
@@ -126,6 +126,16 @@ export function ambientNpcChatterLines(input: {
     if (lines.length >= limit) break
   }
   return lines
+}
+
+function ambientNpcSubtitleText(npc: NpcSummary): string {
+  const recent = npc.recentUtterance?.text?.trim()
+  if (recent) return recent
+  const relationship = npc.relationshipAction
+  if (!relationship) return ''
+  const utterance = relationship.utteranceZh?.trim()
+  if (utterance) return utterance
+  return relationship.detailZh.trim()
 }
 
 export function optimisticLocalShoutLines(input: {

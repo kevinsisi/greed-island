@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-27 — Handoff Snapshot @ v0.98.22
+## 2026-06-27 — Handoff Snapshot @ v0.98.23
 
 ### Current Version
 `0.98.22` — Player Relationship Action Projection：關係行動現在由後端 typed projection/API 提供，前端優先讀 `npc.relationshipAction`，不再需要從 raw freeform 字串猜 badge。

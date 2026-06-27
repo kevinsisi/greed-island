@@ -81,6 +81,31 @@ describe('areaSubtitles', () => {
     ])
   })
 
+  it('turns server relationship actions into ambient nearby subtitle lines', () => {
+    const lines = ambientNpcChatterLines({
+      npcs: [
+        npc({
+          id: 'npc.a',
+          name: '星沉',
+          relationshipAction: {
+            kind: 'caution',
+            labelZh: '⚠️ 戒備玩家',
+            detailZh: '玩家關係形成戒備壓力 76；讓附近同伴提高警覺。',
+            utteranceZh: '先別太靠近那個人。',
+            tick: 101,
+            sequence: 9,
+          },
+        }),
+      ],
+      nearbyNpcIds: new Set(['npc.a']),
+      tick: 102,
+    })
+
+    expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
+      '星沉: 先別太靠近那個人。',
+    ])
+  })
+
   it('builds ambient nearby NPC chatter only from actual utterances, not cognition summaries', () => {
     const lines = ambientNpcChatterLines({
       npcs: [
