@@ -38,7 +38,7 @@ const LOCAL_SHOUT_CLIENT_TIMEOUT_MS = 18_000
 import { areaOutdoorNpcs, areaVisibleNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
-import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
+import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge, npcRelationshipActionMarker } from './areaBehavior'
 import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, optimisticLocalShoutLines, relationshipActionSubtitleLines, type AreaSubtitleLine } from './areaSubtitles'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
@@ -827,6 +827,7 @@ export function AreaPage() {
                       {outdoorOccupants.map((npc) => {
                         const isNearby = nearbyNpcIds.has(npc.id)
                         const behavior = npcBehaviorBadge(npc, localEvents)
+                        const relationshipMarker = npcRelationshipActionMarker(npc)
                         return (
                           <button
                             key={npc.id}
@@ -866,6 +867,16 @@ export function AreaPage() {
                               ].join(' ')}>
                                 {behavior.primary}
                               </div>
+                              {relationshipMarker && (
+                                <div className="mt-1 rounded-sharp border border-ember-700/50 bg-ember-950/15 px-1.5 py-1 text-[10px] leading-snug text-ember-100">
+                                  <div className="font-display uppercase tracking-tightest text-ember-300">
+                                    {relationshipMarker.label}
+                                  </div>
+                                  <div className="truncate text-ground-200">
+                                    {relationshipMarker.detail}
+                                  </div>
+                                </div>
+                              )}
                               {npc.intentLine && (
                                 <div className="text-[11px] text-ember-300 truncate">
                                   {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}

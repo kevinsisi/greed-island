@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-27 — Handoff Snapshot @ v0.98.24
+## 2026-06-27 — Handoff Snapshot @ v0.98.25
 
 ### Current Version
 `0.98.24` — Player Relationship Action Timeline：relationship action 字幕不再只是 ambient fallback；現在會以 dedicated subtitle rows 和 live dialogue / NPC social events 混排。

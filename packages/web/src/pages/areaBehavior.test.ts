@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AnimalGroupRow } from '../api/client'
 import type { EventSummary, NpcSummary } from '../state/types'
-import { animalBehaviorLabel, npcBehaviorBadge } from './areaBehavior'
+import { animalBehaviorLabel, npcBehaviorBadge, npcRelationshipActionMarker } from './areaBehavior'
 
 function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
   return Object.assign({
@@ -76,6 +76,23 @@ describe('areaBehavior', () => {
 
     expect(badge.primary).toBe('🤝 想找玩家聊天')
     expect(badge.detail).toContain('親近壓力')
+  })
+
+  it('builds compact relationship action markers for NPC cards', () => {
+    expect(npcRelationshipActionMarker(npc({
+      id: 'npc.a',
+      relationshipAction: {
+        kind: 'reciprocity',
+        labelZh: '💰 保留交易機會',
+        detailZh: '把重複交易累積成可回報的交易互惠。',
+        utteranceZh: '我替你留了一手貨。',
+        tick: 33,
+        sequence: 8,
+      },
+    }))).toEqual({
+      label: '關係行動 · 💰 保留交易機會',
+      detail: '我替你留了一手貨。',
+    })
   })
 
   it('renders relationship caution freeform actions as visible NPC badges', () => {

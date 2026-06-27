@@ -39,6 +39,22 @@ export function npcBehaviorBadge(npc: NpcSummary, recentEvents: readonly EventSu
   return NPC_ACTIVITY_BADGES[npc.activity ?? 'idle'] ?? NPC_ACTIVITY_BADGES.idle
 }
 
+export type RelationshipActionMarker = Readonly<{
+  label: string
+  detail: string
+}>
+
+export function npcRelationshipActionMarker(npc: NpcSummary): RelationshipActionMarker | null {
+  const action = npc.relationshipAction
+  if (!action) return null
+  const utterance = action.utteranceZh?.trim()
+  const detail = utterance || action.detailZh.trim()
+  return {
+    label: `關係行動 · ${action.labelZh}`,
+    detail,
+  }
+}
+
 export function isNpcArguing(npcId: string, recentEvents: readonly EventSummary[]): boolean {
   return recentEvents.some((event) => {
     if (event.eventType !== 'NPC_INTERACT') return false
