@@ -101,6 +101,34 @@ export function nearbySpeechRecipients(
   return recipients.slice(0, limit)
 }
 
+export function relationshipActionSubtitleLines(input: {
+  npcs: readonly NpcSummary[]
+  nearbyNpcIds: ReadonlySet<string>
+  limit?: number
+}): AreaSubtitleLine[] {
+  const limit = input.limit ?? 4
+  const lines: AreaSubtitleLine[] = []
+  for (const npc of input.npcs) {
+    if (!input.nearbyNpcIds.has(npc.id) || !isAreaSociallyAvailableNpc(npc)) continue
+    if (npc.recentUtterance?.text?.trim()) continue
+    const relationship = npc.relationshipAction
+    if (!relationship) continue
+    const text = relationship.utteranceZh?.trim() || relationship.detailZh.trim()
+    if (!text) continue
+    lines.push({
+      id: `relationship-action:${npc.id}:${relationship.sequence}`,
+      tick: relationship.tick,
+      speaker: npc.name,
+      text,
+      tone: 'npc',
+      npcId: npc.id,
+    })
+  }
+  return lines
+    .sort((a, b) => a.tick - b.tick)
+    .slice(-limit)
+}
+
 export function ambientNpcChatterLines(input: {
   npcs: readonly NpcSummary[]
   nearbyNpcIds: ReadonlySet<string>

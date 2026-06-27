@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EventSummary, NpcSummary } from '../state/types'
-import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, nearestSpeakTarget, optimisticLocalShoutLines, optimisticSpeechLines } from './areaSubtitles'
+import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, nearestSpeakTarget, optimisticLocalShoutLines, optimisticSpeechLines, relationshipActionSubtitleLines } from './areaSubtitles'
 
 function ev(input: Partial<EventSummary> & Pick<EventSummary, 'eventType' | 'payload'>): EventSummary {
   return {
@@ -103,6 +103,36 @@ describe('areaSubtitles', () => {
 
     expect(lines.map((line) => `${line.speaker}: ${line.text}`)).toEqual([
       '星沉: 先別太靠近那個人。',
+    ])
+  })
+
+  it('builds dedicated relationship action subtitle rows that can mix with live speech', () => {
+    const lines = relationshipActionSubtitleLines({
+      npcs: [
+        npc({
+          id: 'npc.a',
+          name: '星沉',
+          relationshipAction: {
+            kind: 'caution',
+            labelZh: '⚠️ 戒備玩家',
+            detailZh: '玩家關係形成戒備壓力 76；讓附近同伴提高警覺。',
+            utteranceZh: '先別太靠近那個人。',
+            tick: 101,
+            sequence: 9,
+          },
+        }),
+        npc({
+          id: 'npc.b',
+          name: '阿鬼',
+          recentUtterance: { text: '我先去碼頭。', tick: 102 },
+        }),
+      ],
+      nearbyNpcIds: new Set(['npc.a', 'npc.b']),
+      limit: 3,
+    })
+
+    expect(lines.map((line) => `${line.id} ${line.speaker}: ${line.text}`)).toEqual([
+      'relationship-action:npc.a:9 星沉: 先別太靠近那個人。',
     ])
   })
 

@@ -39,7 +39,7 @@ import { areaOutdoorNpcs, areaVisibleNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
 import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
 import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge } from './areaBehavior'
-import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, optimisticLocalShoutLines, type AreaSubtitleLine } from './areaSubtitles'
+import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, optimisticLocalShoutLines, relationshipActionSubtitleLines, type AreaSubtitleLine } from './areaSubtitles'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -262,12 +262,22 @@ export function AreaPage() {
     }),
     [nearbyNpcIdList, outdoorOccupants, subtitleRecipientIds, world.tick]
   )
+  const relationshipSubtitles = useMemo(
+    () => relationshipActionSubtitleLines({
+      npcs: outdoorOccupants,
+      nearbyNpcIds: new Set(nearbyNpcIdList.length > 0 ? nearbyNpcIdList : subtitleRecipientIds),
+      limit: 4,
+    }),
+    [nearbyNpcIdList, outdoorOccupants, subtitleRecipientIds]
+  )
   const subtitleFeed = useMemo(
     () => dedupeSubtitleLines([
-      ...(liveSubtitles.length > 0 ? liveSubtitles : ambientSubtitles),
+      ...liveSubtitles,
+      ...relationshipSubtitles,
+      ...(liveSubtitles.length === 0 && relationshipSubtitles.length === 0 ? ambientSubtitles : []),
       ...optimisticSubtitles,
     ]),
-    [ambientSubtitles, liveSubtitles, optimisticSubtitles]
+    [ambientSubtitles, liveSubtitles, optimisticSubtitles, relationshipSubtitles]
   )
 
   const interactionReadyCount = outdoorOccupants.length

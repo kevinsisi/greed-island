@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-27 — Handoff Snapshot @ v0.98.23
+## 2026-06-27 — Handoff Snapshot @ v0.98.24
 
 ### Current Version
 `0.98.23` — Player Relationship Action Subtitles：server-projected `npc.relationshipAction` 現在會進附近字幕/動態 feed。玩家不只看到 badge，也能看到 NPC 說出提醒、靠近、留機會等關係行動。
