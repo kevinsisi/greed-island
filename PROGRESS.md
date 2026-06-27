@@ -8,30 +8,25 @@ developer. Keep latest status at the top.
 ## 2026-06-27 — Handoff Snapshot @ v0.98.26
 
 ### Current Version
-`0.98.25` — Player Relationship Action Card Marker：NPC drawer/card 現在會直接顯示 compact relationship action marker，讓玩家不用只靠字幕或地圖 badge 才知道誰正在警告、靠近、或保留交易機會。
+`0.98.26` — Player Relationship Action Dialog Context：玩家打開 NPC 對話時，dialog header 也會顯示目前 relationship action context，包含「關係行動 · label」與 NPC 實際 utterance/detail。
 
 ### What Changed
-- `packages/web/src/pages/areaBehavior.ts`
-  - 新增 `npcRelationshipActionMarker()`。
-  - marker label：`關係行動 · {labelZh}`。
-  - marker detail 優先用 `utteranceZh`，沒有時 fallback 到 `detailZh`。
-- `packages/web/src/pages/AreaPage.tsx`
-  - NPC drawer card 在 behavior badge 下方渲染 relationship action marker。
-- `packages/web/src/pages/areaBehavior.test.ts`
-  - 新增 compact marker regression。
-- `openspec/changes/player-relationship-action-card-marker/`
+- `packages/web/src/components/game/NpcDialog.tsx`
+  - 重用 `npcRelationshipActionMarker()`。
+  - 在 NPC dialog header 的 relationship / tier 下方渲染 relationship action marker。
+- `openspec/changes/player-relationship-action-dialog-context/`
   - 新增 proposal / tasks / spec。
 
 ### Verified
-- `npm run version:sync` — pass（version synced: `0.98.25`）
-- `npx openspec validate player-relationship-action-card-marker --strict` — pass
+- `npm run version:sync` — pass（version synced: `0.98.26`）
+- `npx openspec validate player-relationship-action-dialog-context --strict` — pass
 - `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（18 tests）
 - `npm run build -w @greed-island/web` — pass
 - `npm run build -w @greed-island/server` — pass
-- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.25`, `ok=true`, tick `288398` during verification.
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.26`, `ok=true`, tick `288402` during verification.
 
 ### Continue
-- Continue player-visible consequences by adding relationship action context into the NPC dialog header/body so direct conversations expose why the NPC is warning, approaching, or reserving trade opportunities.
+- Continue world consequences: make relationship action kinds affect available quick intents / dialog prompt hints so NPCs under caution/affinity/reciprocity offer different conversation affordances.
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.20
 
