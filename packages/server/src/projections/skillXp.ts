@@ -13,11 +13,13 @@ export type SkillXpRow = Readonly<{
 const NPC_OBSERVED_SKILL = 'NPC_OBSERVED_SKILL'
 const NPC_MENTORSHIP_STARTED = 'NPC_MENTORSHIP_STARTED'
 const NPC_MENTORSHIP_COMPLETED = 'NPC_MENTORSHIP_COMPLETED'
+const NPC_FREEFORM_ACTION_PROPOSED = 'NPC_FREEFORM_ACTION_PROPOSED'
 
 export const SKILL_XP_BOOT_EVENT_TYPES = [
   NPC_OBSERVED_SKILL,
   NPC_MENTORSHIP_STARTED,
   NPC_MENTORSHIP_COMPLETED,
+  NPC_FREEFORM_ACTION_PROPOSED,
 ] as const
 
 export class SkillXpProjection {
@@ -35,21 +37,16 @@ export class SkillXpProjection {
   }
 
   project(event: Event): void {
+    if (event.eventType === NPC_FREEFORM_ACTION_PROPOSED) {
+      const p = readFreeformSkillPayload(event)
+      if (!p) return
+      this.addXp(p.npcId, p.skillId, p.xpDelta)
+      return
+    }
     if (event.eventType === NPC_OBSERVED_SKILL) {
       const p = readObservedPayload(event)
       if (!p) return
-      const k = this.key(p.npcId, p.skillId)
-      const existing = this.rows.get(k)
-      const delta = p.xpDelta ?? SKILL_XP_PER_OBSERVE
-      const newXp = (existing?.xp ?? 0) + delta
-      const newLevel = Math.floor(newXp / SKILL_XP_LEVEL_THRESHOLD)
-      this.rows.set(k, {
-        npcId: p.npcId,
-        skillId: p.skillId,
-        xp: newXp,
-        level: newLevel,
-        mentorId: existing?.mentorId ?? null,
-      })
+      this.addXp(p.npcId, p.skillId, p.xpDelta ?? SKILL_XP_PER_OBSERVE)
       return
     }
     if (event.eventType === NPC_MENTORSHIP_STARTED) {
@@ -102,6 +99,33 @@ export class SkillXpProjection {
   canonicalHash(): string {
     return hashCanonicalJson(this.getAll())
   }
+
+  private addXp(npcId: string, skillId: string, delta: number): void {
+    const k = this.key(npcId, skillId)
+    const existing = this.rows.get(k)
+    const newXp = (existing?.xp ?? 0) + delta
+    const newLevel = Math.floor(newXp / SKILL_XP_LEVEL_THRESHOLD)
+    this.rows.set(k, {
+      npcId,
+      skillId,
+      xp: newXp,
+      level: newLevel,
+      mentorId: existing?.mentorId ?? null,
+    })
+  }
+}
+
+function readFreeformSkillPayload(event: Event): { npcId: string; skillId: string; xpDelta: number } | null {
+  const data = (event.payload as Record<string, unknown>)?.data
+  if (typeof data !== 'object' || data === null) return null
+  const p = data as Record<string, unknown>
+  if (p.accepted !== true || typeof p.npcId !== 'string') return null
+  const resolved = p.resolved
+  if (typeof resolved !== 'object' || resolved === null || Array.isArray(resolved)) return null
+  const kind = (resolved as Record<string, unknown>).kind
+  if (kind === 'learn') return { npcId: p.npcId, skillId: 'learning', xpDelta: SKILL_XP_PER_OBSERVE }
+  if (kind === 'invent') return { npcId: p.npcId, skillId: 'invention', xpDelta: SKILL_XP_PER_OBSERVE }
+  return null
 }
 
 function readObservedPayload(event: Event): { npcId: string; skillId: string; xpDelta?: number } | null {

@@ -45,6 +45,18 @@ describe('GoodsInventoryProjection', () => {
     expect(projection.get({ goodsId: 'meat', holderType: 'npc', holderId: 'forest.hunter' })?.quantity).toBe(0)
   })
 
+  it('turns accepted buy_goods freeform actions into concrete NPC supplies', () => {
+    const projection = new GoodsInventoryProjection()
+    projection.rebuildFromEvents([
+      freeformActionEvent(1, 'npc.shopper', 'buy_goods', 't_dock', 40),
+    ])
+
+    const row = projection.get({ goodsId: 'daily_supplies', holderType: 'npc', holderId: 'npc.shopper' })
+    expect(row?.quantity).toBeGreaterThan(0)
+    expect(row?.tileId).toBe('t_dock')
+    expect(row?.lastUpdatedTick).toBe(40)
+  })
+
   it('adds goods to player inventory on PLAYER_PICKED_UP_GOODS', () => {
     const projection = new GoodsInventoryProjection()
     projection.rebuildFromEvents([
@@ -189,6 +201,19 @@ function consumedEvent(
     tileId: input.tileId,
     consumedAtTick: input.tick,
     narration: 'goods consumed',
+  })
+}
+
+function freeformActionEvent(sequence: number, npcId: string, kind: string, targetTile: string, tick: number): Event {
+  return baseEvent(sequence, 'NPC_FREEFORM_ACTION_PROPOSED', tick, {
+    npcId,
+    tile: targetTile,
+    proposal: { action: kind, target: { tileId: targetTile, npcId: null, cardId: null }, reason: 'test', risk: 'low', expectedOutcome: 'test', utterance: null },
+    resolved: { kind, targetTile, targetNpcId: null, cardId: null, summary: kind },
+    accepted: true,
+    rejectionReason: null,
+    decidedAtTick: tick,
+    narration: `${npcId} ${kind}`,
   })
 }
 

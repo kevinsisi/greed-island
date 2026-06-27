@@ -1,3 +1,8 @@
+## 2026-06-27 — Handoff Snapshot @ v0.98.29
+
+- Shipped npc-life-action-consequences: accepted `buy_goods` freeform actions rebuild into NPC `daily_supplies`; accepted `learn` actions rebuild into `learning` XP; accepted `invent` actions rebuild into world technology evidence. Boot/hydration filters now include freeform events for the affected projections.
+- Tests: targeted server projection/hydration tests passed; server build passed.
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.28
 
 - Shipped npc-life-action-ui-alignment: Timeline now labels `buy_goods`/`learn`/`invent` as shopping/learning/invention, and area NPC badges show recent committed freeform actions as採買/學習/發想 instead of idle.

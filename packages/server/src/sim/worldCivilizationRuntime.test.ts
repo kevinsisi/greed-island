@@ -49,6 +49,27 @@ describe('WorldCivilizationProjection', () => {
     expect(snapshot.goals[0]).toMatchObject({ goalId: 'goal.infrastructure.roads', progress: 45, completed: false })
     expect(snapshot.technologies).toContainEqual(expect.objectContaining({ techId: 'tech.road_surveying', domain: 'infrastructure' }))
   })
+  it('promotes accepted invention freeform actions into replayable technology evidence', () => {
+    const projection = new WorldCivilizationProjection()
+    projection.projectEvent({
+      eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
+      tick: 44,
+      payload: { data: {
+        npcId: 'npc.inventor',
+        tile: 't_central',
+        resolved: { kind: 'invent', targetTile: 't_central', targetNpcId: null, cardId: null, summary: '整理鹽霧保存草圖' },
+        accepted: true,
+        narration: 'npc.inventor invents',
+      } },
+    })
+
+    expect(projection.snapshot().technologies).toContainEqual(expect.objectContaining({
+      techId: 'tech.freeform.npc.inventor.44',
+      domain: 'learning',
+      title: '整理鹽霧保存草圖',
+      evidenceEventIds: ['NPC_FREEFORM_ACTION_PROPOSED:44:npc.inventor'],
+    }))
+  })
 })
 
 describe('planWorldCivilizationCommands', () => {
