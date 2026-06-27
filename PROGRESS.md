@@ -5,6 +5,30 @@ developer. Keep latest status at the top.
 
 ---
 
+## 2026-06-27 — Handoff Snapshot @ v0.98.19
+
+### Current Version
+`0.98.19` — Player Relationship Complexity Planner：修正 v0.98.18 太偏「怨懟/戒備」的問題。玩家↔NPC 長期關係現在同時投影信任、怨懟、親近、熟悉、正/負互動、交易往來，planner 可產生戒備、親近、互惠三種 deterministic relationship pressure。
+
+### What Changed
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - relationship arc 新增 `affinity`、`positiveInteractionCount`、`negativeInteractionCount`、`tradeInteractionCount`。
+  - 正向互動會降低怨懟、增加親近；負向互動會提高怨懟、降低親近。
+  - `plannerBiasForNpc()` 現在聚合 `maxTrust`、`maxAffinity`、`maxFamiliarity`、正/負互動數與交易數。
+- `packages/server/src/sim/intentPlanner.ts`
+  - `player_relationship_caution`：高怨懟/低信任 → social caution。
+  - `player_relationship_affinity`：高信任 + 高親近/熟悉 → social approach/attachment。
+  - `player_relationship_reciprocity`：高信任 + 重複交易 → economic reciprocity。
+- `openspec/changes/player-relationship-complexity-planner/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（38 tests）
+- `npm run build -w @greed-island/server` — pass
+
+### Next Slice
+- 把這三種 relationship pressure 落到更具體 action：靠近/避開玩家、給折扣/加價、提醒同伴、主動提供幫助或拒絕協助。
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.18
 
 ### Current Version

@@ -9,8 +9,12 @@ export type PlayerNpcRelationshipArc = Readonly<{
   npcId: string
   trust: number
   resentment: number
+  affinity: number
   familiarity: number
   interactionCount: number
+  positiveInteractionCount: number
+  negativeInteractionCount: number
+  tradeInteractionCount: number
   lastIntent: 'greet' | 'ask' | 'trade'
   lastPlayerMessage: string
   lastTick: number
@@ -20,6 +24,7 @@ const RELATIONSHIP_MIN = 0
 const RELATIONSHIP_MAX = 100
 const DEFAULT_TRUST = 50
 const DEFAULT_RESSENTMENT = 50
+const DEFAULT_AFFINITY = 0
 const DEFAULT_FAMILIARITY = 0
 const MAX_MESSAGE_CONTEXT_CHARS = 80
 
@@ -48,8 +53,12 @@ export class PlayerNpcRelationshipProjection {
       npcId,
       trust: clamp(trustAfter),
       resentment: clamp((current?.resentment ?? DEFAULT_RESSENTMENT) + resentmentDeltaFor(trustDelta)),
+      affinity: clamp((current?.affinity ?? DEFAULT_AFFINITY) + affinityDeltaFor(trustDelta, intent)),
       familiarity: clamp((current?.familiarity ?? DEFAULT_FAMILIARITY) + 1),
       interactionCount: Math.max(0, Math.round(interactionCount)),
+      positiveInteractionCount: (current?.positiveInteractionCount ?? 0) + (trustDelta > 0 ? 1 : 0),
+      negativeInteractionCount: (current?.negativeInteractionCount ?? 0) + (trustDelta < 0 ? 1 : 0),
+      tradeInteractionCount: (current?.tradeInteractionCount ?? 0) + (intent === 'trade' ? 1 : 0),
       lastIntent: intent,
       lastPlayerMessage: summarize(playerMessage),
       lastTick: typeof event.tick === 'number' ? event.tick : current?.lastTick ?? 0,
@@ -78,7 +87,13 @@ export class PlayerNpcRelationshipProjection {
     return {
       maxResentment: Math.max(...rows.map((row) => row.resentment)),
       minTrust: Math.min(...rows.map((row) => row.trust)),
+      maxTrust: Math.max(...rows.map((row) => row.trust)),
+      maxAffinity: Math.max(...rows.map((row) => row.affinity)),
+      maxFamiliarity: Math.max(...rows.map((row) => row.familiarity)),
       interactionCount: rows.reduce((sum, row) => sum + row.interactionCount, 0),
+      positiveInteractionCount: rows.reduce((sum, row) => sum + row.positiveInteractionCount, 0),
+      negativeInteractionCount: rows.reduce((sum, row) => sum + row.negativeInteractionCount, 0),
+      tradeInteractionCount: rows.reduce((sum, row) => sum + row.tradeInteractionCount, 0),
     }
   }
 
@@ -99,7 +114,7 @@ export function formatPlayerRelationshipContext(row: PlayerNpcRelationshipArc | 
       ? '戒備玩家'
       : '觀望玩家'
   const recent = row.lastPlayerMessage ? `；最近玩家說：「${row.lastPlayerMessage}」` : ''
-  return `玩家關係：${stance}；信任 ${row.trust}；怨懟 ${row.resentment}；熟悉 ${row.familiarity}；互動 ${row.interactionCount} 次${recent}`
+  return `玩家關係：${stance}；信任 ${row.trust}；怨懟 ${row.resentment}；親近 ${row.affinity}；熟悉 ${row.familiarity}；互動 ${row.interactionCount} 次${recent}`
 }
 
 function extractData(payload: unknown): Record<string, unknown> | null {
@@ -125,7 +140,15 @@ function readFiniteNumber(value: unknown): number | null {
 
 function resentmentDeltaFor(trustDelta: number): number {
   if (trustDelta < 0) return Math.min(10, Math.abs(Math.round(trustDelta)))
+  if (trustDelta > 0) return -Math.min(4, Math.max(1, Math.round(trustDelta / 2)))
   return 0
+}
+
+function affinityDeltaFor(trustDelta: number, intent: PlayerNpcRelationshipArc['lastIntent']): number {
+  if (trustDelta < 0) return -Math.min(8, Math.abs(Math.round(trustDelta)))
+  if (trustDelta === 0) return intent === 'trade' ? 1 : 0
+  const intentBonus = intent === 'greet' ? 1 : intent === 'trade' ? 2 : 0
+  return Math.min(14, Math.round(trustDelta) * 2 + intentBonus)
 }
 
 function summarize(value: string): string {

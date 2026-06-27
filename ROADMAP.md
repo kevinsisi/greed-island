@@ -5,6 +5,21 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.19 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Complexity Planner（玩家關係複雜度進入 NPC planner）**
+
+- ✅ **不只怨懟** — 關係弧新增親近、熟悉、正向互動、負向互動、交易往來。
+- ✅ **情感會雙向變化** — 正向互動降低怨懟並提高親近；負向互動提高怨懟並降低親近。
+- ✅ **三種 planner pressure**：
+  - `player_relationship_caution` → 戒備/避開/防衛方向。
+  - `player_relationship_affinity` → 親近/靠近/願意互動方向。
+  - `player_relationship_reciprocity` → 交易互惠/經濟回饋方向。
+- ✅ **deterministic** — 所有結果由 `PLAYER_NPC_DIALOGUE` EventLog 重放而來，不是 AI 即興狀態。
+- ✅ **Verification** — server planner/projection/router tests（38）、server build 通過。
+
+---
+
 ## v0.98.18 ✅ local-ready — 2026-06-27
 
 **主題：Player Relationship Influences NPC Planner（玩家關係影響 NPC 行動規劃）**

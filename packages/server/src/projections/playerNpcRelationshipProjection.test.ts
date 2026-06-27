@@ -45,15 +45,19 @@ describe('PlayerNpcRelationshipProjection', () => {
       playerAccountId: '7',
       npcId: 'npc-a',
       trust: 46,
-      resentment: 55,
+      resentment: 54,
+      affinity: 0,
       familiarity: 2,
       interactionCount: 2,
+      positiveInteractionCount: 1,
+      negativeInteractionCount: 1,
+      tradeInteractionCount: 0,
       lastIntent: 'ask',
       lastPlayerMessage: '你這個沒用的傢伙。',
       lastTick: 20,
     })
     expect(formatPlayerRelationshipContext(projection.read('7', 'npc-a'))).toContain('信任 46')
-    expect(formatPlayerRelationshipContext(projection.read('7', 'npc-a'))).toContain('怨懟 55')
+    expect(formatPlayerRelationshipContext(projection.read('7', 'npc-a'))).toContain('怨懟 54')
   })
 
   it('summarizes hostile player relationships as planner bias for an NPC', () => {
@@ -66,7 +70,13 @@ describe('PlayerNpcRelationshipProjection', () => {
     expect(projection.plannerBiasForNpc('npc-a')).toEqual({
       maxResentment: 60,
       minTrust: 18,
+      maxTrust: 74,
+      maxAffinity: 5,
+      maxFamiliarity: 1,
       interactionCount: 8,
+      positiveInteractionCount: 1,
+      negativeInteractionCount: 1,
+      tradeInteractionCount: 0,
     })
   })
 
