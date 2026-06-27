@@ -26,8 +26,11 @@ developer. Keep latest status at the top.
 
 ### Verified
 - `npx openspec validate player-dialogue-long-term-relationship-consequences --strict` — pass
-- `npm run test -w @greed-island/server -- playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（10 tests）
+- `npm run test -w @greed-island/server -- playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（12 tests；含既有 local-shout OpenCode regressions）
 - `npm run build -w @greed-island/server` — pass
+- GitHub Actions CI `28277179070` — pass
+- GitHub Actions Deploy Dev `28277217148` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.17`, `ok=true`, tick `288281` during verification.
 
 ### Next Slice
 - 把這個長期關係投影接到 deterministic planner：同一個 world state 下，高怨懟玩家觸發的 NPC 應更可能拒絕、避開、警戒或找人抱怨。
