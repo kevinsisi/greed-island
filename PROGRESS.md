@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-27 — Handoff Snapshot @ v0.98.21
+## 2026-06-27 — Handoff Snapshot @ v0.98.22
 
 ### Current Version
 `0.98.21` — Player Relationship Action Visibility：v0.98.20 的關係行動現在在區域 NPC 狀態上看得到。NPC 會顯示「戒備玩家 / 想找玩家聊天 / 保留交易機會」。

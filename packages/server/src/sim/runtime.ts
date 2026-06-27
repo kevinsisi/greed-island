@@ -274,6 +274,7 @@ import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projec
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
 import { PlayerNpcRelationshipProjection, formatPlayerRelationshipContext, PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES } from '../projections/playerNpcRelationshipProjection.js'
+import { PlayerRelationshipActionProjection, PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, type PlayerRelationshipActionView } from '../projections/playerRelationshipActions.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
@@ -547,6 +548,8 @@ export type SimNpcState = Readonly<{
   deceased: boolean
   /** Most recent AI freeform utterance if it is still within the visibility window; null otherwise. */
   recentUtterance: { text: string; tick: number } | null
+  /** Most recent relationship-driven action surfaced for player-facing NPC state. */
+  relationshipAction: PlayerRelationshipActionView | null
 }>
 
 export type TickCommandStats = Readonly<{
@@ -720,6 +723,7 @@ export class SimulationRuntime {
   private readonly lifeGoalsProjection = new LifeGoalsProjection()
   private readonly npcCognitiveProjection = new NpcCognitiveProjectionStore()
   private readonly playerNpcRelationshipProjection = new PlayerNpcRelationshipProjection()
+  private readonly playerRelationshipActionProjection = new PlayerRelationshipActionProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -1738,6 +1742,7 @@ export class SimulationRuntime {
           if (this.currentTick - u.tick > NPC_AGENT_UTTERANCE_VISIBLE_TICKS) return null
           return u
         })(),
+        relationshipAction: this.playerRelationshipActionProjection.getForNpc(profile.id),
       }
     })
   }
@@ -2292,6 +2297,7 @@ export class SimulationRuntime {
       this.lifeGoalsProjection.project(ev)
       this.npcCognitiveProjection.project(ev)
       this.playerNpcRelationshipProjection.apply(ev)
+      this.playerRelationshipActionProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -5987,6 +5993,7 @@ export class SimulationRuntime {
         this.roadNetworkProjection.project(ev)
         this.wallNetworkProjection.project(ev)
         this.activeRuleOperatorsProjection.project(ev)
+        this.playerRelationshipActionProjection.project(ev)
         this.npcIncapacitationProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
@@ -6878,6 +6885,7 @@ export class SimulationRuntime {
       this.intentProjection.rebuildFromEvents(allEvents)
       this.npcCognitiveProjection.rebuildFromEvents(allEvents)
       this.playerNpcRelationshipProjection.rebuildFromEvents(allEvents)
+      this.playerRelationshipActionProjection.rebuildFromEvents(allEvents)
       // v0.87.3 boot-bug fix: mortality / lineage / born-npc projections were
       // wired into the large-log else-branch but NOT here. Result was that
       // every small-world restart resurrected every deceased NPC (the very
@@ -7051,6 +7059,7 @@ export class SimulationRuntime {
       { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
       { label: 'player-npc-relationships', eventTypes: PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES, apply: (events) => this.playerNpcRelationshipProjection.rebuildFromEvents(events) },
+      { label: 'player-relationship-actions', eventTypes: PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, apply: (events) => this.playerRelationshipActionProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections

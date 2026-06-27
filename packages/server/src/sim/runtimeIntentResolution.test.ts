@@ -127,6 +127,44 @@ describe('SimulationRuntime intent resolution', () => {
     }
   })
 
+  it('exposes accepted relationship freeform actions through npc snapshots', () => {
+    const db = new Database(':memory:')
+    const eventStore = new SqliteEventStore(db)
+    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    try {
+      const npc = runtime.getNpcs()[0]!
+      runtime.submitLivingWorldCommand(makeLivingWorldCommand('NPC_FREEFORM_ACTION_PROPOSED', npc.id, 'npc', 1, 1, {
+        npcId: npc.id,
+        tile: npc.location,
+        proposal: {
+          action: '在中央提醒熟人別太靠近讓自己戒備的玩家',
+          target: { tileId: npc.location, npcId: null, cardId: null },
+          reason: '玩家關係形成戒備壓力 76；讓附近同伴提高警覺。',
+          risk: '提醒同伴可能被玩家聽見。',
+          expectedOutcome: '讓附近同伴提高警覺。',
+          utterance: '先別太靠近那個人。',
+        },
+        resolved: { kind: 'spread_rumor', targetTile: npc.location, targetNpcId: null, cardId: null, summary: 'relationship caution' },
+        accepted: true,
+        rejectionReason: null,
+        decidedAtTick: 1,
+        narration: 'test',
+      }))
+
+      expect(runtime.getNpcs().find((row) => row.id === npc.id)?.relationshipAction).toEqual({
+        kind: 'caution',
+        labelZh: '⚠️ 戒備玩家',
+        detailZh: '玩家關係形成戒備壓力 76；讓附近同伴提高警覺。',
+        utteranceZh: '先別太靠近那個人。',
+        tick: 1,
+        sequence: 1,
+      })
+    } finally {
+      runtime.stop()
+      db.close()
+    }
+  })
+
   it('applies accepted freeform agent proposals and ignores rejected ones', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)

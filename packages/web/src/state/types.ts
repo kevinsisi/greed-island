@@ -71,6 +71,17 @@ export type NpcActivity =
   | 'write'
   | 'guard'
 
+export type PlayerRelationshipActionKind = 'caution' | 'affinity' | 'reciprocity'
+
+export interface PlayerRelationshipActionView {
+  kind: PlayerRelationshipActionKind
+  labelZh: string
+  detailZh: string
+  utteranceZh: string | null
+  tick: number
+  sequence: number
+}
+
 export interface NpcSummary {
   id: string
   name: string
@@ -137,6 +148,8 @@ export interface NpcSummary {
   deceased: boolean
   /** v0.92.0+：most recent accepted AI freeform utterance within the visibility window. */
   recentUtterance?: { text: string; tick: number } | null
+  /** Server-authoritative relationship-driven action badge projection. */
+  relationshipAction?: PlayerRelationshipActionView | null
 }
 
 export type CardRank = 'S' | 'A' | 'B' | 'C' | 'D'

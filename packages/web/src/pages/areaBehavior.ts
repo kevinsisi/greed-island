@@ -32,6 +32,8 @@ export function npcBehaviorBadge(npc: NpcSummary, recentEvents: readonly EventSu
   if (isNpcArguing(npc.id, recentEvents)) {
     return { primary: '💢 正在爭執', detail: '近期 NPC_INTERACT 記錄為 argue，場景應顯示衝突', tone: 'conflict' }
   }
+  const projectedRelationshipBadge = projectedRelationshipActionBadge(npc)
+  if (projectedRelationshipBadge) return projectedRelationshipBadge
   const relationshipBadge = npcRelationshipActionBadge(npc.id, recentEvents)
   if (relationshipBadge) return relationshipBadge
   return NPC_ACTIVITY_BADGES[npc.activity ?? 'idle'] ?? NPC_ACTIVITY_BADGES.idle
@@ -44,6 +46,21 @@ export function isNpcArguing(npcId: string, recentEvents: readonly EventSummary[
     const participants = event.payload?.participants
     return Array.isArray(participants) && participants.includes(npcId)
   })
+}
+
+function projectedRelationshipActionBadge(npc: NpcSummary): BehaviorBadge | null {
+  const action = npc.relationshipAction
+  if (!action) return null
+  switch (action.kind) {
+    case 'caution':
+      return { primary: action.labelZh, detail: action.detailZh || '正在提醒附近人提高警覺。', tone: 'danger' }
+    case 'affinity':
+      return { primary: action.labelZh, detail: action.detailZh || '正在主動維持玩家關係。', tone: 'active' }
+    case 'reciprocity':
+      return { primary: action.labelZh, detail: action.detailZh || '正在為熟客保留交易或工作機會。', tone: 'trade' }
+    default:
+      return null
+  }
 }
 
 function npcRelationshipActionBadge(npcId: string, recentEvents: readonly EventSummary[]): BehaviorBadge | null {

@@ -60,6 +60,24 @@ describe('areaBehavior', () => {
     expect(npcBehaviorBadge(npc({ id: 'npc.a', activity: 'idle' }), [interact('argue', ['npc.a', 'npc.b'])]).primary).toBe('💢 正在爭執')
   })
 
+  it('prefers server relationship action projection over raw event parsing', () => {
+    const badge = npcBehaviorBadge(npc({
+      id: 'npc.a',
+      activity: 'idle',
+      relationshipAction: {
+        kind: 'affinity',
+        labelZh: '🤝 想找玩家聊天',
+        detailZh: '玩家關係累積親近壓力 61。',
+        utteranceZh: '有空聊一下嗎？',
+        tick: 22,
+        sequence: 7,
+      },
+    }), [])
+
+    expect(badge.primary).toBe('🤝 想找玩家聊天')
+    expect(badge.detail).toContain('親近壓力')
+  })
+
   it('renders relationship caution freeform actions as visible NPC badges', () => {
     const badge = npcBehaviorBadge(npc({ id: 'npc.a', activity: 'idle' }), [
       relationshipAction('npc.a', '玩家關係形成戒備壓力 76；讓附近同伴提高警覺。', '在中央提醒熟人別太靠近讓自己戒備的玩家'),
