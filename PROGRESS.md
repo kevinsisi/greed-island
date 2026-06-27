@@ -8,29 +8,33 @@ developer. Keep latest status at the top.
 ## 2026-06-27 — Handoff Snapshot @ v0.98.22
 
 ### Current Version
-`0.98.21` — Player Relationship Action Visibility：v0.98.20 的關係行動現在在區域 NPC 狀態上看得到。NPC 會顯示「戒備玩家 / 想找玩家聊天 / 保留交易機會」。
+`0.98.22` — Player Relationship Action Projection：關係行動現在由後端 typed projection/API 提供，前端優先讀 `npc.relationshipAction`，不再需要從 raw freeform 字串猜 badge。
 
 ### What Changed
+- `packages/server/src/projections/playerRelationshipActions.ts`
+  - 新增 event-sourced `PlayerRelationshipActionProjection`。
+  - accepted `NPC_FREEFORM_ACTION_PROPOSED` 會分類成 `caution` / `affinity` / `reciprocity`。
+  - rejected 或非關係 freeform action 不覆蓋 projection。
+- `packages/server/src/sim/runtime.ts`
+  - commit fanout 與 boot hydration 都重建/更新 relationship action projection。
+  - `getNpcs()` 現在回傳 `relationshipAction`。
 - `packages/web/src/pages/areaBehavior.ts`
-  - 從 replayed `NPC_FREEFORM_ACTION_PROPOSED` 偵測 relationship action。
-  - caution → `⚠️ 戒備玩家` / danger tone。
-  - affinity → `🤝 想找玩家聊天` / active tone。
-  - reciprocity → `💰 保留交易機會` / trade tone。
-- `packages/web/src/pages/areaBehavior.test.ts`
-  - 新增 relationship caution / affinity / reciprocity badge regression。
-- `openspec/changes/player-relationship-action-visibility/`
+  - NPC badge 優先使用 server projection；raw recent event parsing 只保留 fallback。
+- `openspec/changes/player-relationship-action-projection/`
   - 新增 proposal / tasks / spec。
 
 ### Verified
-- `npm run version:sync` — pass（version synced: `0.98.21`）
-- `npx openspec validate player-relationship-action-visibility --strict` — pass
-- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（14 tests）
-- `npm run build -w @greed-island/web` — pass
+- `npm run version:sync` — pass（version synced: `0.98.22`）
+- `npx openspec validate player-relationship-action-projection --strict` — pass
+- `npm run test -w @greed-island/server -- playerRelationshipActions.test.ts runtimeIntentResolution.test.ts npcWorldLawActionPlanner.test.ts` — pass（18 tests）
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（15 tests）
 - `npm run build -w @greed-island/server` — pass
-- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.21`, `ok=true`, tick `288363` during verification.
+- `npm run build -w @greed-island/web` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.22`, `ok=true`, tick `288372` during verification.
+- Live `/api/npcs` — 76 NPCs，NPC rows include `relationshipAction` key.
 
 ### Next Slice
-- 後端提供 dedicated relationship-action projection/API，讓前端不必從 freeform proposal 字串推斷 badge；同時可做歷史保留與更精準排序。
+- 把 `relationshipAction` 從 NPC badge 擴展到附近動態/字幕 timeline，讓玩家不只看到狀態，也看到 NPC 實際說了什麼、對誰提醒/靠近/留貨。
 
 ## 2026-06-27 — Handoff Snapshot @ v0.98.20
 
