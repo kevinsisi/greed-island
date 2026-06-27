@@ -2153,7 +2153,7 @@ export class SimulationRuntime {
     const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
     const targetTile = typeof resolved.targetTile === 'string' ? resolved.targetTile : null
     if (!targetTile) return
-    const steerableKinds = new Set(['travel', 'work', 'build', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
+    const steerableKinds = new Set(['travel', 'work', 'build', 'buy_goods', 'learn', 'invent', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
     if (!steerableKinds.has(kind)) return
     this.npcEngine.setIntentOverride(npcId, {
       targetTile,

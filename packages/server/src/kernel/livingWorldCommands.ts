@@ -430,6 +430,9 @@ export type NpcFreeformActionKind =
   | 'travel'
   | 'work'
   | 'build'
+  | 'buy_goods'
+  | 'learn'
+  | 'invent'
   | 'rest'
   | 'socialize'
   | 'buy_card'
@@ -2207,7 +2210,7 @@ const VALIDATORS: Readonly<
     if (typeof p.proposal.expectedOutcome !== 'string' || p.proposal.expectedOutcome.length === 0) return 'proposal.expectedOutcome required'
     if (p.proposal.utterance !== null && typeof p.proposal.utterance !== 'string') return 'proposal.utterance must be string or null'
     if (!isRecord(p.resolved)) return 'resolved required'
-    const validKinds = ['travel', 'work', 'build', 'rest', 'socialize', 'buy_card', 'challenge_combat', 'spread_rumor', 'custom_social_scene']
+    const validKinds = ['travel', 'work', 'build', 'buy_goods', 'learn', 'invent', 'rest', 'socialize', 'buy_card', 'challenge_combat', 'spread_rumor', 'custom_social_scene']
     if (typeof p.resolved.kind !== 'string' || !validKinds.includes(p.resolved.kind)) return 'resolved.kind invalid'
     if (p.resolved.targetTile !== null && (typeof p.resolved.targetTile !== 'string' || p.resolved.targetTile.length === 0)) return 'resolved.targetTile must be string or null'
     if (p.resolved.targetNpcId !== null && (typeof p.resolved.targetNpcId !== 'string' || p.resolved.targetNpcId.length === 0)) return 'resolved.targetNpcId must be string or null'

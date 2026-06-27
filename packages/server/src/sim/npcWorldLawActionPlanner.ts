@@ -80,6 +80,12 @@ function buildNarration(npcNameZh: string, candidate: WorldLawCandidate, targetN
       return candidate.actionZh.includes('水源') || candidate.actionZh.includes('棲地')
         ? `${npcNameZh}前往${targetName}巡看水源、棲地與採集邊界，確認環境變化有沒有壓到居民日常。`
         : `${npcNameZh}前往${targetName}接下一件能用上${candidate.actionZh.includes('身分') ? '自己手藝' : '自身能力'}的工作，把壓力換成收入與消息。`
+    case 'buy_goods':
+      return `${npcNameZh}前往${targetName}採買食物、工具與日用品，先把生活缺口補起來。`
+    case 'learn':
+      return `${npcNameZh}在${targetName}找人請教、觀察手法並練習一段還不熟的技能。`
+    case 'invent':
+      return `${npcNameZh}在${targetName}攤開草圖與材料，把零散觀察整理成一個可試的原型點子。`
     case 'rest':
       return `${npcNameZh}在${targetName}暫時收住腳步，先把體力與判斷力拉回來。`
     case 'buy_card':
@@ -128,6 +134,85 @@ function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLaw
       expectedOutcomeZh: '取得安全位置與下一步情報，而不是在壓力最高處硬撐。',
       utteranceZh: '先找條退路。',
     }
+  }
+
+  if (input.lifeGoal.kind === 'learn_skill' && lifeGoalPressure >= primary.value) {
+    const targetTile = bestTile(input, 'economy')
+    const wantsInvent = (input.cognitive?.patienceBias ?? 1) >= 1.35 || /發明|研究|學者|starreader|invent|scholar|research/i.test(input.roleZh)
+    return wantsInvent
+      ? {
+          kind: 'invent',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}發想一個能驗證「${input.lifeGoal.narration}」的小型原型`,
+          riskZh: '想法可能失敗，也可能被旁人看成浪費材料。',
+          expectedOutcomeZh: '留下草圖、假設與下一步可測試的原型方向。',
+          utteranceZh: '先試一個小原型。',
+        }
+      : {
+          kind: 'learn',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}學習「${input.lifeGoal.narration}」需要的手法`,
+          riskZh: '學習會花時間，也可能暴露自己還不熟練。',
+          expectedOutcomeZh: '累積能被後續工作與建設使用的技能線索。',
+          utteranceZh: '找人教我一段。',
+        }
+  }
+
+  if (input.lifeGoal.kind === 'eat' || primary.key === 'food') {
+    const targetTile = bestTile(input, 'economy')
+    return {
+      kind: 'buy_goods',
+      targetTile,
+      pressure: Math.max(primary.value, lifeGoalPressure),
+      need: primary.key === 'food' ? 'food' : 'life_goal',
+      actionZh: `前往${tileName(input, targetTile)}採買食物、工具與能立刻派上用場的日用品`,
+      riskZh: '價格可能被哄抬，貨源也可能不穩，走一趟仍會消耗體力。',
+      expectedOutcomeZh: '把飢餓與日常缺口轉成可補足的採買清單。',
+      utteranceZh: '先把缺的買齊。',
+    }
+  }
+
+  if (primary.key === 'rest' || input.lifeGoal.kind === 'rest') {
+    return {
+      kind: 'rest',
+      targetTile: input.defaultTile || input.currentTile,
+      pressure: Math.max(primary.value, lifeGoalPressure),
+      need: primary.key === 'rest' ? 'rest' : 'life_goal',
+      actionZh: `回到${tileName(input, input.defaultTile || input.currentTile)}整理呼吸並恢復體力`,
+      riskZh: '休息會暫停眼前的收入與社交機會。',
+      expectedOutcomeZh: '讓體力與判斷力回到能繼續工作的狀態。',
+      utteranceZh: '先歇一下。',
+    }
+  }
+
+  if (input.lifeGoal.kind === 'learn_skill') {
+    const targetTile = bestTile(input, 'economy')
+    const wantsInvent = (input.cognitive?.patienceBias ?? 1) >= 1.35 || /發明|研究|學者|starreader|invent|scholar|research/i.test(input.roleZh)
+    return wantsInvent
+      ? {
+          kind: 'invent',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}發想一個能驗證「${input.lifeGoal.narration}」的小型原型`,
+          riskZh: '想法可能失敗，也可能被旁人看成浪費材料。',
+          expectedOutcomeZh: '留下草圖、假設與下一步可測試的原型方向。',
+          utteranceZh: '先試一個小原型。',
+        }
+      : {
+          kind: 'learn',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}學習「${input.lifeGoal.narration}」需要的手法`,
+          riskZh: '學習會花時間，也可能暴露自己還不熟練。',
+          expectedOutcomeZh: '累積能被後續工作與建設使用的技能線索。',
+          utteranceZh: '找人教我一段。',
+        }
   }
 
   if (input.lifeGoal.kind === 'build_city' || primary.key === 'housing') {

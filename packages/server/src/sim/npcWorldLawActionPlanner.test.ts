@@ -104,6 +104,59 @@ describe('planNpcWorldLawAction', () => {
     expect(socialAction?.narration).not.toContain('不是被排程')
   })
 
+  it('turns food pressure into concrete shopping and procurement instead of more construction', () => {
+    const action = planNpcWorldLawAction(input({
+      roleZh: '料理人',
+      needs: { food: 91, rest: 14, money: 32, housing: 20, safety: 10 },
+      lifeGoal: { kind: 'eat', pressure: 91, narration: '替今晚備齊食材' },
+      cognitive: { ...input().cognitive!, dominantTrait: 'steady' },
+    }))
+
+    expect(action?.resolved.kind).toBe('buy_goods')
+    expect(action?.resolved.targetTile).toBe('t_dock')
+    expect(action?.proposal.action).toContain('採買')
+    expect(action?.proposal.reason).toContain('食物')
+    expect(action?.narration).toContain('採買')
+    expect(action?.narration).not.toContain('公共空間')
+  })
+
+  it('turns learning goals into concrete study or apprenticeship actions', () => {
+    const action = planNpcWorldLawAction(input({
+      roleZh: '學徒',
+      needs: { food: 22, rest: 14, money: 18, housing: 20, safety: 10 },
+      lifeGoal: { kind: 'learn_skill', pressure: 88, narration: '學會修理潮汐儀' },
+      cognitive: { ...input().cognitive!, dominantTrait: 'steady' },
+    }))
+
+    expect(action?.resolved.kind).toBe('learn')
+    expect(action?.proposal.action).toContain('學習')
+    expect(action?.proposal.reason).toContain('學會修理潮汐儀')
+    expect(action?.narration).toContain('請教')
+  })
+
+  it('lets patient knowledge-heavy NPCs propose experiments and ideas', () => {
+    const action = planNpcWorldLawAction(input({
+      roleZh: '發明家',
+      needs: { food: 18, rest: 14, money: 20, housing: 22, safety: 10 },
+      lifeGoal: { kind: 'learn_skill', pressure: 72, narration: '想出新的抽水裝置' },
+      cognitive: {
+        survivalBias: 0.7,
+        economicBias: 0.85,
+        socialBias: 0.75,
+        ecosystemBias: 0.9,
+        patienceBias: 1.55,
+        dominantTrait: 'steady',
+        thoughtZh: '潮策想先把零散觀察變成可測試的點子。',
+        thoughtEn: 'Chao Ce wants to turn observations into a testable idea.',
+      },
+    }))
+
+    expect(action?.resolved.kind).toBe('invent')
+    expect(action?.proposal.action).toContain('發想')
+    expect(action?.proposal.expectedOutcome).toContain('原型')
+    expect(action?.narration).toContain('草圖')
+  })
+
   it('turns relationship caution pressure into a concrete warning action', () => {
     const action = planNpcWorldLawAction(input({
       needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },
