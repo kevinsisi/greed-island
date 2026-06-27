@@ -5,7 +5,7 @@ developer. Keep latest status at the top.
 
 ---
 
-## 2026-06-27 — Handoff Snapshot @ v0.98.25
+## 2026-06-27 — Handoff Snapshot @ v0.98.26
 
 ### Current Version
 `0.98.25` — Player Relationship Action Card Marker：NPC drawer/card 現在會直接顯示 compact relationship action marker，讓玩家不用只靠字幕或地圖 badge 才知道誰正在警告、靠近、或保留交易機會。

@@ -14,6 +14,7 @@ import {
 } from '../../api/client'
 import type { Locale, TranslationKey } from '../../i18n/types'
 import { CombatHud } from './CombatHud'
+import { npcRelationshipActionMarker } from '../../pages/areaBehavior'
 
 const INTENT_TAG_KEY: Readonly<Record<NpcInteractIntent, TranslationKey>> = {
   greet: 'npc.intentGreet',
@@ -293,6 +294,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
 
   // 顯示 challenge 按鈕的條件：低 trust + NPC health > 0
   const canChallenge = (trust ?? 0) <= 30 && (npc.health ?? 0) > 0
+  const relationshipMarker = npcRelationshipActionMarker(npc)
 
   return (
     <div
@@ -345,6 +347,16 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
                 </>
               )}
             </div>
+            {relationshipMarker && (
+              <div className="mt-2 rounded-sharp border border-ember-700/50 bg-ember-950/20 px-2 py-1.5 text-[12px] leading-snug text-ground-100">
+                <div className="font-display text-[10px] uppercase tracking-tightest text-ember-300">
+                  {relationshipMarker.label}
+                </div>
+                <div className="mt-0.5 text-ground-200">
+                  {relationshipMarker.detail}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             {canChallenge && account && (

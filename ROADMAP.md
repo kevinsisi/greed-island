@@ -5,7 +5,7 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
-## v0.98.25 ✅ local-ready — 2026-06-27
+## v0.98.26 ✅ local-ready — 2026-06-27
 
 **主題：Player Relationship Action Visibility（玩家關係行動玩家可見）**
 
