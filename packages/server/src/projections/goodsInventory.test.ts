@@ -45,16 +45,18 @@ describe('GoodsInventoryProjection', () => {
     expect(projection.get({ goodsId: 'meat', holderType: 'npc', holderId: 'forest.hunter' })?.quantity).toBe(0)
   })
 
-  it('turns accepted buy_goods freeform actions into concrete NPC supplies', () => {
+  it('turns accepted buy_goods freeform actions into concrete market-to-NPC supplies', () => {
     const projection = new GoodsInventoryProjection()
     projection.rebuildFromEvents([
-      freeformActionEvent(1, 'npc.shopper', 'buy_goods', 't_dock', 40),
+      storedEvent(1, { goodsId: 'daily_supplies', quantity: 9, holderType: 'settlement', holderId: 'settlement.t_central', tileId: 't_central', tick: 39 }),
+      freeformActionEvent(2, 'npc.shopper', 'buy_goods', 't_dock', 40),
     ])
 
     const row = projection.get({ goodsId: 'daily_supplies', holderType: 'npc', holderId: 'npc.shopper' })
-    expect(row?.quantity).toBeGreaterThan(0)
+    expect(row?.quantity).toBe(2)
     expect(row?.tileId).toBe('t_dock')
     expect(row?.lastUpdatedTick).toBe(40)
+    expect(projection.get({ goodsId: 'daily_supplies', holderType: 'settlement', holderId: 'settlement.t_central' })?.quantity).toBe(7)
   })
 
   it('adds goods to player inventory on PLAYER_PICKED_UP_GOODS', () => {

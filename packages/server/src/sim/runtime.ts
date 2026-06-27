@@ -39,7 +39,8 @@ import {
   type GoodsHolderType,
   type IntentKind,
   type LivingWorldCommand,
-  type LivingWorldEventPayload
+  type LivingWorldEventPayload,
+  type NpcFreeformActionKind
 } from '../kernel/livingWorldCommands.js'
 import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
@@ -621,6 +622,8 @@ export class SimulationRuntime {
   private rareWindowOpen = false
   private rareWindowClosesAtTick = 0
   private readonly recentEvents: NarrativeEvent[] = []
+  private npcSnapshotCache: { tick: number; lastSequence: number; includeDeceased: SimNpcState[]; living: SimNpcState[] } | null = null
+  private worldSnapshotCache: { tick: number; lastSequence: number; snapshot: WorldSnapshot } | null = null
   private readonly listeners = new Set<Listener>()
   private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
@@ -1128,7 +1131,11 @@ export class SimulationRuntime {
   }
 
   getSnapshot(): WorldSnapshot {
-    return {
+    if (this.worldSnapshotCache?.tick === this.currentTick && this.worldSnapshotCache.lastSequence === this.lastSequence) {
+      return this.worldSnapshotCache.snapshot
+    }
+    const worldCivilization = this.worldCivilizationProjection.snapshot()
+    const snapshot: WorldSnapshot = {
       tick: this.currentTick,
       lastSequence: this.lastSequence,
       eventCount: this.eventCount,
@@ -1164,9 +1171,9 @@ export class SimulationRuntime {
         migrationRoutes: this.animalMigrationProjection.list(),
         predatorHunger: this.predatorHungerProjection.list(),
         npcRumors: this.rumorProjection.list(),
-        worldCivilization: this.worldCivilizationProjection.snapshot(),
+        worldCivilization,
       },
-      worldCivilization: this.worldCivilizationProjection.snapshot(),
+      worldCivilization,
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
         ticksPerDay: TICKS_PER_DAY,
@@ -1188,6 +1195,8 @@ export class SimulationRuntime {
       },
       generatedAt: new Date().toISOString()
     }
+    this.worldSnapshotCache = { tick: this.currentTick, lastSequence: this.lastSequence, snapshot }
+    return snapshot
   }
 
   getHouseholdEconomy(): readonly HouseholdEconomyRow[] {
@@ -1654,7 +1663,7 @@ export class SimulationRuntime {
    * §43.1 「後代會記得他」 holds), call `getNpcsIncludingDeceased()` instead.
    */
   getNpcs(): SimNpcState[] {
-    return this.getNpcsIncludingDeceased().filter((npc) => !npc.deceased)
+    return this.getNpcSnapshotCache().living
   }
 
   /**
@@ -1668,9 +1677,16 @@ export class SimulationRuntime {
    * player interaction endpoints — those see only the living.
    */
   getNpcsIncludingDeceased(): SimNpcState[] {
+    return this.getNpcSnapshotCache().includeDeceased
+  }
+
+  private getNpcSnapshotCache(): { includeDeceased: SimNpcState[]; living: SimNpcState[] } {
+    if (this.npcSnapshotCache?.tick === this.currentTick && this.npcSnapshotCache.lastSequence === this.lastSequence) {
+      return this.npcSnapshotCache
+    }
     // Iterate the NpcEngine's profile registry so matured born NPCs (registered
     // via NpcEngine.registerDynamicNpc) appear alongside config-loaded profiles.
-    return this.npcEngine.listProfiles().map((profile) => {
+    const includeDeceased = this.npcEngine.listProfiles().map((profile) => {
       const s =
         this.npcEngine.getState(profile.id) ??
         ({
@@ -1707,7 +1723,7 @@ export class SimulationRuntime {
         memoryContext,
         currentTick: this.currentTick,
       })
-      const cognitiveEvolution = this.deriveNpcCognitiveEvolutionSummary(profile.id, profile.name.zh, cognitive, life, memoryContext)
+      const cognitiveEvolution = this.derivePublicNpcCognitiveEvolutionSummary(profile.id, cognitive.thoughtZh)
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
@@ -1747,6 +1763,37 @@ export class SimulationRuntime {
         relationshipAction: this.playerRelationshipActionProjection.getForNpc(profile.id),
       }
     })
+    const living = includeDeceased.filter((npc) => !npc.deceased)
+    this.npcSnapshotCache = { tick: this.currentTick, lastSequence: this.lastSequence, includeDeceased, living }
+    return this.npcSnapshotCache
+  }
+
+  private derivePublicNpcCognitiveEvolutionSummary(npcId: string, currentThoughtZh: string): NpcCognitiveEvolutionSummary {
+    const projected = this.npcCognitiveProjection.get(npcId)
+    if (!projected) {
+      return {
+        reflectionCount: 0,
+        currentThoughtZh,
+        lastReflectionZh: null,
+        personalityTraceZh: null,
+        lifeGoalTraceZh: null,
+        relationshipTraceZh: null,
+      }
+    }
+    const personalityParts = Object.entries(projected.personalityDeltas)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key} ${signedTraceDelta(value as number)}`)
+    const recentRelationshipTrace = projected.relationshipReflectionTrace.slice(-3)
+    return {
+      reflectionCount: projected.reflectionCount,
+      currentThoughtZh,
+      lastReflectionZh: projected.lastReflectionSummaryZh,
+      personalityTraceZh: personalityParts.length > 0 ? `人格演化：${personalityParts.join('、')}` : null,
+      lifeGoalTraceZh: projected.currentLifeGoalOverride ? `人生目標：${projected.currentLifeGoalOverride.narration}（壓力 ${Math.round(projected.currentLifeGoalOverride.pressure)}）` : null,
+      relationshipTraceZh: recentRelationshipTrace.length > 0
+        ? recentRelationshipTrace.map((row) => `${row.targetNpcId}：${row.dimension} ${signedTraceDelta(row.delta)}，${row.reason}`).join('；')
+        : null,
+    }
   }
 
   private getLivingNpcRuntimeSnapshots(): Array<Pick<SimNpcState, 'id' | 'location' | 'activity'>> {
@@ -2155,6 +2202,21 @@ export class SimulationRuntime {
     const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
     const targetTile = typeof resolved.targetTile === 'string' ? resolved.targetTile : null
     if (!targetTile) return
+    if (kind === 'buy_goods') {
+      const quantity = typeof resolved.quantity === 'number' && Number.isFinite(resolved.quantity) && resolved.quantity > 0
+        ? Math.max(1, Math.floor(resolved.quantity))
+        : 2
+      const unitPrice = this.marketPricesProjection.get({ settlementId: 'settlement.t_central', goodsId: 'daily_supplies' })?.priceGold ?? 8
+      const spend = this.planHouseholdGoldSpend({
+        npcId,
+        tileId: targetTile,
+        amount: Math.max(1, Math.ceil(unitPrice * quantity)),
+        purpose: 'buy_goods:daily_supplies',
+        sourceId: ev.eventId,
+        tick: ev.tick ?? this.currentTick,
+      })
+      if (spend && this.householdBalanceForNpc(npcId) > 0) this.commitLivingWorldCommand(spend)
+    }
     const steerableKinds = new Set(['travel', 'work', 'build', 'buy_goods', 'learn', 'invent', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
     if (!steerableKinds.has(kind)) return
     this.npcEngine.setIntentOverride(npcId, {
@@ -6332,6 +6394,7 @@ export class SimulationRuntime {
       ...Object.fromEntries(generatedTiles.map((tile) => [tile.id, tile.name])),
     }
     const commands: LivingWorldCommand[] = []
+    const recentFreeformActionKinds = this.collectRecentNpcFreeformActionKinds(420)
     for (const [index, profile] of profiles.entries()) {
       if (this.npcMortalityProjection.isDeceased(profile.id)) continue
       const phase = index % plannerCadence
@@ -6420,6 +6483,7 @@ export class SimulationRuntime {
         tileNames,
         cognitive,
         memoryContext,
+        recentActionKinds: recentFreeformActionKinds.get(profile.id) ?? [],
       })
       if (worldLawAction) {
         commands.push(makeLivingWorldCommand(
@@ -6456,6 +6520,25 @@ export class SimulationRuntime {
       ))
     }
     return commands
+  }
+
+  private collectRecentNpcFreeformActionKinds(limit: number): Map<string, NpcFreeformActionKind[]> {
+    const out = new Map<string, NpcFreeformActionKind[]>()
+    for (const event of this.store.readRecentEvents(limit)) {
+      if (event.eventType !== 'NPC_FREEFORM_ACTION_PROPOSED') continue
+      const data = (event.payload as { data?: Record<string, unknown> })?.data
+      if (!data || data.accepted !== true) continue
+      const npcId = typeof data.npcId === 'string' ? data.npcId : null
+      const resolved = data.resolved
+      const kind = resolved && typeof resolved === 'object' && !Array.isArray(resolved)
+        ? (resolved as Record<string, unknown>).kind
+        : null
+      if (!npcId || !isCooldownTrackedNpcActionKind(kind)) continue
+      const list = out.get(npcId) ?? []
+      if (list.length < 4) list.push(kind)
+      out.set(npcId, list)
+    }
+    return out
   }
 
   private isNpcInsideOwnedBuilding(npcId: string, state: NpcRuntimeState): boolean {
@@ -6725,7 +6808,7 @@ export class SimulationRuntime {
   }): LivingWorldCommand | null {
     const amount = Math.max(0, Math.floor(input.amount))
     if (amount <= 0) return null
-    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    const householdId = this.resolveHouseholdIdForNpc(input.npcId)
     if (!householdId) return null
     return makeLivingWorldCommand(
       'HOUSEHOLD_GOLD_CONTRIBUTED',
@@ -6758,7 +6841,7 @@ export class SimulationRuntime {
   }): LivingWorldCommand | null {
     const amount = Math.max(0, Math.floor(input.amount))
     if (amount <= 0) return null
-    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    const householdId = this.resolveHouseholdIdForNpc(input.npcId)
     if (!householdId) return null
     return makeLivingWorldCommand(
       'HOUSEHOLD_GOLD_SPENT',
@@ -6780,8 +6863,16 @@ export class SimulationRuntime {
     )
   }
 
-  private householdBalanceForNpc(npcId: string): number {
+  private resolveHouseholdIdForNpc(npcId: string): string | null {
     const householdId = householdIdForNpc(this.lifeExpansion, npcId)
+    if (householdId) return householdId
+    return this.householdEconomyProjection.list()
+      .find((row) => row.contributorNpcIds.includes(npcId))
+      ?.householdId ?? null
+  }
+
+  private householdBalanceForNpc(npcId: string): number {
+    const householdId = this.resolveHouseholdIdForNpc(npcId)
     if (!householdId) return 0
     return this.householdEconomyProjection.getByHouseholdId(householdId)?.balance ?? 0
   }
@@ -7660,3 +7751,12 @@ function inferWorldCivilizationDomain(eventType: string, data: Record<string, un
 }
 
 
+
+function isCooldownTrackedNpcActionKind(value: unknown): value is NpcFreeformActionKind {
+  return value === 'work' || value === 'build' || value === 'buy_goods' || value === 'learn' || value === 'invent' || value === 'rest' || value === 'socialize' || value === 'custom_social_scene' || value === 'travel'
+}
+
+function signedTraceDelta(value: number): string {
+  const rounded = Math.round(value * 100) / 100
+  return rounded >= 0 ? `+${rounded}` : String(rounded)
+}

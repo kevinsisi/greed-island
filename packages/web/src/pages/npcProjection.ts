@@ -21,13 +21,19 @@ type AreaVisibilityWeather = 'clear' | 'overcast' | 'mist' | 'storm' | 'breeze'
 
 export function areaOutdoorNpcs(npcs: readonly NpcSummary[], tileId: string): NpcSummary[] {
   return npcs.filter(
-    (npc) => npc.location === tileId && isAreaSociallyAvailableNpc(npc)
+    (npc) => npc.location === tileId && isAreaVisibleOutdoorNpc(npc)
   )
 }
 
-export function isAreaSociallyAvailableNpc(npc: NpcSummary): boolean {
+export function isAreaVisibleOutdoorNpc(npc: NpcSummary): boolean {
   if (npc.deceased || npc.buildingId) return false
-  if (npc.activity === 'move' || npc.activity === 'sleep') return false
+  if (npc.activity === 'sleep') return false
+  return true
+}
+
+export function isAreaSociallyAvailableNpc(npc: NpcSummary): boolean {
+  if (!isAreaVisibleOutdoorNpc(npc)) return false
+  if (npc.activity === 'move') return false
   return true
 }
 
@@ -62,16 +68,16 @@ function areaNpcStableKey(npc: NpcSummary): string {
 export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'zh'): MapNpc[] {
   return npcs
     .filter((npc) => isKnownDistrictId(npc.location))
+    .filter((npc) => !npc.deceased && !npc.buildingId && npc.activity !== 'sleep')
     .map((npc) => {
       const route = normalizeTravelRoute(npc.travelRoute)
-      if (npc.buildingId || npc.activity !== 'move' || !route) return null
       const base: MapNpc = {
         id: npc.id,
         name: npc.name,
         shortName: npc.name.charAt(0),
         districtId: npc.location as DistrictId
       }
-      base.travelRoute = route
+      if (route) base.travelRoute = route
       if (typeof npc.color === 'number') base.color = npc.color
       if (npc.activity) base.activity = npc.activity
       if (typeof npc.subCol === 'number') base.subCol = npc.subCol
@@ -79,9 +85,9 @@ export function hubMapNpcs(npcs: readonly NpcSummary[], locale: 'zh' | 'en' = 'z
       if (typeof npc.mood === 'number') base.mood = npc.mood
       if (typeof npc.health === 'number') base.health = npc.health
       if (npc.intentLine) base.intentLine = locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en
+      if (npc.recentUtterance?.text?.trim()) base.recentUtterance = npc.recentUtterance.text.trim()
       return base
     })
-    .filter((npc): npc is MapNpc => npc !== null)
 }
 
 function normalizeTravelRoute(route: NpcSummary['travelRoute']): MapNpc['travelRoute'] | null {

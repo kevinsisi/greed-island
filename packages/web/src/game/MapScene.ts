@@ -61,6 +61,8 @@ export interface MapNpc {
   }
   /** Short deterministic task text from the server projection. */
   intentLine?: string
+  /** Recent committed/autonomous utterance rendered on the hub map. */
+  recentUtterance?: string | null
 }
 
 /**
@@ -1185,6 +1187,12 @@ export class MapScene extends Phaser.Scene {
         if (avatar?.label && avatar.label.text !== npc.shortName) avatar.label.setText(npc.shortName)
         this.attachNpcIdleAnimation(existing, npc.id)
         // 活動 emoji 同步
+        const bubbleText = existing.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+        if (bubbleText) {
+          const line = npc.recentUtterance?.trim()
+          const textValue = line ? `「${line.slice(0, 28)}${line.length > 28 ? '…' : ''}」` : '💬'
+          if (bubbleText.text !== textValue) bubbleText.setText(textValue)
+        }
         const iconGlyph = activityGlyphFor(npc.activity)
         const iconText = existing.getData('activityIcon') as Phaser.GameObjects.Text | undefined
         if (iconText) {
@@ -1269,7 +1277,8 @@ export class MapScene extends Phaser.Scene {
       activityIconText.setAlpha(0)
       sprite.setData('activityIcon', activityIconText)
 
-      const chatBubble = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 1.6, '💬', {
+      const hubSpeech = npc.recentUtterance?.trim()
+      const chatBubble = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 1.6, hubSpeech ? `「${hubSpeech.slice(0, 28)}${hubSpeech.length > 28 ? '…' : ''}」` : '💬', {
         fontFamily:
           '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
         fontSize: '18px',
@@ -1279,7 +1288,7 @@ export class MapScene extends Phaser.Scene {
       })
       chatBubble.setOrigin(0.5, 1)
       chatBubble.setDepth(73)
-      chatBubble.setVisible(false)
+      chatBubble.setVisible(!!hubSpeech)
       chatBubble.setAlpha(0)
       chatBubble.setInteractive({ useHandCursor: true })
       chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -1699,9 +1708,12 @@ export class MapScene extends Phaser.Scene {
         nearestDist = d
         nearestId = id
       }
-      // 顯示 / 隱藏 sprite 上方的 💬 提示氣泡
+      // 顯示 / 隱藏 sprite 上方的互動或說話氣泡；有台詞時即使稍遠也顯示，讓主地圖看得見周圍人在說話。
       const bubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
-      if (bubble) bubble.setVisible(inRange)
+      if (bubble) {
+        const npc = this.npcs.find((row) => row.id === id)
+        bubble.setVisible(inRange || !!npc?.recentUtterance?.trim())
+      }
     }
     this.nearbyNpcId = nearestId
 

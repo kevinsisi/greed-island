@@ -1,3 +1,8 @@
+## 2026-06-27 — Handoff Snapshot @ v0.98.32
+
+- Shipped npc presence/liveness hotfix plus snapshot/economy/distribution follow-up: `/api/npcs` and `/api/world` reuse tick-level snapshots; accepted `buy_goods` now transfers market `daily_supplies` to NPC inventory and spends household gold; world-law action planning rotates away from recently repeated non-critical actions; hub map now shows local outdoor NPCs plus recent speech bubbles, while child area maps keep moving outdoor NPCs visible instead of looking frozen.
+- Tests: targeted server tests passed (`npcWorldLawActionPlanner`, `goodsInventory`, `runtimeBuyGoodsEconomy`, `runtimeSnapshotCache`; 24 tests); targeted web tests passed (`npcProjection`, `areaSubtitles`; 18 tests); server build passed; web build passed.
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.29
 
 - Shipped npc-life-action-consequences: accepted `buy_goods` freeform actions rebuild into NPC `daily_supplies`; accepted `learn` actions rebuild into `learning` XP; accepted `invent` actions rebuild into world technology evidence. Boot/hydration filters now include freeform events for the affected projections.

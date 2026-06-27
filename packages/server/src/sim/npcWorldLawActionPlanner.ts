@@ -22,6 +22,7 @@ export type NpcWorldLawActionPlannerInput = Readonly<{
   tileNames: Readonly<Record<string, string | undefined>>
   cognitive?: NpcCognitiveProfile | null
   memoryContext: string
+  recentActionKinds?: readonly NpcFreeformActionKind[]
 }>
 
 type WorldLawCandidate = Readonly<{
@@ -36,7 +37,7 @@ type WorldLawCandidate = Readonly<{
 }>
 
 export function planNpcWorldLawAction(input: NpcWorldLawActionPlannerInput): NpcFreeformActionProposedCmd | null {
-  const candidate = chooseWorldLawCandidate(input)
+  const candidate = applyActionCooldown(input, chooseWorldLawCandidate(input))
   if (!candidate || candidate.pressure <= input.threshold) return null
   const targetName = candidate.targetTile ? tileName(input, candidate.targetTile) : tileName(input, input.currentTile)
   const reason = buildReason(input, candidate, targetName)
@@ -64,6 +65,67 @@ export function planNpcWorldLawAction(input: NpcWorldLawActionPlannerInput): Npc
     decidedAtTick: input.currentTick,
     narration: buildNarration(input.npcNameZh, candidate, targetName),
   }
+}
+
+function applyActionCooldown(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate | null): WorldLawCandidate | null {
+  if (!candidate) return null
+  const recent = input.recentActionKinds ?? []
+  if (!recent.includes(candidate.kind)) return candidate
+  if (candidate.pressure >= input.threshold + 55) return candidate
+  const alternatives = buildCooldownAlternatives(input, candidate)
+    .filter((alt) => alt.kind !== candidate.kind && !recent.slice(0, 2).includes(alt.kind))
+    .sort((a, b) => b.pressure - a.pressure || a.kind.localeCompare(b.kind))
+  return alternatives[0] ?? candidate
+}
+
+function buildCooldownAlternatives(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate): WorldLawCandidate[] {
+  const targetTile = bestTile(input, 'economy')
+  const safeTile = bestTile(input, 'safety')
+  const pressure = Math.max(input.threshold + 6, Math.floor(candidate.pressure * 0.82))
+  return [
+    {
+      kind: 'work', targetTile, pressure, need: 'money',
+      actionZh: `改去${tileName(input, targetTile)}接一件短工，避免連續重複同一種安排`,
+      riskZh: '轉換工作會消耗時間，但能讓收入、消息與需求重新流動。',
+      expectedOutcomeZh: '把卡住的行為分布拉回實際生產與交易。',
+      utteranceZh: '換件活做。',
+    },
+    {
+      kind: 'buy_goods', targetTile, pressure: pressure - 1, need: 'food',
+      actionZh: `改到${tileName(input, targetTile)}補一趟日用品與食物`,
+      riskZh: '價格與庫存可能不穩，但能讓 household 消耗閉環繼續運轉。',
+      expectedOutcomeZh: '補足日常物資，並把金錢壓力轉進市場。',
+      utteranceZh: '順路補貨。',
+    },
+    {
+      kind: 'learn', targetTile, pressure: pressure - 2, need: 'life_goal',
+      actionZh: `改在${tileName(input, targetTile)}請教一段能改善下次工作的手法`,
+      riskZh: '學習不一定立刻帶來收入，但能避免世界只剩單調勞動。',
+      expectedOutcomeZh: '累積技能證據，給後續工作與發明留下基礎。',
+      utteranceZh: '問一下做法。',
+    },
+    {
+      kind: 'build', targetTile, pressure: pressure - 3, need: 'housing',
+      actionZh: `改去${tileName(input, targetTile)}查看是否有能整理的工地或公共角落`,
+      riskZh: '材料可能不足，但能讓建設線索保持活躍。',
+      expectedOutcomeZh: '把閒置壓力導向可視化建設進度。',
+      utteranceZh: '看看哪裡能修。',
+    },
+    {
+      kind: 'rest', targetTile: input.defaultTile || input.currentTile, pressure: pressure - 4, need: 'rest',
+      actionZh: `回到${tileName(input, input.defaultTile || input.currentTile)}短暫整理體力`,
+      riskZh: '休息會暫停收入，但能防止疲勞累積。',
+      expectedOutcomeZh: '把體力恢復到能繼續行動的狀態。',
+      utteranceZh: '先緩一下。',
+    },
+    {
+      kind: 'travel', targetTile: safeTile, pressure: pressure - 5, need: 'safety',
+      actionZh: `改往${tileName(input, safeTile)}走一趟，重新確認安全與下一步`,
+      riskZh: '移動會錯過目前街區的機會，但能切換場景壓力。',
+      expectedOutcomeZh: '降低同地點重複行為，讓事件流回到多區域探索。',
+      utteranceZh: '換個地方看看。',
+    },
+  ]
 }
 
 function buildNarration(npcNameZh: string, candidate: WorldLawCandidate, targetName: string): string {

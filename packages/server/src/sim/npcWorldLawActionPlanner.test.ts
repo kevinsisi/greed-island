@@ -202,6 +202,17 @@ describe('planNpcWorldLawAction', () => {
     expect(action?.proposal.utterance).toContain('留給熟客')
   })
 
+  it('rotates away from recently repeated actions when pressure is not critical', () => {
+    const action = planNpcWorldLawAction(input({
+      recentActionKinds: ['work', 'buy_goods'],
+    }))
+
+    expect(action?.resolved.kind).not.toBe('work')
+    expect(action?.resolved.kind).not.toBe('buy_goods')
+    expect(['learn', 'build', 'rest', 'travel']).toContain(action?.resolved.kind)
+    expect(action?.proposal.reason).toContain('買卡資金')
+  })
+
   it('stays quiet when no world pressure crosses the threshold', () => {
     const action = planNpcWorldLawAction(input({
       needs: { food: 12, rest: 14, money: 18, housing: 20, safety: 10 },

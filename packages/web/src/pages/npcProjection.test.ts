@@ -17,9 +17,9 @@ function npc(input: Partial<NpcSummary> & Pick<NpcSummary, 'id'>): NpcSummary {
 }
 
 describe('NPC scene projections', () => {
-  it('excludes socially unavailable NPCs from area outdoor occupants', () => {
+  it('keeps moving outdoor NPCs visible on area maps while excluding sleep/indoor occupants', () => {
     const people = [
-      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
+      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' }, recentUtterance: { text: '碼頭有人缺工具。', tick: 88 } }),
       npc({
         id: 'traveller',
         activity: 'move',
@@ -35,12 +35,12 @@ describe('NPC scene projections', () => {
       npc({ id: 'inside', activity: 'work', buildingId: 'b_central_exchange' })
     ]
 
-    expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local'])
+    expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local', 'traveller'])
   })
 
-  it('maps only travelling NPCs to the hub overview', () => {
+  it('maps local and travelling NPCs to the hub overview with speech evidence', () => {
     const people = [
-      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' } }),
+      npc({ id: 'local', activity: 'idle', buildingId: null, intentLine: { zh: '在中央待命', en: 'Standing by' }, recentUtterance: { text: '碼頭有人缺工具。', tick: 88 } }),
       npc({
         id: 'traveller',
         activity: 'move',
@@ -57,8 +57,9 @@ describe('NPC scene projections', () => {
 
     const hub = hubMapNpcs(people)
 
-    expect(hub.map((p) => p.id)).toEqual(['traveller'])
-    expect(hubMapNpcs(people, 'en').map((p) => p.id)).toEqual(['traveller'])
+    expect(hub.map((p) => p.id)).toEqual(['local', 'traveller'])
+    expect(hubMapNpcs(people, 'en').map((p) => p.id)).toEqual(['local', 'traveller'])
+    expect(hub.find((p) => p.id === 'local')?.recentUtterance).toBe('碼頭有人缺工具。')
     expect(hub.find((p) => p.id === 'traveller')?.travelRoute).toEqual({
       fromDistrictId: 't_central',
       toDistrictId: 't_dock',
@@ -86,12 +87,12 @@ describe('NPC scene projections', () => {
     expect(hubMapNpcs(people)[0]?.travelRoute?.targetDistrictId).toBe('t_salt_marsh')
   })
 
-  it('keeps arrived expansion-district NPCs on the child area map only', () => {
+  it('keeps arrived expansion-district NPCs on both hub overview and child area map', () => {
     const people = [
       npc({ id: 'builder', activity: 'work', buildingId: null, location: 't_salt_marsh' })
     ]
 
-    expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual(['builder'])
     expect(areaOutdoorNpcs(people, 't_salt_marsh').map((p) => p.id)).toEqual(['builder'])
   })
 
@@ -117,20 +118,20 @@ describe('NPC scene projections', () => {
     expect(areaVisibleNpcs(people, 't_central', 'clear')).toHaveLength(24)
   })
 
-  it('keeps local outdoor NPCs on the child area map only', () => {
+  it('keeps local outdoor NPCs on both the child area map and hub overview', () => {
     const people = [
       npc({ id: 'local', activity: 'trade', buildingId: null, location: 't_central' })
     ]
 
     expect(areaOutdoorNpcs(people, 't_central').map((p) => p.id)).toEqual(['local'])
-    expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual(['local'])
   })
 
-  it('excludes move-labeled NPCs without a route from the hub overview', () => {
+  it('keeps move-labeled local NPCs visible on the hub overview', () => {
     const people = [
       npc({ id: 'bad-move', activity: 'move', buildingId: null, location: 't_central' })
     ]
 
-    expect(hubMapNpcs(people).map((p) => p.id)).toEqual([])
+    expect(hubMapNpcs(people).map((p) => p.id)).toEqual(['bad-move'])
   })
 })
