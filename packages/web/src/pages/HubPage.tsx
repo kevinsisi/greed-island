@@ -21,6 +21,11 @@ import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './
 import { buildHubEcologySummaries, type HubEcologySummary } from './hubEcology'
 import type { AnimalGroupRow, MigrationRow, PredatorWarningRow } from '../api/client'
 import { activeDistrictIdsForHub } from './hubDistricts'
+import {
+  shouldRenderHubCivilizationButton,
+  shouldRenderHubWorldCivilizationPanel,
+  shouldRenderPlayerCivilizationPanel,
+} from './hubPanelVisibility'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
@@ -76,6 +81,7 @@ export function HubPage() {
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
   const [showCivPanel, setShowCivPanel] = useState(false)
+  const isSignedIn = !!token
 
   // 每 30 秒拉一次 area state 用來上 tile 色（治安/經濟/派系外框）
   // 5 秒 tick + 區域狀態變化緩慢 → 30 秒 polling 足夠，不會把 server 打爆。
@@ -278,35 +284,38 @@ export function HubPage() {
       </div>
 
       {/* 地圖互動：緊貼地圖，避免被世界目標/科技等資訊面板隔開。 */}
-      {token && (
-        <div className="mt-2 px-2 flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-2">
-          {currentName && currentDistrict ? (
-            <button
-              type="button"
-              onClick={handleOpenCurrentArea}
-              className="gi-touch min-h-[44px] flex-1 px-5 py-2 inline-flex flex-col items-center justify-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
-            >
-              <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
-                {t('hub.currentArea')}
-              </span>
-              <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
-                {t('hub.openArea', { name: currentName })}
-              </span>
-            </button>
-          ) : (
-            <div className="hidden sm:block flex-1" aria-hidden="true" />
-          )}
+      <div className="mt-2 px-2 flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-2">
+        {token && currentName && currentDistrict ? (
+          <button
+            type="button"
+            onClick={handleOpenCurrentArea}
+            className="gi-touch min-h-[44px] flex-1 px-5 py-2 inline-flex flex-col items-center justify-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
+          >
+            <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
+              {t('hub.currentArea')}
+            </span>
+            <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
+              {t('hub.openArea', { name: currentName })}
+            </span>
+          </button>
+        ) : (
+          <div className="hidden sm:block flex-1" aria-hidden="true" />
+        )}
+        {shouldRenderHubCivilizationButton(isSignedIn) && (
           <button
             type="button"
             onClick={() => setShowCivPanel((v) => !v)}
+            aria-expanded={showCivPanel}
             className="gi-touch min-h-[44px] px-4 py-2 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors"
           >
             ⚔ 文明面板
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      <WorldCivilizationPanel snapshot={world.worldCivilization} />
+      {shouldRenderHubWorldCivilizationPanel(showCivPanel) && (
+        <WorldCivilizationPanel snapshot={world.worldCivilization} />
+      )}
 
       {!token && (
         <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
@@ -314,7 +323,7 @@ export function HubPage() {
         </div>
       )}
 
-      {token && showCivPanel && (
+      {shouldRenderPlayerCivilizationPanel(showCivPanel, isSignedIn) && (
         <PlayerCivilizationPanel
           tileId={currentDistrict as string | null}
           onClose={() => setShowCivPanel(false)}

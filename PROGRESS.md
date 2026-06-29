@@ -1,3 +1,9 @@
+## 2026-06-29 — Handoff Snapshot @ v0.98.33
+
+- Kept the restored pixel Hub/母地圖 path, but removed the default world-goal/technology info wall from the first screen. The civilization/world-goal panel now stays collapsed behind `⚔ 文明面板`, including guest/read-only browsing, so the pixel map remains the main visual surface.
+- Added pure panel-visibility regressions for the default-collapsed state and explicit opt-in behavior.
+- Verified so far: targeted web test passed (`hubPanelVisibility`; 2 tests); web build passed.
+
 ## 2026-06-27 — Handoff Snapshot @ v0.98.32
 
 - Shipped npc presence/liveness hotfix plus snapshot/economy/distribution follow-up: `/api/npcs` and `/api/world` reuse tick-level snapshots; accepted `buy_goods` now transfers market `daily_supplies` to NPC inventory and spends household gold; world-law action planning rotates away from recently repeated non-critical actions; hub map now shows local outdoor NPCs plus recent speech bubbles, while child area maps keep moving outdoor NPCs visible instead of looking frozen.

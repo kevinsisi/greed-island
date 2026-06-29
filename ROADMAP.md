@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.33 ✅ local-ready — 2026-06-29
+
+**主題：Pixel Hub First-Screen Declutter（像素母地圖首頁去資訊牆）**
+
+- ✅ **pixel map preserved** — 不再回到第一人稱/非像素 renderer，維持目前 restored pixel Hub/母地圖路徑。
+- ✅ **world goals collapsed** — 世界目標與科技不再預設壓在地圖下方，改由 `⚔ 文明面板` 明確展開。
+- ✅ **guest can inspect** — 未登入唯讀瀏覽也看得到文明面板按鈕，但預設仍不展開。
+- ✅ **regression** — 新增 hub panel visibility test 鎖住預設收起與 opt-in 展開行為。
+- ✅ **Verification** — targeted web test（2）與 web build 通過。
+
+---
+
 ## v0.98.26 ✅ local-ready — 2026-06-27
 
 **主題：Player Relationship Action Visibility（玩家關係行動玩家可見）**
