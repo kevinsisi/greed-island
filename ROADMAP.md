@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.34 ✅ local-ready — 2026-06-29
+
+**主題：Pixel Hub NPC Motion（像素母地圖 NPC 不再像雕像）**
+
+- ✅ **route walkers keep moving** — 有 server-authoritative `travelRoute` / `activity=move` 的 NPC 會沿路線方向持續走動，不再 tween 到終點後定住。
+- ✅ **local stroll** — 本地戶外 NPC 會在 server-projected sub-tile anchor 周圍做小幅 deterministic stroll，讓畫面活起來但不改世界狀態。
+- ✅ **no fake speech/state** — 只改顯示層 motion，沒有新增假台詞、假事件或 hidden world mutation。
+- ✅ **regression** — 新增 hub NPC motion policy tests，鎖住 moving/local/sleeping 的視覺規則。
+- ✅ **Verification** — targeted web tests（8）、web build、本地 browser 3 秒 sprite 位移檢查通過。
+
+---
+
 ## v0.98.33 ✅ local-ready — 2026-06-29
 
 **主題：Pixel Hub First-Screen Declutter（像素母地圖首頁去資訊牆）**

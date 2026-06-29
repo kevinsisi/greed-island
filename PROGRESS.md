@@ -1,3 +1,9 @@
+## 2026-06-29 — Handoff Snapshot @ v0.98.34
+
+- Fixed the restored pixel Hub looking frozen: NPC sprites now keep a bounded display-only stroll/motion loop while their authoritative server presence remains visible. Routed/moving NPCs keep walking along their route vector; local outdoor NPCs get a small deterministic stroll around their server-projected sub-tile anchor. No world state or speech is invented.
+- Added pure Hub NPC motion-policy regressions and verified in a local browser that sprite positions changed over 3 seconds (`changedCount=8` on fixture Hub).
+- Verified so far: targeted web tests passed (`hubNpcMotion`, `hubCharacterVisualState`; 8 tests); web build passed.
+
 ## 2026-06-29 — Handoff Snapshot @ v0.98.33
 
 - Kept the restored pixel Hub/母地圖 path, but removed the default world-goal/technology info wall from the first screen. The civilization/world-goal panel now stays collapsed behind `⚔ 文明面板`, including guest/read-only browsing, so the pixel map remains the main visual surface.
