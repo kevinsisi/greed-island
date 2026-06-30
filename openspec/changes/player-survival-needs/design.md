@@ -11,7 +11,7 @@
 ## Decisions
 
 ### D1：惰性對帳，而非每 tick 全玩家迴圈
-- needs 狀態存 `(asOfTick, nourishment, vigor, alive)`。`reconcile(state, currentTick)` 為純函數：`elapsed = currentTick - asOfTick`，套用衰退/挨餓/回復/死亡，回新狀態。
+- needs 狀態存 `(asOfTick, nourishment, vigor, collapsed)`。`reconcile(state, currentTick)` 為純函數：`elapsed = currentTick - asOfTick`，套用衰退/挨餓/回復/昏厥/解除昏厥，回新狀態。
 - 在「讀取 `/api/player/needs`」與「玩家行動」時對帳並（必要時）發 `PLAYER_NEEDS_RECONCILED`。
 - **理由**：玩家可能多且常離線；每 tick 迴圈昂貴且無謂。惰性對帳決定性、便宜、天然支援離線衰退（呼應「世界不等你」）。
 
@@ -23,14 +23,14 @@
 - `nourishment -= NOURISHMENT_DECAY_PER_TICK * elapsed`（封底 0）。
 - `nourishment < STARVATION_THRESHOLD` → `vigor -= VIGOR_STARVATION_DECAY_PER_TICK * elapsedUnderThreshold`。
 - `nourishment >= VIGOR_RECOVERY_THRESHOLD` → `vigor += VIGOR_RECOVERY_PER_TICK * elapsed`（封頂 100）。
-- `vigor <= 0` → `alive=false`，發 `PLAYER_DIED{ tick, cause:'starvation' }`。
+- `vigor <= 0` → `collapsed=true`，發 `PLAYER_COLLAPSED{ tick }`；`collapsed=true` 且 `vigor >= VIGOR_RECOVERY_THRESHOLD` → `collapsed=false`（可恢復）。
 - 速率以 `TICKS_PER_HOUR`(=720) 為基準定值：健康→開始挨餓落在數小時牆鐘量級。常數化、可日後 settings 化。
 - **理由**：避免 magic number；決定性可測；手感可調。
 
-### D4：死亡 gate（SP1 範圍）
-- `alive=false` → 玩家寫入型互動（hunt/fish/dialog 等）回明確錯誤（比照死亡 NPC 410 精神，對玩家用適當碼，例如 409/410 + `PLAYER_DECEASED`）。唯讀瀏覽不受影響。
-- 傳承/後代接續**不在 SP1**；前端明示「傳承於後續版本」避免「死了卡住」誤解。
-- **理由**：死亡須立即有一致後果，但完整傳承是 SP5 的獨立工作。
+### D4：可恢復昏厥（非永久死亡）+ 最小進食閉合迴圈（SP1 範圍）
+- `vigor` 觸 0 = **昏厥（collapsed）**，非永久死亡；補給回升即解除。永久死亡 + 傳承是 SP5 的獨立工作。
+- SP1 無世界相依求生動作（SP2），故提供**最小進食** `PLAYER_ATE`：花固定金幣 → `nourishment += EAT_RATION_NOURISHMENT`（封頂 100）；金幣不足回錯誤。**昏厥時仍可進食**（否則形成無法脫離的死局）。
+- **理由**：SP1 必須是自足、可脫離的閉合迴圈（需求衰退→進食→恢復），而不是「必然餓死且無法挽救」。進食的世界相依供給（打獵/採集/糧價）由 SP2 取代/擴充此置入。
 
 ### D5：投影 boot 掛兩條分支
 - `PlayerSurvivalProjection` 的 `rebuildFromEvents` 必須同時加進 `runtime.ts` 的小 log 完整重建與大 log availability-first boot 兩條分支（v0.25.3/v0.87.3 鐵則）。

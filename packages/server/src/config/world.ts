@@ -279,6 +279,30 @@ export const NPC_AGENT_UTTERANCE_MAX_CHARS = 60
 // （= TICKS_PER_HOUR / 4 ≈ 3 分鐘牆鐘）。超過後 API 回傳 null 讓前端隱藏。
 export const NPC_AGENT_UTTERANCE_VISIBLE_TICKS = Math.round(TICKS_PER_HOUR / 4)
 
+// ── 玩家求生需求（player-survival-needs / SP1）─────────────────────────────
+// 玩家也是世界裡的求生者：溫飽(nourishment)與體況(vigor)隨 tick 衰退，連離線
+// 都算（惰性對帳）。速率以 TICKS_PER_HOUR(=720) 為基準，讓手感落在數小時牆鐘，
+// 避免過快挫折 / 過慢無張力。日後可 settings 化。
+export const PLAYER_NEEDS_MAX = 100
+export const PLAYER_NEEDS_MIN = 0
+// 溫飽從滿(100)到空(0)約 5 小時牆鐘。
+export const PLAYER_NOURISHMENT_DECAY_PER_TICK = PLAYER_NEEDS_MAX / (5 * TICKS_PER_HOUR)
+// 溫飽低於此 → 開始挨餓扣 vigor。
+export const PLAYER_STARVATION_THRESHOLD = 25
+// 挨餓時 vigor 流失：滿到空約 3 小時。
+export const PLAYER_VIGOR_STARVATION_DECAY_PER_TICK = PLAYER_NEEDS_MAX / (3 * TICKS_PER_HOUR)
+// 溫飽高於此 → vigor 緩慢回復：空到滿約 4 小時。
+export const PLAYER_VIGOR_RECOVERY_NOURISHMENT_THRESHOLD = 50
+export const PLAYER_VIGOR_RECOVERY_PER_TICK = PLAYER_NEEDS_MAX / (4 * TICKS_PER_HOUR)
+// vigor 觸 0 = 昏厥(collapsed)；回升至此以上才解除昏厥（遲滯，避免抖動）。
+export const PLAYER_COLLAPSE_RECOVERY_VIGOR = 25
+// 新玩家進場初值。
+export const PLAYER_INITIAL_NOURISHMENT = 70
+export const PLAYER_INITIAL_VIGOR = 100
+// SP1 最小進食（置入式，SP2 以世界相依供給取代）：花金幣 → 提升溫飽。
+export const PLAYER_EAT_RATION_GOLD_COST = 10
+export const PLAYER_EAT_RATION_NOURISHMENT = 40
+
 // Matured-child inheritance (v0.88.0)
 // 成年的孩子以父母 civic 紀錄的平均值乘上比例做為起步 seed（不是轉移，
 // 父母不會扣 — 這模擬「從父母身上學到的東西」）。調參背景見

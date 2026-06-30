@@ -13,9 +13,9 @@
 - **WHEN** 在同一個 tick 內多次讀取需求
 - **THEN** 系統 SHALL NOT 為每次讀取都產生 `PLAYER_NEEDS_RECONCILED` 事件（僅在實際跨越 ≥1 整數 tick 且值有變時記錄）
 
-### Requirement: 溫飽與體況 SHALL 形成飢餓/回復後果鏈，體況歸零 SHALL 觸發死亡標記
+### Requirement: 溫飽與體況 SHALL 形成飢餓/回復後果鏈，體況歸零 SHALL 觸發可恢復昏厥
 
-當 `nourishment` 低於飢餓閾值時，`vigor` SHALL 隨之衰退（挨餓）；當 `nourishment` 高於回復閾值時，`vigor` SHALL 緩慢回復並封頂 100。當 `vigor` 觸及 0 時，系統 SHALL 將玩家標記為死亡（`alive=false`）並發出 `PLAYER_DIED`（cause=starvation）。所有速率與閾值 MUST 為具名常數，不得使用 magic number。
+當 `nourishment` 低於飢餓閾值時，`vigor` SHALL 隨之衰退（挨餓）；當 `nourishment` 高於回復閾值時，`vigor` SHALL 緩慢回復並封頂 100。當 `vigor` 觸及 0 時，系統 SHALL 將玩家標記為昏厥（`collapsed=true`）並發出 `PLAYER_COLLAPSED`。昏厥為**可恢復**狀態：當 `vigor` 回升至恢復閾值以上時 SHALL 解除昏厥（`collapsed=false`）。永久死亡與傳承不在本能力範圍（留待 SP5）。所有速率與閾值 MUST 為具名常數，不得使用 magic number。
 
 #### Scenario: 溫飽過低導致體況下滑
 - **GIVEN** 玩家 nourishment 低於飢餓閾值且 vigor 為 50
@@ -27,23 +27,42 @@
 - **WHEN** 經過若干 tick 對帳
 - **THEN** vigor SHALL 上升但不超過 100
 
-#### Scenario: 體況歸零觸發死亡標記
+#### Scenario: 體況歸零觸發可恢復昏厥
 - **GIVEN** 玩家持續挨餓使 vigor 趨近 0
 - **WHEN** vigor 觸及 0
-- **THEN** 系統 SHALL 標記 `alive=false` 並發出 `PLAYER_DIED`
+- **THEN** 系統 SHALL 標記 `collapsed=true` 並發出 `PLAYER_COLLAPSED`
 
-### Requirement: 系統 SHALL 提供唯讀需求查詢並在死亡時 gate 寫入型互動
+#### Scenario: 補給回升後解除昏厥
+- **GIVEN** 玩家處於昏厥（collapsed=true）且其後 nourishment 回到回復閾值以上
+- **WHEN** 經過若干 tick 對帳使 vigor 回升至恢復閾值以上
+- **THEN** 系統 SHALL 解除昏厥（collapsed=false）
 
-系統 SHALL 提供已登入玩家查詢自身求生需求的唯讀端點，回傳 reconcile 到當前 tick 的 `{ nourishment, vigor, alive, asOfTick }`。當玩家 `alive=false` 時，寫入型玩家互動 SHALL 被擋下並回明確錯誤；唯讀瀏覽 SHALL 不受影響。傳承/後代接續不在本能力範圍。
+### Requirement: 系統 SHALL 提供唯讀需求查詢
+
+系統 SHALL 提供已登入玩家查詢自身求生需求的唯讀端點，回傳 reconcile 到當前 tick 的 `{ nourishment, vigor, collapsed, asOfTick }`。
 
 #### Scenario: 查詢回傳對帳後的當前值
 - **WHEN** 已登入玩家查詢需求
 - **THEN** 回傳值 SHALL 為 reconcile 到當前 tick 的結果
 
-#### Scenario: 死亡玩家的寫入互動被擋
-- **GIVEN** 玩家 `alive=false`
-- **WHEN** 嘗試寫入型互動（如打獵/釣魚/對話）
-- **THEN** 系統 SHALL 回明確錯誤而非靜默成功；唯讀瀏覽不受影響
+### Requirement: 系統 SHALL 提供最小進食動作以閉合求生迴圈
+
+SP1 尚無世界相依的求生動作（打獵/採集等屬 SP2），因此 SHALL 提供一個最小進食動作：玩家花費固定金幣 → 提升 `nourishment`（封頂 100）。此為**過渡性置入**，SP2 將以世界相依的真實供給動作取代/擴充。進食 MUST 走 Command → Rule Engine → Event（`PLAYER_ATE`）。金幣不足時 SHALL 回明確錯誤。昏厥（collapsed）狀態下 SHALL 仍允許進食，使玩家得以自昏厥恢復（不可形成無法脫離的死局）。
+
+#### Scenario: 進食提升溫飽並扣金幣
+- **GIVEN** 玩家金幣足夠且 nourishment 為 40
+- **WHEN** 執行進食動作
+- **THEN** nourishment SHALL 上升（封頂 100）且金幣 SHALL 被扣除
+
+#### Scenario: 金幣不足無法進食
+- **GIVEN** 玩家金幣不足
+- **WHEN** 嘗試進食
+- **THEN** 系統 SHALL 回明確錯誤，nourishment 與金幣不變
+
+#### Scenario: 昏厥時仍可進食以恢復
+- **GIVEN** 玩家 `collapsed=true` 且金幣足夠
+- **WHEN** 執行進食動作
+- **THEN** 進食 SHALL 成功，使 nourishment 回升、進而讓 vigor 得以恢復並解除昏厥
 
 ### Requirement: 投影 boot SHALL 同時掛上小 log 與大 log 兩條分支
 
