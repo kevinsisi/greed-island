@@ -1,3 +1,14 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (npc-agent-liveness-and-retry, 本機未 push)
+
+- 對症「NPC 沒有真的有智慧」根因之一：`NpcAgentRunner` 先前每個 NPC 每模擬小時（720 ticks≈60min）才 AI 思考一次、且失敗即靜默放棄不重試。
+- 排程改造（`packages/server/src/npcs/npcAgentRunner.ts`）：以 `lastDeliberatedTick` staleness 輪轉取代固定 hash 相位 —— 每 tick 在合格 NPC 中挑「最久沒思考」者，受全域硬上限 `NPC_AGENT_MAX_DELIBERATIONS_PER_TICK`（預設 1）封頂。**成本上限與 NPC 數量脫鉤**。間隔 `NPC_AGENT_DECISION_INTERVAL_TICKS` 由 720 降為 `TICKS_PER_MINUTE*10`（120≈10min）。
+- 可靠性：`deliberate` 對暫時性失敗（provider throw / 回傳無法解析 JSON）指數退避重試 `NPC_AGENT_MAX_RETRIES`（預設 2）次，任一次成功即送出，耗盡才記 error/parse_failed（不 throw 給 tick）。穩態（成功）零額外呼叫。
+- 全部旋鈕可由 settings 覆寫免改碼調 liveness↔成本：`npc_agent_interval_ticks` / `npc_agent_max_per_tick` / `npc_agent_max_retries` / `npc_agent_retry_base_ms`。沿用既有 `npc_agent_enabled=false` 全關與「無 provider→不啟用」。
+- 架構鐵則不變：AI 仍只在 server freeform 提案上選擇並走 `resolveFreeformAgentProposal` + Rule Engine。無事件 shape 變動 → replay 零影響。
+- **成本 envelope（已配置 AI key 時）**：全域上限預設 1 次/ tick（≈12 次/分 ceiling，實際依到期數，約為原 ~0.85 次/分的數倍）；無 key 部署零影響。可用上述 settings 下修。
+- OpenSpec: `openspec/changes/npc-agent-liveness-and-retry/`（新 capability `npc-agent-liveness`，strict validate 通過）。
+- 驗證：`npcAgentRunner.test.ts` 9/9（全域上限、staleness、min-interval、retry 成功/耗盡/parse_failed、enabled 閘門、既有測試）；full server suite **1320/1320 全綠**；`npm run build`（server+web）clean。
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.37 (autonomous-world-narration, 本機未 push)
 
 - 對症「世界感覺只在玩家開畫面才動」的**敘事層**根因（先前 v0.98.35/36 只修了 scheduler/tick cadence，沒碰旁白生成路徑）。診斷：世界骨架（NPC 移動/事件）本就每 5s tick 自主推進，但 `AmbientNarrator` 的氛圍旁白只在玩家觀看某區（area-view API）或最近觀看過（`tickRefresh`）時才生成 —— 沒人看的區域旁白永遠不更新，造成「我一開畫面它才開始有氣氛」。

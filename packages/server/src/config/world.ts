@@ -258,10 +258,21 @@ export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
 // NPC life goals — cadence for NPC_LIFE_GOAL_SET emission（top-8 壓力 NPC）。
 export const LIFE_GOAL_CADENCE_TICKS = 30
 
-// NPC AI agent（v0.89.0）— 每個 NPC 以此節奏輪到一次 AI 自主決策
-// （由 npcId hash 錯相），AI 只能在 server 算好的合法 intent 選項中選擇。
-// TICKS_PER_HOUR=720 → 每 NPC 約每小時（牆鐘）一次、52 NPC ≈ 每 70 秒一次呼叫。
-export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_HOUR
+// NPC AI agent（v0.89.0；liveness 改造）— 一個 NPC 自上次 AI 思考起至少間隔
+// 此 tick 數才「再次合格」。注意：這只是「再次合格門檻」，不是成本天花板 ——
+// 真正的全域成本上限由 NPC_AGENT_MAX_DELIBERATIONS_PER_TICK 封頂（與 NPC 數量
+// 脫鉤）。兩者分離後可安全調低間隔讓世界更活。
+// TICKS_PER_MINUTE*10=120 ≈ 10 分鐘牆鐘（原為 TICKS_PER_HOUR=720≈60 分）。
+export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_MINUTE * 10
+// 全域每 tick 最多進行幾次 AI 自主決策（成本硬上限，與 NPC 數量無關）。超出的
+// 合格 NPC 由 staleness 在後續 tick 輪到。可由 settings `npc_agent_max_per_tick` 覆寫。
+export const NPC_AGENT_MAX_DELIBERATIONS_PER_TICK = 1
+// 單次 AI 決策對暫時性失敗（provider throw / 回傳無法解析的 JSON）的指數退避
+// 重試上限。可由 settings `npc_agent_max_retries` 覆寫。
+export const NPC_AGENT_MAX_RETRIES = 2
+// 退避基數（毫秒）：第 n 次重試前等 base * 2^n。可由 settings `npc_agent_retry_base_ms`
+// 覆寫（測試設 0 → 即時重試，免假時鐘）。
+export const NPC_AGENT_RETRY_BASE_DELAY_MS = 500
 // AI 自述 utterance 上限長度（防 prompt 失控輸出灌爆 ticker）。
 export const NPC_AGENT_UTTERANCE_MAX_CHARS = 60
 // 最近一次 utterance 在 Area scene 聊天泡泡裡保持可見的 tick 數
