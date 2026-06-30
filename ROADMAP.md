@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.35 ✅ local-ready — 2026-06-30
+
+**主題：Autonomous World Tick Cadence（世界不要像打開頁面才動）**
+
+- ✅ **root cause verified** — live `/healthz`、`/api/world`、recent events 在 36+ 秒內停同一 tick；不是手機畫面錯覺。
+- ✅ **slow cooldown shortened** — slow tick 後的 HTTP recovery 從 120–240 秒縮短成 30–60 秒，世界在背景更常推進。
+- ✅ **HTTP still protected** — 仍保留 slow tick 後的恢復窗口，不回到完全無 cooldown。
+- ✅ **regression** — scheduler tests 先紅再綠，鎖住 slow-tick delay 不可再回到 2–4 分鐘。
+- ✅ **Verification** — targeted server tests（5）通過。
+
+---
+
 ## v0.98.34 ✅ local-ready — 2026-06-29
 
 **主題：Pixel Hub NPC Motion（像素母地圖 NPC 不再像雕像）**

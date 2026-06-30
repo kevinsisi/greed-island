@@ -1,3 +1,9 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.35
+
+- Fixed the world feeling like it only moves when the player opens the page: live probes showed `/healthz`, `/api/world`, and recent events stayed on the same tick for 36+ seconds even without browser interaction. Root cause was the slow-tick HTTP recovery scheduler imposing 120–240s cooldowns after slow ticks, which kept HTTP responsive but made the autonomous world appear paused.
+- Reduced slow-tick recovery to 30–60s (`elapsedMs * 1.5`, capped) so background simulation keeps progressing while still leaving an HTTP recovery window after expensive ticks.
+- Verified so far: RED scheduler regression failed on old 120/240s behavior; targeted server tests passed (`runtimeScheduler`, `runtimePhaseTiming`; 5 tests).
+
 ## 2026-06-29 — Handoff Snapshot @ v0.98.34
 
 - Fixed the restored pixel Hub looking frozen: NPC sprites now keep a bounded display-only stroll/motion loop while their authoritative server presence remains visible. Routed/moving NPCs keep walking along their route vector; local outdoor NPCs get a small deterministic stroll around their server-projected sub-tile anchor. No world state or speech is invented.

@@ -6,12 +6,12 @@ describe('SimulationRuntime tick scheduler', () => {
     expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 4_000 })).toBe(5_000)
   })
 
-  it('adds a long HTTP recovery window after slow ticks', () => {
-    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 13_000 })).toBe(120_000)
-    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 24_000 })).toBe(120_000)
+  it('keeps slow-tick recovery short enough that the world keeps moving while nobody watches', () => {
+    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 13_000 })).toBe(30_000)
+    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 24_000 })).toBe(36_000)
   })
 
-  it('caps slow-tick cooldown so simulation still eventually progresses', () => {
-    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 90_000 })).toBe(240_000)
+  it('caps slow-tick cooldown below one minute so simulation still feels alive', () => {
+    expect(computeNextTickDelayMs({ tickDurationMs: 5_000, elapsedMs: 90_000 })).toBe(60_000)
   })
 })
