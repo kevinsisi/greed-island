@@ -6,13 +6,14 @@ import { AtmosphereBar } from '../game/AtmosphereBar'
 import { EventTicker, EventTickerStrip } from '../game/EventTicker'
 import { WorldEventsBanner } from '../game/WorldEventsBanner'
 import { Avatar } from '../common/Avatar'
+import { Icon, type IconName } from '../common/Icon'
 import { APP_VERSION } from '../../version'
 import { api, type ServerAccount } from '../../api/client'
 
 interface NavItem {
   to: string
   labelKey: TranslationKey
-  glyph: string
+  icon: IconName
   visibleWhen?: (account: ServerAccount | null) => boolean
 }
 
@@ -22,40 +23,40 @@ interface NavItem {
 //   /admin    admin only (role management + issue password resets)
 // /account is the gate for guests and the sign-in / sign-out hub.
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',         labelKey: 'nav.hub',      glyph: '◈' },
-  { to: '/codex',    labelKey: 'nav.codex',    glyph: '☷' },
-  { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
-  { to: '/ecology',  labelKey: 'nav.ecology',  glyph: '⬡' },
-  { to: '/market',   labelKey: 'nav.market',   glyph: '⊛' },
-  { to: '/social',   labelKey: 'nav.social',   glyph: '☍' },
+  { to: '/',         labelKey: 'nav.hub',      icon: 'hub' },
+  { to: '/codex',    labelKey: 'nav.codex',    icon: 'codex' },
+  { to: '/timeline', labelKey: 'nav.timeline', icon: 'timeline' },
+  { to: '/ecology',  labelKey: 'nav.ecology',  icon: 'ecology' },
+  { to: '/market',   labelKey: 'nav.market',   icon: 'market' },
+  { to: '/social',   labelKey: 'nav.social',   icon: 'social' },
   {
     to: '/profile',
     labelKey: 'nav.profile',
-    glyph: '◑',
+    icon: 'profile',
     visibleWhen: (account) => account !== null,
   },
   {
     to: '/account',
     labelKey: 'nav.account',
-    glyph: '◐',
+    icon: 'account',
     visibleWhen: (account) => account === null,
   },
   {
     to: '/admin/world',
     labelKey: 'nav.gmWorld',
-    glyph: '◎',
+    icon: 'gmWorld',
     visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
   },
   {
     to: '/admin',
     labelKey: 'nav.admin',
-    glyph: '✶',
+    icon: 'admin',
     visibleWhen: (account) => account?.role === 'admin',
   },
   {
     to: '/settings',
     labelKey: 'nav.settings',
-    glyph: '⚙',
+    icon: 'settings',
     visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
   },
 ]
@@ -190,15 +191,15 @@ function PlayerResources() {
   if (!resources) return null
 
   return (
-    <div className="inline-flex items-center gap-2 text-[11px] font-display uppercase tracking-tightest">
-      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
-        <span className="text-ember-400">{resources.gold.toLocaleString()}</span> 潮幣
+    <div className="inline-flex items-center gap-2 text-[11px] font-body text-ground-300">
+      <span className="px-2 py-1 border border-ember-700/40 rounded-sharp bg-ember-500/5">
+        <span className="gi-data text-ember-400 text-[13px] font-semibold">{resources.gold.toLocaleString()}</span> 潮幣
       </span>
-      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
-        體力 <span className="text-ground-100">{resources.energy}</span>/100
+      <span className="px-2 py-1 border border-ground-700 rounded-sharp bg-ground-900/75">
+        體力 <span className="gi-data text-sand text-[13px]">{resources.energy}</span>/100
       </span>
-      <span className="px-2 py-1 border border-ground-700 rounded-sharp text-ground-300 bg-ground-900/75">
-        術式 <span className="text-moss-400">{resources.techniqueCount}</span>
+      <span className="px-2 py-1 border border-ground-700 rounded-sharp bg-ground-900/75">
+        術式 <span className="gi-data text-moss-400 text-[13px] font-semibold">{resources.techniqueCount}</span>
       </span>
     </div>
   )
@@ -208,7 +209,7 @@ function BrandMark() {
   const { t } = useI18n()
   return (
     <div className="flex items-center gap-2">
-      <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden="true">
+      <svg viewBox="0 0 32 32" className="h-7 w-7 drop-shadow-[0_0_6px_rgba(245,158,11,0.55)]" aria-hidden="true">
         <circle cx="16" cy="16" r="13" fill="none" stroke="#f59e0b" strokeWidth="1.5" />
         <path
           d="M4 18 Q10 12 16 18 T28 18"
@@ -227,10 +228,10 @@ function BrandMark() {
         />
       </svg>
       <div className="leading-none">
-        <div className="font-display font-extrabold tracking-tightest text-ground-100 text-[16px]">
+        <div className="font-display font-extrabold tracking-tight text-sand text-[18px]">
           {t('brand.title')}
         </div>
-        <div className="font-display text-[10px] uppercase tracking-tightest text-ground-500">
+        <div className="font-display text-[10px] uppercase tracking-eyebrow text-ember-500/80 mt-0.5">
           {t('brand.subtitle')}
         </div>
       </div>
@@ -294,7 +295,7 @@ function VersionTag() {
     <span
       title={mismatched ? `client v${APP_VERSION} ↔ server v${serverVersion}` : `v${display}`}
       className={[
-        'font-display text-[10px] uppercase tracking-tightest',
+        'gi-data text-[10px] tracking-tight',
         mismatched ? 'text-rust-400' : 'text-ground-600'
       ].join(' ')}
     >
@@ -309,7 +310,7 @@ function DesktopRail() {
   const { account } = useAuth()
   const items = visibleNavItems(account ?? null)
   return (
-    <nav className="hidden lg:flex flex-col w-48 shrink-0 border-r border-ground-800 bg-ground-900 px-3 py-6 gap-1">
+    <nav className="hidden lg:flex flex-col w-48 shrink-0 border-r border-ground-800 bg-ground-900/60 px-3 py-6 gap-1">
       {items.map((item) => (
         <NavLink
           key={item.to}
@@ -317,15 +318,27 @@ function DesktopRail() {
           end={item.to === '/'}
           className={({ isActive }) =>
             [
-              'group flex items-center gap-3 px-3 py-3 rounded-sharp border transition-colors',
+              'group relative flex items-center gap-3 px-3 py-2.5 rounded-sharp border transition-all duration-200',
               isActive
-                ? 'border-ember-600/60 bg-ember-500/5 text-ember-400'
-                : 'border-transparent text-ground-300 hover:bg-ground-800 hover:text-ground-100'
+                ? 'border-ember-600/50 bg-ember-500/10 text-ember-400 shadow-glow-ember'
+                : 'border-transparent text-ground-400 hover:bg-ground-800/80 hover:text-sand'
             ].join(' ')
           }
         >
-          <span className="font-display text-lg leading-none">{item.glyph}</span>
-          <span className="text-sm font-medium">{t(item.labelKey)}</span>
+          {({ isActive }) => (
+            <>
+              {/* left accent bar on the active route */}
+              <span
+                className={[
+                  'absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-ember-400 transition-opacity duration-200',
+                  isActive ? 'opacity-100' : 'opacity-0'
+                ].join(' ')}
+                aria-hidden="true"
+              />
+              <Icon name={item.icon} className="h-5 w-5 shrink-0" />
+              <span className="font-display font-semibold tracking-tight text-[15px]">{t(item.labelKey)}</span>
+            </>
+          )}
         </NavLink>
       ))}
       <div className="mt-auto pt-6">
@@ -388,13 +401,13 @@ function MobileTabBar() {
                 [
                   'gi-touch flex items-center gap-3 px-3 py-2.5 rounded-sharp transition-colors',
                   isActive
-                    ? 'text-ember-400 bg-ember-500/5'
+                    ? 'text-ember-400 bg-ember-500/10'
                     : 'text-ground-300 hover:text-ground-100 hover:bg-ground-800',
                 ].join(' ')
               }
             >
-              <span className="font-display text-lg leading-none w-5 text-center">{item.glyph}</span>
-              <span className="text-[12px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
+              <Icon name={item.icon} className="h-5 w-5 shrink-0" />
+              <span className="text-[13px] font-display font-semibold tracking-tight">{t(item.labelKey)}</span>
             </NavLink>
           ))}
         </div>
@@ -410,8 +423,8 @@ function MobileTabBar() {
                 onClick={() => setMoreOpen(false)}
                 className={({ isActive }) => tabClass(isActive)}
               >
-                <span className="font-display text-lg leading-none">{item.glyph}</span>
-                <span className="text-[10px] font-display uppercase tracking-tightest">{t(item.labelKey)}</span>
+                <Icon name={item.icon} className="h-[22px] w-[22px]" />
+                <span className="text-[10px] font-display font-semibold uppercase tracking-eyebrow">{t(item.labelKey)}</span>
               </NavLink>
             </li>
           ))}
@@ -423,8 +436,8 @@ function MobileTabBar() {
                 end={profileItem.to === '/'}
                 className={({ isActive }) => tabClass(isActive)}
               >
-                <span className="font-display text-lg leading-none">{profileItem.glyph}</span>
-                <span className="text-[10px] font-display uppercase tracking-tightest">{t(profileItem.labelKey)}</span>
+                <Icon name={profileItem.icon} className="h-[22px] w-[22px]" />
+                <span className="text-[10px] font-display font-semibold uppercase tracking-eyebrow">{t(profileItem.labelKey)}</span>
               </NavLink>
             ) : (
               <button
@@ -434,8 +447,8 @@ function MobileTabBar() {
                 aria-label={t('nav.more')}
                 className={tabClass(moreOpen || moreActive)}
               >
-                <span className="font-display text-lg leading-none">⋯</span>
-                <span className="text-[10px] font-display uppercase tracking-tightest">{t('nav.more')}</span>
+                <Icon name="more" className="h-[22px] w-[22px]" />
+                <span className="text-[10px] font-display font-semibold uppercase tracking-eyebrow">{t('nav.more')}</span>
               </button>
             )}
           </li>

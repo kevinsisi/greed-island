@@ -1,3 +1,13 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (ui-visual-foundation-refresh, 本機未 push)
+
+- 對症「操作介面很醜、沒有玩的慾望」：確立「salvage-lit treasure port at night」視覺基礎，集中在 design token + component + app chrome，一次改全站生效（不逐頁重寫）。純呈現層，無後端/行為/契約變動。
+- 配色（`tailwind.config.ts`）：amber(ember) 暖主光 + 新增 oxidized-teal(`tide`) 冷副光 + parchment(`sand`) 暖白標題，橋接暖色像素世界；保留 moss/rust。
+- 字體分工：`font-display`→Big Shoulders Display（characterful condensed 海報體）+Noto Sans TC；新增 `font-data`(JetBrains Mono) **僅供數值/版本**；`font-body`=Noto Sans TC。全域 display 改動讓既有標題即時去除「mono debug console」觀感。
+- 縱深/氛圍（`styles/index.css`）：`.gi-panel` 改帶頂部內高光+柔投影+hover 暖框；body 改分層 radial 光暈+vignette+細顆粒，取代死板純色。新增 `.gi-heading`/`.gi-eyebrow`/`.gi-data`/`.gi-tag-tide` + `shadow-panel/raised/glow-*` token + `rise/glow-pulse` 動畫。
+- 圖示：新增 `Icon.tsx`（12 個一致 stroke 線性圖示），取代 GameShell 的 Unicode 幾何字元 nav glyph（`◈ ☷ ⬡`）。chrome 微互動：desktop rail active 加 glow+accent bar、BrandMark glow、數值改 `font-data` 對齊。
+- OpenSpec: `ui-visual-foundation-refresh`（新 capability `ui-visual-foundation`，strict 通過）。
+- 驗證：`npm run build`（tsc -b + vite，server+web）clean。**本機 preview 截圖工具在此環境無法 settle**（頁面健康、558 fonts loaded、eval 正常，截圖逾時，非程式問題）→ 改以 live 部署為權威視覺確認（同 slice 1/2 模式）。
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.37 (npc-agent-liveness-and-retry, 本機未 push)
 
 - 對症「NPC 沒有真的有智慧」根因之一：`NpcAgentRunner` 先前每個 NPC 每模擬小時（720 ticks≈60min）才 AI 思考一次、且失敗即靜默放棄不重試。

@@ -17,16 +17,37 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     /* iOS Safari ignores `user-scalable=no`; touch-action: manipulation
-       disables double-tap-to-zoom and other browser-level gestures so the
-       map and overlays do not get accidentally zoomed by two-finger or
-       double-tap interactions. */
+       disables double-tap-to-zoom so the map/overlays don't get zoomed. */
     touch-action: manipulation;
+    /* Atmosphere: warm amber light from the top, a cool tide glow from the
+       lower-left, a deep vignette, and a faint grain — so the world reads as a
+       lamplit salvage port at night instead of a flat dead panel. Fixed so it
+       doesn't scroll. */
+    background-color: #0c0a09;
+    background-image:
+      radial-gradient(120% 80% at 78% -10%, rgba(245, 158, 11, 0.1), transparent 55%),
+      radial-gradient(90% 70% at 0% 110%, rgba(20, 184, 166, 0.08), transparent 60%),
+      radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+    background-attachment: fixed;
+  }
+
+  /* Faint film grain overlay for texture (non-interactive, above bg below UI). */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
   }
 
   canvas {
-    /* Phaser canvas already gets touchAction: none on its container,
-       but apply on canvas itself too as a belt-and-suspenders defense
-       against pinch-zoom on mobile browsers that ignore the parent. */
     touch-action: none;
   }
 
@@ -37,16 +58,41 @@
 }
 
 @layer components {
+  /* Panels read as physical plates: top inner highlight + soft drop shadow,
+     a hairline that warms on hover. */
   .gi-panel {
-    @apply bg-ground-800 border border-ground-700 rounded-sharp;
+    @apply bg-ground-800/90 border border-ground-700/80 rounded-sharp shadow-panel backdrop-blur-sm transition-colors duration-200;
+  }
+
+  .gi-panel-interactive {
+    @apply gi-panel hover:border-ember-600/50 hover:shadow-raised transition-all duration-200;
+  }
+
+  .gi-panel-raised {
+    @apply bg-ground-800 border border-ground-700 rounded-sharp shadow-raised;
+  }
+
+  /* Big poster heading — NOT uppercase mono. This is the single biggest move
+     away from the "debug console" look. */
+  .gi-heading {
+    @apply font-display font-extrabold tracking-tight text-sand leading-[1.05];
+  }
+
+  /* Small-caps amber kicker above a heading. */
+  .gi-eyebrow {
+    @apply font-display uppercase tracking-eyebrow text-ember-400 text-[11px] font-semibold;
   }
 
   .gi-tag {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-display tracking-tightest uppercase text-ground-300 border border-ground-600 rounded-sharp;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-display tracking-eyebrow uppercase font-semibold text-ground-300 border border-ground-600 rounded-sharp;
   }
 
   .gi-tag-ember {
     @apply text-ember-400 border-ember-600/60 bg-ember-500/5;
+  }
+
+  .gi-tag-tide {
+    @apply text-tide-400 border-tide-600/60 bg-tide-500/5;
   }
 
   .gi-tag-moss {
@@ -55,6 +101,11 @@
 
   .gi-tag-rust {
     @apply text-rust-500 border-rust-600/60 bg-rust-500/5;
+  }
+
+  /* Monospace data chip — gold counts, ticks, ids. */
+  .gi-data {
+    @apply font-data tabular-nums tracking-tight;
   }
 
   .gi-divider {
