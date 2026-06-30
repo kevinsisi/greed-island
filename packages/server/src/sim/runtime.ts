@@ -351,6 +351,7 @@ const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
 const SLOW_TICK_PHASE_REPORT_THRESHOLD_MS = 250
 const MAX_CATCH_UP_TICKS_PER_CALLBACK = 1
+const OVERDUE_TICK_HTTP_YIELD_MS = 2_000
 
 export type TickPhaseTiming = Readonly<{ label: string; elapsedMs: number }>
 
@@ -367,8 +368,14 @@ export function computeDueTickCount(input: {
   return Math.min(input.maxCatchUpTicks, dueTicks)
 }
 
-export function computeNextTickDelayMs(input: { nowMs: number; nextDueAtMs: number }): number {
-  return Math.max(0, input.nextDueAtMs - input.nowMs)
+export function computeNextTickDelayMs(input: {
+  nowMs: number
+  nextDueAtMs: number
+  overdueYieldMs?: number
+}): number {
+  const delayMs = input.nextDueAtMs - input.nowMs
+  if (delayMs >= 0) return delayMs
+  return input.overdueYieldMs ?? OVERDUE_TICK_HTTP_YIELD_MS
 }
 
 export function summarizeSlowTickPhaseTimings(

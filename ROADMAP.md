@@ -11,7 +11,7 @@
 
 - ✅ **fixed world clock** — scheduler 以 wall-clock `nextDueAtMs` 推進，不再用「跑完 tick 後再等 cooldown」造成漂移。
 - ✅ **missed tick catch-up** — 如果 event loop 晚到，會依真實時間計算 missed ticks；60 秒 / 5 秒 cadence 會被視為 12 個 due ticks。
-- ✅ **bounded yielding** — 單次 callback 只補 1 tick，後續用 `setTimeout(0)` 繼續追，讓 HTTP 有機會插隊但不讓世界故意睡 30–60 秒。
+- ✅ **bounded yielding** — 單次 callback 只補 1 tick；落後時用 2 秒短 yield 讓 HTTP 插隊，不再用 30–60 秒 cooldown 讓世界故意睡著。
 - ✅ **no screen coupling** — 這是 server runtime scheduler 行為，不依賴使用者是否開頁面或前端 polling。
 - ✅ **Verification** — targeted server scheduler tests（4）通過。
 

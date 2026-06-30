@@ -7,10 +7,10 @@ describe('SimulationRuntime tick scheduler', () => {
     expect(computeNextTickDelayMs({ nowMs: 5_000, nextDueAtMs: 10_000 })).toBe(5_000)
   })
 
-  it('does not add HTTP cooldown that makes the autonomous world drift while nobody watches', () => {
-    expect(computeNextTickDelayMs({ nowMs: 18_000, nextDueAtMs: 10_000 })).toBe(0)
-    expect(computeNextTickDelayMs({ nowMs: 29_000, nextDueAtMs: 15_000 })).toBe(0)
-    expect(computeNextTickDelayMs({ nowMs: 95_000, nextDueAtMs: 20_000 })).toBe(0)
+  it('uses a short yield instead of HTTP cooldown when the fixed clock is overdue', () => {
+    expect(computeNextTickDelayMs({ nowMs: 18_000, nextDueAtMs: 10_000, overdueYieldMs: 2_000 })).toBe(2_000)
+    expect(computeNextTickDelayMs({ nowMs: 29_000, nextDueAtMs: 15_000, overdueYieldMs: 2_000 })).toBe(2_000)
+    expect(computeNextTickDelayMs({ nowMs: 95_000, nextDueAtMs: 20_000, overdueYieldMs: 2_000 })).toBe(2_000)
   })
 
   it('computes missed ticks from wall-clock time instead of browser/API refreshes', () => {

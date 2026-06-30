@@ -1,7 +1,7 @@
 ## 2026-06-30 — Handoff Snapshot @ v0.98.36
 
 - Reworked the world tick loop to follow a fixed wall-clock schedule instead of adding a slow-tick HTTP cooldown. If the event loop is late, the runtime computes missed ticks from elapsed wall time and catches up one scheduler turn at a time, so the world no longer intentionally sleeps longer just because a tick was expensive or nobody has the page open.
-- Removed the 30–60s recovery-window behavior from v0.98.35. HTTP responsiveness now comes from yielding between one-tick catch-up turns, not from making simulation time drift behind real time.
+- Removed the 30–60s recovery-window behavior from v0.98.35. HTTP responsiveness now comes from yielding 2 seconds between overdue one-tick catch-up turns, not from making simulation time drift behind real time.
 - Verified so far: RED scheduler regression failed on the old cooldown/missing catch-up behavior; targeted server scheduler tests passed (`runtimeScheduler`; 4 tests).
 
 ## 2026-06-30 — Handoff Snapshot @ v0.98.35
