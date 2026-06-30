@@ -1,8 +1,14 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.36
+
+- Reworked the world tick loop to follow a fixed wall-clock schedule instead of adding a slow-tick HTTP cooldown. If the event loop is late, the runtime computes missed ticks from elapsed wall time and catches up one scheduler turn at a time, so the world no longer intentionally sleeps longer just because a tick was expensive or nobody has the page open.
+- Removed the 30–60s recovery-window behavior from v0.98.35. HTTP responsiveness now comes from yielding between one-tick catch-up turns, not from making simulation time drift behind real time.
+- Verified so far: RED scheduler regression failed on the old cooldown/missing catch-up behavior; targeted server scheduler tests passed (`runtimeScheduler`; 4 tests).
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.35
 
 - Fixed the world feeling like it only moves when the player opens the page: live probes showed `/healthz`, `/api/world`, and recent events stayed on the same tick for 36+ seconds even without browser interaction. Root cause was the slow-tick HTTP recovery scheduler imposing 120–240s cooldowns after slow ticks, which kept HTTP responsive but made the autonomous world appear paused.
 - Reduced slow-tick recovery to 30–60s (`elapsedMs * 1.5`, capped) so background simulation keeps progressing while still leaving an HTTP recovery window after expensive ticks.
-- Verified so far: RED scheduler regression failed on old 120/240s behavior; targeted server tests passed (`runtimeScheduler`, `runtimePhaseTiming`; 5 tests).
+- Verified: RED scheduler regression failed on old 120/240s behavior; targeted server tests passed (`runtimeScheduler`, `runtimePhaseTiming`; 5 tests).
 
 ## 2026-06-29 — Handoff Snapshot @ v0.98.34
 

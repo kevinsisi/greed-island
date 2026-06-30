@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.36 ✅ local-ready — 2026-06-30
+
+**主題：Fixed-Clock Autonomous Tick Loop（世界時鐘不跟瀏覽器/API 壓力漂移）**
+
+- ✅ **fixed world clock** — scheduler 以 wall-clock `nextDueAtMs` 推進，不再用「跑完 tick 後再等 cooldown」造成漂移。
+- ✅ **missed tick catch-up** — 如果 event loop 晚到，會依真實時間計算 missed ticks；60 秒 / 5 秒 cadence 會被視為 12 個 due ticks。
+- ✅ **bounded yielding** — 單次 callback 只補 1 tick，後續用 `setTimeout(0)` 繼續追，讓 HTTP 有機會插隊但不讓世界故意睡 30–60 秒。
+- ✅ **no screen coupling** — 這是 server runtime scheduler 行為，不依賴使用者是否開頁面或前端 polling。
+- ✅ **Verification** — targeted server scheduler tests（4）通過。
+
+---
+
 ## v0.98.35 ✅ local-ready — 2026-06-30
 
 **主題：Autonomous World Tick Cadence（世界不要像打開頁面才動）**
