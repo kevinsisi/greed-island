@@ -349,19 +349,26 @@ const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
-const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 30_000
-const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 60_000
-const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 1.5
 const SLOW_TICK_PHASE_REPORT_THRESHOLD_MS = 250
+const MAX_CATCH_UP_TICKS_PER_CALLBACK = 3
 
 export type TickPhaseTiming = Readonly<{ label: string; elapsedMs: number }>
 
-export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedMs: number }): number {
-  if (input.elapsedMs <= input.tickDurationMs) return input.tickDurationMs
-  return Math.min(
-    SLOW_TICK_MAX_HTTP_COOLDOWN_MS,
-    Math.max(SLOW_TICK_MIN_HTTP_COOLDOWN_MS, Math.ceil(input.elapsedMs * SLOW_TICK_HTTP_COOLDOWN_FACTOR))
-  )
+export function computeDueTickCount(input: {
+  tickDurationMs: number
+  nowMs: number
+  nextDueAtMs: number
+  maxCatchUpTicks?: number
+}): number {
+  if (input.tickDurationMs <= 0) return 1
+  if (input.nowMs < input.nextDueAtMs) return 0
+  const dueTicks = Math.floor((input.nowMs - input.nextDueAtMs) / input.tickDurationMs) + 1
+  if (input.maxCatchUpTicks === undefined) return dueTicks
+  return Math.min(input.maxCatchUpTicks, dueTicks)
+}
+
+export function computeNextTickDelayMs(input: { nowMs: number; nextDueAtMs: number }): number {
+  return Math.max(0, input.nextDueAtMs - input.nowMs)
 }
 
 export function summarizeSlowTickPhaseTimings(
@@ -628,6 +635,7 @@ export class SimulationRuntime {
   private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
   private tickLoopActive = false
+  private nextTickDueAtMs: number | null = null
   private deferredHydrationState: DeferredHydrationState = 'not_needed'
   private deferredHydrationPromise: Promise<void> | null = null
   private deferredHydrationError: string | null = null
@@ -921,11 +929,13 @@ export class SimulationRuntime {
   start(): void {
     if (this.tickLoopActive) return
     this.tickLoopActive = true
-    this.scheduleNextTick()
+    this.nextTickDueAtMs = Date.now() + this.tickDurationMs
+    this.scheduleNextTick(this.tickDurationMs)
   }
 
   stop(): void {
     this.tickLoopActive = false
+    this.nextTickDueAtMs = null
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -941,15 +951,33 @@ export class SimulationRuntime {
     this.timer = setTimeout(() => {
       this.timer = null
       if (!this.tickLoopActive) return
+      if (this.nextTickDueAtMs === null) this.nextTickDueAtMs = Date.now()
+
+      const dueAtStartMs = this.nextTickDueAtMs
       const startedAt = Date.now()
-      const phaseTimings = this.runTickSafely()
-      const elapsedMs = Date.now() - startedAt
-      const nextDelayMs = computeNextTickDelayMs({ tickDurationMs: this.tickDurationMs, elapsedMs })
-      if (elapsedMs > this.tickDurationMs) {
+      const dueTickCount = Math.max(
+        1,
+        computeDueTickCount({
+          tickDurationMs: this.tickDurationMs,
+          nowMs: startedAt,
+          nextDueAtMs: dueAtStartMs,
+          maxCatchUpTicks: MAX_CATCH_UP_TICKS_PER_CALLBACK,
+        })
+      )
+      const phaseTimings: TickPhaseTiming[] = []
+      for (let i = 0; i < dueTickCount; i += 1) {
+        phaseTimings.push(...this.runTickSafely())
+        this.nextTickDueAtMs += this.tickDurationMs
+      }
+
+      const endedAt = Date.now()
+      const elapsedMs = endedAt - startedAt
+      const nextDelayMs = computeNextTickDelayMs({ nowMs: endedAt, nextDueAtMs: this.nextTickDueAtMs })
+      if (elapsedMs > this.tickDurationMs || dueTickCount > 1 || nextDelayMs === 0) {
         const phaseSummary = summarizeSlowTickPhaseTimings(phaseTimings)
         console.warn(
-          `[sim] tick ${this.currentTick} took ${elapsedMs}ms; ` +
-            `delaying next tick by ${nextDelayMs}ms to keep HTTP responsive` +
+          `[sim] tick ${this.currentTick} ran ${dueTickCount} due tick(s) in ${elapsedMs}ms; ` +
+            `next tick delay ${nextDelayMs}ms from fixed world clock` +
             (phaseSummary ? `; slow phases: ${phaseSummary}` : '')
         )
       }
