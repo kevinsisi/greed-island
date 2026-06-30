@@ -819,8 +819,14 @@ export class SimulationRuntime {
     this.ambientNarrator = narrator
     // v0.15.1：每 tick 主動推「最近被玩家請求過、cache 已過期」的 tile 進下一輪
     // refresh，這樣下次 polling 拿到的 ambient 文字真的會變動，而不是靜止 30 tick。
+    // autonomous-world-narration：背景輪轉的全 world tile 來源 —— 與
+    // AreaStateEngine 的 seed 同一份（runtime ctor: MAP_TILES.map(t => t.id)）。
+    const worldTileIds = MAP_TILES.map((t) => t.id)
     this.subscribeTick((tick) => {
+      // (1) recent-visitor refresh：玩家正在看的 tile，較快節奏。
       narrator.tickRefresh(tick, (tileId) => this.buildAmbientContext(tileId))
+      // (2) 自主背景演化：沒人看的角落也持續更新（成本/速率由 narrator 內部封頂）。
+      narrator.backgroundRefresh(tick, worldTileIds, (tileId) => this.buildAmbientContext(tileId))
     })
     return narrator
   }

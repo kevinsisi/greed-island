@@ -1,3 +1,12 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (autonomous-world-narration, 本機未 push)
+
+- 對症「世界感覺只在玩家開畫面才動」的**敘事層**根因（先前 v0.98.35/36 只修了 scheduler/tick cadence，沒碰旁白生成路徑）。診斷：世界骨架（NPC 移動/事件）本就每 5s tick 自主推進，但 `AmbientNarrator` 的氛圍旁白只在玩家觀看某區（area-view API）或最近觀看過（`tickRefresh`）時才生成 —— 沒人看的區域旁白永遠不更新，造成「我一開畫面它才開始有氣氛」。
+- 新增 `AmbientNarrator.backgroundRefresh`（`packages/server/src/sim/ambientNarrator.ts`）：runtime tick listener 在既有 `tickRefresh` 之後，對全 world tile（`MAP_TILES`）做 round-robin，每 `AMBIENT_BACKGROUND_REFRESH_PERIOD_TICKS`（=6，≈30s）最多挑「最久沒更新（含從未生成）」的 1 個 tile 主動刷新 —— **即使沒有玩家在看**，世界各區氛圍敘事持續演化。
+- 安全/成本保證：無 active AI provider（無 key 且無 OpenCode）→ no-op 零呼叫；單執行緒下每 period 最多 1 個 tile（不塞 event loop）；沿用 `inflight` 去重；recent-visitor tile 由 `tickRefresh` 負責、背景跳過；走既有 read-only `runRefresh`（不寫 EventLog、不下 Command，遵守 ARCHITECTURE.md）。無事件 shape 變動 → replay 零影響。
+- OpenSpec: `openspec/changes/autonomous-world-narration/`（proposal/design/specs/tasks，strict validate 通過；`living-world` 新增 requirement「Ambient 旁白 SHALL 自主背景演化」）。
+- 驗證：新測試 `ambientNarrator.test.ts` 8/8 綠（無 visitor 刷新、速率封頂、零成本、in-flight 去重、決定性挑選、round-robin）；`build:server` tsc 綠；full server suite 1311/1312（唯一失敗 `npc.test.ts` OpenCode 20ms-timeout failover 與本change無關，單獨重跑 11/11 綠）。
+- 待辦：本機 server log 觀察背景生成（保留待使用者方便時，避免重啟線上 pod）；push 保留批次處理（push main = rollout 重啟線上 pod）。
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.37
 
 - Fixed mobile nearby-shout timeout shown as `NPC 回應逾時` for abusive/rude shouts such as `廢物們`: local shout now recognizes rude speech before invoking AI and returns the existing grounded NPC reprimand immediately, still recording the player/NPC dialogue through the normal world-event path.
