@@ -1,6 +1,6 @@
 {
   "name": "@greed-island/server",
-  "version": "0.98.36",
+  "version": "0.98.37",
   "private": true,
   "type": "module",
   "main": "dist/index.js",

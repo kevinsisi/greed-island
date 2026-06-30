@@ -183,7 +183,13 @@ export function createNpcRouter(input: {
     const tier: RelationshipTier = tierForRelationship(previousTrust)
     const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
     const identityLine = identityReplyFor(profile, message, player.displayName)
-    let line: LocalizedLine | null = identityLine
+    const deterministicLocalLine = identityLine ?? (isRudeLocalShout(message) ? localShoutFallbackLine(profile, message, {
+      tileId,
+      tick,
+      previousTrust,
+      interactionCount: previousCount,
+    }) : null)
+    let line: LocalizedLine | null = deterministicLocalLine
     let replySource: ReplySource = 'fallback'
     let aiError: string | null = null
 
@@ -1129,6 +1135,10 @@ function identityReplyFor(
   }
 }
 
+function isRudeLocalShout(playerMessage: string): boolean {
+  return /廢物|白癡|智障|垃圾|滾|低能|蠢/.test(playerMessage.replace(/\s+/g, ''))
+}
+
 function localShoutFallbackLine(
   profile: NpcProfile,
   playerMessage: string,
@@ -1139,7 +1149,7 @@ function localShoutFallbackLine(
   const nameEn = profile.name.en
   const roleEn = profile.role.en
   const normalized = playerMessage.replace(/\s+/g, '')
-  const isRude = /廢物|白癡|智障|垃圾|滾|低能|蠢/.test(normalized)
+  const isRude = isRudeLocalShout(playerMessage)
   const asksDestination = /去哪|去哪裡|去哪儿|要去哪|往哪|走哪/.test(normalized)
   const asksDoing = /幹嘛|在幹嘛|做什麼|做什么|忙什麼|忙什么/.test(normalized)
   const asksIdentity = /誰|谁|名字|叫什麼|叫什么/.test(normalized)

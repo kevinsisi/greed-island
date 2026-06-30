@@ -434,6 +434,92 @@ describe('npc router', () => {
     }
   })
 
+  it('answers rude local shouts immediately without waiting for AI timeout', async () => {
+    const db = new Database(':memory:')
+    const accounts = new AccountStore(db, 4)
+    const store = new PlayerStateStore(db)
+    const settings = new SettingsStore(db)
+    const account = await accounts.createAccount('rude-ai-shout@example.test', 'hunter123')
+    settings.setSetting('provider_priority', 'opencode')
+
+    const aiApp = express()
+    let aiMessageCalls = 0
+    aiApp.use(express.json())
+    aiApp.post('/session', (_req, res) => res.json({ id: 'slow-session' }))
+    aiApp.post('/session/:id/message', (_req, res) => {
+      aiMessageCalls += 1
+      setTimeout(() => res.json({ parts: [{ type: 'text', text: 'too late' }] }), 200)
+    })
+    aiApp.delete('/session/:id', (_req, res) => res.status(204).end())
+    const aiServer = await listen(aiApp)
+    const aiAddress = aiServer.address() as AddressInfo
+    settings.setSetting('opencode_base_url', `http://127.0.0.1:${aiAddress.port}`)
+
+    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const profile: NpcProfile = {
+      id: 'npc-rude-ai',
+      name: { zh: '霧川', en: 'Wuchuan' },
+      role: { zh: '巡街人', en: 'Patroller' },
+      defaultLocation: 't_central',
+      routine: [],
+      triggers: [],
+      memory: { consultsEventTypes: [], decayFn: 'none', decayParam: 0 },
+      personality: { trustBase: 50, patience: 0.8 },
+    }
+    const runtime = {
+      findProfile: (npcId: string) => (npcId === profile.id ? profile : null),
+      getCurrentTick: () => 133,
+      getNpcMortalityProjection: () => ({ isDeceased: () => false }),
+      getNpcs: () => [{ id: profile.id, location: 't_central' }],
+      getNpcsIncludingDeceased: () => [profile],
+      submitLivingWorldCommand: () => ({ eventId: 'evt-rude-local-shout' }),
+    } as unknown as SimulationRuntime
+
+    const app = express()
+    app.use(express.json())
+    app.use(createNpcRouter({
+      runtime,
+      store,
+      settings,
+      accounts,
+      authConfig,
+      localShoutAiTimeoutMs: 150,
+      openCodeEndpointTimeoutMs: 100,
+    }))
+    const server = await listen(app)
+
+    try {
+      const address = server.address() as AddressInfo
+      const token = jwt.sign(
+        { sub: account.id, email: account.email, role: account.role },
+        authConfig.jwtSecret
+      )
+      const startedAt = Date.now()
+      const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-rude-ai'], message: '廢物們' }),
+      })
+      const elapsedMs = Date.now() - startedAt
+      const payload = (await response.json()) as { replySource?: string; line?: { zh?: string }; npcId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.npcId).toBe('npc-rude-ai')
+      expect(payload.replySource).toBe('fallback')
+      expect(payload.line?.zh).toContain('霧川')
+      expect(payload.line?.zh).toContain('嘴巴放乾淨點')
+      expect(aiMessageCalls).toBe(0)
+      expect(elapsedMs).toBeLessThan(100)
+    } finally {
+      await close(server)
+      await close(aiServer)
+      db.close()
+    }
+  })
+
   it('falls back before mobile local shout timeout when AI is slow', async () => {
     const db = new Database(':memory:')
     const accounts = new AccountStore(db, 4)

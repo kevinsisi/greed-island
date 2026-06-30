@@ -1,3 +1,9 @@
+## 2026-06-30 — Handoff Snapshot @ v0.98.37
+
+- Fixed mobile nearby-shout timeout shown as `NPC 回應逾時` for abusive/rude shouts such as `廢物們`: local shout now recognizes rude speech before invoking AI and returns the existing grounded NPC reprimand immediately, still recording the player/NPC dialogue through the normal world-event path.
+- Raised the mobile local-shout client abort window from 18s to 45s so normal AI-backed replies do not get aborted just before the server-side AI timeout/fallback path can finish under live load.
+- Verified so far: RED router regression failed because rude local shout still waited for OpenCode; targeted server NPC router tests passed (`npc`; 11 tests).
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.36
 
 - Reworked the world tick loop to follow a fixed wall-clock schedule instead of adding a slow-tick HTTP cooldown. If the event loop is late, the runtime computes missed ticks from elapsed wall time and catches up one scheduler turn at a time, so the world no longer intentionally sleeps longer just because a tick was expensive or nobody has the page open.

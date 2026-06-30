@@ -5,6 +5,18 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.37 ✅ local-ready — 2026-06-30
+
+**主題：Nearby Shout Timeout Fix（附近發話不要因辱罵等 AI 超時）**
+
+- ✅ **rude shout fast path** — `廢物們` 這類辱罵不再等待 AI；server 直接讓被選中的 NPC 以既有 grounded 角色語氣回應。
+- ✅ **event-routed** — 回應仍走 `PLAYER_NPC_DIALOGUE`，不是前端假台詞或 hidden client state。
+- ✅ **mobile timeout widened** — 手機附近發話 client abort 從 18 秒調到 45 秒，避免正常 AI/降級路徑被前端提早切斷。
+- ✅ **regression** — 新增 router regression，證明辱罵附近發話不會呼叫 OpenCode、也不會等 AI timeout。
+- ✅ **Verification** — targeted server NPC router tests（11）通過。
+
+---
+
 ## v0.98.36 ✅ local-ready — 2026-06-30
 
 **主題：Fixed-Clock Autonomous Tick Loop（世界時鐘不跟瀏覽器/API 壓力漂移）**
