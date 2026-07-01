@@ -156,6 +156,7 @@ jobs:
             for ($attempt = 1; $attempt -le 18; $attempt++) {
               try {
                 curl.exe --max-time 20 -fsS $url -o NUL
+                if ($LASTEXITCODE -ne 0) { throw "$name failed with curl exit code $LASTEXITCODE" }
                 Write-Host "$name ok"
                 return
               } catch {

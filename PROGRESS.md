@@ -1,7 +1,11 @@
+## 2026-07-01 — Handoff Snapshot @ v0.98.40
+
+- Hardened the desktop deploy smoke check after the v0.98.38/v0.98.39 deploys reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke now retries each endpoint with bounded curl timeouts, checks `/api/version` explicitly, requires `/api/world`, and converts native `curl.exe` non-zero exit codes into caught retry failures instead of false-positive `ok` logs.
+- Verified: local full `npm run check` passed at v0.98.39 before this CI/CD-only hardening; v0.98.40 version sync completed.
+
 ## 2026-07-01 — Handoff Snapshot @ v0.98.39
 
-- Hardened the desktop deploy smoke check after the v0.98.38 deploy reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke now retries each endpoint with bounded curl timeouts, checks `/api/version` explicitly, and still requires `/api/world` before passing.
-- Verified: local full `npm run check` had passed at v0.98.38 before this CI/CD-only hardening; v0.98.39 version sync completed.
+- Hardened the desktop deploy smoke check after the v0.98.38 deploy reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke retries were added, but PowerShell native-command exit handling still allowed curl 502s to log `ok`, so v0.98.40 follows up with explicit `$LASTEXITCODE` handling.
 
 ## 2026-07-01 — Handoff Snapshot @ v0.98.38
 
