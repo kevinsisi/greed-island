@@ -1,3 +1,8 @@
+## 2026-07-01 — Handoff Snapshot @ v0.98.39
+
+- Hardened the desktop deploy smoke check after the v0.98.38 deploy reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke now retries each endpoint with bounded curl timeouts, checks `/api/version` explicitly, and still requires `/api/world` before passing.
+- Verified: local full `npm run check` had passed at v0.98.38 before this CI/CD-only hardening; v0.98.39 version sync completed.
+
 ## 2026-07-01 — Handoff Snapshot @ v0.98.38
 
 - Tightened the slow `runtimePredation` starvation regressions so they isolate the predator-starvation invariant instead of dragging in unrelated NPC aggression/defense and biome spawn side paths. The targeted file now runs in ~6s locally instead of the previous ~115s hotspot inside the full server suite.
