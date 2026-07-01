@@ -1,3 +1,9 @@
+## 2026-07-01 — Handoff Snapshot @ v0.98.38
+
+- Tightened the slow `runtimePredation` starvation regressions so they isolate the predator-starvation invariant instead of dragging in unrelated NPC aggression/defense and biome spawn side paths. The targeted file now runs in ~6s locally instead of the previous ~115s hotspot inside the full server suite.
+- Fixed `scripts/sync-version.mjs` to also sync `packages/web/src/version.ts`, preventing the UI shell from carrying a stale bundled client version after root/package version bumps.
+- Verified: targeted server predation test passed (`runtimePredation`; 3 tests); full `npm run check` passed (`server 1304`, `web 154`, build included).
+
 ## 2026-06-30 — Handoff Snapshot @ v0.98.37 (ui-visual-foundation-refresh, 本機未 push)
 
 - 對症「操作介面很醜、沒有玩的慾望」：確立「salvage-lit treasure port at night」視覺基礎，集中在 design token + component + app chrome，一次改全站生效（不逐頁重寫）。純呈現層，無後端/行為/契約變動。
