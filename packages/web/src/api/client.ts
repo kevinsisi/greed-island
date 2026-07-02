@@ -1512,6 +1512,16 @@ export const api = {
       headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, payload })
     }),
+  // ── v0.96.0  MindSheet — NPC 意圖 ──
+  npcIntent: (token: string, npcId: string) =>
+    jsonFetch<NpcIntentResponse>(`/npc/${encodeURIComponent(npcId)}/intent`, {
+      headers: authHeaders(token)
+    }),
+  // ── v0.96.0  MindSheet — NPC 信念 ──
+  npcBeliefs: (token: string, npcId: string) =>
+    jsonFetch<NpcBeliefsResponse>(`/npc/${encodeURIComponent(npcId)}/beliefs`, {
+      headers: authHeaders(token)
+    }),
   // ── SP1 — Player Survival Needs ──
   playerNeeds: (token: string) =>
     jsonFetch<PlayerNeedsState>('/player/needs', { headers: authHeaders(token) }),
@@ -1607,6 +1617,33 @@ export type PlayerNeedsState = {
   vigor: number
   collapsed: boolean
   asOfTick: number
+}
+
+export type NpcIntentEntry = {
+  kind: string
+  label: string
+  urgencyLabel: string
+  reasonZh: string
+}
+
+export type NpcLesson = {
+  kind: string
+  text: string
+}
+
+export type NpcIntentResponse = {
+  intents: NpcIntentEntry[]
+  lessons: NpcLesson[]
+}
+
+export type NpcBeliefEntry = {
+  label: string
+  confidenceLabel: string
+  kind: string
+}
+
+export type NpcBeliefsResponse = {
+  beliefs: NpcBeliefEntry[]
 }
 
 export function streamUrl(): string {

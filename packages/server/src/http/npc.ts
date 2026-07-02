@@ -52,6 +52,9 @@ import {
 import type { NpcProfile } from '../npcs/types.js'
 import type { SettingsStore } from './settings.js'
 import { TICKS_PER_HOUR, TICKS_PER_DAY } from '../config/world.js'
+import { TILE_NAME_BY_ID } from '../sim/mapGraph.js'
+import type { BeliefRow, BeliefSubjectKind } from '../projections/beliefProjection.js'
+import type { IntentKind } from '../kernel/livingWorldCommands.js'
 
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
@@ -1010,6 +1013,53 @@ export function createNpcRouter(input: {
     })
   })
 
+  // ── v0.96.0  MindSheet — NPC 意圖 ───────────────────────────────────────────
+  router.get('/npc/:npcId/intent', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+
+    const entries = input.runtime.getNpcIntentStack(npcId).slice(0, 3)
+    const weights = input.runtime.getNpcLearningWeights(npcId)
+
+    res.json({
+      intents: entries.map((e) => ({
+        kind: e.kind,
+        label: intentKindLabel(e.kind),
+        urgencyLabel: intentUrgencyLabel(e.urgency),
+        reasonZh: intentReasonZh(e),
+      })),
+      lessons: intentLessons(weights),
+    })
+  })
+
+  // ── v0.96.0  MindSheet — NPC 信念 ───────────────────────────────────────────
+  router.get('/npc/:npcId/beliefs', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+
+    const rows = [...input.runtime.getNpcBeliefs(npcId)]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5)
+
+    res.json({
+      beliefs: rows.map((r) => ({
+        label: beliefLabel(r),
+        confidenceLabel: confidenceLabel(r.confidence),
+        kind: r.subject,
+      })),
+    })
+  })
+
   return router
 }
 
@@ -1377,4 +1427,103 @@ function composeInterventionNarration(
 function trim80(s: string): string {
   if (s.length <= 80) return s
   return s.slice(0, 80) + '…'
+}
+
+// ── v0.96.0  MindSheet 翻譯輔助函式 ──────────────────────────────────────────
+
+const INTENT_KIND_LABELS: Readonly<Record<IntentKind, string>> = {
+  survival:  '尋求安全',
+  economic:  '尋找物資',
+  social:    '處理人際關係',
+  ecosystem: '遠離環境惡化',
+}
+
+function intentKindLabel(kind: IntentKind): string {
+  return INTENT_KIND_LABELS[kind] ?? kind
+}
+
+function intentUrgencyLabel(urgency: number): string {
+  if (urgency >= 70) return '非常迫切'
+  if (urgency >= 40) return '迫切'
+  if (urgency >= 10) return '有些想法'
+  return '不太緊急'
+}
+
+function intentReasonZh(entry: { kind: IntentKind; reason: string }): string {
+  const { kind, reason } = entry
+  if (kind === 'survival') {
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '當前位置'
+    return `${tileName}有危險跡象，她想找更安全的地方`
+  }
+  if (kind === 'economic') {
+    const goodsMatch = /goods_scarcity=(\S+)/.exec(reason)
+    const goodsName = goodsMatch ? GOODS_NAMES_ZH[goodsMatch[1]!] ?? goodsMatch[1] : '物資'
+    return `${goodsName}正在短缺，她想尋找補給`
+  }
+  if (kind === 'social') {
+    if (reason.startsWith('player_relationship_caution')) return '她對玩家有些警戒，保持適當距離'
+    if (reason.startsWith('player_relationship_affinity')) return '她對玩家有好感，想靠近一點'
+    if (reason.startsWith('player_relationship_reciprocity')) return '她記得和玩家的交易，覺得互利合作有意義'
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '此區'
+    return `${tileName}被敵對勢力控制，她想遠離`
+  }
+  if (kind === 'ecosystem') {
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '此區'
+    return `${tileName}生態惡化，她想換個地方`
+  }
+  return '她有新的想法'
+}
+
+const GOODS_NAMES_ZH: Readonly<Record<string, string>> = {
+  fish: '魚類',
+  meat: '肉類',
+  grain: '糧食',
+}
+
+const INTENT_LESSONS_ZH: Readonly<Record<IntentKind, string>> = {
+  survival:  '保持警覺確實讓她更安全',
+  economic:  '尋找物資通常對她有幫助',
+  social:    '謹慎應對人際關係是正確的',
+  ecosystem: '遠離惡化環境是明智之舉',
+}
+
+function intentLessons(weights: Readonly<Partial<Record<IntentKind, number>>>): Array<{ kind: IntentKind; text: string }> {
+  return (Object.entries(weights) as Array<[IntentKind, number]>)
+    .filter(([, w]) => w > 1.0)
+    .map(([kind]) => ({ kind, text: INTENT_LESSONS_ZH[kind] }))
+}
+
+const BELIEF_SUBJECT_LABELS: Readonly<Record<BeliefSubjectKind, (qualifier: string) => string>> = {
+  tile_safety:      (q) => `${TILE_NAME_BY_ID[q] ?? q}的安全狀況`,
+  goods_scarcity:   (q) => `${GOODS_NAMES_ZH[q] ?? q}的供應`,
+  ecosystem_health: (q) => `${TILE_NAME_BY_ID[q] ?? q}的生態`,
+  faction_control:  (q) => `${TILE_NAME_BY_ID[q] ?? q}的控制勢力`,
+}
+
+const BELIEF_VALUE_LABELS: Readonly<Record<string, string>> = {
+  dangerous:  '有危險',
+  safe:       '安全',
+  scarce:     '緊張',
+  abundant:   '充裕',
+  depleted:   '枯竭',
+  recovering: '恢復中',
+  controlled: '被控制',
+  contested:  '爭奪中',
+  free:       '自由',
+}
+
+function beliefLabel(row: BeliefRow): string {
+  const subjectLabel = BELIEF_SUBJECT_LABELS[row.subject]?.(row.qualifier) ?? row.qualifier
+  const valueLabel = BELIEF_VALUE_LABELS[row.value] ?? row.value
+  return `${subjectLabel}${valueLabel}`
+}
+
+function confidenceLabel(confidence: number): string {
+  if (confidence >= 80) return '她確信'
+  if (confidence >= 50) return '她相信'
+  if (confidence >= 30) return '她隱約覺得'
+  return '她不太確定'
 }

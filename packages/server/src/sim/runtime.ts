@@ -271,7 +271,7 @@ import { WorldStateProjection, WORLD_STATE_BOOT_EVENT_TYPES } from '../projectio
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { BuildingOccupantsProjection, BUILDING_OCCUPANTS_BOOT_EVENT_TYPES } from '../projections/buildingOccupants.js'
-import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
+import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY, type BeliefRow } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
 import { PlayerNpcRelationshipProjection, formatPlayerRelationshipContext, PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES } from '../projections/playerNpcRelationshipProjection.js'
@@ -279,7 +279,7 @@ import { PlayerRelationshipActionProjection, PLAYER_RELATIONSHIP_ACTION_EVENT_TY
 import { PlayerSurvivalProjection, PLAYER_SURVIVAL_BOOT_EVENT_TYPES } from '../projections/playerSurvival.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
-import { computeIntentStack } from './intentPlanner.js'
+import { computeIntentStack, type IntentEntry } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
 import { planNpcWorldLawAction } from './npcWorldLawActionPlanner.js'
@@ -1525,6 +1525,32 @@ export class SimulationRuntime {
   /** v0.50.0 — NPC's subjective beliefs (formatted string for AI dialog prompt). */
   getFormattedBeliefContext(npcId: string): string {
     return formatBeliefContext(this.beliefProjection.getBeliefs(npcId), this.currentTick)
+  }
+
+  /** v0.96.0 — Raw belief rows for MindSheet API (top entries by confidence). */
+  getNpcBeliefs(npcId: string): readonly BeliefRow[] {
+    return this.beliefProjection.getBeliefs(npcId)
+  }
+
+  /** v0.96.0 — Computed intent stack for MindSheet API (entries sorted by urgency). */
+  getNpcIntentStack(npcId: string): IntentEntry[] {
+    const profile = this.npcEngine.listProfiles().find((p) => p.id === npcId)
+    const state = this.npcEngine.getState(npcId)
+    if (!profile || !state) return []
+    const beliefs = this.beliefProjection.getBeliefs(npcId)
+    const weights = this.intentProjection.getLearningWeights(npcId, this.currentTick)
+    const memoryBoost = this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(npcId, this.currentTick) : 0
+    const lifeGoalBoost = this.computeLifeGoalIntentBoost(npcId)
+    return computeIntentStack(
+      npcId, beliefs, profile, weights,
+      state.tile, state.faction || undefined, this.currentTick,
+      memoryBoost, lifeGoalBoost, this.playerNpcRelationshipProjection.plannerBiasForNpc(npcId),
+    ).entries
+  }
+
+  /** v0.96.0 — Learning weights per intent kind for MindSheet lessons. */
+  getNpcLearningWeights(npcId: string): Readonly<Partial<Record<IntentKind, number>>> {
+    return this.intentProjection.getLearningWeights(npcId, this.currentTick)
   }
 
   /** v0.52.0 — NPC's reflection memory (formatted string for AI dialog prompt). */

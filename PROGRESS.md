@@ -1,3 +1,23 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 1 — NpcMindSheet, 本機未 push)
+
+- 實作 UI Engagement Redesign Phase 1：NPC MindSheet（讓玩家看見 Hermes 等級 NPC 的內心）。
+- **後端 runtime 新增 3 個公開方法**（`sim/runtime.ts`）：
+  - `getNpcBeliefs(npcId)` → 原始 `BeliefRow[]`（供 API 層直接使用）
+  - `getNpcIntentStack(npcId)` → 計算當前意圖堆疊 `IntentEntry[]`，邏輯與 `attachNpcAgent` 的 `computeIntentEntries` 相同（從私有欄位組裝 beliefs/weights/memoryBoost/lifeGoalBoost/playerBias）
+  - `getNpcLearningWeights(npcId)` → `IntentProjection.getLearningWeights` 的薄包裝，供 lessons 轉換
+- **後端 API 兩支新端點**（`http/npc.ts`）：
+  - `GET /api/npc/:id/intent` → top 3 intents（含 kind/label/urgencyLabel/reasonZh）+ 教訓列表（學習權重 > 1.0 的 intent 轉人話）；已過 `requireLivingNpc` 死亡閘（404/410）
+  - `GET /api/npc/:id/beliefs` → top 5 beliefs by confidence（含 label/confidenceLabel/kind）；confidence 轉語氣規則：≥80「她確信」/≥50「她相信」/≥30「她隱約覺得」/<30「她不太確定」；信念標籤用 `TILE_NAME_BY_ID` + 商品中文名組合；所有欄位為顯示就緒字串，禁止 debug 數字出現在回應
+- **前端 API 型別**（`web/src/api/client.ts`）：`NpcIntentResponse`/`NpcBeliefsResponse`/`NpcIntentEntry`/`NpcLesson`/`NpcBeliefEntry` 型別 + `npcIntent`/`npcBeliefs` 呼叫函式
+- **NpcMindSheet component**（新建 `web/src/components/game/NpcMindSheet.tsx`）：並行拉兩支 API；四個區塊：「她現在在想什麼」（前 2 個意圖預設展開，可展開全部）、「她相信的事」（折疊）、「她學到的教訓」（折疊）、「你們的關係」（折疊）；信念 confidence 顏色：tide（不確定）→ ember（確信）；取消後不污染舊 npcId 資料（npcIdRef 防止 race）
+- **NpcDialog 整合**（`web/src/components/game/NpcDialog.tsx`）：import NpcMindSheet；在 `</header>` 後、對話區前插入 MindSheet 折疊區塊（按鈕可收起）；手機：隨 NpcDialog bottom sheet 一起上滑；桌機：在 NpcDialog 右側面板內
+- **測試**（新建 `packages/server/src/http/npcMindSheet.test.ts`）：7 個測試全綠：intent 端點 200/404/410、beliefs 端點 200/200(空)/404/410
+- **驗證**：
+  - server vitest 新增測試全綠（7/7）；npc 相關 HTTP tests 全綠（25/25）；pre-existing 3 flaky timeout failures（npcEngine/runtimeGoodsInventory/runtimeSettlementFamine）與本 change 無關
+  - `tsc --noEmit` 兩個 package 皆 clean
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在
+- 待辦：push 時機由使用者決定；live 視覺驗收（MindSheet 顯示）；Phase 2 WorldSignal 即時流
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 0, 本機未 push)
 
 - 實作 UI Engagement Redesign Phase 0：HubPage 雙形態版型重構 + WhenYouWereGone 入場卡。
