@@ -1,3 +1,14 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.43 (map-M3: human silhouette tokens + BuildingSvg vector building interior)
+
+- **緊急修復兩個上線 regression**（4a68aa0 Hub + de5401a Area 向量地圖替換後）：
+  1. **人型消失**：WorldMapSvg / AreaMapSvg NPC token 從圓點換成 SVG 人形剪影（頭圓形+身體矩形），配 faction 色 + `#fff5b8` 描邊；活動 emoji 移至頭頂右肩。玩家 token 也同步人形化：AreaMapSvg 玩家仍用六角形框但加人頭；WorldMapSvg peer player 也改人形。
+  2. **建築沒圖（Phase M3）**：新建 `BuildingSvg.tsx` 取代 `BuildingPhaserGame`，`BuildingPage.tsx` 改 import。向量室內視圖：棋盤格地板（依建築類型配色）、家具 emoji glyph、NPC 人形 token（isOwner 金邊）、名稱標籤、🚪 離開按鈕。
+- **新增 `BuildingSvg.test.ts`**：10 個 `buildingNpcPosition` 純邏輯測試（單人/多人/越界/分行）。
+- **驗證**：
+  - web vitest：35 test files / 260 pass（新增 10 tests 全綠）。
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在（Phaser 仍在 bundle 供 CombatScene 用）。
+- **Phaser 剩餘引用**：`CombatHud.tsx` + `CombatScene.ts`（Phase B 戰鬥）；`BuildingPhaserGame.tsx` + `BuildingScene.ts` 已閒置（BuildingPage 不再引用），Phase M4 可清理。
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.42 (map-visual-replacement Phase M2 — AreaMapSvg 向量地圖取代 AreaPhaserGame)
 
 - 實作 Phase M2（`docs/superpowers/specs/2026-07-02-map-visual-replacement.md`）：以 CSS Grid + 絕對定位圖層的向量地圖替換 AreaPage 的 Phaser canvas。

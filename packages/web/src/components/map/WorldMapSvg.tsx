@@ -444,12 +444,15 @@ export function WorldMapSvg({
                 transition: 'transform 1.8s ease-in-out',
               }}
               pointerEvents="none"
+              opacity="0.88"
             >
-              <circle r="7" fill="#4db8c8" stroke="#fff5b8" strokeWidth="1" opacity="0.85" />
+              {/* Human silhouette — tide blue */}
+              <circle cx="0" cy="-5" r="4.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="0.75" />
+              <rect x="-4" y="-0.5" width="8" height="6.5" rx="1.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="0.75" />
               <text
-                y="3"
+                y="-2.5"
                 textAnchor="middle"
-                fontSize="7"
+                fontSize="5"
                 fill="#1a1407"
                 fontFamily="'Big Shoulders Display', system-ui, sans-serif"
                 fontWeight="700"
@@ -510,32 +513,44 @@ export function WorldMapSvg({
               {/* Transparent 14px hit area (≥44px touch satisfied by map bounds) */}
               <circle r="14" fill="transparent" />
 
-              {/* Visual token circle */}
-              <circle
-                r="9"
-                fill={npcColor}
-                stroke="#fff5b8"
-                strokeWidth={isTravelling ? 0.5 : 1}
-                opacity={isTravelling ? 0.7 : 1}
-              />
+              {/* Human silhouette token */}
+              <g opacity={isTravelling ? 0.7 : 1}>
+                {/* Head */}
+                <circle
+                  cx="0" cy="-6"
+                  r="5"
+                  fill={npcColor}
+                  stroke="#fff5b8"
+                  strokeWidth={isTravelling ? 0.5 : 0.75}
+                />
+                {/* Torso */}
+                <rect
+                  x="-4.5" y="-1"
+                  width="9" height="7"
+                  rx="2"
+                  fill={npcColor}
+                  stroke="#fff5b8"
+                  strokeWidth={isTravelling ? 0.5 : 0.75}
+                  opacity="0.9"
+                />
+                {/* Initial inside head */}
+                <text
+                  y="-3"
+                  textAnchor="middle"
+                  fontSize="6"
+                  fill={tColor}
+                  fontFamily="'Big Shoulders Display', system-ui, sans-serif"
+                  fontWeight="800"
+                  pointerEvents="none"
+                >
+                  {npc.shortName}
+                </text>
+              </g>
 
-              {/* Initials — Big Shoulders Display */}
-              <text
-                y="3"
-                textAnchor="middle"
-                fontSize="8"
-                fill={tColor}
-                fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                fontWeight="800"
-                pointerEvents="none"
-              >
-                {npc.shortName}
-              </text>
-
-              {/* Activity emoji (right shoulder) */}
+              {/* Activity emoji (right shoulder of head) */}
               {actEmoji && (
                 <text
-                  x="9" y="-4"
+                  x="7" y="-9"
                   fontSize="10"
                   pointerEvents="none"
                 >

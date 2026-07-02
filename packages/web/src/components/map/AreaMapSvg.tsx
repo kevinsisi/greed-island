@@ -641,30 +641,14 @@ export function AreaMapSvg({
                 zIndex: 18,
               }}
             >
-              <div
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: '50%',
-                  backgroundColor: '#4db8c8',
-                  border: '1.5px solid #fff5b8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: 0.85,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: '#1a1407',
-                    fontFamily: "'Big Shoulders Display', system-ui, sans-serif",
-                    fontWeight: 800,
-                  }}
-                >
+              {/* Human silhouette — peer player, tide blue */}
+              <svg width="22" height="28" viewBox="0 0 22 28" style={{ overflow: 'visible', opacity: 0.88 }} aria-hidden="true">
+                <circle cx="11" cy="7" r="6" fill="#4db8c8" stroke="#fff5b8" strokeWidth="1.25" />
+                <rect x="4" y="13" width="14" height="11" rx="2.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="1.25" opacity="0.9" />
+                <text x="11" y="11" textAnchor="middle" fontSize="7" fill="#1a1407" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
                   {p.shortName}
-                </span>
-              </div>
+                </text>
+              </svg>
             </div>
           ))}
 
@@ -731,33 +715,46 @@ export function AreaMapSvg({
                 </div>
               )}
 
-              {/* Token circle */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  backgroundColor: npcColor,
-                  border: `2px solid ${isLowMood ? '#6b6b6b' : '#fff5b8'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: isNearby ? `0 0 10px 3px ${npcColor}88` : 'none',
-                  transition: 'box-shadow 0.3s ease',
-                }}
-              >
-                <span
+              {/* Human silhouette token */}
+              <div style={{ position: 'relative', display: 'inline-flex' }}>
+                <svg
+                  width="28"
+                  height="34"
+                  viewBox="0 0 28 34"
                   style={{
-                    fontSize: 14,
-                    color: textColor,
-                    fontFamily: "'Big Shoulders Display', system-ui, sans-serif",
-                    fontWeight: 800,
-                    lineHeight: 1,
+                    overflow: 'visible',
+                    filter: isNearby ? `drop-shadow(0 0 6px ${npcColor}99)` : 'none',
+                    transition: 'filter 0.3s ease',
                   }}
+                  aria-hidden="true"
                 >
-                  {npc.shortName}
-                </span>
+                  {/* Head */}
+                  <circle
+                    cx="14" cy="9" r="7"
+                    fill={npcColor}
+                    stroke={isLowMood ? '#6b6b6b' : '#fff5b8'}
+                    strokeWidth="1.5"
+                  />
+                  {/* Torso */}
+                  <rect
+                    x="5" y="16" width="18" height="13" rx="3"
+                    fill={npcColor}
+                    stroke={isLowMood ? '#6b6b6b' : '#fff5b8'}
+                    strokeWidth="1.5"
+                    opacity="0.9"
+                  />
+                  {/* Initial inside head */}
+                  <text
+                    x="14" y="13"
+                    textAnchor="middle"
+                    fontSize="9"
+                    fill={textColor}
+                    fontFamily="'Big Shoulders Display', system-ui, sans-serif"
+                    fontWeight="800"
+                  >
+                    {npc.shortName}
+                  </text>
+                </svg>
 
                 {/* Low health indicator */}
                 {isLowHealth && (
@@ -780,7 +777,7 @@ export function AreaMapSvg({
                     style={{
                       position: 'absolute',
                       top: -5,
-                      right: -7,
+                      right: -8,
                       fontSize: 12,
                       lineHeight: 1,
                     }}
@@ -793,7 +790,7 @@ export function AreaMapSvg({
           )
         })}
 
-        {/* ── Player token (SVG hexagon) ─────────────────────────────── */}
+        {/* ── Player token (human silhouette + hexagon frame) ───────── */}
         {controlsEnabled && (
           <div
             className="absolute"
@@ -808,22 +805,26 @@ export function AreaMapSvg({
           >
             <svg
               width="34"
-              height="34"
-              viewBox="0 0 34 34"
+              height="40"
+              viewBox="0 0 34 40"
               style={{ overflow: 'visible' }}
               aria-hidden="true"
             >
+              {/* Head above hexagon */}
+              <circle cx="17" cy="5" r="7" fill="#4db8c8" stroke="#f39c20" strokeWidth="1.5" />
+              {/* Hexagon body */}
               <polygon
-                points="17,2 31,9.5 31,24.5 17,32 3,24.5 3,9.5"
+                points="17,12 31,19.5 31,34.5 17,42 3,34.5 3,19.5"
                 fill="#4db8c8"
                 stroke="#f39c20"
                 strokeWidth="1.5"
               />
+              {/* Initial in head */}
               <text
                 x="17"
-                y="22"
+                y="9"
                 textAnchor="middle"
-                fontSize="11"
+                fontSize="9"
                 fill="#1a1407"
                 fontFamily="'Big Shoulders Display', system-ui, sans-serif"
                 fontWeight="800"
