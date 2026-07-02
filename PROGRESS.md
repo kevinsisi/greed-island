@@ -1,3 +1,21 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 0, 本機未 push)
+
+- 實作 UI Engagement Redesign Phase 0：HubPage 雙形態版型重構 + WhenYouWereGone 入場卡。
+- **HubPage 版型重構**（`pages/HubPage.tsx`）：
+  - 手機（< sm）：36px 精簡頂列 → Phaser 地圖 → WhenYouWereGone（地圖下嵌入） → SurvivalHud compact strip → WorldSignal 佔位條 → 固定底部 ActionBar（進入區域 + 進食 + …）。
+  - 桌機（≥ sm）：左側 220px 面板（SurvivalHud compact + WorldSignal 佔位） + 中央地圖 + 右側 280px 情境面板（Phase 0 顯示選中區域基本資訊）。
+  - 使用 `sm:` breakpoint；Phaser 容器邏輯零改動。
+- **WhenYouWereGone**（新建 `components/game/WhenYouWereGone.tsx`）：取代 `SinceLastVisitPanel` 彈窗，改為嵌入式卡片（非 modal）；沿用同一 `sessionStorage` key；並行拉 `worldSinceLastVisit` + `playerNeeds`；最多 3 則 NPC/世界敘事句（NPC 行動 > 區域壓力 > 世界事件優先）+ 離線衰退摘要（「你的溫飽掉到 48%，體況尚可」格式）+ 直接行動按鈕（去區域 + 進食 + 知道了）。
+- **ActionBar**（新建 `components/game/ActionBar.tsx`）：手機固定底部 56px、桌機嵌入地圖下方；進入區域（走近區域才 active）+ 進食（−10 金）+ … 佔位。
+- **SurvivalHud**（`components/game/SurvivalHud.tsx`）：新增 `compact` prop，compact 模式隱藏進食按鈕（由 ActionBar 承接）。
+- **純邏輯模組**（新建 `whenYouWereGoneLogic.ts`）：`selectNarrativeItems` / `formatDecaySummary` / `ticksToHoursLabel` / `buildActionButtons` / `wygHasContent` 全部可單元測試。
+- **hubPanelVisibility.ts**：新增 `canEnterArea` / `shouldShowWhenYouWereGone` 兩個 layout 判斷函數。
+- **驗證**：
+  - web vitest：32 test files / 199 tests 全綠（新增 `whenYouWereGoneLogic.test.ts` 30 個測試 + `hubLayoutSmoke.test.ts` 8 個測試）。
+  - server vitest：170 passed / 2 pre-existing flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+  - `npm run build`（tsc -b + vite）clean，無新 TypeScript error。
+- 待辦：push 時機由使用者決定；live 視覺驗收（手機/桌機版型）；Phase 1 NpcMindSheet、Phase 2 WorldSignal 即時流。
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.40 (player-survival-needs SP1, 本機未 push)
 
 - 實作 OpenSpec change `player-survival-needs`（SP1）全部 24 個 tasks，完成玩家求生需求最小閉合迴圈。

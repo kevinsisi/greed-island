@@ -4,7 +4,8 @@ import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
 import { useAuth } from '../state/AuthContext'
 import { NpcDialog } from '../components/game/NpcDialog'
-import { SinceLastVisitPanel } from '../components/game/SinceLastVisitPanel'
+import { WhenYouWereGone } from '../components/game/WhenYouWereGone'
+import { ActionBar } from '../components/game/ActionBar'
 import { PlayerCivilizationPanel } from '../components/game/PlayerCivilizationPanel'
 import { WorldCivilizationPanel } from '../components/game/WorldCivilizationPanel'
 import { PhaserGame } from '../game/PhaserGame'
@@ -22,9 +23,11 @@ import { buildHubEcologySummaries, type HubEcologySummary } from './hubEcology'
 import type { AnimalGroupRow, MigrationRow, PredatorWarningRow } from '../api/client'
 import { activeDistrictIdsForHub } from './hubDistricts'
 import {
+  canEnterArea,
   shouldRenderHubCivilizationButton,
   shouldRenderHubWorldCivilizationPanel,
   shouldRenderPlayerCivilizationPanel,
+  shouldShowWhenYouWereGone,
 } from './hubPanelVisibility'
 import { SurvivalHud } from '../components/game/SurvivalHud'
 
@@ -33,59 +36,50 @@ const HUB_PRESENCE_REFRESH_MS = 8_000
 const SINCE_PANEL_DISMISSED_KEY = 'gi:hub:since-panel-dismissed:v1'
 type HubPosition = { x: number; y: number; z: number }
 
-/**
- * HubPage 採用「地圖主視覺 + 輕量 overlay」設計：
- * - 地圖 (PhaserGame) 是主視覺
- * - 「進入 XXX →」與文明面板按鈕緊貼地圖下方，避免被後續資訊面板隔開
- * - 城市標題列放在地圖外上方，避免遮住主地圖
- * - 行動裝置仍保留 44px 以上觸控目標
- */
 export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs, map, events, source, world } = useWorldState()
   const { token, account } = useAuth()
-  // v0.95.1 hotfix: mount immediately with fixture data, then keep the one-way latch once authoritative server data arrives
-  // once, keep the Phaser canvas mounted forever — even if SSE/poll
-  // briefly flips `source` back to 'fixture' on a transient error.
-  // Without this latch, every short network blip tears down + recreates
-  // the entire scene, which is what the user saw as "卡住、要頻繁重整".
+
+  // v0.95.1: one-way latch — keeps Phaser canvas mounted through transient SSE errors
   const [hasServerWorld, setHasServerWorld] = useState(true)
   useEffect(() => {
     if (source === 'server' && !hasServerWorld) setHasServerWorld(true)
   }, [hasServerWorld, source])
+
   const navigate = useNavigate()
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
   const [currentDistrict, setCurrentDistrict] = useState<DistrictId | null>(null)
-  // v0.15.45: only show 不在時的潮鳴市 panel when the user actually returns
-  // after being offline — not on every HubPage mount, route change, or
-  // forced reload. The dismissal latches into sessionStorage, which is
-  // cleared when the tab closes, so a fresh "re-enter the world" still
-  // shows the catch-up panel.
-  const [showSincePanel, setShowSincePanel] = useState<boolean>(() => {
+
+  // WhenYouWereGone — one-per-session dismiss via sessionStorage (same key as old SinceLastVisitPanel)
+  const [wygDismissed, setWygDismissed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     try {
-      return window.sessionStorage.getItem(SINCE_PANEL_DISMISSED_KEY) !== '1'
+      return window.sessionStorage.getItem(SINCE_PANEL_DISMISSED_KEY) === '1'
     } catch {
       return true
     }
   })
-  const dismissSincePanel = useCallback(() => {
-    setShowSincePanel(false)
+  const dismissWyg = useCallback(() => {
+    setWygDismissed(true)
     if (typeof window === 'undefined') return
     try {
       window.sessionStorage.setItem(SINCE_PANEL_DISMISSED_KEY, '1')
     } catch {
-      // sessionStorage may be unavailable in some embedded webviews — non-fatal.
+      // sessionStorage unavailable in some embedded webviews — non-fatal
     }
   }, [])
+
   const [areaStates, setAreaStates] = useState<ServerAreaState[]>([])
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
   const [showCivPanel, setShowCivPanel] = useState(false)
+
+  // ActionBar eat result — SurvivalHud picks up the change on next tick via polling
+
   const isSignedIn = !!token
 
-  // 每 30 秒拉一次 area state 用來上 tile 色（治安/經濟/派系外框）
-  // 5 秒 tick + 區域狀態變化緩慢 → 30 秒 polling 足夠，不會把 server 打爆。
+  // Area states for tile overlays (safety/economy/faction colours), polled every 30s
   useEffect(() => {
     let cancelled = false
     const fetchAreas = () => {
@@ -98,40 +92,35 @@ export function HubPage() {
         .catch(() => {})
     }
     fetchAreas()
-    const t = window.setInterval(fetchAreas, 30_000)
+    const id = window.setInterval(fetchAreas, 30_000)
     return () => {
       cancelled = true
-      window.clearInterval(t)
+      window.clearInterval(id)
     }
   }, [])
 
-  const activeDistrictIds = useMemo<DistrictId[]>(() => {
-    return activeDistrictIdsForHub(map, world.facts['lifeExpansion'])
-  }, [map, world.facts])
-
+  const activeDistrictIds = useMemo<DistrictId[]>(
+    () => activeDistrictIdsForHub(map, world.facts['lifeExpansion']),
+    [map, world.facts],
+  )
   const activeDistrictSet = useMemo(() => new Set(activeDistrictIds), [activeDistrictIds])
 
-  const areaOverlays = useMemo<MapAreaOverlay[]>(() => {
-    return areaStates
-      .filter((a) => activeDistrictSet.has(a.tileId as DistrictId))
-      .map((a) => ({
-        districtId: a.tileId as DistrictId,
-        safety: a.resources.safety,
-        economy: a.resources.economy,
-        food: a.resources.food,
-        dominantFaction: (a.dominantFaction as FactionLeanId | null) ?? null
-      }))
-  }, [activeDistrictSet, areaStates])
+  const areaOverlays = useMemo<MapAreaOverlay[]>(
+    () =>
+      areaStates
+        .filter((a) => activeDistrictSet.has(a.tileId as DistrictId))
+        .map((a) => ({
+          districtId: a.tileId as DistrictId,
+          safety: a.resources.safety,
+          economy: a.resources.economy,
+          food: a.resources.food,
+          dominantFaction: (a.dominantFaction as FactionLeanId | null) ?? null,
+        })),
+    [activeDistrictSet, areaStates],
+  )
 
-  // 主地圖是世界總覽：只顯示跨區移動中的 NPC route。
-  // 已落在某個區域或建築內的 NPC 只在該子層地圖渲染，避免同一 NPC 分身。
-  const mapNpcs = useMemo<MapNpc[]>(() => {
-    return hubMapNpcs(npcs, locale)
-  }, [locale, npcs])
+  const mapNpcs = useMemo<MapNpc[]>(() => hubMapNpcs(npcs, locale), [locale, npcs])
 
-  // v0.15.40：當 React 端有 routed traveller 時，把這次 Hub 投影規模送進
-  // console.debug。配合 MapScene 內的 sprite diagnostic 與 window.__giHubTravellerDiagnostics()，
-  // 可在 live 上直接定位「資料是否進 React state」「投影是否丟掉」「sprite 是否建出」三段。
   useEffect(() => {
     const routed = mapNpcs.filter((n) => n.travelRoute)
     if (routed.length === 0) return
@@ -139,17 +128,15 @@ export function HubPage() {
       reactNpcCount: npcs.length,
       mapNpcCount: mapNpcs.length,
       routedMapNpcCount: routed.length,
-      routedIds: routed.map((n) => n.id)
+      routedIds: routed.map((n) => n.id),
     })
   }, [mapNpcs, npcs])
 
-  const constructionActivities = useMemo<MapConstructionActivity[]>(() => {
-    return constructionActivitiesFor(events, npcs, constructionProjectsFromWorldFact(world.facts['lifeExpansion']))
-  }, [events, npcs, world.facts])
+  const constructionActivities = useMemo<MapConstructionActivity[]>(
+    () => constructionActivitiesFor(events, npcs, constructionProjectsFromWorldFact(world.facts['lifeExpansion'])),
+    [events, npcs, world.facts],
+  )
 
-  // Sprint 2A — derive per-tile ecology summaries from WorldSnapshot.facts
-  // so the Hub map can paint species badges, predator warning rings, and
-  // migration arrows alongside the existing district visuals.
   const ecologyByTile = useMemo<readonly HubEcologySummary[]>(() => {
     const animals = (world.facts['animalPopulation'] as readonly AnimalGroupRow[] | undefined) ?? []
     const migrations = (world.facts['migrationRoutes'] as readonly MigrationRow[] | undefined) ?? []
@@ -157,15 +144,17 @@ export function HubPage() {
     return buildHubEcologySummaries({ animals, migrations, predatorHunger })
   }, [world.facts])
 
-  const mapPlayers = useMemo<MapPlayer[]>(() => {
-    return nearbyPlayers.map((player) => ({
-      id: player.id,
-      displayName: player.displayName,
-      shortName: shortNameFor(player.displayName),
-      x: player.x,
-      y: player.y
-    }))
-  }, [nearbyPlayers])
+  const mapPlayers = useMemo<MapPlayer[]>(
+    () =>
+      nearbyPlayers.map((player) => ({
+        id: player.id,
+        displayName: player.displayName,
+        shortName: shortNameFor(player.displayName),
+        x: player.x,
+        y: player.y,
+      })),
+    [nearbyPlayers],
+  )
 
   const refreshHubPresence = useCallback(async () => {
     if (!token) {
@@ -200,23 +189,23 @@ export function HubPage() {
       latestPositionRef.current = pos
       if (!hadPosition) void refreshHubPresence()
     },
-    [refreshHubPresence]
+    [refreshHubPresence],
   )
 
   const hudStrings = useMemo(
-    () => ({
-      interact: t('hub.interactHint'),
-      enterArea: t('hub.enterArea')
-    }),
-    [t]
+    () => ({ interact: t('hub.interactHint'), enterArea: t('hub.enterArea') }),
+    [t],
   )
 
-  const handleAreaEnter = useCallback((districtId: DistrictId) => {
-    if (!token) return
-    if (!isDistrict(districtId)) return
-    if (!activeDistrictSet.has(districtId)) return
-    setCurrentDistrict(districtId)
-  }, [activeDistrictSet, token])
+  const handleAreaEnter = useCallback(
+    (districtId: DistrictId) => {
+      if (!token) return
+      if (!isDistrict(districtId)) return
+      if (!activeDistrictSet.has(districtId)) return
+      setCurrentDistrict(districtId)
+    },
+    [activeDistrictSet, token],
+  )
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
@@ -224,7 +213,7 @@ export function HubPage() {
       const npc = npcs.find((n) => n.id === npcId)
       if (npc) setActiveNpc(npc)
     },
-    [npcs, token]
+    [npcs, token],
   )
 
   const handleOpenCurrentArea = useCallback(() => {
@@ -240,107 +229,155 @@ export function HubPage() {
         : currentDef.nameEn
       : null
 
+  const showWyg = shouldShowWhenYouWereGone(token, wygDismissed)
+
+  const phaserMap = hasServerWorld ? (
+    <PhaserGame
+      npcs={mapNpcs}
+      players={mapPlayers}
+      locale={locale}
+      playerName={account?.displayName ?? null}
+      hudStrings={hudStrings}
+      onAreaEnter={handleAreaEnter}
+      onNpcInteract={handleNpcInteract}
+      onPositionChange={handleHubPositionChange}
+      areaOverlays={areaOverlays}
+      activeDistrictIds={activeDistrictIds}
+      constructionActivities={constructionActivities}
+      ecologyByTile={ecologyByTile}
+      controlsEnabled={!!token}
+    />
+  ) : (
+    <div className="w-full aspect-[4/3] rounded-sharp border border-ground-700 bg-ground-900 flex items-center justify-center text-ground-400 text-sm">
+      {locale === 'zh' ? '載入潮鳴市…' : 'Loading Tide Hum City…'}
+    </div>
+  )
+
   return (
-    <div className="relative w-full max-w-[800px] mx-auto">
-      <div className="mb-2 mx-2 border border-ground-700 bg-ground-900/90 rounded-sharp px-3 py-2 flex items-center justify-between gap-3">
-        <div className="min-w-0 flex flex-col">
-          <span className="font-display text-[10px] uppercase tracking-tightest text-ember-500 leading-tight">
-            {t('hub.eyebrow')}
-          </span>
-          <span className="font-display font-extrabold text-lg tracking-tightest text-ground-100 leading-tight truncate">
-            {t('hub.title')}
-          </span>
-        </div>
-        <span className="shrink-0 font-display text-[10px] uppercase tracking-tightest text-ground-500">
-          800 x 600
+    <div className="relative w-full">
+
+      {/* ── 精簡頂列（36px）─────────────────────────────────────── */}
+      <div className="h-9 px-3 border-b border-ground-700 bg-ground-900/90 flex items-center gap-2 shrink-0">
+        <span className="font-display text-[10px] uppercase tracking-eyebrow text-ember-500">
+          {t('hub.eyebrow')}
         </span>
+        <span className="font-display font-extrabold text-sm tracking-tightest text-ground-100 truncate">
+          {t('hub.title')}
+        </span>
+        <span className="ml-auto font-data text-[10px] text-ground-500 shrink-0">● 世界運轉中</span>
       </div>
 
-      <div className="relative w-full">
-        {hasServerWorld ? (
-          // v0.15.45: once mounted, stay mounted. `hasServerWorld` is a
-          // one-way latch — transient SSE/poll failures cannot tear the
-          // scene down. Per-prop updates still flow through
-          // `applyExternalUpdate` so NPC / map updates land normally.
-          <PhaserGame
-            npcs={mapNpcs}
-            players={mapPlayers}
-            locale={locale}
-            playerName={account?.displayName ?? null}
-            hudStrings={hudStrings}
-            onAreaEnter={handleAreaEnter}
-            onNpcInteract={handleNpcInteract}
-            onPositionChange={handleHubPositionChange}
-            areaOverlays={areaOverlays}
-            activeDistrictIds={activeDistrictIds}
-            constructionActivities={constructionActivities}
-            ecologyByTile={ecologyByTile}
-            controlsEnabled={!!token}
-          />
-        ) : (
-          <div className="w-full max-w-[800px] mx-auto aspect-[4/3] rounded-sharp border border-ground-700 bg-ground-900 flex items-center justify-center text-ground-400 text-sm">
-            {locale === 'zh' ? '載入潮鳴市…' : 'Loading Tide Hum City…'}
+      {/* ── 主體：手機 = 單欄，桌機 ≥ sm = 三欄 ─────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:min-h-[600px]">
+
+        {/* ── 左側面板（桌機專屬，220px）────────────────────────── */}
+        <aside className="hidden sm:flex sm:flex-col sm:w-[220px] sm:shrink-0 sm:border-r sm:border-ground-700 sm:bg-ground-900/40 sm:p-3 sm:gap-3">
+          {token && (
+            <SurvivalHud compact token={token} tick={world.tick} />
+          )}
+
+          {/* WorldSignal 佔位（Phase 2 實裝即時流） */}
+          <div className="gi-panel px-2 py-2 flex flex-col gap-1 flex-1">
+            <div className="gi-eyebrow">世界現在</div>
+            <p className="text-[11px] text-ground-500 leading-relaxed">即時事件流 Phase 2 實裝</p>
           </div>
-        )}
-      </div>
+        </aside>
 
-      {/* SP1 — 求生處境 HUD：地圖正下方全寬 strip（手機）/ 桌機同位置 */}
-      {token && (
-        <div className="mt-2 px-2">
-          <SurvivalHud token={token} tick={world.tick} />
+        {/* ── 中央欄（地圖 + 嵌入元件）─────────────────────────── */}
+        <div className="flex-1 min-w-0 flex flex-col">
+
+          {/* Phaser 地圖 */}
+          <div className="relative w-full">
+            {phaserMap}
+          </div>
+
+          {/* WhenYouWereGone — 地圖下方、HUD 上方，非彈窗 */}
+          {token && showWyg && (
+            <WhenYouWereGone token={token} onDismiss={dismissWyg} />
+          )}
+
+          {/* 手機：SurvivalHud 緊貼地圖下（桌機在左側面板） */}
+          {token && (
+            <div className="sm:hidden">
+              <SurvivalHud compact token={token} tick={world.tick} />
+            </div>
+          )}
+
+          {/* 手機：WorldSignal 折疊條佔位 */}
+          <div className="sm:hidden px-3 py-2 border-t border-b border-ground-700 bg-ground-900/60 flex items-center gap-2">
+            <span className="gi-eyebrow">世界現在</span>
+            <span className="text-[11px] text-ground-500">即時事件流 Phase 2 實裝</span>
+          </div>
+
+          {/* 文明面板 / 無登入提示（僅需在頁面內任意位置就行） */}
+          {shouldRenderHubWorldCivilizationPanel(showCivPanel) && (
+            <WorldCivilizationPanel snapshot={world.worldCivilization} />
+          )}
+
+          {!token && (
+            <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
+              登入後才能移動、進入街區與互動；目前是只讀瀏覽模式。
+            </div>
+          )}
+
+          {shouldRenderPlayerCivilizationPanel(showCivPanel, isSignedIn) && (
+            <PlayerCivilizationPanel
+              tileId={currentDistrict as string | null}
+              onClose={() => setShowCivPanel(false)}
+            />
+          )}
+
+          {/* ActionBar — 手機固定底部 / 桌機嵌入地圖下方 */}
+          <ActionBar
+            token={token}
+            currentDistrictName={currentName}
+            canEnter={canEnterArea(token, currentDistrict)}
+            onEnterArea={handleOpenCurrentArea}
+          />
+
+          {/* 手機底部固定欄佔位（避免內容被 ActionBar 遮住） */}
+          <div className="sm:hidden h-14 shrink-0" aria-hidden="true" />
         </div>
-      )}
 
-      {/* 地圖互動：緊貼地圖，避免被世界目標/科技等資訊面板隔開。 */}
-      <div className="mt-2 px-2 flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-2">
-        {token && currentName && currentDistrict ? (
-          <button
-            type="button"
-            onClick={handleOpenCurrentArea}
-            className="gi-touch min-h-[44px] flex-1 px-5 py-2 inline-flex flex-col items-center justify-center gap-0 bg-ground-900 border-2 border-ember-500 rounded-sharp text-ember-100 hover:bg-ember-500/15 hover:border-ember-400 transition-colors shadow-lg shadow-ember-900/30"
-          >
-            <span className="font-display text-[9px] uppercase tracking-tightest text-ember-400 leading-tight">
-              {t('hub.currentArea')}
-            </span>
-            <span className="font-display font-extrabold text-sm tracking-tightest leading-tight">
-              {t('hub.openArea', { name: currentName })}
-            </span>
-          </button>
-        ) : (
-          <div className="hidden sm:block flex-1" aria-hidden="true" />
-        )}
-        {shouldRenderHubCivilizationButton(isSignedIn) && (
-          <button
-            type="button"
-            onClick={() => setShowCivPanel((v) => !v)}
-            aria-expanded={showCivPanel}
-            className="gi-touch min-h-[44px] px-4 py-2 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors"
-          >
-            ⚔ 文明面板
-          </button>
-        )}
+        {/* ── 右側情境面板（桌機專屬，280px）──────────────────── */}
+        <aside className="hidden sm:flex sm:flex-col sm:w-[280px] sm:shrink-0 sm:border-l sm:border-ground-700 sm:bg-ground-900/40 sm:p-3 sm:gap-3">
+          {/* 文明面板切換按鈕 */}
+          {shouldRenderHubCivilizationButton(isSignedIn) && (
+            <button
+              type="button"
+              onClick={() => setShowCivPanel((v) => !v)}
+              aria-expanded={showCivPanel}
+              className="gi-touch px-3 py-2 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors text-left"
+            >
+              ⚔ 文明面板
+            </button>
+          )}
+
+          {/* 選中區域資訊（Phase 0 佔位；NpcMindSheet 在 Phase 1 接入） */}
+          <div className="gi-panel p-3 flex flex-col gap-2 flex-1">
+            <div className="gi-eyebrow">情境面板</div>
+            {currentName ? (
+              <>
+                <p className="text-[11px] text-ground-500">目前選中區域</p>
+                <p className="font-display font-bold text-[14px] tracking-tightest text-ground-200">
+                  {currentName}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenCurrentArea}
+                  className="gi-touch mt-1 px-3 py-1.5 border border-ember-600 rounded-sharp text-[11px] font-display tracking-eyebrow uppercase text-ember-300 bg-ember-500/10 hover:bg-ember-500/20 transition-colors"
+                >
+                  前往 {currentName}
+                </button>
+              </>
+            ) : (
+              <p className="text-[11px] text-ground-500 leading-relaxed">
+                點選地圖區域以查看詳情
+              </p>
+            )}
+          </div>
+        </aside>
       </div>
-
-      {shouldRenderHubWorldCivilizationPanel(showCivPanel) && (
-        <WorldCivilizationPanel snapshot={world.worldCivilization} />
-      )}
-
-      {!token && (
-        <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
-          登入後才能移動、進入街區與互動；目前是只讀瀏覽模式。
-        </div>
-      )}
-
-      {shouldRenderPlayerCivilizationPanel(showCivPanel, isSignedIn) && (
-        <PlayerCivilizationPanel
-          tileId={currentDistrict as string | null}
-          onClose={() => setShowCivPanel(false)}
-        />
-      )}
-
-      {token && showSincePanel && (
-        <SinceLastVisitPanel token={token} onClose={dismissSincePanel} />
-      )}
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />
     </div>

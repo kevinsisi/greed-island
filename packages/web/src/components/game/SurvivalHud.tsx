@@ -54,9 +54,11 @@ function NeedBar({ label, value, danger }: NeedBarProps) {
 type SurvivalHudProps = {
   token: string
   tick: number
+  /** compact: hides the eat button; used when ActionBar carries that action */
+  compact?: boolean
 }
 
-export function SurvivalHud({ token, tick }: SurvivalHudProps) {
+export function SurvivalHud({ token, tick, compact = false }: SurvivalHudProps) {
   const [needs, setNeeds] = useState<PlayerNeedsState | null>(null)
   const [eating, setEating] = useState(false)
   const [eatError, setEatError] = useState<string | null>(null)
@@ -127,19 +129,21 @@ export function SurvivalHud({ token, tick }: SurvivalHudProps) {
         {statusText(needs)}
       </p>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleEat}
-          disabled={eating}
-          className="gi-touch flex-1 px-3 py-1.5 text-[11px] font-display tracking-eyebrow uppercase bg-ground-700 hover:bg-ember-500/20 border border-ground-600 hover:border-ember-600 rounded-sharp text-ground-300 hover:text-ember-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {eating ? '進食中…' : `進食 −${EAT_GOLD_COST} 金`}
-        </button>
-        {eatError && (
-          <span className="text-[10px] text-rust-400 flex-1 truncate">{eatError}</span>
-        )}
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleEat}
+            disabled={eating}
+            className="gi-touch flex-1 px-3 py-1.5 text-[11px] font-display tracking-eyebrow uppercase bg-ground-700 hover:bg-ember-500/20 border border-ground-600 hover:border-ember-600 rounded-sharp text-ground-300 hover:text-ember-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {eating ? '進食中…' : `進食 −${EAT_GOLD_COST} 金`}
+          </button>
+          {eatError && (
+            <span className="text-[10px] text-rust-400 flex-1 truncate">{eatError}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
