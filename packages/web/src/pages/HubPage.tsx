@@ -26,6 +26,7 @@ import {
   shouldRenderHubWorldCivilizationPanel,
   shouldRenderPlayerCivilizationPanel,
 } from './hubPanelVisibility'
+import { SurvivalHud } from '../components/game/SurvivalHud'
 
 const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
@@ -282,6 +283,13 @@ export function HubPage() {
           </div>
         )}
       </div>
+
+      {/* SP1 — 求生處境 HUD：地圖正下方全寬 strip（手機）/ 桌機同位置 */}
+      {token && (
+        <div className="mt-2 px-2">
+          <SurvivalHud token={token} tick={world.tick} />
+        </div>
+      )}
 
       {/* 地圖互動：緊貼地圖，避免被世界目標/科技等資訊面板隔開。 */}
       <div className="mt-2 px-2 flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-2">

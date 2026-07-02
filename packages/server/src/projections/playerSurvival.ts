@@ -145,6 +145,13 @@ export class PlayerSurvivalProjection {
     return state ? reconcile(state, currentTick) : null
   }
 
+  rebuildFromEvents(events: readonly Event[]): void {
+    this.latestByAccount.clear()
+    for (const ev of events) {
+      this.project(ev)
+    }
+  }
+
   toJSON(): Record<number, PlayerSurvivalState> {
     const out: Record<number, PlayerSurvivalState> = {}
     for (const [accountId, row] of this.latestByAccount) {

@@ -1511,6 +1511,14 @@ export const api = {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, payload })
+    }),
+  // ── SP1 — Player Survival Needs ──
+  playerNeeds: (token: string) =>
+    jsonFetch<PlayerNeedsState>('/player/needs', { headers: authHeaders(token) }),
+  eatRation: (token: string) =>
+    jsonFetch<{ accepted: boolean; needs: PlayerNeedsState }>('/player/eat', {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     })
 }
 
@@ -1592,6 +1600,13 @@ export type GoodsInventoryEntry = {
   quantity: number
   nameZh: string
   unit: string
+}
+
+export type PlayerNeedsState = {
+  nourishment: number
+  vigor: number
+  collapsed: boolean
+  asOfTick: number
 }
 
 export function streamUrl(): string {

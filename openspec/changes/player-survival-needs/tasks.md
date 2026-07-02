@@ -11,34 +11,34 @@
 
 ## 3. Commands / Events（kernel/livingWorldCommands.ts）
 
-- [ ] 3.1 `PLAYER_NEEDS_RECONCILED`（新狀態 + asOfTick）+ validator
-- [ ] 3.2 `PLAYER_COLLAPSED`（tick）+ validator
-- [ ] 3.3 `PLAYER_ATE`（扣金幣 + 提升溫飽，封頂 100）+ validator（金幣不足拒絕）
-- [ ] 3.4 玩家首次進入 seed 需求初始化路徑
-- [ ] 3.5 對帳事件節流：僅跨 ≥1 整數 tick 且值變才發
+- [x] 3.1 `PLAYER_NEEDS_RECONCILED`（新狀態 + asOfTick）+ validator
+- [x] 3.2 `PLAYER_COLLAPSED`（tick）+ validator
+- [x] 3.3 `PLAYER_ATE`（扣金幣 + 提升溫飽，封頂 100）+ validator（金幣不足拒絕）
+- [x] 3.4 玩家首次進入 seed 需求初始化路徑
+- [x] 3.5 對帳事件節流：僅跨 ≥1 整數 tick 且值變才發
 
 ## 4. Runtime boot 接線（sim/runtime.ts）
 
-- [ ] 4.1 `PlayerSurvivalProjection.rebuildFromEvents` 接入**小 log 完整重建**分支
-- [ ] 4.2 同接入**大 log availability-first boot** 分支（v0.25.3/v0.87.3 鐵則）
-- [ ] 4.3 boot 重建測試（兩條分支皆還原最新狀態）
+- [x] 4.1 `PlayerSurvivalProjection.rebuildFromEvents` 接入**小 log 完整重建**分支
+- [x] 4.2 同接入**大 log availability-first boot** 分支（v0.25.3/v0.87.3 鐵則）
+- [x] 4.3 boot 重建測試（兩條分支皆還原最新狀態）
 
 ## 5. API（http）
 
-- [ ] 5.1 `GET /api/player/needs`（authenticated）→ reconcile 到 currentTick 的 `{ nourishment, vigor, collapsed, asOfTick }`
-- [ ] 5.2 進食 endpoint（authenticated）：扣 wallet → `PLAYER_ATE`；金幣不足回明確錯誤；昏厥時仍可進食
-- [ ] 5.3 API 測試：對帳值、未登入、進食成功/金幣不足/昏厥可進食
+- [x] 5.1 `GET /api/player/needs`（authenticated）→ reconcile 到 currentTick 的 `{ nourishment, vigor, collapsed, asOfTick }`
+- [x] 5.2 進食 endpoint（authenticated）：扣 wallet → `PLAYER_ATE`；金幣不足回明確錯誤；昏厥時仍可進食
+- [x] 5.3 API 測試：對帳值、未登入、進食成功/金幣不足/昏厥可進食
 
 ## 6. 前端處境 HUD（web）
 
-- [ ] 6.1 `api/client.ts` 加 `playerNeeds(token)` 與進食呼叫
-- [ ] 6.2 `components/game/SurvivalHud.tsx`：兩條需求條 + 瀕危脈動張力 + 狀態句 + 進食按鈕 + 昏厥呈現（SP-UI token、font-data）
-- [ ] 6.3 `pages/HubPage.tsx` 主畫面中央掛 HUD；透過既有 SSE/polling 節奏更新
-- [ ] 6.4 前端測試：健康/挨餓/瀕危/昏厥區間呈現
+- [x] 6.1 `api/client.ts` 加 `playerNeeds(token)` 與進食呼叫
+- [x] 6.2 `components/game/SurvivalHud.tsx`：兩條需求條 + 瀕危脈動張力 + 狀態句 + 進食按鈕 + 昏厥呈現（SP-UI token、font-data）
+- [x] 6.3 `pages/HubPage.tsx` 主畫面中央掛 HUD；透過既有 SSE/polling 節奏更新
+- [x] 6.4 前端測試：健康/挨餓/瀕危/昏厥區間呈現
 
 ## 7. 驗證與收尾
 
-- [ ] 7.1 `npm --workspace packages/server exec vitest run` 全套綠
-- [ ] 7.2 `npm run build`（server + web）clean
-- [ ] 7.3 更新 PROGRESS.md（含 design doc 連結與 SP1 範圍）
-- [ ] 7.4 commit；push/部署時機與 live 視覺/行為驗收向使用者確認
+- [x] 7.1 `npm --workspace packages/server exec vitest run` 全套綠（2 pre-existing failures in npc.test.ts / runtimeSettlementFamine.test.ts 與本 SP 無關）
+- [x] 7.2 `npm run build`（server + web）clean
+- [x] 7.3 更新 PROGRESS.md（含 design doc 連結與 SP1 範圍）
+- [x] 7.4 commit；push/部署時機與 live 視覺/行為驗收向使用者確認

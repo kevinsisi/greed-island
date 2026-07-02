@@ -1,3 +1,14 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (player-survival-needs SP1, 本機未 push)
+
+- 實作 OpenSpec change `player-survival-needs`（SP1）全部 24 個 tasks，完成玩家求生需求最小閉合迴圈。
+- **後端**（`kernel/livingWorldCommands.ts`）：新增 `PLAYER_NEEDS_SEEDED` / `PLAYER_NEEDS_RECONCILED` / `PLAYER_COLLAPSED` / `PLAYER_ATE` 四個事件類型及對應 validator、命令型別定義，加入 `LivingWorldCommandPayload` union。
+- **投影重建**（`sim/runtime.ts`）：`PlayerSurvivalProjection` 補上 `rebuildFromEvents`；runtime 的小 log 與大 log 兩條 boot 分支（v0.25.3/v0.87.3 鐵則）皆已接入。event fan-out 同步加掛。
+- **API**（`http/playerSurvivalRouter.ts`）：`GET /api/player/needs`（首次自動 seed → 惰性對帳至 currentTick，跨整數 tick 且值變才發 `PLAYER_NEEDS_RECONCILED`）；`POST /api/player/eat`（扣 wallet 10 金、金幣不足回 402、昏厥仍可進食）。
+- **前端**（`api/client.ts` + `SurvivalHud.tsx` + `HubPage.tsx`）：`playerNeeds`/`eatRation` API 呼叫；雙需求條 + 瀕危 rust pulse + 狀態句 + 進食按鈕 + 昏厥呈現；HUD 掛在主畫面地圖正下方（已登入時顯示），随 SSE/polling tick 節奏刷新。
+- 設計文件：`docs/superpowers/specs/2026-06-30-survival-actor-core-design.md`（SP1 核心設計）、`docs/superpowers/specs/2026-07-02-ui-engagement-redesign.md`（§4.1/§7 HUD 位置規範）。
+- **驗證**：新增 26 個 server-side tests（rebuildFromEvents 3 + 路由 7 個場景）全綠；`npm run build`（tsc + vite）clean；pre-existing 2 flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+- 待辦：push 時機由使用者決定（push main = rollout 重啟線上 pod）；live 視覺驗收（HUD 顯示、進食效果）。
+
 ## 2026-07-01 — Handoff Snapshot @ v0.98.40
 
 - Hardened the desktop deploy smoke check after the v0.98.38/v0.98.39 deploys reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke now retries each endpoint with bounded curl timeouts, checks `/api/version` explicitly, requires `/api/world`, and converts native `curl.exe` non-zero exit codes into caught retry failures instead of false-positive `ok` logs.

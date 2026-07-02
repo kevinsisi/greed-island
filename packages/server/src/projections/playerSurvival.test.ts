@@ -131,3 +131,33 @@ describe('PlayerSurvivalProjection', () => {
     expect(proj.getState(7)).toBeNull()
   })
 })
+
+describe('PlayerSurvivalProjection.rebuildFromEvents', () => {
+  it('restores latest state for small-log boot (sequence order)', () => {
+    const events = [
+      ev(1, { accountId: 3, asOfTick: 0, nourishment: 70, vigor: 100, collapsed: false }),
+      ev(2, { accountId: 3, asOfTick: 360, nourishment: 65, vigor: 95, collapsed: false }),
+      ev(3, { accountId: 3, asOfTick: 720, nourishment: 60, vigor: 90, collapsed: false }),
+    ]
+    const proj = new PlayerSurvivalProjection()
+    proj.rebuildFromEvents(events)
+    expect(proj.getState(3)).toEqual({ asOfTick: 720, nourishment: 60, vigor: 90, collapsed: false })
+  })
+
+  it('restores latest state for large-log boot (typed subset)', () => {
+    const events = [
+      ev(10, { accountId: 5, asOfTick: 0, nourishment: 70, vigor: 100, collapsed: false }),
+      ev(20, { accountId: 5, asOfTick: 500, nourishment: 55, vigor: 70, collapsed: false }),
+    ]
+    const proj = new PlayerSurvivalProjection()
+    proj.rebuildFromEvents(events)
+    expect(proj.getState(5)).toEqual({ asOfTick: 500, nourishment: 55, vigor: 70, collapsed: false })
+  })
+
+  it('clears prior state on successive rebuild calls', () => {
+    const proj = new PlayerSurvivalProjection()
+    proj.rebuildFromEvents([ev(1, { accountId: 7, asOfTick: 0, nourishment: 80, vigor: 100, collapsed: false })])
+    proj.rebuildFromEvents([])
+    expect(proj.getState(7)).toBeNull()
+  })
+})

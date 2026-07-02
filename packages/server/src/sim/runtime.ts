@@ -276,6 +276,7 @@ import { IntentProjection, formatReflectionContext } from '../projections/intent
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
 import { PlayerNpcRelationshipProjection, formatPlayerRelationshipContext, PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES } from '../projections/playerNpcRelationshipProjection.js'
 import { PlayerRelationshipActionProjection, PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, type PlayerRelationshipActionView } from '../projections/playerRelationshipActions.js'
+import { PlayerSurvivalProjection, PLAYER_SURVIVAL_BOOT_EVENT_TYPES } from '../projections/playerSurvival.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
 import { computeIntentStack } from './intentPlanner.js'
@@ -744,6 +745,7 @@ export class SimulationRuntime {
   private readonly npcCognitiveProjection = new NpcCognitiveProjectionStore()
   private readonly playerNpcRelationshipProjection = new PlayerNpcRelationshipProjection()
   private readonly playerRelationshipActionProjection = new PlayerRelationshipActionProjection()
+  private readonly playerSurvivalProjection = new PlayerSurvivalProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -2017,6 +2019,10 @@ export class SimulationRuntime {
     return this.currentTick
   }
 
+  getPlayerSurvivalProjection(): PlayerSurvivalProjection {
+    return this.playerSurvivalProjection
+  }
+
   getPlayerCivilizationSnapshot(accountId: string) {
     const row = this.playerCivilizationProjection.snapshot(accountId)
     const playerFactionTerritories = row.factionIds.flatMap((fid) =>
@@ -2403,6 +2409,7 @@ export class SimulationRuntime {
       this.npcCognitiveProjection.project(ev)
       this.playerNpcRelationshipProjection.apply(ev)
       this.playerRelationshipActionProjection.project(ev)
+      this.playerSurvivalProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -7029,6 +7036,7 @@ export class SimulationRuntime {
       this.npcLineageProjection.rebuildFromEvents(allEvents)
       this.bornNpcsProjection.rebuildFromEvents(allEvents)
       this.lifeGoalsProjection.rebuildFromEvents(allEvents)
+      this.playerSurvivalProjection.rebuildFromEvents(allEvents)
     } else {
       // Availability-first large-log boot: only rebuild projections required
       // for HTTP availability before any typed replay begins. On very large
@@ -7194,6 +7202,7 @@ export class SimulationRuntime {
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
       { label: 'player-npc-relationships', eventTypes: PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES, apply: (events) => this.playerNpcRelationshipProjection.rebuildFromEvents(events) },
       { label: 'player-relationship-actions', eventTypes: PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, apply: (events) => this.playerRelationshipActionProjection.rebuildFromEvents(events) },
+      { label: 'player-survival', eventTypes: PLAYER_SURVIVAL_BOOT_EVENT_TYPES, apply: (events) => this.playerSurvivalProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections
