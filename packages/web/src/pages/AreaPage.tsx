@@ -8,7 +8,7 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { CombatHud } from '../components/game/CombatHud'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
-import { AreaPhaserGame } from '../game/AreaPhaserGame'
+import { AreaMapSvg } from '../components/map/AreaMapSvg'
 import {
   normaliseWeather,
   type AreaMapBuilding,
@@ -571,7 +571,7 @@ export function AreaPage() {
 
       {/* 地圖 — 純畫面，沒有疊任何 HTML 按鈕 */}
       <div className="w-full">
-        <AreaPhaserGame
+        <AreaMapSvg
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
           players={mapPlayers}

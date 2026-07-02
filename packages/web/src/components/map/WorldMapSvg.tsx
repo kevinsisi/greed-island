@@ -1,5 +1,6 @@
 // Hub world map — SVG vector implementation (Phase M1).
-// Replaces PhaserGame/MapScene for HubPage. AreaPage still uses Phaser.
+// Replaces PhaserGame/MapScene for HubPage.
+// Area map replaced by AreaMapSvg (Phase M2). Building interior: Phase M3.
 //
 // Visual language: 18th-century nautical chart × salvage-lit treasure port.
 // Ground #1a1510, ember #f39c20 warm glow, tide #4db8c8 cold water accents.

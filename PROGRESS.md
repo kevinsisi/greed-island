@@ -1,3 +1,24 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.42 (map-visual-replacement Phase M2 — AreaMapSvg 向量地圖取代 AreaPhaserGame)
+
+- 實作 Phase M2（`docs/superpowers/specs/2026-07-02-map-visual-replacement.md`）：以 CSS Grid + 絕對定位圖層的向量地圖替換 AreaPage 的 Phaser canvas。
+- **新增 `AreaMapSvg.tsx`**（`packages/web/src/components/map/`，≈370 行）：
+  - 地形層：CSS Grid 15×10，色調自 `terrainMask` 查表（`#2a2218`~`#0a1520` 深色系）；點格子移動玩家 token（click-to-move）。
+  - NPC token：絕對定位 32px 圓形，`subCol/subRow → left/top %`，4.5 秒 CSS transition 移動，右肩活動 emoji，低心情/低血量指示，AI 語音氣泡（60 字截斷，am-bubble-in 動畫）。
+  - 玩家 token：SVG 六角形，tide 藍填色 + ember 描邊；位置 localStorage 持久化（v2 格式 col/row，避免衝突）。
+  - 建築：glyph + 狀態色框（operational=ember/damaged=rust/construction=黃/abandoned=灰），靠近顯示 ✋ am-float 動畫，施工進度條。
+  - 掉落物：rank 顏色閃爍（am-drop 動畫），44px 觸控面積。
+  - 生態層：植株 chip（透明度由 saturationPct 決定）、動物 emoji（可點擊狩獵）、漁場底部進度條、遷徙/捕食者 chip。
+  - 天氣 VFX：CSS filter（overcast/mist/storm/breeze）+ 雨點/🍃 CSS animation。
+  - 多人：peer player token（CSS transition 7.5s）；`onNearbyNpcsChange`/`onNearbyBuildingChange` Chebyshev 距離閘（2 cells / 1.5 cells）。
+  - 純工具函式 export：`colToPercent`, `rowToPercent`, `pixelXToPercent`, `pixelYToPercent`, `gridDistance`, `buildTerrainGrid`, `terrainToCssColor`, `numToHex`。
+- **新增 `AreaMapSvg.test.ts`**：34 個純邏輯測試全綠（numToHex / colToPercent / rowToPercent / pixel→% / gridDistance / terrainToCssColor / buildTerrainGrid）。
+- **修改 `AreaPage.tsx`**：import AreaMapSvg，不再 import/渲染 AreaPhaserGame；所有 props 介面對齊（含 ecology / weather / onAnimalHunt / onFish）。
+- **刪除 `AreaPhaserGame.tsx`**：唯一引用者（AreaPage）已切換，安全刪除。
+- **Phaser 剩餘引用（不可刪除）**：`CombatHud.tsx` + `CombatScene.ts`（Phase B 戰鬥，已上線）、`BuildingPhaserGame.tsx` + `BuildingPage.tsx`（Phase M3 待做）、`AreaScene.ts`（AreaPage/AreaMapSvg 仍 import 其型別 + `normaliseWeather`，待 M3 後一起清理）。Phaser package 繼續留在 package.json。
+- **驗證**：
+  - web vitest：35 test files / 1602 pass（新增 AreaMapSvg 34 tests 全綠；3 pre-existing timeout failures 與本 change 無關）。
+  - `npm run build`（tsc -b + vite）clean，零新 TS error；chunk size warning 預先存在。
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.41 (map-visual-replacement — SVG 向量航海圖取代 Phaser 像素圖)
 
 - 實作 OpenSpec change `2026-07-02-map-visual-replacement` 方案 A：以 SVG 向量航海圖取代 HubPage 的 Phaser 像素圖。AreaPage 仍保留 Phaser（不動）。
