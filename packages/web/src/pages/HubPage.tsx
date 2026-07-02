@@ -8,7 +8,7 @@ import { WhenYouWereGone } from '../components/game/WhenYouWereGone'
 import { ActionBar } from '../components/game/ActionBar'
 import { PlayerCivilizationPanel } from '../components/game/PlayerCivilizationPanel'
 import { WorldCivilizationPanel } from '../components/game/WorldCivilizationPanel'
-import { PhaserGame } from '../game/PhaserGame'
+import { WorldMapSvg } from '../components/map/WorldMapSvg'
 import { api, type ServerAreaState, type ServerNearbyPlayer } from '../api/client'
 import {
   DISTRICTS,
@@ -232,7 +232,7 @@ export function HubPage() {
   const showWyg = shouldShowWhenYouWereGone(token, wygDismissed)
 
   const phaserMap = hasServerWorld ? (
-    <PhaserGame
+    <WorldMapSvg
       npcs={mapNpcs}
       players={mapPlayers}
       locale={locale}

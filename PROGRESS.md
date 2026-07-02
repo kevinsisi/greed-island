@@ -1,3 +1,20 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.41 (map-visual-replacement — SVG 向量航海圖取代 Phaser 像素圖)
+
+- 實作 OpenSpec change `2026-07-02-map-visual-replacement` 方案 A：以 SVG 向量航海圖取代 HubPage 的 Phaser 像素圖。AreaPage 仍保留 Phaser（不動）。
+- **新增 `WorldMapSvg.tsx`**（`packages/web/src/components/map/`，550 行）：
+  - 18 世紀航海圖 × 廢土港口視覺語言（背景 #2a2e36、ember #f39c20、tide #4db8c8）。
+  - 9 個圖層：背景 → 地區填色 → 派系/安全/經濟 overlay → 遷徙路線箭頭 → 地區名稱標籤 → 生態徽章 → 建設浮標 → 點擊區域 → 玩家/NPC token。
+  - NPC token 含角色縮寫、活動 emoji、截斷對話泡泡；旅行 NPC 自動定位在路線中點。
+  - 區域點擊觸發 `onAreaEnter(districtId)` → `navigate(/area/:id)`；呼叫 `onPositionChange` 更新社交 presence。
+  - `controlsEnabled=false` 時純讀（未登入訪客模式）。
+- **新增 `WorldMapSvg.test.ts`**（174 行）：33 個純邏輯測試（numToHex / darkenNum / npcPixelPos 靜態+旅行+越界 / DISTRICT_RECTS 完整性）全綠。
+- **修改 `HubPage.tsx`**：import WorldMapSvg，不再 import/渲染 PhaserGame；所有 props（npcs / players / areaOverlays / activeDistrictIds / constructionActivities / ecologyByTile / controlsEnabled）完整傳入。
+- **驗證**：
+  - web vitest：33 test files / 218 tests 全綠。
+  - server vitest：171 passed / 2 pre-existing flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在。
+- CI/CD：push 後 GitHub Actions 將自動部署至 dev。
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 1 — NpcMindSheet, 本機未 push)
 
 - 實作 UI Engagement Redesign Phase 1：NPC MindSheet（讓玩家看見 Hermes 等級 NPC 的內心）。
