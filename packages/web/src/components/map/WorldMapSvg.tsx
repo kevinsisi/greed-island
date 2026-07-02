@@ -21,8 +21,9 @@ import type {
   MapPlayer,
 } from '../../game/MapScene'
 import type { HubEcologySummary } from '../../pages/hubEcology'
-import { activityGlyphFor, textColorForBg } from '../../game/npcVisuals'
+import { activityGlyphFor } from '../../game/npcVisuals'
 import { visualForSpecies } from '../../game/speciesPalette'
+import { NpcGlyph, CompassStar } from './tokenMedallion'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,18 @@ export function WorldMapSvg({
               50%       { transform: translateY(-3px); }
             }
             .wm-float { animation: wm-float 3s ease-in-out infinite; }
+            @keyframes wm-npc-pulse { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
+            @keyframes wm-player-breathe { 0%,100% { opacity:0.3 } 50% { opacity:0.85 } }
+            .wm-npc-pulse { animation: wm-npc-pulse 1.8s ease-in-out infinite; }
           `}</style>
+          <radialGradient id="wm-npc-base" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#2d2418" />
+            <stop offset="100%" stopColor="#120d06" />
+          </radialGradient>
+          <radialGradient id="wm-player-base" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#14232a" />
+            <stop offset="100%" stopColor="#08101a" />
+          </radialGradient>
           <marker id="wm-arr-dep" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#c87920" opacity="0.75" />
           </marker>
@@ -444,21 +456,27 @@ export function WorldMapSvg({
                 transition: 'transform 1.8s ease-in-out',
               }}
               pointerEvents="none"
-              opacity="0.88"
             >
-              {/* Human silhouette — tide blue */}
-              <circle cx="0" cy="-5" r="4.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="0.75" />
-              <rect x="-4" y="-0.5" width="8" height="6.5" rx="1.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="0.75" />
-              <text
-                y="-2.5"
-                textAnchor="middle"
-                fontSize="5"
-                fill="#1a1407"
-                fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                fontWeight="700"
-              >
+              {/* Peer player medallion */}
+              <g opacity={0.88}>
+              {/* Breathing glow */}
+              <circle r="13.5" fill="none" stroke="rgba(77,184,200,0.3)" strokeWidth="3"
+                style={{ animation: 'wm-player-breathe 2.5s ease-in-out infinite' }} />
+              {/* Outer tide ring */}
+              <circle r="11" fill="none" stroke="#4db8c8" strokeWidth="2" />
+              {/* Inner ember ring */}
+              <circle r="8.5" fill="none" stroke="#f39c20" strokeWidth="1" opacity="0.7" />
+              {/* Dark base */}
+              <circle r="7.5" fill="url(#wm-player-base)" />
+              {/* Compass star */}
+              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
+              {/* Name pill */}
+              <rect x="-9" y="10" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.82)" />
+              <text y="15.5" textAnchor="middle" fontSize="5"
+                fill="#fff5b8" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
                 {p.shortName}
               </text>
+              </g>
             </g>
           ))}
 
@@ -466,13 +484,13 @@ export function WorldMapSvg({
         {npcs.map(npc => {
           const [x, y]  = npcPixelPos(npc)
           const npcColor = numToHex(npc.color ?? DEFAULT_NPC_COLOR)
-          const tColor   = textColorForBg(npc.color ?? DEFAULT_NPC_COLOR)
           const actEmoji = activityGlyphFor(npc.activity)
           const raw      = npc.recentUtterance
           const truncated = raw
             ? raw.length > 20 ? raw.slice(0, 20) + '…' : raw
             : null
           const isTravelling = !!npc.travelRoute
+          const isLowHealth = typeof npc.health === 'number' && npc.health < 30
 
           return (
             <g
@@ -513,45 +531,38 @@ export function WorldMapSvg({
               {/* Transparent 14px hit area (≥44px touch satisfied by map bounds) */}
               <circle r="14" fill="transparent" />
 
-              {/* Human silhouette token */}
-              <g opacity={isTravelling ? 0.7 : 1}>
-                {/* Head */}
-                <circle
-                  cx="0" cy="-6"
-                  r="5"
-                  fill={npcColor}
-                  stroke="#fff5b8"
-                  strokeWidth={isTravelling ? 0.5 : 0.75}
-                />
-                {/* Torso */}
-                <rect
-                  x="-4.5" y="-1"
-                  width="9" height="7"
-                  rx="2"
-                  fill={npcColor}
-                  stroke="#fff5b8"
-                  strokeWidth={isTravelling ? 0.5 : 0.75}
-                  opacity="0.9"
-                />
-                {/* Initial inside head */}
-                <text
-                  y="-3"
-                  textAnchor="middle"
-                  fontSize="6"
-                  fill={tColor}
-                  fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                  fontWeight="800"
-                  pointerEvents="none"
-                >
+              {/* NPC Medallion */}
+              <g opacity={isTravelling ? 0.65 : 1}>
+                {/* Speaking pulse ring */}
+                {truncated && (
+                  <circle r="13" fill="none" stroke="#f39c20" strokeWidth="1.5"
+                    className="wm-npc-pulse" />
+                )}
+                {/* Outer faction ring */}
+                <circle r="11" fill="none"
+                  stroke={isLowHealth ? '#c0532a' : (isTravelling ? '#7a6040' : npcColor)}
+                  strokeWidth="2" />
+                {/* Subtle glow */}
+                <circle r="11" fill="none" stroke={npcColor} strokeWidth="4" opacity="0.12" />
+                {/* Dark base */}
+                <circle r="9" fill="url(#wm-npc-base)" />
+                {/* Occupation glyph */}
+                <NpcGlyph activity={npc.activity} initial={npc.shortName} color={npcColor} />
+                {/* Name pill */}
+                <rect x="-10" y="11.5" width="20" height="8" rx="1.5" fill="rgba(26,16,8,0.82)" />
+                <text y="17.5" textAnchor="middle" fontSize="5.5"
+                  fill={npcColor} fontFamily="'Big Shoulders Display', system-ui, sans-serif"
+                  fontWeight="700" letterSpacing="0.03em"
+                  pointerEvents="none">
                   {npc.shortName}
                 </text>
               </g>
 
-              {/* Activity emoji (right shoulder of head) */}
+              {/* Activity emoji badge (right upper corner) */}
               {actEmoji && (
                 <text
-                  x="7" y="-9"
-                  fontSize="10"
+                  x="13" y="-11"
+                  fontSize="9"
                   pointerEvents="none"
                 >
                   {actEmoji}

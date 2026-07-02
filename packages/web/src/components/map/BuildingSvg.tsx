@@ -7,7 +7,7 @@
 
 import type { ServerBuildingDef } from '../../api/client'
 import type { BuildingSceneNpc } from '../../game/BuildingScene'
-import { textColorForBg } from '../../game/npcVisuals'
+import { NpcGlyph } from './tokenMedallion'
 
 // ── Floor colour pairs [light, dark] by building type ─────────────────────
 
@@ -91,6 +91,16 @@ export function BuildingSvg({
       role="region"
       aria-label={building.nameZh}
     >
+      {/* Hidden SVG defs for medallion gradients */}
+      <svg aria-hidden="true" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <defs>
+          <radialGradient id="bs-npc-base" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#2d2418" />
+            <stop offset="100%" stopColor="#120d06" />
+          </radialGradient>
+        </defs>
+      </svg>
+
       {/* ── Floor grid (checkerboard) ──────────────────────────────── */}
       <div
         className="absolute inset-0"
@@ -146,7 +156,6 @@ export function BuildingSvg({
         {npcs.map((npc, idx) => {
           const [leftPct, topPct] = buildingNpcPosition(idx, npcs.length)
           const npcColor = typeof npc.color === 'number' ? numToHex(npc.color) : '#f39c20'
-          const textColor = textColorForBg(typeof npc.color === 'number' ? npc.color : 0xf39c20)
           const isOwner = npc.isOwner
 
           return (
@@ -170,58 +179,32 @@ export function BuildingSvg({
               role={controlsEnabled ? 'button' : undefined}
               aria-label={npc.name}
             >
-              {/* Human silhouette SVG */}
-              <svg
-                width="28"
-                height="34"
-                viewBox="0 0 28 34"
-                style={{ overflow: 'visible' }}
-                aria-hidden="true"
-              >
-                {/* Head */}
-                <circle
-                  cx="14" cy="9" r="7"
-                  fill={npcColor}
-                  stroke={isOwner ? '#ffd966' : '#fff5b8'}
-                  strokeWidth={isOwner ? 2 : 1.5}
-                />
-                {/* Torso */}
-                <rect
-                  x="5" y="16" width="18" height="13" rx="3"
-                  fill={npcColor}
-                  stroke={isOwner ? '#ffd966' : '#fff5b8'}
-                  strokeWidth={isOwner ? 2 : 1.5}
-                  opacity="0.9"
-                />
-                {/* Initial in head */}
-                <text
-                  x="14" y="13"
-                  textAnchor="middle"
-                  fontSize="9"
-                  fill={textColor}
+              {/* NPC Medallion */}
+              <svg width="28" height="36" viewBox="-14 -14 28 36"
+                style={{ overflow: 'visible' }} aria-hidden="true">
+                {/* Owner highlight ring */}
+                {isOwner && (
+                  <circle r="13" fill="none" stroke="#ffd966" strokeWidth="1.5" opacity="0.55" />
+                )}
+                {/* Outer faction ring */}
+                <circle r="11" fill="none"
+                  stroke={isOwner ? '#ffd966' : npcColor}
+                  strokeWidth={isOwner ? 2.5 : 2} />
+                {/* Glow */}
+                <circle r="11" fill="none" stroke={npcColor} strokeWidth="4" opacity="0.12" />
+                {/* Dark base */}
+                <circle r="9" fill="url(#bs-npc-base)" />
+                {/* Occupation glyph */}
+                <NpcGlyph activity={npc.activity} initial={npc.shortName} color={isOwner ? '#ffd966' : npcColor} />
+                {/* Name pill */}
+                <rect x="-12" y="11.5" width="24" height="8.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
+                <text y="17.5" textAnchor="middle" fontSize="5.5"
+                  fill={isOwner ? '#ffd966' : npcColor}
                   fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                  fontWeight="800"
-                >
+                  fontWeight="700" letterSpacing="0.03em">
                   {npc.shortName}
                 </text>
               </svg>
-
-              {/* Name label */}
-              <span
-                style={{
-                  marginTop: 3,
-                  fontSize: 9,
-                  color: isOwner ? '#ffd966' : '#d4c89a',
-                  fontFamily: "'Big Shoulders Display', system-ui, sans-serif",
-                  fontWeight: 700,
-                  letterSpacing: '0.03em',
-                  lineHeight: 1,
-                  whiteSpace: 'nowrap',
-                  pointerEvents: 'none',
-                }}
-              >
-                {npc.shortName}
-              </span>
             </div>
           )
         })}

@@ -15,8 +15,9 @@ import type {
   AreaWeather,
 } from '../../game/AreaScene'
 import type { DistrictId } from '../../game/districts'
-import { activityGlyphFor, textColorForBg } from '../../game/npcVisuals'
+import { activityGlyphFor } from '../../game/npcVisuals'
 import { visualForSpecies } from '../../game/speciesPalette'
+import { NpcGlyph, CompassStar } from './tokenMedallion'
 import {
   effectiveTerrainAt,
   type AnyTerrain,
@@ -338,6 +339,8 @@ export function AreaMapSvg({
         @keyframes am-rain       { 0% { transform:translateY(-10%) } 100% { transform:translateY(110%) } }
         @keyframes am-breeze-leaf { 0% { transform:translateX(-10px) translateY(0) scale(0.8); opacity:0 } 60% { opacity:0.7 } 100% { transform:translateX(70px) translateY(-15px) scale(1); opacity:0 } }
         @keyframes am-bubble-in  { 0% { transform:translateX(-50%) scale(0.85); opacity:0 } 100% { transform:translateX(-50%) scale(1); opacity:1 } }
+        @keyframes am-npc-pulse  { 0%,100% { opacity:1 } 50% { opacity:0.15 } }
+        @keyframes am-player-breathe { 0%,100% { opacity:0.3 } 50% { opacity:0.9 } }
         .am-drop     { animation: am-drop-pulse 1.4s ease-in-out infinite }
         .am-float    { animation: am-float 2.8s ease-in-out infinite }
       `}</style>
@@ -370,6 +373,20 @@ export function AreaMapSvg({
           ))
         )}
       </div>
+
+      {/* Hidden SVG defs for medallion gradients */}
+      <svg aria-hidden="true" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <defs>
+          <radialGradient id="am-npc-base" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#2d2418" />
+            <stop offset="100%" stopColor="#120d06" />
+          </radialGradient>
+          <radialGradient id="am-player-base" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#14232a" />
+            <stop offset="100%" stopColor="#08101a" />
+          </radialGradient>
+        </defs>
+      </svg>
 
       {/* ── Layer 1: Overlay (pointer-events-none container) ─────────── */}
       <div className="absolute inset-0 pointer-events-none">
@@ -641,11 +658,19 @@ export function AreaMapSvg({
                 zIndex: 18,
               }}
             >
-              {/* Human silhouette — peer player, tide blue */}
-              <svg width="22" height="28" viewBox="0 0 22 28" style={{ overflow: 'visible', opacity: 0.88 }} aria-hidden="true">
-                <circle cx="11" cy="7" r="6" fill="#4db8c8" stroke="#fff5b8" strokeWidth="1.25" />
-                <rect x="4" y="13" width="14" height="11" rx="2.5" fill="#4db8c8" stroke="#fff5b8" strokeWidth="1.25" opacity="0.9" />
-                <text x="11" y="11" textAnchor="middle" fontSize="7" fill="#1a1407" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
+              {/* Peer player medallion */}
+              <svg width="26" height="26" viewBox="-13 -13 26 26"
+                style={{ overflow: 'visible', opacity: 0.88 }} aria-hidden="true">
+                {/* Breathing glow */}
+                <circle r="12.5" fill="none" stroke="rgba(77,184,200,0.28)" strokeWidth="2.5"
+                  style={{ animation: 'am-player-breathe 2.5s ease-in-out infinite' }} />
+                <circle r="10" fill="none" stroke="#4db8c8" strokeWidth="2" />
+                <circle r="7.5" fill="none" stroke="#f39c20" strokeWidth="1" opacity="0.7" />
+                <circle r="6.5" fill="url(#am-player-base)" />
+                <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
+                <rect x="-8" y="8.5" width="16" height="6.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
+                <text y="13.5" textAnchor="middle" fontSize="4.5"
+                  fill="#fff5b8" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
                   {p.shortName}
                 </text>
               </svg>
@@ -655,7 +680,6 @@ export function AreaMapSvg({
         {/* ── NPC tokens ────────────────────────────────────────────── */}
         {npcs.map(npc => {
           const npcColor = numToHex(npc.color ?? 0xf6c560)
-          const textColor = textColorForBg(npc.color ?? 0xf6c560)
           const actEmoji = activityGlyphFor(npc.activity)
           const behaviorEmoji = npc.behaviorIcon && !actEmoji ? npc.behaviorIcon : null
           const isNearby = nearbyNpcIdSet.has(npc.id)
@@ -715,73 +739,44 @@ export function AreaMapSvg({
                 </div>
               )}
 
-              {/* Human silhouette token */}
+              {/* NPC Medallion */}
               <div style={{ position: 'relative', display: 'inline-flex' }}>
-                <svg
-                  width="28"
-                  height="34"
-                  viewBox="0 0 28 34"
+                <svg width="28" height="36" viewBox="-14 -14 28 36"
                   style={{
                     overflow: 'visible',
-                    filter: isNearby ? `drop-shadow(0 0 6px ${npcColor}99)` : 'none',
+                    filter: isNearby ? `drop-shadow(0 0 5px ${npcColor}90)` : 'none',
                     transition: 'filter 0.3s ease',
                   }}
                   aria-hidden="true"
                 >
-                  {/* Head */}
-                  <circle
-                    cx="14" cy="9" r="7"
-                    fill={npcColor}
-                    stroke={isLowMood ? '#6b6b6b' : '#fff5b8'}
-                    strokeWidth="1.5"
-                  />
-                  {/* Torso */}
-                  <rect
-                    x="5" y="16" width="18" height="13" rx="3"
-                    fill={npcColor}
-                    stroke={isLowMood ? '#6b6b6b' : '#fff5b8'}
-                    strokeWidth="1.5"
-                    opacity="0.9"
-                  />
-                  {/* Initial inside head */}
-                  <text
-                    x="14" y="13"
-                    textAnchor="middle"
-                    fontSize="9"
-                    fill={textColor}
+                  {/* Speaking pulse ring */}
+                  {truncated && (
+                    <circle r="13" fill="none" stroke="#f39c20" strokeWidth="1.5"
+                      style={{ animation: 'am-npc-pulse 1.8s ease-in-out infinite' }} />
+                  )}
+                  {/* Outer ring */}
+                  <circle r="11" fill="none"
+                    stroke={isLowHealth ? '#c0532a' : (isLowMood ? '#6a5830' : npcColor)}
+                    strokeWidth="2" />
+                  {/* Glow */}
+                  <circle r="11" fill="none" stroke={npcColor} strokeWidth="4" opacity="0.12" />
+                  {/* Dark base */}
+                  <circle r="9" fill="url(#am-npc-base)" />
+                  {/* Glyph */}
+                  <NpcGlyph activity={npc.activity} initial={npc.shortName} color={npcColor} />
+                  {/* Name pill */}
+                  <rect x="-11" y="11.5" width="22" height="8.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
+                  <text y="17.5" textAnchor="middle" fontSize="5.5"
+                    fill={isLowMood ? '#6a6a5a' : npcColor}
                     fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                    fontWeight="800"
-                  >
+                    fontWeight="700" letterSpacing="0.03em">
                     {npc.shortName}
                   </text>
                 </svg>
 
-                {/* Low health indicator */}
-                {isLowHealth && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -7,
-                      left: -7,
-                      fontSize: 12,
-                      lineHeight: 1,
-                    }}
-                  >
-                    🤕
-                  </span>
-                )}
-
-                {/* Activity or behavior emoji (right shoulder) */}
+                {/* Activity / behavior emoji badge (right upper corner) */}
                 {(actEmoji || behaviorEmoji) && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -5,
-                      right: -8,
-                      fontSize: 12,
-                      lineHeight: 1,
-                    }}
-                  >
+                  <span style={{ position: 'absolute', top: -5, right: -10, fontSize: 11, lineHeight: 1 }}>
                     {actEmoji || behaviorEmoji}
                   </span>
                 )}
@@ -803,32 +798,24 @@ export function AreaMapSvg({
               pointerEvents: 'none',
             }}
           >
-            <svg
-              width="34"
-              height="40"
-              viewBox="0 0 34 40"
-              style={{ overflow: 'visible' }}
-              aria-hidden="true"
-            >
-              {/* Head above hexagon */}
-              <circle cx="17" cy="5" r="7" fill="#4db8c8" stroke="#f39c20" strokeWidth="1.5" />
-              {/* Hexagon body */}
-              <polygon
-                points="17,12 31,19.5 31,34.5 17,42 3,34.5 3,19.5"
-                fill="#4db8c8"
-                stroke="#f39c20"
-                strokeWidth="1.5"
-              />
-              {/* Initial in head */}
-              <text
-                x="17"
-                y="9"
-                textAnchor="middle"
-                fontSize="9"
-                fill="#1a1407"
-                fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                fontWeight="800"
-              >
+            {/* Player self medallion */}
+            <svg width="34" height="34" viewBox="-17 -17 34 34"
+              style={{ overflow: 'visible' }} aria-hidden="true">
+              {/* Breathing glow ring */}
+              <circle r="15" fill="none" stroke="rgba(77,184,200,0.28)" strokeWidth="3"
+                style={{ animation: 'am-player-breathe 2.5s ease-in-out infinite' }} />
+              {/* Outer tide ring */}
+              <circle r="12" fill="none" stroke="#4db8c8" strokeWidth="2.5" />
+              {/* Inner ember ring */}
+              <circle r="9.5" fill="none" stroke="#f39c20" strokeWidth="1.5" />
+              {/* Dark base */}
+              <circle r="8" fill="url(#am-player-base)" />
+              {/* Compass star */}
+              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
+              {/* Name pill */}
+              <rect x="-11" y="11.5" width="22" height="8.5" rx="1.5" fill="rgba(26,16,8,0.88)" />
+              <text y="17.5" textAnchor="middle" fontSize="6"
+                fill="#f39c20" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="800">
                 {playerName ? playerName.charAt(0).toUpperCase() : '你'}
               </text>
             </svg>

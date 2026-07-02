@@ -1,3 +1,15 @@
+## 2026-07-02 — Handoff Snapshot @ v0.98.44 (map-M4: medallion token 視覺重做)
+
+- **NPC / player token 全面換成航海圖徽章式 medallion**（WorldMapSvg + AreaMapSvg + BuildingSvg）：
+  - 刪除所有頭圓+身體矩形人形程式碼。
+  - 新建 `tokenMedallion.tsx`：`NpcGlyph`（activity→職業線性圖示，stroke 1.3 line-icon 風格）+ `CompassStar`（玩家羅盤星）。
+  - 職業 glyph 對照：guard/patrol=盾、trade=天平、read/study=書卷、craft/work=鎚、pray=十字架、perform=音符、write=羽毛筆、eat=魚鉤；無對照（idle/move/sleep）→首字母 Big Shoulders 800。
+  - NPC 外環：faction color，說話時 ember 脈光環，移動中 opacity 0.65，低健康轉 rust，低情緒轉暗金（AreaMapSvg）。
+  - Player medallion：tide 外環+ember 內環，羅盤星中央，呼吸 glow animation。
+  - Radial gradient 深色羊皮紙底（#2d2418→#120d06 for NPC，#14232a→#08101a for player）。
+  - 名字 pill：半透明深底 + faction color text，嵌在 medallion 下緣。
+- **驗證**：web vitest 35 files / 260 pass（全綠），`tsc -b && vite build` clean（chunk warning 預存在）。
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.43 (map-M3: human silhouette tokens + BuildingSvg vector building interior)
 
 - **緊急修復兩個上線 regression**（4a68aa0 Hub + de5401a Area 向量地圖替換後）：
