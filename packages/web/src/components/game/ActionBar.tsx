@@ -30,42 +30,24 @@ export function ActionBar({ token, currentDistrictName, canEnter, onEnterArea, o
     }
   }, [token, eating, onEatSuccess])
 
+  // Inline on all breakpoints — MobileTabBar (z-30, fixed bottom-0) already occupies the
+  // bottom of the screen; a second fixed bar at z-20 is fully covered and unreachable.
   return (
-    <>
-      {/* Mobile: fixed bottom bar */}
-      <div
-        className="sm:hidden fixed bottom-0 inset-x-0 z-20 flex items-stretch h-14 gap-2 px-2 py-2 border-t border-ground-700 bg-ground-900/95"
-        role="toolbar"
-        aria-label="主要動作"
-      >
-        <ActionButtons
-          canEnter={canEnter}
-          currentDistrictName={currentDistrictName}
-          onEnterArea={onEnterArea}
-          token={token}
-          eating={eating}
-          eatError={eatError}
-          onEat={handleEat}
-        />
-      </div>
-
-      {/* Desktop: inline below map */}
-      <div
-        className="hidden sm:flex items-stretch h-14 gap-2 px-0 py-2 border-t border-ground-700"
-        role="toolbar"
-        aria-label="主要動作"
-      >
-        <ActionButtons
-          canEnter={canEnter}
-          currentDistrictName={currentDistrictName}
-          onEnterArea={onEnterArea}
-          token={token}
-          eating={eating}
-          eatError={eatError}
-          onEat={handleEat}
-        />
-      </div>
-    </>
+    <div
+      className="flex items-stretch h-14 gap-2 px-0 py-2 border-t border-ground-700"
+      role="toolbar"
+      aria-label="主要動作"
+    >
+      <ActionButtons
+        canEnter={canEnter}
+        currentDistrictName={currentDistrictName}
+        onEnterArea={onEnterArea}
+        token={token}
+        eating={eating}
+        eatError={eatError}
+        onEat={handleEat}
+      />
+    </div>
   )
 }
 

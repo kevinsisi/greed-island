@@ -335,8 +335,6 @@ export function HubPage() {
             onEnterArea={handleOpenCurrentArea}
           />
 
-          {/* 手機底部固定欄佔位（避免內容被 ActionBar 遮住） */}
-          <div className="sm:hidden h-14 shrink-0" aria-hidden="true" />
         </div>
 
         {/* ── 右側情境面板（桌機專屬，280px）──────────────────── */}
