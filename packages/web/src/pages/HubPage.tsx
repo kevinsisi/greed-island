@@ -276,10 +276,19 @@ export function HubPage() {
             <SurvivalHud compact token={token} tick={world.tick} />
           )}
 
-          {/* WorldSignal 佔位（Phase 2 實裝即時流） */}
-          <div className="gi-panel px-2 py-2 flex flex-col gap-1 flex-1">
+          <div className="gi-panel px-2 py-2 flex flex-col gap-1 flex-1 overflow-hidden">
             <div className="gi-eyebrow">世界現在</div>
-            <p className="text-[11px] text-ground-500 leading-relaxed">即時事件流 Phase 2 實裝</p>
+            {events.filter(e => e.narration).slice(0, 5).length === 0 ? (
+              <p className="text-[10px] text-ground-600 leading-relaxed">世界安靜著…</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {events.filter(e => e.narration).slice(0, 5).map(evt => (
+                  <li key={evt.sequence} className="text-[10px] text-ground-400 leading-snug line-clamp-2">
+                    {evt.narration}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </aside>
 
@@ -303,10 +312,12 @@ export function HubPage() {
             </div>
           )}
 
-          {/* 手機：WorldSignal 折疊條佔位 */}
-          <div className="sm:hidden px-3 py-2 border-t border-b border-ground-700 bg-ground-900/60 flex items-center gap-2">
-            <span className="gi-eyebrow">世界現在</span>
-            <span className="text-[11px] text-ground-500">即時事件流 Phase 2 實裝</span>
+          {/* 手機：WorldSignal 最新事件 */}
+          <div className="sm:hidden px-3 py-2 border-t border-b border-ground-700 bg-ground-900/60 flex items-center gap-2 overflow-hidden">
+            <span className="gi-eyebrow shrink-0">世界現在</span>
+            <span className="text-[10px] text-ground-400 truncate">
+              {events.find(e => e.narration)?.narration ?? '世界安靜著…'}
+            </span>
           </div>
 
           {/* 文明面板 / 無登入提示（僅需在頁面內任意位置就行） */}

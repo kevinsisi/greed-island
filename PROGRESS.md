@@ -1,3 +1,17 @@
+## 2026-07-03 — Handoff Snapshot @ v0.98.45 (map-M5: WorldMapSvg 全面重做 — 有機島嶼、玩家移動、NPC 漂移)
+
+- **WorldMapSvg 三大問題一次修好**：
+  1. **視覺重設計**：深夜海背景 `#07111e`，SVG `<polygon>` 有機多邊形島嶼取代矩形填色；低飽和島嶼底色 + 派系色 10–20% tint；Big Shoulders 羊皮卷標籤 pill；11 條虛線海航路；district anchor ember 光點（兩層 pulse 動畫）；NPC hover 餘燼光暈。
+  2. **玩家移動**：新增 `playerDistrictId` state（localStorage `gi:hubPos:v2` 持久化）；點擊地區 → 玩家 token 以 `transition: transform 0.5s ease-in-out` 流暢移動；`onAreaEnter` + `onPositionChange` 照舊觸發；`controlsEnabled` 閘控。
+  3. **NPC 自主漂移**：FNV-1a 哈希決定論漂移函式 `npcIdleDrift(npcId, tick)`，`setInterval(3500ms)` 累積 `driftTick`，`useMemo` 重算每個 NPC 偏移量（±1–2px）；CSS `transition: 4.5s ease-in-out` 平滑補間。
+- **HubPage.tsx「世界現在」面板**：移除 `即時事件流 Phase 2 實裝` placeholder；改顯示 `events.filter(e=>e.narration).slice(0,5)` 真實敘事，空時顯示「世界安靜著…」。
+- **驗證**：
+  - `tsc --noEmit` 0 errors ✅
+  - web vitest 16 tests (WorldMapSvg.test.ts) 全綠 ✅
+  - Playwright 截圖 (1440×900 / 390×844) 確認有機島嶼、標籤、海路 ✅
+  - NPC 漂移 DOM 驗證：`translate(660.787px, 101.046px)` → `translate(661.558px, 99.6618px)` after 8s ✅
+- **版本**：`packages/web/package.json` → 0.98.45
+
 ## 2026-07-02 — Handoff Snapshot @ v0.98.44 (map-M4: medallion token 視覺重做)
 
 - **NPC / player token 全面換成航海圖徽章式 medallion**（WorldMapSvg + AreaMapSvg + BuildingSvg）：

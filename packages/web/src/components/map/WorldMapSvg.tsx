@@ -5,7 +5,7 @@
 // Visual language: 18th-century nautical chart × salvage-lit treasure port.
 // Ground #1a1510, ember #f39c20 warm glow, tide #4db8c8 cold water accents.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DISTRICTS,
   DISTRICT_IDS,
@@ -60,6 +60,59 @@ const FACTION_STYLE: Readonly<Record<FactionLeanId, {
   civilian:     { fill: 'rgba(0,0,0,0)',          stroke: 'rgba(180,180,180,0.25)' },
 }
 
+const SEA_ROUTES: Array<[DistrictId, DistrictId]> = [
+  ['t_forest',   't_mountain'],
+  ['t_mountain', 't_temple'],
+  ['t_mountain', 't_dimai'],
+  ['t_dimai',    't_central'],
+  ['t_forest',   't_desert'],
+  ['t_desert',   't_dock'],
+  ['t_central',  't_dock'],
+  ['t_ruin',     't_dock'],
+  ['t_central',  't_ruin'],
+  ['t_temple',   't_ruin'],
+  ['t_ruin',     't_salt_marsh'],
+]
+
+/** Organic polygon point-strings per district. */
+const ISLAND_PATHS: Readonly<Partial<Record<DistrictId, string>>> = {
+  t_forest:     '12,15 65,5 115,3 175,16 197,58 198,120 192,175 165,197 102,200 40,196 7,162 4,92',
+  t_mountain:   '204,8 295,3 390,2 490,4 552,8 558,52 556,118 548,158 458,162 375,160 290,162 208,158 202,112 200,52',
+  t_temple:     '566,10 670,3 792,6 798,58 800,135 794,196 738,200 665,200 584,196 562,157 560,82',
+  t_dimai:      '288,208 378,202 472,208 478,254 476,338 465,358 378,362 290,360 282,340 278,252',
+  t_desert:     '7,368 82,362 196,368 198,415 200,482 194,518 120,522 38,520 6,512 3,465 0,412',
+  t_central:    '248,368 378,362 516,368 520,415 518,484 512,518 378,522 244,518 240,482 238,415',
+  t_ruin:       '565,368 680,362 795,368 800,412 800,484 796,518 708,522 618,520 563,516 558,482 560,412',
+  t_salt_marsh: '608,525 720,520 798,525 800,562 798,598 726,600 640,598 606,592',
+  t_dock:       '6,525 185,520 388,520 554,525 558,565 555,598 378,600 193,598 58,600 6,595',
+}
+
+/** Dark, low-saturation ground fill per district. */
+const ISLAND_FILL: Readonly<Partial<Record<DistrictId, string>>> = {
+  t_forest:     '#1c2e1e',
+  t_mountain:   '#182418',
+  t_temple:     '#142236',
+  t_dimai:      '#221438',
+  t_desert:     '#262228',
+  t_central:    '#281520',
+  t_ruin:       '#281c10',
+  t_dock:       '#12222e',
+  t_salt_marsh: '#182428',
+}
+
+/** Slightly lighter stroke per district. */
+const ISLAND_STROKE: Readonly<Partial<Record<DistrictId, string>>> = {
+  t_forest:     '#3a5838',
+  t_mountain:   '#2a4028',
+  t_temple:     '#263858',
+  t_dimai:      '#3c2858',
+  t_desert:     '#404040',
+  t_central:    '#482035',
+  t_ruin:       '#4a3020',
+  t_dock:       '#204050',
+  t_salt_marsh: '#2e4848',
+}
+
 // ── Pure utilities (exported for tests) ───────────────────────────────────────
 
 /** Convert 24-bit RGB number to CSS hex string. */
@@ -107,6 +160,39 @@ export function npcPixelPos(npc: MapNpc): [number, number] {
   return [anchorX, anchorY]
 }
 
+// ── NPC idle drift (module-level, deterministic) ──────────────────────────────
+
+function npcIdleDrift(npcId: string, tick: number): { dx: number; dy: number } {
+  let h = 5381
+  for (let i = 0; i < npcId.length; i++) h = ((h * 33) ^ npcId.charCodeAt(i)) >>> 0
+  const phase = tick * 0.35 + (h % 628) / 100
+  const amp   = 1.6 + (h % 10) * 0.08
+  return {
+    dx: Math.cos(phase + (h % 20) * 0.31) * amp,
+    dy: Math.sin(phase * 1.25 + (h % 15) * 0.44) * amp,
+  }
+}
+
+// ── Player position persistence ──────────────────────────────────────────────
+
+const HUB_POS_KEY = 'gi:hubPos:v2'
+
+function loadHubPlayerDistrict(): DistrictId | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(HUB_POS_KEY)
+    if (raw && isDistrict(raw as DistrictId)) return raw as DistrictId
+  } catch { /* storage unavailable */ }
+  return null
+}
+
+function saveHubPlayerDistrict(id: DistrictId): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(HUB_POS_KEY, id)
+  } catch { /* quota */ }
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface WorldMapSvgProps {
@@ -131,6 +217,7 @@ export function WorldMapSvg({
   npcs,
   players = [],
   locale,
+  playerName,
   onAreaEnter,
   onNpcInteract,
   onPositionChange,
@@ -141,6 +228,7 @@ export function WorldMapSvg({
   controlsEnabled = true,
 }: WorldMapSvgProps) {
   const [hoveredDistrict, setHoveredDistrict] = useState<DistrictId | null>(null)
+  const [playerDistrictId, setPlayerDistrictId] = useState<DistrictId | null>(loadHubPlayerDistrict)
 
   // null activeSet = all districts are active (no restriction)
   const activeSet = useMemo(
@@ -184,9 +272,40 @@ export function WorldMapSvg({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // NPC idle drift tick
+  const driftTickRef = useRef(0)
+  const [driftTick, setDriftTick] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      driftTickRef.current += 1
+      setDriftTick(driftTickRef.current)
+    }, 3500)
+    return () => clearInterval(id)
+  }, [])
+
+  const idleDrift = useMemo(() => {
+    const m = new Map<string, { dx: number; dy: number }>()
+    for (const npc of npcs) m.set(npc.id, npcIdleDrift(npc.id, driftTick))
+    return m
+  }, [npcs, driftTick])
+
+  const playerPixelPos = useMemo(() => {
+    if (!playerDistrictId) return null
+    const def = DISTRICTS[playerDistrictId]
+    return {
+      x: def.anchor.col * TILE_SIZE + TILE_SIZE / 2,
+      y: def.anchor.row * TILE_SIZE + TILE_SIZE / 2,
+    }
+  }, [playerDistrictId])
+
   const handleDistrictClick = useCallback(
     (id: DistrictId) => {
       if (!isActiveDistrict(id)) return
+      if (controlsEnabled) {
+        setPlayerDistrictId(id)
+        saveHubPlayerDistrict(id)
+      }
       onAreaEnter(id)
       if (onPositionChange) {
         const def = DISTRICTS[id]
@@ -197,7 +316,7 @@ export function WorldMapSvg({
         })
       }
     },
-    [isActiveDistrict, onAreaEnter, onPositionChange],
+    [isActiveDistrict, controlsEnabled, onAreaEnter, onPositionChange],
   )
 
   return (
@@ -223,6 +342,9 @@ export function WorldMapSvg({
             @keyframes wm-npc-pulse { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
             @keyframes wm-player-breathe { 0%,100% { opacity:0.3 } 50% { opacity:0.85 } }
             .wm-npc-pulse { animation: wm-npc-pulse 1.8s ease-in-out infinite; }
+            @keyframes wm-ember-pulse { 0%,100% { opacity:0.4 } 50% { opacity:0.88 } }
+            .wm-ember-pulse { animation: wm-ember-pulse 2.8s ease-in-out infinite; }
+            .wm-npc:hover > g { filter: drop-shadow(0 0 5px rgba(243,156,32,0.65)); }
           `}</style>
           <radialGradient id="wm-npc-base" cx="40%" cy="35%" r="65%">
             <stop offset="0%" stopColor="#2d2418" />
@@ -232,6 +354,10 @@ export function WorldMapSvg({
             <stop offset="0%" stopColor="#14232a" />
             <stop offset="100%" stopColor="#08101a" />
           </radialGradient>
+          <radialGradient id="wm-sea-center" cx="50%" cy="50%" r="65%">
+            <stop offset="0%" stopColor="#0f1e30" stopOpacity="1"/>
+            <stop offset="100%" stopColor="#07111e" stopOpacity="0"/>
+          </radialGradient>
           <marker id="wm-arr-dep" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#c87920" opacity="0.75" />
           </marker>
@@ -240,62 +366,102 @@ export function WorldMapSvg({
           </marker>
         </defs>
 
-        {/* ── Layer 0: Background (road / street fill) ──────────────────── */}
-        <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="#2a2e36" />
+        {/* ── Layer 0: Background (dark sea) ────────────────────────────── */}
+        <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="#07111e"/>
+        {/* subtle center highlight */}
+        <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#wm-sea-center)" opacity="0.6"/>
 
-        {/* ── Layer 1: District fills ───────────────────────────────────── */}
-        {DISTRICT_IDS.map(id => {
-          const dr = DISTRICT_RECTS[id]
-          if (!dr) return null
-          const def    = DISTRICTS[id]
-          const [c0, r0, c1, r1] = dr
-          const active = isActiveDistrict(id)
+        {/* ── Sea routes (dashed lines between adjacent district anchors) ── */}
+        {SEA_ROUTES.map(([a, b]) => {
+          const defA = DISTRICTS[a], defB = DISTRICTS[b]
+          const x1 = defA.anchor.col * TILE_SIZE + TILE_SIZE / 2
+          const y1 = defA.anchor.row * TILE_SIZE + TILE_SIZE / 2
+          const x2 = defB.anchor.col * TILE_SIZE + TILE_SIZE / 2
+          const y2 = defB.anchor.row * TILE_SIZE + TILE_SIZE / 2
           return (
-            <rect
-              key={id}
-              x={c0 * TILE_SIZE}
-              y={r0 * TILE_SIZE}
-              width={(c1 - c0 + 1) * TILE_SIZE}
-              height={(r1 - r0 + 1) * TILE_SIZE}
-              fill={darkenNum(def.color, active ? 0.68 : 0.38)}
-              stroke="#6b5e4a"
-              strokeWidth="1.5"
-              opacity={active ? 1 : 0.6}
+            <line key={`route-${a}-${b}`}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="#4db8c8" strokeWidth="0.8"
+              strokeOpacity="0.18"
+              strokeDasharray="9 14"
               pointerEvents="none"
             />
           )
         })}
 
+        {/* ── Layer 1: Island fills ────────────────────────────────────────── */}
+        {DISTRICT_IDS.map(id => {
+          const path = ISLAND_PATHS[id]
+          if (!path) return null
+          const active = isActiveDistrict(id)
+          const fill   = ISLAND_FILL[id]   ?? '#1a1a1a'
+          const stroke = active ? (ISLAND_STROKE[id] ?? '#3a3a3a') : '#1e1e1e'
+          return (
+            <polygon
+              key={id}
+              points={path}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              opacity={active ? 1 : 0.45}
+              pointerEvents="none"
+            />
+          )
+        })}
+
+        {/* ── Layer 1b: Hover highlight ────────────────────────────────────── */}
+        {hoveredDistrict && isActiveDistrict(hoveredDistrict) && (() => {
+          const path = ISLAND_PATHS[hoveredDistrict]
+          if (!path) return null
+          return (
+            <polygon
+              points={path}
+              fill="rgba(243,156,32,0.07)"
+              stroke="#f39c20"
+              strokeWidth="1.5"
+              strokeOpacity="0.35"
+              pointerEvents="none"
+            />
+          )
+        })()}
+
         {/* ── Layer 2: Faction / safety / economy overlays ──────────────── */}
         {areaOverlays.map(o => {
-          const dr = DISTRICT_RECTS[o.districtId]
-          if (!dr) return null
-          const [c0, r0, c1, r1] = dr
-          const x = c0 * TILE_SIZE
-          const y = r0 * TILE_SIZE
-          const w = (c1 - c0 + 1) * TILE_SIZE
-          const h = (r1 - r0 + 1) * TILE_SIZE
+          const path = ISLAND_PATHS[o.districtId]
+          if (!path) return null
           const fs = o.dominantFaction ? FACTION_STYLE[o.dominantFaction] : null
           return (
             <g key={`ov-${o.districtId}`} pointerEvents="none">
-              {/* Safety warning: dim red haze */}
               {o.safety < 40 && (
-                <rect x={x} y={y} width={w} height={h} fill="rgba(180,30,30,0.12)" />
+                <polygon points={path} fill="rgba(180,30,30,0.12)"/>
               )}
-              {/* Economy highlight: ember dot in corner */}
               {o.economy > 70 && (
-                <circle cx={x + w - 10} cy={y + 10} r="8" fill="rgba(243,156,32,0.30)" />
+                <polygon points={path} fill="rgba(243,156,32,0.08)"/>
               )}
-              {/* Faction overlay: fill + faction-colour border */}
               {fs && (
-                <rect
-                  x={x} y={y} width={w} height={h}
+                <polygon
+                  points={path}
                   fill={fs.fill}
                   stroke={fs.stroke}
-                  strokeWidth="2"
+                  strokeWidth="1.5"
                   strokeDasharray={fs.strokeDasharray}
                 />
               )}
+            </g>
+          )
+        })}
+
+        {/* ── Layer 2b: Ember light dots at district anchors ──────────────── */}
+        {DISTRICT_IDS.map(id => {
+          if (!isActiveDistrict(id)) return null
+          const def = DISTRICTS[id]
+          const cx = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
+          const cy = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
+          return (
+            <g key={`ember-${id}`} pointerEvents="none">
+              <circle cx={cx} cy={cy} r="6" fill="#f39c20" opacity="0.12" className="wm-ember-pulse"/>
+              <circle cx={cx} cy={cy} r="2.8" fill="#f6c560" opacity="0.80" className="wm-ember-pulse"/>
             </g>
           )
         })}
@@ -323,29 +489,39 @@ export function WorldMapSvg({
           })
         )}
 
-        {/* ── Layer 4: District name labels ─────────────────────────────── */}
+        {/* ── Layer 4: District name labels (parchment pill) ──────────────── */}
         {DISTRICT_IDS.map(id => {
           const dr = DISTRICT_RECTS[id]
           if (!dr) return null
           const def    = DISTRICTS[id]
           const [c0, r0, c1] = dr
           const cx     = ((c0 + c1 + 1) / 2) * TILE_SIZE
-          const ty     = r0 * TILE_SIZE + 14
+          const pillY  = r0 * TILE_SIZE + 20
           const active = isActiveDistrict(id)
+          const label  = locale === 'zh' ? def.nameZh : def.nameEn
+          const pillW  = Math.max(label.length * 7 + 18, 44)
           return (
-            <text
-              key={`lbl-${id}`}
-              x={cx} y={ty}
-              textAnchor="middle"
-              fill={active ? '#fff5b8' : '#6b5e4a'}
-              fontSize="11"
-              fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-              fontWeight="800"
-              letterSpacing="0.04em"
-              pointerEvents="none"
-            >
-              {locale === 'zh' ? def.nameZh : def.nameEn}
-            </text>
+            <g key={`lbl-${id}`} pointerEvents="none">
+              <rect
+                x={cx - pillW / 2} y={pillY - 12}
+                width={pillW} height={15}
+                rx="4" ry="4"
+                fill={active ? 'rgba(22,14,6,0.82)' : 'rgba(15,12,10,0.55)'}
+                stroke={active ? '#6a5030' : '#2e2820'}
+                strokeWidth="0.75"
+              />
+              <text
+                x={cx} y={pillY}
+                textAnchor="middle"
+                fill={active ? '#e8d090' : '#4a4040'}
+                fontSize="10.5"
+                fontFamily="'Big Shoulders Display', system-ui, sans-serif"
+                fontWeight="800"
+                letterSpacing="0.06em"
+              >
+                {label}
+              </text>
+            </g>
           )
         })}
 
@@ -480,9 +656,43 @@ export function WorldMapSvg({
             </g>
           ))}
 
+        {/* ── Layer 8b: Self player token ────────────────────────────────── */}
+        {playerPixelPos && controlsEnabled && (
+          <g
+            style={{
+              transform: `translate(${playerPixelPos.x}px, ${playerPixelPos.y}px)`,
+              transition: 'transform 0.5s ease-in-out',
+            }}
+            pointerEvents="none"
+          >
+            <g opacity={0.95}>
+              {/* Ember breathing glow */}
+              <circle r="14" fill="none" stroke="rgba(243,156,32,0.25)" strokeWidth="3"
+                style={{ animation: 'wm-player-breathe 2.5s ease-in-out infinite' }} />
+              {/* Outer ember ring */}
+              <circle r="11" fill="none" stroke="#f39c20" strokeWidth="2" />
+              {/* Inner tide ring */}
+              <circle r="8.5" fill="none" stroke="#4db8c8" strokeWidth="1" opacity="0.6" />
+              {/* Dark base */}
+              <circle r="7.5" fill="url(#wm-player-base)" />
+              {/* Compass star */}
+              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
+              {/* Name pill */}
+              <rect x="-9" y="10" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.88)" />
+              <text y="15.5" textAnchor="middle" fontSize="5"
+                fill="#f39c20" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
+                {playerName ? playerName.charAt(0).toUpperCase() : '你'}
+              </text>
+            </g>
+          </g>
+        )}
+
         {/* ── Layer 9: NPC tokens ───────────────────────────────────────── */}
         {npcs.map(npc => {
-          const [x, y]  = npcPixelPos(npc)
+          const [baseX, baseY] = npcPixelPos(npc)
+          const drift = idleDrift.get(npc.id) ?? { dx: 0, dy: 0 }
+          const x = baseX + drift.dx
+          const y = baseY + drift.dy
           const npcColor = numToHex(npc.color ?? DEFAULT_NPC_COLOR)
           const actEmoji = activityGlyphFor(npc.activity)
           const raw      = npc.recentUtterance
@@ -495,9 +705,10 @@ export function WorldMapSvg({
           return (
             <g
               key={npc.id}
+              className="wm-npc"
               style={{
                 transform: `translate(${x}px, ${y}px)`,
-                transition: 'transform 1.8s ease-in-out',
+                transition: 'transform 4.5s ease-in-out',
                 cursor: 'pointer',
               }}
               onClick={() => onNpcInteract(npc.id)}
