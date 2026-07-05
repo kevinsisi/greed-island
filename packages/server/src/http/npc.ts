@@ -52,10 +52,15 @@ import {
 import type { NpcProfile } from '../npcs/types.js'
 import type { SettingsStore } from './settings.js'
 import { TICKS_PER_HOUR, TICKS_PER_DAY } from '../config/world.js'
+import { TILE_NAME_BY_ID } from '../sim/mapGraph.js'
+import type { BeliefRow, BeliefSubjectKind } from '../projections/beliefProjection.js'
+import type { IntentKind } from '../kernel/livingWorldCommands.js'
 
 const HISTORY_DEFAULT_LIMIT = 20
 const HISTORY_MAX_LIMIT = 100
 const PLAYER_MESSAGE_MAX_CHARS = 800
+const LOCAL_SHOUT_AI_TIMEOUT_MS = 15_000
+const OPENCODE_ENDPOINT_TIMEOUT_MS = 8_000
 
 // v0.87.3 — deceased NPC gate. Used by /interact, /dialog-hold, /greet, /intervene.
 // Returns the profile when the NPC exists and is alive; otherwise writes the proper
@@ -95,9 +100,13 @@ export function createNpcRouter(input: {
   accounts: AccountStore
   authConfig: AuthConfig
   getPropertyContext?: (npcId: string) => Promise<readonly { title: string; price: number; address: string; rooms: number; hall: number; bath: number; sizePing: number; buildingType: string; floor: string | null; age: number | null }[]>
+  localShoutAiTimeoutMs?: number
+  openCodeEndpointTimeoutMs?: number
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+  const localShoutAiTimeoutMs = Math.max(1, input.localShoutAiTimeoutMs ?? LOCAL_SHOUT_AI_TIMEOUT_MS)
+  const openCodeEndpointTimeoutMs = Math.max(1, input.openCodeEndpointTimeoutMs ?? OPENCODE_ENDPOINT_TIMEOUT_MS)
 
   router.post('/npc/:npcId/dialog-hold', auth, (req: Request, res: Response) => {
     const claims = req.auth
@@ -113,6 +122,217 @@ export function createNpcRouter(input: {
       held: hold !== null,
       tick: hold?.tick ?? input.runtime.getCurrentTick(),
       expiresAtTick: hold?.expiresAtTick ?? null,
+    })
+  })
+
+  router.post('/npc/local-shout', auth, async (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const body = (req.body ?? {}) as { tileId?: unknown; candidateNpcIds?: unknown; message?: unknown }
+    const tileId = typeof body.tileId === 'string' ? body.tileId.trim() : ''
+    const candidateNpcIds = Array.isArray(body.candidateNpcIds)
+      ? body.candidateNpcIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : []
+    const message = readMessage(body.message)
+    if (!tileId || candidateNpcIds.length === 0 || !message) {
+      res.status(400).json({ error: 'INVALID_INPUT', message: 'tileId、candidateNpcIds、message 必填。' })
+      return
+    }
+    if (message.length > PLAYER_MESSAGE_MAX_CHARS) {
+      res.status(400).json({
+        error: 'MESSAGE_TOO_LONG',
+        message: `訊息不可超過 ${PLAYER_MESSAGE_MAX_CHARS} 字。`,
+      })
+      return
+    }
+
+    const liveNpcs = typeof (input.runtime as { getNpcs?: unknown }).getNpcs === 'function'
+      ? input.runtime.getNpcs()
+      : []
+    const liveNpcById = new Map(liveNpcs.map((npc) => [npc.id, npc] as const))
+    const localCandidateIds = candidateNpcIds.filter((id) => {
+      const npc = liveNpcById.get(id)
+      return npc?.location === tileId && !input.runtime.getNpcMortalityProjection().isDeceased(id)
+    })
+    const npcId = [...localCandidateIds]
+      .sort((a, b) => {
+        const relA = input.store.getRelation(claims.sub, a)
+        const relB = input.store.getRelation(claims.sub, b)
+        const lastA = relA?.lastInteractionTick ?? Number.NEGATIVE_INFINITY
+        const lastB = relB?.lastInteractionTick ?? Number.NEGATIVE_INFINITY
+        if (lastA !== lastB) return lastA - lastB
+        const countA = relA?.interactionCount ?? 0
+        const countB = relB?.interactionCount ?? 0
+        if (countA !== countB) return countA - countB
+        return localCandidateIds.indexOf(a) - localCandidateIds.indexOf(b)
+      })[0] ?? null
+    if (!npcId) {
+      res.status(404).json({ error: 'NO_LOCAL_NPC', message: '附近沒有可回應的 NPC。' })
+      return
+    }
+    const profile = requireLivingNpc(input.runtime, npcId, res)
+    if (!profile) return
+
+    const tick = input.runtime.getCurrentTick()
+    const baseTrust = typeof profile.personality.trustBase === 'number'
+      ? clampTrust(profile.personality.trustBase)
+      : 50
+    const existing = input.store.getRelation(claims.sub, npcId)
+    const previousTrust = existing ? existing.trust : baseTrust
+    const previousCount = existing ? existing.interactionCount : 0
+    let resolvedIntent: InteractIntent = 'ask'
+    const tier: RelationshipTier = tierForRelationship(previousTrust)
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
+    const identityLine = identityReplyFor(profile, message, player.displayName)
+    const deterministicLocalLine = identityLine ?? (isRudeLocalShout(message) ? localShoutFallbackLine(profile, message, {
+      tileId,
+      tick,
+      previousTrust,
+      interactionCount: previousCount,
+    }) : null)
+    let line: LocalizedLine | null = deterministicLocalLine
+    let replySource: ReplySource = 'fallback'
+    let aiError: string | null = null
+
+    const hasKeys = input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings)
+    if (!line && hasKeys) {
+      try {
+        const allProfiles = typeof (input.runtime as { getNpcsIncludingDeceased?: unknown }).getNpcsIncludingDeceased === 'function'
+          ? input.runtime.getNpcsIncludingDeceased()
+          : [profile]
+        const history = input.store.listPersonalEvents({
+          accountId: claims.sub,
+          npcId,
+          limit: 10,
+        })
+        const rawRumors = input.runtime.getActiveNpcRumors?.(npcId) ?? []
+        const rumorCtx = rawRumors.length > 0
+          ? rawRumors.map((r) => ({ topic: r.topic as string, subjectId: r.subjectId, tileId: r.tileId, accuracy: r.accuracy }))
+          : undefined
+        const playerRelationshipCtx = input.runtime.getFormattedPlayerRelationshipContext?.(String(claims.sub), npcId) || undefined
+        const dialogCtx: AiDialogContext = {
+          profile,
+          player,
+          trust: previousTrust,
+          tier,
+          history,
+          playerMessage: message,
+          worldTick: tick,
+          worldValidNpcNames: allProfiles.map((npc) => npc.name.zh),
+          ...(playerRelationshipCtx ? { playerRelationshipContext: playerRelationshipCtx } : {}),
+          ...(rumorCtx ? { activeRumors: rumorCtx } : {}),
+        }
+        const ai = await withLocalShoutAiTimeout(
+          generateAiReply(input.settings, dialogCtx, {
+            openCodeTimeoutMs: openCodeEndpointTimeoutMs,
+          }),
+          localShoutAiTimeoutMs,
+        )
+        const sanitized = sanitizeNpcReplyForUnknownEntities({
+          playerMessage: message,
+          replyZh: ai.zh,
+          replyEn: ai.en,
+          knownNpcNames: allProfiles.map((npc) => npc.name.zh),
+        })
+        line = sanitized
+        resolvedIntent = ai.intent
+        replySource = 'ai'
+      } catch (err) {
+        aiError = err instanceof AiDialogError ? err.message : String(err)
+        console.warn('[npc] local-shout AI dialog failed, using fallback', aiError)
+      }
+    }
+
+    if (!line) {
+      line = localShoutFallbackLine(profile, message, {
+        tileId,
+        tick,
+        previousTrust,
+        interactionCount: previousCount,
+      })
+    }
+    const trustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
+      tick,
+      lastInteractionTick: existing?.lastInteractionTick ?? 0,
+      interactionCount: previousCount,
+    })
+    const trustAfter = clampTrust(previousTrust + trustDelta)
+    const relation = input.store.upsertRelation({
+      accountId: claims.sub,
+      npcId,
+      trust: trustAfter,
+      interactionCount: previousCount + 1,
+      lastInteractionTick: tick,
+    })
+    const personalEvent = input.store.appendPersonalEvent({
+      accountId: claims.sub,
+      npcId,
+      intent: resolvedIntent,
+      playerMessage: message,
+      lineZh: line.zh,
+      lineEn: line.en,
+      tick,
+      trustAfter: relation.trust,
+    })
+    input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
+      npcId,
+      playerAccountId: String(claims.sub),
+      intent: resolvedIntent,
+      playerMessage: message,
+      replyZh: line.zh,
+      replyEn: line.en,
+      tick,
+      trustAfter: relation.trust,
+    })
+    const dialogueIntent: 'greet' | 'ask' | 'trade' = resolvedIntent === 'leave' ? 'ask' : resolvedIntent
+    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
+      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_NPC_DIALOGUE',
+          String(claims.sub),
+          'player',
+          tick,
+          Date.now(),
+          {
+            playerAccountId: String(claims.sub),
+            npcId,
+            tile: tileId,
+            intent: dialogueIntent,
+            playerMessage: message,
+            npcReplyZh: line.zh,
+            npcReplyEn: line.en,
+            trustDelta: relation.trust - previousTrust,
+            trustAfter: relation.trust,
+            interactionCount: relation.interactionCount,
+            narration: `${player.displayName}在${tileId}向附近發話：「${summarizeDialogLine(message, 48)}」，${profile.name.zh}回應並把這次對話記進自己的下一步判斷。`,
+          }
+        ))
+      : null
+
+    res.json({
+      npcId,
+      intent: resolvedIntent,
+      tick,
+      line: { zh: line.zh, en: line.en },
+      replySource,
+      aiError,
+      relationship: {
+        trust: relation.trust,
+        previousTrust,
+        delta: relation.trust - previousTrust,
+        tier: tierForRelationship(relation.trust),
+        interactionCount: relation.interactionCount,
+        min: RELATIONSHIP_MIN,
+        max: RELATIONSHIP_MAX,
+      },
+      personalEvent: {
+        id: personalEvent.id,
+        occurredAt: new Date(personalEvent.occurredAt).toISOString(),
+        intent: personalEvent.intent,
+      },
+      worldEventId: dialogueEvent?.eventId ?? null,
     })
   })
 
@@ -286,6 +506,7 @@ export function createNpcRouter(input: {
         const reflectionCtx = input.runtime.getFormattedReflectionContext(npcId) || undefined
         const memoryCtx = input.runtime.getFormattedMemoryContext(npcId) || undefined
         const lifeGoalCtx = input.runtime.getFormattedLifeGoalContext(npcId) || undefined
+        const playerRelationshipCtx = input.runtime.getFormattedPlayerRelationshipContext?.(String(claims.sub), npcId) || undefined
 
         // building context — tells AI which building the NPC is currently in
         const npcBuildingId = input.runtime.getNpcBuildingId(npcId)
@@ -332,6 +553,7 @@ export function createNpcRouter(input: {
           ...(reflectionCtx ? { reflectionContext: reflectionCtx } : {}),
           ...(memoryCtx ? { memoryContext: memoryCtx } : {}),
           ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
+          ...(playerRelationshipCtx ? { playerRelationshipContext: playerRelationshipCtx } : {}),
           ...(buildingContext ? { buildingContext } : {}),
         }
         if (input.getPropertyContext) {
@@ -340,7 +562,9 @@ export function createNpcRouter(input: {
             (dialogCtx as Record<string, unknown>).propertyContext = pc
           }
         }
-        const ai = await generateAiReply(input.settings, dialogCtx)
+        const ai = await generateAiReply(input.settings, dialogCtx, {
+          openCodeTimeoutMs: openCodeEndpointTimeoutMs,
+        })
         const sanitized = sanitizeNpcReplyForUnknownEntities({
           playerMessage,
           replyZh: ai.zh,
@@ -407,6 +631,30 @@ export function createNpcRouter(input: {
       trustAfter: relation.trust,
     })
 
+    const npcTile = resolveNpcTileForDialog(input.runtime, npcId, profile.defaultLocation)
+    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
+      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+          'PLAYER_NPC_DIALOGUE',
+          String(claims.sub),
+          'player',
+          tick,
+          Date.now(),
+          {
+            playerAccountId: String(claims.sub),
+            npcId,
+            tile: npcTile,
+            intent: resolvedIntent === 'trade' ? 'trade' : resolvedIntent === 'greet' ? 'greet' : 'ask',
+            playerMessage,
+            npcReplyZh: replyZh,
+            npcReplyEn: replyEn,
+            trustDelta: relation.trust - previousTrust,
+            trustAfter: relation.trust,
+            interactionCount: relation.interactionCount,
+            narration: `${player.displayName}在${npcTile}向${profile.name.zh}說：「${summarizeDialogLine(playerMessage, 48)}」，${profile.name.zh}把這次對話記進自己的下一步判斷。`,
+          }
+        ))
+      : null
+
     res.json({
       npcId,
       intent: resolvedIntent,
@@ -428,6 +676,7 @@ export function createNpcRouter(input: {
         occurredAt: new Date(personalEvent.occurredAt).toISOString(),
         intent: personalEvent.intent,
       },
+      worldEventId: dialogueEvent?.eventId ?? null,
     })
   })
 
@@ -771,6 +1020,53 @@ export function createNpcRouter(input: {
     })
   })
 
+  // ── v0.96.0  MindSheet — NPC 意圖 ───────────────────────────────────────────
+  router.get('/npc/:npcId/intent', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+
+    const entries = input.runtime.getNpcIntentStack(npcId).slice(0, 3)
+    const weights = input.runtime.getNpcLearningWeights(npcId)
+
+    res.json({
+      intents: entries.map((e) => ({
+        kind: e.kind,
+        label: intentKindLabel(e.kind),
+        urgencyLabel: intentUrgencyLabel(e.urgency),
+        reasonZh: intentReasonZh(e),
+      })),
+      lessons: intentLessons(weights),
+    })
+  })
+
+  // ── v0.96.0  MindSheet — NPC 信念 ───────────────────────────────────────────
+  router.get('/npc/:npcId/beliefs', auth, (req: Request, res: Response) => {
+    const claims = req.auth
+    if (!claims) {
+      res.status(401).json({ error: 'UNAUTHORIZED' })
+      return
+    }
+    const npcId = String(req.params.npcId ?? '')
+    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+
+    const rows = [...input.runtime.getNpcBeliefs(npcId)]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5)
+
+    res.json({
+      beliefs: rows.map((r) => ({
+        label: beliefLabel(r),
+        confidenceLabel: confidenceLabel(r.confidence),
+        kind: r.subject,
+      })),
+    })
+  })
+
   return router
 }
 
@@ -896,6 +1192,91 @@ function identityReplyFor(
   }
 }
 
+function isRudeLocalShout(playerMessage: string): boolean {
+  return /廢物|白癡|智障|垃圾|滾|低能|蠢/.test(playerMessage.replace(/\s+/g, ''))
+}
+
+function localShoutFallbackLine(
+  profile: NpcProfile,
+  playerMessage: string,
+  ctx: { tileId: string; tick: number; previousTrust: number; interactionCount: number }
+): LocalizedLine {
+  const nameZh = profile.name.zh
+  const roleZh = profile.role.zh
+  const nameEn = profile.name.en
+  const roleEn = profile.role.en
+  const normalized = playerMessage.replace(/\s+/g, '')
+  const isRude = isRudeLocalShout(playerMessage)
+  const asksDestination = /去哪|去哪裡|去哪儿|要去哪|往哪|走哪/.test(normalized)
+  const asksDoing = /幹嘛|在幹嘛|做什麼|做什么|忙什麼|忙什么/.test(normalized)
+  const asksIdentity = /誰|谁|名字|叫什麼|叫什么/.test(normalized)
+  const asksHelp = /幫|帮|找|需要|怎麼|怎么|在哪|哪裡|哪里/.test(normalized)
+  const familiarity = ctx.previousTrust >= 60
+    ? '我認得你的聲音'
+    : ctx.interactionCount > 0
+      ? '剛才那句我也記著'
+      : '我聽到了'
+
+  if (isRude) {
+    return {
+      zh: `「${nameZh}皺了下眉。嘴巴放乾淨點，我是${roleZh}，不是站在雨裡給你撒氣的。要問事就問。」`,
+      en: `"${nameEn} frowns. Watch your mouth. I am a ${roleEn}, not someone standing in the rain for you to vent at. Ask your question."`,
+    }
+  }
+
+  if (asksDestination) {
+    return {
+      zh: `「${nameZh}，${roleZh}。我在${ctx.tileId}附近辦自己的事；你要找路、找人，還是想跟著走？」`,
+      en: `"${nameEn}, ${roleEn}. I am handling my own business near ${ctx.tileId}. Are you looking for a route, a person, or trying to follow?"`,
+    }
+  }
+
+  if (asksDoing) {
+    return {
+      zh: `「${nameZh}在這。${familiarity}。雨這麼大，我先把${roleZh}該顧的事收完；你有急事就直說。」`,
+      en: `"${nameEn} is here. ${familiarity}. With rain this heavy, I am finishing what a ${roleEn} has to watch over. Say it if it is urgent."`,
+    }
+  }
+
+  if (asksIdentity) {
+    return {
+      zh: `「我是${nameZh}，${roleZh}。你在${ctx.tileId}附近喊話，我聽見了。」`,
+      en: `"I am ${nameEn}, ${roleEn}. You called out near ${ctx.tileId}; I heard you."`,
+    }
+  }
+
+  if (asksHelp) {
+    return {
+      zh: `「${nameZh}抬頭看你。${familiarity}。你要找什麼，講一個名字或地點，我才知道怎麼回。」`,
+      en: `"${nameEn} looks up. ${familiarity}. Give me a name or place so I know how to answer."`,
+    }
+  }
+
+  return {
+    zh: `「${nameZh}，${roleZh}。${familiarity}。你是要問路、找人，還是只是想叫住附近的人？」`,
+    en: `"${nameEn}, ${roleEn}. ${familiarity}. Are you asking for directions, looking for someone, or just trying to stop people nearby?"`,
+  }
+}
+
+function withLocalShoutAiTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new AiDialogError(`Local shout AI timeout after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err: unknown) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
+}
+
 function readMessage(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
@@ -913,6 +1294,20 @@ function fallbackMessageFor(intent: InteractIntent): string {
     case 'leave':
       return '（玩家準備告辭。）'
   }
+}
+
+function resolveNpcTileForDialog(runtime: SimulationRuntime, npcId: string, fallbackTile: string): string {
+  const npcs = typeof (runtime as { getNpcs?: unknown }).getNpcs === 'function'
+    ? runtime.getNpcs()
+    : []
+  const row = npcs.find((npc) => npc.id === npcId)
+  return row?.location ?? fallbackTile
+}
+
+function summarizeDialogLine(input: string, maxChars: number): string {
+  const collapsed = input.replace(/\s+/g, ' ').trim()
+  if (collapsed.length <= maxChars) return collapsed
+  return `${collapsed.slice(0, maxChars)}…`
 }
 
 function staticTrustDelta(
@@ -1039,4 +1434,103 @@ function composeInterventionNarration(
 function trim80(s: string): string {
   if (s.length <= 80) return s
   return s.slice(0, 80) + '…'
+}
+
+// ── v0.96.0  MindSheet 翻譯輔助函式 ──────────────────────────────────────────
+
+const INTENT_KIND_LABELS: Readonly<Record<IntentKind, string>> = {
+  survival:  '尋求安全',
+  economic:  '尋找物資',
+  social:    '處理人際關係',
+  ecosystem: '遠離環境惡化',
+}
+
+function intentKindLabel(kind: IntentKind): string {
+  return INTENT_KIND_LABELS[kind] ?? kind
+}
+
+function intentUrgencyLabel(urgency: number): string {
+  if (urgency >= 70) return '非常迫切'
+  if (urgency >= 40) return '迫切'
+  if (urgency >= 10) return '有些想法'
+  return '不太緊急'
+}
+
+function intentReasonZh(entry: { kind: IntentKind; reason: string }): string {
+  const { kind, reason } = entry
+  if (kind === 'survival') {
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '當前位置'
+    return `${tileName}有危險跡象，她想找更安全的地方`
+  }
+  if (kind === 'economic') {
+    const goodsMatch = /goods_scarcity=(\S+)/.exec(reason)
+    const goodsName = goodsMatch ? GOODS_NAMES_ZH[goodsMatch[1]!] ?? goodsMatch[1] : '物資'
+    return `${goodsName}正在短缺，她想尋找補給`
+  }
+  if (kind === 'social') {
+    if (reason.startsWith('player_relationship_caution')) return '她對玩家有些警戒，保持適當距離'
+    if (reason.startsWith('player_relationship_affinity')) return '她對玩家有好感，想靠近一點'
+    if (reason.startsWith('player_relationship_reciprocity')) return '她記得和玩家的交易，覺得互利合作有意義'
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '此區'
+    return `${tileName}被敵對勢力控制，她想遠離`
+  }
+  if (kind === 'ecosystem') {
+    const tileMatch = /tile (\S+)/.exec(reason)
+    const tileName = tileMatch ? (TILE_NAME_BY_ID[tileMatch[1]!] ?? tileMatch[1]) : '此區'
+    return `${tileName}生態惡化，她想換個地方`
+  }
+  return '她有新的想法'
+}
+
+const GOODS_NAMES_ZH: Readonly<Record<string, string>> = {
+  fish: '魚類',
+  meat: '肉類',
+  grain: '糧食',
+}
+
+const INTENT_LESSONS_ZH: Readonly<Record<IntentKind, string>> = {
+  survival:  '保持警覺確實讓她更安全',
+  economic:  '尋找物資通常對她有幫助',
+  social:    '謹慎應對人際關係是正確的',
+  ecosystem: '遠離惡化環境是明智之舉',
+}
+
+function intentLessons(weights: Readonly<Partial<Record<IntentKind, number>>>): Array<{ kind: IntentKind; text: string }> {
+  return (Object.entries(weights) as Array<[IntentKind, number]>)
+    .filter(([, w]) => w > 1.0)
+    .map(([kind]) => ({ kind, text: INTENT_LESSONS_ZH[kind] }))
+}
+
+const BELIEF_SUBJECT_LABELS: Readonly<Record<BeliefSubjectKind, (qualifier: string) => string>> = {
+  tile_safety:      (q) => `${TILE_NAME_BY_ID[q] ?? q}的安全狀況`,
+  goods_scarcity:   (q) => `${GOODS_NAMES_ZH[q] ?? q}的供應`,
+  ecosystem_health: (q) => `${TILE_NAME_BY_ID[q] ?? q}的生態`,
+  faction_control:  (q) => `${TILE_NAME_BY_ID[q] ?? q}的控制勢力`,
+}
+
+const BELIEF_VALUE_LABELS: Readonly<Record<string, string>> = {
+  dangerous:  '有危險',
+  safe:       '安全',
+  scarce:     '緊張',
+  abundant:   '充裕',
+  depleted:   '枯竭',
+  recovering: '恢復中',
+  controlled: '被控制',
+  contested:  '爭奪中',
+  free:       '自由',
+}
+
+function beliefLabel(row: BeliefRow): string {
+  const subjectLabel = BELIEF_SUBJECT_LABELS[row.subject]?.(row.qualifier) ?? row.qualifier
+  const valueLabel = BELIEF_VALUE_LABELS[row.value] ?? row.value
+  return `${subjectLabel}${valueLabel}`
+}
+
+function confidenceLabel(confidence: number): string {
+  if (confidence >= 80) return '她確信'
+  if (confidence >= 50) return '她相信'
+  if (confidence >= 30) return '她隱約覺得'
+  return '她不太確定'
 }

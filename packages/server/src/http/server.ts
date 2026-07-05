@@ -47,6 +47,7 @@ import { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
 import { createLivingWorldRouter } from './livingWorldRouter.js'
 import { createPlayerCivilizationRouter } from './playerCivilizationRouter.js'
+import { createPlayerSurvivalRouter } from './playerSurvivalRouter.js'
 import { CombatStore } from '../combat/combatStore.js'
 
 // Owner emails always promoted to admin on boot. Hardcoded so a fresh
@@ -334,6 +335,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
   app.use('/api', createHistoryRouter({ runtime: options.runtime }))
   app.use('/api', createBioNodesRouter({ runtime: options.runtime }))
   app.use('/api', createPlayerCivilizationRouter({ runtime: options.runtime, authConfig: options.auth }))
+  app.use('/api', createPlayerSurvivalRouter({ runtime: options.runtime, jobs: jobsStore, authConfig: options.auth }))
   app.use(
     '/api',
     createCombatRouter({

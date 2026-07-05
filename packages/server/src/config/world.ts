@@ -258,15 +258,50 @@ export const MATURATION_CADENCE_TICKS = TICKS_PER_HOUR
 // NPC life goals — cadence for NPC_LIFE_GOAL_SET emission（top-8 壓力 NPC）。
 export const LIFE_GOAL_CADENCE_TICKS = 30
 
-// NPC AI agent（v0.89.0）— 每個 NPC 以此節奏輪到一次 AI 自主決策
-// （由 npcId hash 錯相），AI 只能在 server 算好的合法 intent 選項中選擇。
-// TICKS_PER_HOUR=720 → 每 NPC 約每小時（牆鐘）一次、52 NPC ≈ 每 70 秒一次呼叫。
-export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_HOUR
+// NPC AI agent（v0.89.0；liveness 改造）— 一個 NPC 自上次 AI 思考起至少間隔
+// 此 tick 數才「再次合格」。注意：這只是「再次合格門檻」，不是成本天花板 ——
+// 真正的全域成本上限由 NPC_AGENT_MAX_DELIBERATIONS_PER_TICK 封頂（與 NPC 數量
+// 脫鉤）。兩者分離後可安全調低間隔讓世界更活。
+// TICKS_PER_MINUTE*10=120 ≈ 10 分鐘牆鐘（原為 TICKS_PER_HOUR=720≈60 分）。
+export const NPC_AGENT_DECISION_INTERVAL_TICKS = TICKS_PER_MINUTE * 10
+// 全域每 tick 最多進行幾次 AI 自主決策（成本硬上限，與 NPC 數量無關）。超出的
+// 合格 NPC 由 staleness 在後續 tick 輪到。可由 settings `npc_agent_max_per_tick` 覆寫。
+export const NPC_AGENT_MAX_DELIBERATIONS_PER_TICK = 1
+// 單次 AI 決策對暫時性失敗（provider throw / 回傳無法解析的 JSON）的指數退避
+// 重試上限。可由 settings `npc_agent_max_retries` 覆寫。
+export const NPC_AGENT_MAX_RETRIES = 2
+// 退避基數（毫秒）：第 n 次重試前等 base * 2^n。可由 settings `npc_agent_retry_base_ms`
+// 覆寫（測試設 0 → 即時重試，免假時鐘）。
+export const NPC_AGENT_RETRY_BASE_DELAY_MS = 500
 // AI 自述 utterance 上限長度（防 prompt 失控輸出灌爆 ticker）。
 export const NPC_AGENT_UTTERANCE_MAX_CHARS = 60
 // 最近一次 utterance 在 Area scene 聊天泡泡裡保持可見的 tick 數
 // （= TICKS_PER_HOUR / 4 ≈ 3 分鐘牆鐘）。超過後 API 回傳 null 讓前端隱藏。
 export const NPC_AGENT_UTTERANCE_VISIBLE_TICKS = Math.round(TICKS_PER_HOUR / 4)
+
+// ── 玩家求生需求（player-survival-needs / SP1）─────────────────────────────
+// 玩家也是世界裡的求生者：溫飽(nourishment)與體況(vigor)隨 tick 衰退，連離線
+// 都算（惰性對帳）。速率以 TICKS_PER_HOUR(=720) 為基準，讓手感落在數小時牆鐘，
+// 避免過快挫折 / 過慢無張力。日後可 settings 化。
+export const PLAYER_NEEDS_MAX = 100
+export const PLAYER_NEEDS_MIN = 0
+// 溫飽從滿(100)到空(0)約 5 小時牆鐘。
+export const PLAYER_NOURISHMENT_DECAY_PER_TICK = PLAYER_NEEDS_MAX / (5 * TICKS_PER_HOUR)
+// 溫飽低於此 → 開始挨餓扣 vigor。
+export const PLAYER_STARVATION_THRESHOLD = 25
+// 挨餓時 vigor 流失：滿到空約 3 小時。
+export const PLAYER_VIGOR_STARVATION_DECAY_PER_TICK = PLAYER_NEEDS_MAX / (3 * TICKS_PER_HOUR)
+// 溫飽高於此 → vigor 緩慢回復：空到滿約 4 小時。
+export const PLAYER_VIGOR_RECOVERY_NOURISHMENT_THRESHOLD = 50
+export const PLAYER_VIGOR_RECOVERY_PER_TICK = PLAYER_NEEDS_MAX / (4 * TICKS_PER_HOUR)
+// vigor 觸 0 = 昏厥(collapsed)；回升至此以上才解除昏厥（遲滯，避免抖動）。
+export const PLAYER_COLLAPSE_RECOVERY_VIGOR = 25
+// 新玩家進場初值。
+export const PLAYER_INITIAL_NOURISHMENT = 70
+export const PLAYER_INITIAL_VIGOR = 100
+// SP1 最小進食（置入式，SP2 以世界相依供給取代）：花金幣 → 提升溫飽。
+export const PLAYER_EAT_RATION_GOLD_COST = 10
+export const PLAYER_EAT_RATION_NOURISHMENT = 40
 
 // Matured-child inheritance (v0.88.0)
 // 成年的孩子以父母 civic 紀錄的平均值乘上比例做為起步 seed（不是轉移，

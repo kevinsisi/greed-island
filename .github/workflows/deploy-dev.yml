@@ -146,12 +146,27 @@ jobs:
             $deployPath = "$($Matches[1].ToUpper()):\$($Matches[2] -replace '/', '\')"
           }
           Set-Location $deployPath
-          Start-Sleep -Seconds 3
           $envFile = Get-Content .env | Where-Object { $_ -match '^TAILSCALE_BIND_ADDR=' } | Select-Object -First 1
           $bindAddr = $envFile -replace '^TAILSCALE_BIND_ADDR=', ''
           $hostPortLine = Get-Content .env | Where-Object { $_ -match '^GREED_ISLAND_HOST_PORT=' } | Select-Object -First 1
           $hostPort = if ($hostPortLine) { $hostPortLine -replace '^GREED_ISLAND_HOST_PORT=', '' } else { '8100' }
-          curl.exe -fsS "http://${bindAddr}:${hostPort}/" -o NUL
-          Write-Host "web ok"
-          curl.exe -fsS "http://${bindAddr}:${hostPort}/api/world" -o NUL
-          Write-Host "api world ok"
+          $baseUrl = "http://${bindAddr}:${hostPort}"
+
+          function Invoke-SmokeCheck($name, $url) {
+            for ($attempt = 1; $attempt -le 18; $attempt++) {
+              try {
+                curl.exe --max-time 20 -fsS $url -o NUL
+                if ($LASTEXITCODE -ne 0) { throw "$name failed with curl exit code $LASTEXITCODE" }
+                Write-Host "$name ok"
+                return
+              } catch {
+                if ($attempt -eq 18) { throw }
+                Write-Host "$name not ready yet (attempt $attempt/18); retrying..."
+                Start-Sleep -Seconds 5
+              }
+            }
+          }
+
+          Invoke-SmokeCheck "web" "$baseUrl/"
+          Invoke-SmokeCheck "api version" "$baseUrl/api/version"
+          Invoke-SmokeCheck "api world" "$baseUrl/api/world"

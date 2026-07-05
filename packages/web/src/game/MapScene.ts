@@ -34,6 +34,7 @@ import {
 import type { CharacterFacing, CharacterPoint } from './characterVisualState'
 import { isHubWalkablePixel, resolveHubSpawnPosition } from './hubWalkability'
 import { visualForSpecies, labelForSpecies } from './speciesPalette'
+import { deterministicHubNpcMotionSeed, hubNpcMotionMode } from './hubNpcMotion'
 import type { NpcActivity } from '../state/types'
 import type { HubEcologySummary } from '../pages/hubEcology'
 
@@ -61,6 +62,8 @@ export interface MapNpc {
   }
   /** Short deterministic task text from the server projection. */
   intentLine?: string
+  /** Recent committed/autonomous utterance rendered on the hub map. */
+  recentUtterance?: string | null
 }
 
 /**
@@ -158,6 +161,12 @@ function factionFrameColor(faction: FactionLeanId): number {
     default:
       return 0xc6c6c6 // 灰
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min
+  if (value > max) return max
+  return value
 }
 
 /**
@@ -1185,6 +1194,12 @@ export class MapScene extends Phaser.Scene {
         if (avatar?.label && avatar.label.text !== npc.shortName) avatar.label.setText(npc.shortName)
         this.attachNpcIdleAnimation(existing, npc.id)
         // 活動 emoji 同步
+        const bubbleText = existing.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+        if (bubbleText) {
+          const line = npc.recentUtterance?.trim()
+          const textValue = line ? `「${line.slice(0, 28)}${line.length > 28 ? '…' : ''}」` : '💬'
+          if (bubbleText.text !== textValue) bubbleText.setText(textValue)
+        }
         const iconGlyph = activityGlyphFor(npc.activity)
         const iconText = existing.getData('activityIcon') as Phaser.GameObjects.Text | undefined
         if (iconText) {
@@ -1269,7 +1284,8 @@ export class MapScene extends Phaser.Scene {
       activityIconText.setAlpha(0)
       sprite.setData('activityIcon', activityIconText)
 
-      const chatBubble = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 1.6, '💬', {
+      const hubSpeech = npc.recentUtterance?.trim()
+      const chatBubble = this.add.text(spawn.x, spawn.y - NPC_SPRITE_SIZE * 1.6, hubSpeech ? `「${hubSpeech.slice(0, 28)}${hubSpeech.length > 28 ? '…' : ''}」` : '💬', {
         fontFamily:
           '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", system-ui, sans-serif',
         fontSize: '18px',
@@ -1279,7 +1295,7 @@ export class MapScene extends Phaser.Scene {
       })
       chatBubble.setOrigin(0.5, 1)
       chatBubble.setDepth(73)
-      chatBubble.setVisible(false)
+      chatBubble.setVisible(!!hubSpeech)
       chatBubble.setAlpha(0)
       chatBubble.setInteractive({ useHandCursor: true })
       chatBubble.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -1293,6 +1309,7 @@ export class MapScene extends Phaser.Scene {
       })
       sprite.setData('chatBubble', chatBubble)
       this.attachNpcIdleAnimation(sprite, npc.id)
+      this.attachNpcAmbientMotion(sprite, npc, target)
       this.fadeNpcSprite(sprite, 1)
 
       // v0.15.44: routed traveller — kick off the tween from spawn (from-center)
@@ -1340,6 +1357,98 @@ export class MapScene extends Phaser.Scene {
       ease: 'Sine.easeInOut'
     })
     sprite.setData('idleTween', tween)
+  }
+
+  private attachNpcAmbientMotion(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    npc: MapNpc,
+    anchor: { x: number; y: number }
+  ): void {
+    this.stopNpcAmbientMotion(sprite)
+    const mode = hubNpcMotionMode(npc)
+    if (mode === 'still') {
+      this.setNpcVisualPosition(sprite, npc, anchor.x, anchor.y)
+      return
+    }
+
+    const seed = deterministicHubNpcMotionSeed(npc.id)
+    const routeVector = this.npcRouteVector(npc)
+    const radius = mode === 'route-loop' ? 18 + (seed % 8) : 4 + (seed % 5)
+    const duration = mode === 'route-loop' ? 3600 + (seed % 900) : 2200 + (seed % 700)
+    const phase = (seed % 628) / 100
+    const dx = routeVector.x * radius || Math.cos(phase) * radius
+    const dy = routeVector.y * radius || Math.sin(phase) * radius
+    const from = {
+      x: clamp(anchor.x - dx, NPC_SPRITE_SIZE, CANVAS_WIDTH - NPC_SPRITE_SIZE),
+      y: clamp(anchor.y - dy, NPC_SPRITE_SIZE, CANVAS_HEIGHT - NPC_SPRITE_SIZE),
+    }
+    const to = {
+      x: clamp(anchor.x + dx, NPC_SPRITE_SIZE, CANVAS_WIDTH - NPC_SPRITE_SIZE),
+      y: clamp(anchor.y + dy, NPC_SPRITE_SIZE, CANVAS_HEIGHT - NPC_SPRITE_SIZE),
+    }
+
+    const tweenTarget = { px: sprite.x, py: sprite.y }
+    const tween = this.tweens.add({
+      targets: tweenTarget,
+      px: to.x,
+      py: to.y,
+      duration,
+      delay: seed % 500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+      onYoyo: () => {
+        tween.updateTo('px', from.x, true)
+        tween.updateTo('py', from.y, true)
+      },
+      onRepeat: () => {
+        tween.updateTo('px', to.x, true)
+        tween.updateTo('py', to.y, true)
+      },
+      onUpdate: (_t, t: { px: number; py: number }) => {
+        this.setNpcVisualPosition(sprite, npc, t.px, t.py)
+      },
+    })
+    sprite.setData('ambientMotionTween', tween)
+  }
+
+  private stopNpcAmbientMotion(sprite: Phaser.Physics.Arcade.Sprite): void {
+    const tween = sprite.getData('ambientMotionTween') as Phaser.Tweens.Tween | undefined
+    if (tween) this.tweens.remove(tween)
+    sprite.setData('ambientMotionTween', undefined)
+  }
+
+  private npcRouteVector(npc: MapNpc): { x: number; y: number } {
+    if (!npc.travelRoute) return { x: 0, y: 0 }
+    const from = DISTRICTS[npc.travelRoute.fromDistrictId]
+    const to = DISTRICTS[npc.travelRoute.toDistrictId]
+    if (!from || !to) return { x: 0, y: 0 }
+    const fromCenter = this.districtCenter(from)
+    const toCenter = this.districtCenter(to)
+    const dx = toCenter.x - fromCenter.x
+    const dy = toCenter.y - fromCenter.y
+    const length = Math.hypot(dx, dy)
+    if (length < 0.1) return { x: 0, y: 0 }
+    return { x: dx / length, y: dy / length }
+  }
+
+  private setNpcVisualPosition(
+    sprite: Phaser.Physics.Arcade.Sprite,
+    npc: MapNpc,
+    x: number,
+    y: number
+  ): void {
+    const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
+    const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
+    const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
+    const chatBubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
+    const visualState = characterVisualStateForHubNpc(npc, { x, y }, { x: sprite.x, y: sprite.y })
+    sprite.setPosition(x, y)
+    sprite.setData('visualState', visualState)
+    if (avatar) applyProceduralAvatarPose(avatar.container, visualState)
+    if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
+    if (activityIcon) activityIcon.setPosition(x + NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
+    if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
   }
 
   /**
@@ -1416,6 +1525,7 @@ export class MapScene extends Phaser.Scene {
   ): void {
     const prev = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (prev) prev.stop()
+    this.stopNpcAmbientMotion(sprite)
     const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
     const nameLabel = sprite.getData('nameLabel') as Phaser.GameObjects.Text | undefined
     const activityIcon = sprite.getData('activityIcon') as Phaser.GameObjects.Text | undefined
@@ -1426,12 +1536,8 @@ export class MapScene extends Phaser.Scene {
     sprite.setData('visualState', visualState)
     const distance = Math.hypot(x - startX, y - startY)
     if (distance < 0.5) {
-      sprite.setPosition(x, y)
-      if (avatar) applyProceduralAvatarPose(avatar.container, visualState)
-      if (nameLabel) nameLabel.setPosition(x, y - NPC_SPRITE_SIZE * 0.85)
-      if (activityIcon)
-        activityIcon.setPosition(x + NPC_SPRITE_SIZE * 0.55, y - NPC_SPRITE_SIZE * 0.55)
-      if (chatBubble) chatBubble.setPosition(x, y - NPC_SPRITE_SIZE * 1.6)
+      this.setNpcVisualPosition(sprite, npc, x, y)
+      this.attachNpcAmbientMotion(sprite, npc, { x, y })
       return
     }
     const tween = this.tweens.add({
@@ -1449,8 +1555,8 @@ export class MapScene extends Phaser.Scene {
         if (chatBubble) chatBubble.setPosition(t.px, t.py - NPC_SPRITE_SIZE * 1.6)
       },
       onComplete: () => {
-        sprite.setPosition(x, y)
-        if (avatar) applyProceduralAvatarPose(avatar.container, visualState)
+        this.setNpcVisualPosition(sprite, npc, x, y)
+        this.attachNpcAmbientMotion(sprite, npc, { x, y })
       }
     })
     sprite.setData('moveTween', tween)
@@ -1459,6 +1565,7 @@ export class MapScene extends Phaser.Scene {
   private disposeNpcSprite(id: string, sprite: Phaser.Physics.Arcade.Sprite): void {
     const moveTween = sprite.getData('moveTween') as Phaser.Tweens.Tween | undefined
     if (moveTween) this.tweens.remove(moveTween)
+    this.stopNpcAmbientMotion(sprite)
     const idleTween = sprite.getData('idleTween') as Phaser.Tweens.Tween | undefined
     if (idleTween) this.tweens.remove(idleTween)
     const avatar = sprite.getData('avatar') as ProceduralAvatar | undefined
@@ -1699,9 +1806,12 @@ export class MapScene extends Phaser.Scene {
         nearestDist = d
         nearestId = id
       }
-      // 顯示 / 隱藏 sprite 上方的 💬 提示氣泡
+      // 顯示 / 隱藏 sprite 上方的互動或說話氣泡；有台詞時即使稍遠也顯示，讓主地圖看得見周圍人在說話。
       const bubble = sprite.getData('chatBubble') as Phaser.GameObjects.Text | undefined
-      if (bubble) bubble.setVisible(inRange)
+      if (bubble) {
+        const npc = this.npcs.find((row) => row.id === id)
+        bubble.setVisible(inRange || !!npc?.recentUtterance?.trim())
+      }
     }
     this.nearbyNpcId = nearestId
 

@@ -46,6 +46,23 @@ describe('BuildingRuntime', () => {
     expect(outdoor.get('t_central') ?? []).not.toContain('traveller')
   })
 
+  it('can expose working non-owner NPCs in workplace building views without removing them from simulation outdoor inputs', () => {
+    const runtime = new BuildingRuntime()
+    const states = new Map<string, NpcRuntimeState>([
+      ['dock.free.worker', npcState({ tile: 't_mountain', activity: 'work' })]
+    ])
+
+    const lodge = runtime.snapshotForTile('t_mountain', states, [], { includeWorkplaces: true }).find((item) => item.def.id === 'b_mountain_lodge')
+    const outdoor = runtime.npcsOutsideOnTile(states)
+
+    expect(lodge?.occupants).toContainEqual({
+      npcId: 'dock.free.worker',
+      shift: 'morning',
+      isOwner: false,
+    })
+    expect(outdoor.get('t_mountain') ?? []).toContain('dock.free.worker')
+  })
+
   it('derives occupants for runtime-projected completed NPC buildings', () => {
     const runtime = new BuildingRuntime()
     const states = new Map<string, NpcRuntimeState>([

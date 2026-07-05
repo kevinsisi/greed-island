@@ -5,6 +5,389 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.98.37 ✅ local-ready — 2026-06-30
+
+**主題：Nearby Shout Timeout Fix（附近發話不要因辱罵等 AI 超時）**
+
+- ✅ **rude shout fast path** — `廢物們` 這類辱罵不再等待 AI；server 直接讓被選中的 NPC 以既有 grounded 角色語氣回應。
+- ✅ **event-routed** — 回應仍走 `PLAYER_NPC_DIALOGUE`，不是前端假台詞或 hidden client state。
+- ✅ **mobile timeout widened** — 手機附近發話 client abort 從 18 秒調到 45 秒，避免正常 AI/降級路徑被前端提早切斷。
+- ✅ **regression** — 新增 router regression，證明辱罵附近發話不會呼叫 OpenCode、也不會等 AI timeout。
+- ✅ **Verification** — targeted server NPC router tests（11）通過。
+
+---
+
+## v0.98.36 ✅ local-ready — 2026-06-30
+
+**主題：Fixed-Clock Autonomous Tick Loop（世界時鐘不跟瀏覽器/API 壓力漂移）**
+
+- ✅ **fixed world clock** — scheduler 以 wall-clock `nextDueAtMs` 推進，不再用「跑完 tick 後再等 cooldown」造成漂移。
+- ✅ **missed tick catch-up** — 如果 event loop 晚到，會依真實時間計算 missed ticks；60 秒 / 5 秒 cadence 會被視為 12 個 due ticks。
+- ✅ **bounded yielding** — 單次 callback 只補 1 tick；落後時用 2 秒短 yield 讓 HTTP 插隊，不再用 30–60 秒 cooldown 讓世界故意睡著。
+- ✅ **no screen coupling** — 這是 server runtime scheduler 行為，不依賴使用者是否開頁面或前端 polling。
+- ✅ **Verification** — targeted server scheduler tests（4）通過。
+
+---
+
+## v0.98.35 ✅ local-ready — 2026-06-30
+
+**主題：Autonomous World Tick Cadence（世界不要像打開頁面才動）**
+
+- ✅ **root cause verified** — live `/healthz`、`/api/world`、recent events 在 36+ 秒內停同一 tick；不是手機畫面錯覺。
+- ✅ **slow cooldown shortened** — slow tick 後的 HTTP recovery 從 120–240 秒縮短成 30–60 秒，世界在背景更常推進。
+- ✅ **HTTP still protected** — 仍保留 slow tick 後的恢復窗口，不回到完全無 cooldown。
+- ✅ **regression** — scheduler tests 先紅再綠，鎖住 slow-tick delay 不可再回到 2–4 分鐘。
+- ✅ **Verification** — targeted server tests（5）通過。
+
+---
+
+## v0.98.34 ✅ local-ready — 2026-06-29
+
+**主題：Pixel Hub NPC Motion（像素母地圖 NPC 不再像雕像）**
+
+- ✅ **route walkers keep moving** — 有 server-authoritative `travelRoute` / `activity=move` 的 NPC 會沿路線方向持續走動，不再 tween 到終點後定住。
+- ✅ **local stroll** — 本地戶外 NPC 會在 server-projected sub-tile anchor 周圍做小幅 deterministic stroll，讓畫面活起來但不改世界狀態。
+- ✅ **no fake speech/state** — 只改顯示層 motion，沒有新增假台詞、假事件或 hidden world mutation。
+- ✅ **regression** — 新增 hub NPC motion policy tests，鎖住 moving/local/sleeping 的視覺規則。
+- ✅ **Verification** — targeted web tests（8）、web build、本地 browser 3 秒 sprite 位移檢查通過。
+
+---
+
+## v0.98.33 ✅ local-ready — 2026-06-29
+
+**主題：Pixel Hub First-Screen Declutter（像素母地圖首頁去資訊牆）**
+
+- ✅ **pixel map preserved** — 不再回到第一人稱/非像素 renderer，維持目前 restored pixel Hub/母地圖路徑。
+- ✅ **world goals collapsed** — 世界目標與科技不再預設壓在地圖下方，改由 `⚔ 文明面板` 明確展開。
+- ✅ **guest can inspect** — 未登入唯讀瀏覽也看得到文明面板按鈕，但預設仍不展開。
+- ✅ **regression** — 新增 hub panel visibility test 鎖住預設收起與 opt-in 展開行為。
+- ✅ **Verification** — targeted web test（2）與 web build 通過。
+
+---
+
+## v0.98.26 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Action Visibility（玩家關係行動玩家可見）**
+
+- ✅ **caution visible** — 關係戒備 action 會在 NPC badge 顯示 `⚠️ 戒備玩家`。
+- ✅ **affinity visible** — 親近 action 會顯示 `🤝 想找玩家聊天`。
+- ✅ **reciprocity visible** — 交易互惠 action 會顯示 `💰 保留交易機會`。
+- ✅ **event-derived** — badge 從 recent `NPC_FREEFORM_ACTION_PROPOSED` event 派生，不新增 hidden client state。
+- ✅ **Verification** — web area behavior/subtitle tests（14）、web production build 通過。
+
+---
+
+## v0.98.20 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Pressure Actions（玩家關係壓力落到具體世界行動）**
+
+- ✅ **relationship → action** — planner 的關係壓力現在會進 world-law action planner。
+- ✅ **caution** — `player_relationship_caution` 產生 `spread_rumor`：提醒附近人別太靠近讓 NPC 戒備的玩家。
+- ✅ **affinity** — `player_relationship_affinity` 產生 `custom_social_scene`：主動靠近信任玩家聊天/維持關係。
+- ✅ **reciprocity** — `player_relationship_reciprocity` 產生 `work`：為熟客保留合適貨物或工作機會。
+- ✅ **event-routed** — 仍走 `NPC_FREEFORM_ACTION_PROPOSED`，不是 hidden runtime mutation。
+- ✅ **Verification** — world-law planner/planner/projection/router tests（45）、server build 通過。
+
+---
+
+## v0.98.19 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Complexity Planner（玩家關係複雜度進入 NPC planner）**
+
+- ✅ **不只怨懟** — 關係弧新增親近、熟悉、正向互動、負向互動、交易往來。
+- ✅ **情感會雙向變化** — 正向互動降低怨懟並提高親近；負向互動提高怨懟並降低親近。
+- ✅ **三種 planner pressure**：
+  - `player_relationship_caution` → 戒備/避開/防衛方向。
+  - `player_relationship_affinity` → 親近/靠近/願意互動方向。
+  - `player_relationship_reciprocity` → 交易互惠/經濟回饋方向。
+- ✅ **deterministic** — 所有結果由 `PLAYER_NPC_DIALOGUE` EventLog 重放而來，不是 AI 即興狀態。
+- ✅ **Verification** — server planner/projection/router tests（38）、server build 通過。
+
+---
+
+## v0.98.18 ✅ local-ready — 2026-06-27
+
+**主題：Player Relationship Influences NPC Planner（玩家關係影響 NPC 行動規劃）**
+
+- ✅ **planner bias** — `PlayerNpcRelationshipProjection` 提供每個 NPC 的 hostile player bias：最高怨懟、最低信任、互動總次數。
+- ✅ **social caution intent** — 高怨懟/低信任玩家歷史會讓 `computeIntentStack()` 產生 `social` caution intent。
+- ✅ **runtime wired** — deterministic runtime planning 與 NPC agent legal-option generation 都吃同一份 replayed relationship bias。
+- ✅ **not AI-mutated** — AI 不決定 urgency；所有 bias 來自 `PLAYER_NPC_DIALOGUE` EventLog 重放。
+- ✅ **OpenSpec** — `player-relationship-influences-npc-planner`。
+- ✅ **Verification** — server planner/projection/router tests（36）、server build 通過。
+
+---
+
+## v0.98.17 ✅ local-ready — 2026-06-27
+
+**主題：Player Dialogue Long-term Relationship Consequences（玩家說過的話留下長期後果）**
+
+- ✅ **replayable relationship arc** — 新增 `PlayerNpcRelationshipProjection`，由 `PLAYER_NPC_DIALOGUE` EventLog 重建玩家↔NPC 關係弧。
+- ✅ **long-term dimensions** — 追蹤信任、怨懟、熟悉度、互動次數、最近意圖與最近玩家訊息。
+- ✅ **AI prompt grounding** — direct interact / local shout 的 AI 對話 prompt 會讀取長期關係摘要，讓 NPC 語氣反映累積信任或怨懟。
+- ✅ **boot/fanout wired** — live projection、小 log boot、large-log deferred hydration 都接上，避免重啟後遺失。
+- ✅ **OpenSpec** — `player-dialogue-long-term-relationship-consequences`。
+- ✅ **Verification** — OpenSpec validate、server projection + npc router tests（10）、server build 通過。
+
+---
+
+## v0.98.16 ✅ shipped — 2026-06-27
+
+**主題：OpenCode Timeout Strategy（慢 endpoint 可 failover，手機不先逾時）**
+
+- ✅ **split budgets** — local shout AI 整體 budget 改為 15 秒；單一 OpenCode endpoint（create-session + send-message）總 timeout 改為 8 秒，不再共用 v0.98.15 的 6 秒硬切。
+- ✅ **endpoint failover** — 第一個 OpenCode endpoint message timeout 時，provider chain 會繼續嘗試下一個 endpoint；第二個成功就回 `replySource: "ai"`。
+- ✅ **direct dialog protected** — direct `/npc/:id/interact` 也傳入 8 秒 OpenCode endpoint timeout，避免壞 endpoint 走 60 秒 default 卡住互動。
+- ✅ **client window aligned** — 前端附近發話 abort 提高到 18 秒，高於 server 15 秒 fallback budget。
+- ✅ **runtime endpoint direction** — live 設定應優先使用 direct `http://100.73.52.37:4096` 作 service-to-service OpenCode endpoint，不靠 mixed-tailnet provider DNS。
+- ✅ **regression** — mock slow-first/fast-second OpenCode endpoint 覆蓋 failover；慢 provider fallback 仍低於 client timeout。
+- ✅ **ship gate** — local build/test/OpenSpec、CI `28259571138`、Deploy Dev `28259664683` 通過；live `hunter.sisihome.org` 回 `0.98.16`，local shout smoke `12508ms` 回 `replySource="ai"`。
+
+---
+
+## v0.98.15 ✅ shipped — 2026-06-26
+
+**主題：Local Shout AI Timeout Guard（附近發話不等到手機先逾時）**
+
+- ✅ **server-side AI timeout** — `POST /api/npc/local-shout` 對整條 AI provider chain 最多等 6 秒，短於前端 8 秒 timeout。
+- ✅ **fallback before UI failure** — OpenCode 慢回或不回時，server 改回 v0.98.13 identity-grounded fallback，仍回 `200` / `replySource: "fallback"`。
+- ✅ **AI still enabled** — 快速 OpenCode 回覆仍走 `replySource: "ai"`；不是關閉 agent。
+- ✅ **regression** — mock 慢 OpenCode message endpoint 不回應時，local shout 在 1 秒內 fallback。
+- ✅ **live verified** — `hunter.sisihome.org` health 回 `0.98.15`；live local-shout smoke `7022ms` 回 fallback，低於前端 8 秒 timeout。
+
+---
+
+## v0.98.14 ✅ local-ready — 2026-06-26
+
+**主題：AI-backed Local Shout（附近發話真的接 AI）**
+
+- ✅ **async local shout** — `POST /api/npc/local-shout` 改成 async，支援等待 AI 生成。
+- ✅ **real AI path** — 有 OpenCode/Gemini provider 時呼叫 `generateAiReply()`，成功回 `replySource: "ai"`。
+- ✅ **tested with mock provider** — 新增 mock OpenCode regression，確認 nearby shout 真的打到 AI message endpoint，不是直接 fallback。
+- ✅ **fallback only on failure** — provider 未設定或 AI 失敗時才用 v0.98.13 grounded fallback。
+- ✅ **event schema safe** — AI intent 為 `leave` 時，world event intent 映射到 `ask`，避免 `PLAYER_NPC_DIALOGUE` schema 拒收。
+
+**主題：Grounded Local Shout Fallback（源頭不要產生罐頭複讀）**
+
+- ✅ **no shared rumor fallback** — `local-shout` fallback 不再呼叫共用 `pickLine()`，避免多 NPC 抽到同一句「夜市那條街，問阿鬼…」。
+- ✅ **identity-grounded reply** — fallback 直接帶入 responder 名字、角色、玩家喊話、tile、熟悉度。
+- ✅ **deterministic** — 仍用 tick / trust / interactionCount / npc id 產生可重播 variant。
+- ✅ **regression** — 測試要求 local shout fallback 包含 NPC 名字/角色且不含阿鬼罐頭。
+- ✅ **Verification** — server npc router test（7）、server build 通過。
+
+---
+
+## v0.98.12 ✅ shipped — 2026-06-26
+
+**主題：Clone Subtitle Dedup（多位 NPC 同句只顯示一次）**
+
+- ✅ **cross-speaker NPC dedupe** — 附近字幕現在對 NPC/system 行用文字內容去重，不再讓海石、星沉同一句各佔一行。
+- ✅ **player-safe** — 玩家字幕仍保留 speaker+text key，避免不同玩家同句被誤刪。
+- ✅ **regression** — 新增 clone NPC speech 測試。
+- ✅ **Verification** — web subtitle test（9）、web build 通過。
+
+---
+
+## v0.98.11 ✅ shipped — 2026-06-26
+
+**主題：Local Shout Responder Rotation（附近喊話不要每次同一人接）**
+
+- ✅ **recent responder avoidance** — `POST /api/npc/local-shout` 選 responder 時，優先挑玩家最近沒互動過的同區 NPC。
+- ✅ **less repetition** — 連續喊話不再一直 candidate 第一位 NPC 回，降低同 NPC / 同 fallback 句型重複感。
+- ✅ **deterministic tie-break** — 同分時保留前端候選順序，方便 replay/debug。
+- ✅ **Verification** — server npc router test（7）通過。
+
+---
+
+## v0.98.10 ✅ shipped — 2026-06-26
+
+**主題：Server-side Local Shout（真正附近發話 endpoint）**
+
+- ✅ **new endpoint** — 新增 `POST /api/npc/local-shout`，前端只送一次附近發話。
+- ✅ **server responder selection** — 後端根據 `tileId + candidateNpcIds` 選一位合法、活著、同區 NPC 回應。
+- ✅ **replayable world fact** — 回應仍提交 `PLAYER_NPC_DIALOGUE` command/event，NPC 記憶與關係同步更新。
+- ✅ **frontend wired** — AreaPage 改用 `api.npcLocalShout()`，不再直接呼叫 single-NPC interact。
+- ✅ **Verification** — server npc router test（6）、web subtitle test（9）、full build 通過。
+
+---
+
+## v0.98.9 ✅ shipped — 2026-06-26
+
+**主題：Stable Local Shout（不要前端三連打假裝群聊）**
+
+- ✅ **single responder** — inline 附近發話不再對 3 位 NPC 各打一個 `/interact`；一次只送第一順位/最近 NPC，降低等待與失敗率。
+- ✅ **no repeated AI replies** — 字幕最多一位 NPC pending/reply，不再三個人同時回同型句。
+- ✅ **friendly failure** — 失敗只顯示單一「NPC 暫時沒有回應，稍後再試。」或逾時訊息，不再逐人洗 `Load failed`。
+- ✅ **timeout** — inline speech request 加 8s timeout，避免手機 UI 卡太久。
+- ✅ **also includes v0.98.8** — `cognitiveLine` 內心摘要不再進「附近對話字幕」。
+- ✅ **Verification** — `areaSubtitles.test.ts`（9）與 web build 通過。
+
+> 後續正解：新增 server-side local shout command/event，讓附近 NPC 在後端選一兩個回應；不要前端 fan-out single-NPC API。
+
+---
+
+## v0.98.7 ✅ shipped — 2026-06-26
+
+**主題：Behavior Plausibility Projection（不是只修下雨，而是行為合理性）**
+
+- ✅ **generic social availability** — 新增 `isAreaSociallyAvailableNpc()`，街景與附近字幕共用同一套行為可用規則。
+- ✅ **sleep ≠ street chatter** — 睡覺 NPC 不再被當成室外可互動/可字幕發聲的人。
+- ✅ **move ≠ local crowd** — 移動中 NPC 維持 hub travel projection，不塞進區域街景與附近喊話對象。
+- ✅ **presence first** — 室內、死亡、移動、睡覺都不算「站在附近可聊天」。
+- ✅ **behavior priority kept** — 工作、交易、巡邏、表演、守衛等具體行為仍優先於 idle 人群顯示。
+- ✅ **Verification** — full `npm test`（server 1275 + web 141）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.6 ✅ shipped — 2026-06-26
+
+**主題：Rainy Crowd & Chatter Sanity Fix（下雨少塞人、有避雨、不要罐頭複讀）**
+
+- ✅ **storm crowd cap** — 街景平時最多顯示 24 位，驟雨最多 12 位，避免小地圖塞 60+ 人。
+- ✅ **speech-aware visibility** — 降載時優先保留有 recent utterance / cognition / 非 idle 行為的 NPC。
+- ✅ **rain affordance** — 驟雨中 idle NPC 顯示 `☂️` / `正在避雨`，地圖下方說明多數人進騎樓或室內避雨。
+- ✅ **no canned ambient clones** — ambient 字幕不再用靜態 `greetLine`，並去除相同文字，避免多人講同一句。
+- ✅ **crowd disclosure** — NPC tab / 場景說明顯示可見/總室外人數，不偷改世界真相。
+- ✅ **tests** — `areaSubtitles.test.ts` + `npcProjection.test.ts` 覆蓋雨天 crowd cap、speech priority、ambient 去罐頭/去重。
+- ✅ **Verification** — full `npm test`（server 1275 + web 141）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.5 ✅ shipped — 2026-06-26
+
+**主題：Local Shout & Subtitle Dedupe（地圖附近喊話、多 NPC 回應、字幕不重複）**
+
+- ✅ **local shout audience** — 字幕輸入改成向附近 NPC 喊話，最多 3 位附近 NPC 接收；沒有距離資料時 fallback 同區 1 位。
+- ✅ **multi-NPC replies** — 同一句玩家發話只顯示一次，多位 NPC 各自顯示 pending / 回覆。
+- ✅ **dedupe feed** — optimistic echo、SSE、EventLog 追上後不再把同一句 `你：...` / NPC 回覆刷兩次。
+- ✅ **more real speech** — 字幕支援 NPC 自主 `utterance`，沒有近期 event 時顯示附近 NPC ambient chatter。
+- ✅ **mobile copy** — UI 改為 `向附近 N 人發話` / `向附近 N 人說話…`，不再像只能私訊一個目標。
+- ✅ **tests** — `areaSubtitles.test.ts` 覆蓋 freeform utterance、ambient chatter、local shout audience、多 NPC optimistic lines、dedupe。
+- ✅ **Verification** — full `npm test`（server 1275 + web 140）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.4 ✅ shipped — 2026-06-26
+
+**主題：Mobile Subtitle Send Feedback Fix（手機發話不再像沒反應）**
+
+- ✅ **immediate player echo** — 按「發話」後立刻顯示 `你：...`，不等 API 回來。
+- ✅ **pending NPC line** — 同時顯示 `NPC：……`，讓玩家知道正在等回覆。
+- ✅ **response replacement** — API 成功後用真實 NPC 回覆替換 pending 字幕。
+- ✅ **visible failure** — API 失敗會在字幕行顯示「發話失敗：...」，不只靠 toast。
+- ✅ **mobile button clarity** — busy 狀態從 `…` 改成 `發話中`。
+- ✅ **tests** — `areaSubtitles.test.ts` 新增 optimistic speech line regression。
+- ✅ **Verification** — targeted web test（4）、web build 通過。
+
+---
+
+## v0.98.3 ✅ shipped — 2026-06-26
+
+**主題：Area Dialogue Subtitles（走近 NPC 就看得到附近對話，也能直接發話）**
+
+- ✅ **nearby subtitle feed** — Area 地圖下方新增「附近對話字幕」，把附近 `NPC_INTERACT`、`PLAYER_NPC_DIALOGUE` 顯示成字幕行。
+- ✅ **player speech input** — 字幕欄可直接輸入發話；送出走既有 `/api/npc/:id/interact`，仍會提交 replayable `PLAYER_NPC_DIALOGUE` world event。
+- ✅ **nearby target** — 優先對身邊 NPC 發話；沒有目標時提示靠近 NPC。
+- ✅ **optimistic transcript** — 成功送出後立即顯示「你」與 NPC 回覆，世界事件 refresh 追上後仍可回放。
+- ✅ **tests** — 新增 `areaSubtitles.test.ts` 覆蓋 NPC 對談字幕、玩家/NPC 對話字幕、發話目標選擇。
+- ✅ **Verification** — full `npm test`（server 1275 + web 134）、targeted web tests（9）、full build、OpenSpec check、diff check 通過。
+
+---
+
+## v0.98.2 ✅ shipped — 2026-06-26
+
+**主題：Behavior-Aligned Area UI（吃飯就顯示吃飯，爭執就顯示爭執）**
+
+- ✅ **NPC behavior badges** — Area NPC list 新增 event-aware 行為 badge；`eat` 顯示「🍚 正在吃飯」，近期 `NPC_INTERACT(mode=argue)` 參與者顯示「💢 正在爭執」。
+- ✅ **map icon override** — AreaScene NPC sprite 右上角圖示支援行為覆蓋；吃飯/爭執不再只顯示泛用 activity。
+- ✅ **animal behavior labels** — 場景分頁新增「動物行為證據」；動物 sprite/群聚標籤依 ecology intent 顯示「覓食中 / 狩獵中 / 遷徙中 / 成群移動」。
+- ✅ **visual behavior fix** — 動物狩獵/遷徙不再套吃草 bob，只有覓食/成群才低頭吃草。
+- ✅ **tests** — 新增 `areaBehavior.test.ts` 覆蓋 NPC eat、NPC argue、animal intent 映射。
+- ✅ **Verification** — targeted web tests（13）、web build 通過。
+
+---
+
+## v0.98.1 ✅ shipped — 2026-06-26
+
+**主題：Player Dialogue World Consequences（玩家對話進 EventLog，NPC 下一步會被拉動）**
+
+- ✅ **replayable dialogue fact** — 新增 `PLAYER_NPC_DIALOGUE` command/event，玩家訊息、NPC 回覆、intent、信任變化與 tile 都成為可 replay 的世界事實。
+- ✅ **interact endpoint consequence** — `/api/npc/:id/interact` 仍保存私有聊天紀錄，但同步提交 LivingWorld event，response 回傳 `worldEventId`。
+- ✅ **NPC plan steering** — runtime 收到 `PLAYER_NPC_DIALOGUE` 後會更新 NPC speech bubble，並設定短期 `intentOverride`：`trade` → economic，`greet`/`ask` → social。
+- ✅ **tests** — router 測試覆蓋 world-event submission；runtime 測試覆蓋 event-driven intent override。
+- ✅ **Verification** — full `npm test`（server 1275 + web 128）、targeted server tests（13）、full build、OpenSpec check、diff check 通過。
+- ⏳ **Next** — 把玩家對話累積到長期 cognition / relationship projection，讓 NPC 反覆被問、被騙、被幫忙後真的改變信念與人生目標。
+
+---
+
+## v0.98.0 ✅ shipped — 2026-06-26
+
+**主題：NPC Interaction Visibility（玩家能直接對話，也看得到 NPC 彼此互動）**
+
+- ✅ **player interaction affordance** — Area NPC 分頁登入後可直接點任何同區室外 NPC 開啟對話；附近 NPC 仍標示可地圖點擊，但不再讓距離規則把整個 NPC list 變成死按鈕。
+- ✅ **social proof surface** — 場景分頁新增「NPC 互動證據」，直接顯示最近 `NPC_INTERACT` 的交談/爭執敘事。
+- ✅ **social cadence tuning** — NPC 同 tile 社交事件機率 `0.08 → 0.25`、互動距離 `2 → 5`，讓 live 更常出現可見社交事件。
+- ✅ **tests** — 新增 `areaSocial.test.ts` 覆蓋互動事件辨識與格式化；server NPC interaction regression tests 仍通過。
+- ✅ **Verification** — targeted server tests（58）、web social tests（3）、full build 通過。
+- ⏳ **Next** — 室內 NPC 彼此互動、玩家對話真正推動 NPC 關係/計畫，避免互動只停在 UI 對話框。
+
+---
+
+## v0.97.9 ✅ shipped — 2026-06-26
+
+**主題：NPC Workplace Occupancy + Chronicle Naturalization（職缺和世界畫面接起來）**
+
+- ✅ **root cause** — 原本 BuildingRuntime 只把 owner NPC 放進 owner building；非 owner NPC 即使 activity 是 `work`，仍會留在戶外，所以玩家看到「有職缺，但完全沒人在工作」。
+- ✅ **NPC workplace routing** — building API view 可把工作/交易中的 NPC 導入同 tile 的 hiring building 或用途相符建築，simulation hot paths 仍保留戶外輸入，避免阻斷採集/建設/家庭經濟鏈。
+- ✅ **visible shift metadata** — 非 owner workplace occupant 會帶第一個 hiring shift，讓 API/UI 可顯示班別關聯。
+- ✅ **chronicle naturalization** — freeform accepted motivation 縮短；planner 主敘事改成事件語氣，減少模板式「不是被排程推著走」。
+- ✅ **Verification** — full `npm test`（server 1273 + web 125）、targeted CI-regression tests（10）、full build、OpenSpec check（15 active changes）、diff check 通過。
+- ⏳ **Next** — 把職缺容量、NPC 技能/職責、班表與薪資做成 replayable NPC employment economy，不只用 activity 對建築用途配對。
+
+---
+
+## v0.97.8 ✅ shipped — 2026-06-26
+
+**主題：Slow Tick Phase Timing Observability（long tick 分段計時）**
+
+- ✅ **phase timing** — scheduled simulation tick 現在會量測 `plan-commands`、`rule-evaluation`、`append-events`、`npc-sqlite-projections`、`projection-fanout`、`tick-listeners`。
+- ✅ **actionable warning** — slow tick warning 會附上最慢 phase summary，例如 `slow phases: projection-fanout=9250ms rule-evaluation=4100ms ...`，下一刀可以直接鎖定真正慢段，而不是再猜。
+- ✅ **regression coverage** — 新增 phase summary helper 測試，保證慢段排序、threshold 過濾穩定。
+- ✅ **Verification** — targeted tests（5）、full build、OpenSpec check（15 active changes）、diff check 通過。
+- ⏳ **Next** — 部署後觀察 live warning，依實際最慢 phase 拆 chunk/yield 或繼續降低同步 fanout。
+
+## v0.97.7 ✅ shipped — 2026-06-26
+
+**主題：Long Tick Data Timeout Mitigation（降低資料 UI 撞 tick timeout）**
+
+- ✅ **live repro** — v0.97.6 live batch probe 仍重現 8 秒 cutoff：同一批 `/api/world`、`/api/map`、`/api/npcs`、`/api/events`、`/api/areas` 在 long tick 中會整批 timeout；等 tick 結束後 45 秒 probe 可在約 2.5 秒拿到正確資料。
+- ✅ **longer recovery window** — slow tick 後下一輪 tick cooldown 從 30–60 秒提高到 120–240 秒，讓手機 UI 有更大的資料讀取空窗；這是明確犧牲 simulation cadence 來保住玩家資料載入。
+- ✅ **frontend timeout guard** — world-state `resilientLoad` timeout 從 45 秒提高到 120 秒，避免還在等待 live tick unblock 時過早切到 fallback / incomplete state。
+- ✅ **Verification** — targeted scheduler/resilient tests（7）、full build、OpenSpec check（15 active changes）、diff check 通過。
+
+---
+
+## v0.97.6 ✅ local-ready — 2026-06-26
+
+**主題：Hub Map Action Placement Hotfix（地圖互動按鈕回到地圖旁）**
+
+- ✅ **map-first controls** — `進入目前位置` 與 `文明面板` 現在緊貼 Hub 地圖下方，不再被「世界目標與科技」資訊面板隔開。
+- ✅ **mobile layout** — 行動版維持 44px+ 觸控目標，按鈕直向排列；桌面版同列排列。
+- ✅ **Verification** — web build、server build、diff check 通過。
+
+---
+
+## v0.97.5 ✅ local-ready — 2026-06-26
+
+**主題：Tick Projection SQLite Batching（降低 long tick 同步 SQLite fanout 阻塞）**
+
+- ✅ **root cause follow-up** — v0.97.4 先讓 HTTP 有空窗；v0.97.5 開始處理 tick 本身：每輪 committed events fanout 到 NPC memory / relationship SQLite 投影時，不再逐 event/row 支付 autocommit 成本。
+- ✅ **batched NPC projection transaction** — 新增 `SqliteEventStore.runInTransaction`，runtime 將 NPC memory locality rows 與 relationship projection 寫入包成單一 SQLite transaction，保留原本 per-event 順序與 idempotent INSERT/UPSERT 語意。
+- ✅ **shared path** — regular simulation tick 與 `publishCommittedEvents` 都使用同一個 batched projection helper。
+- ✅ **Verification** — targeted server tests（12）、full build、OpenSpec check（15 active changes）通過。
+
+---
+
 ## v0.97.4 ✅ local-ready — 2026-06-26
 
 **主題：Refresh Hydration Reliability Hotfix（重整不再因 long tick 直接落到錯誤/fixture 資料）**

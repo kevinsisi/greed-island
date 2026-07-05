@@ -98,6 +98,9 @@ export interface AreaMapNpc {
   color: number
   /** 活動 enum，用來顯示活動圖示 emoji */
   activity: AreaNpcActivity
+  /** Event-aware behavior override shown on top of the sprite (e.g. arguing). */
+  behaviorIcon?: string
+  behaviorLabel?: string
   /** v0.14.0：mood < 30 時 name label 用灰色顯示低落感 */
   mood?: number
   /** v0.14.0：health < 30 時 sprite 旁加 🤕 圖示 */
@@ -237,7 +240,7 @@ function areaSubcellFromHash(key: string, tileId: string, salt: string): { x: nu
 function ecologySignature(eco: AreaEcologyView | null): string {
   if (!eco) return 'none'
   const animals = eco.animals
-    .map((row) => `${row.speciesId}:${row.count}:${[...row.animalIds].sort().join(',')}`)
+    .map((row) => `${row.speciesId}:${row.count}:${row.intent}:${row.thoughtZh}:${[...row.animalIds].sort().join(',')}`)
     .sort()
     .join('|')
   const plants = eco.plants
@@ -278,6 +281,15 @@ const RANK_COLOR: Record<string, number> = {
  * - 該街區的 NPC 以 sprite 排成一圈，靠近顯示提示，按 E / Space / 點 sprite 觸發互動
  * - 玩家位置每 500ms 同步給外面 (React) 寫入 localStorage，刷新或回來都會回到同一位置
  */
+export function animalIntentLabel(intent: AreaEcologyView['animals'][number]['intent']): string {
+  switch (intent) {
+    case 'foraging': return '覓食中'
+    case 'herding': return '成群移動'
+    case 'migrating': return '遷徙中'
+    case 'hunting': return '狩獵中'
+  }
+}
+
 export class AreaScene extends Phaser.Scene {
   static readonly KEY = 'AreaScene'
 
@@ -864,6 +876,8 @@ export class AreaScene extends Phaser.Scene {
             y,
             color: visual.color,
             nameZh: labelForSpecies(row.speciesId),
+            behaviorLabel: animalIntentLabel(row.intent),
+            intent: row.intent,
             bounds: animalBounds,
             canStandAt,
             getPlayerXY,
@@ -899,7 +913,8 @@ export class AreaScene extends Phaser.Scene {
           })
           this.envTweens.push(bob)
         })
-        const speciesLabel = this.add.text(x, y + 16, `${labelForSpecies(row.speciesId)} ×${row.count}`, {
+        const behavior = animalIntentLabel(row.intent)
+        const speciesLabel = this.add.text(x, y + 16, `${labelForSpecies(row.speciesId)} ×${row.count} · ${behavior}`, {
           fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
           fontSize: '10px',
           color: '#fff5b8',
@@ -1714,7 +1729,7 @@ export class AreaScene extends Phaser.Scene {
           if (nameLabel.style.color !== targetColor) nameLabel.setColor(targetColor)
         }
         if (activityIcon) {
-          const glyph = activityGlyphFor(npc.activity)
+          const glyph = npc.behaviorIcon ?? activityGlyphFor(npc.activity)
           if (activityIcon.text !== glyph) activityIcon.setText(glyph)
           activityIcon.setVisible(glyph.length > 0)
         }
@@ -1818,8 +1833,8 @@ export class AreaScene extends Phaser.Scene {
       healthIcon.setVisible(injured)
       sprite.setData('healthIcon', healthIcon)
 
-      // sprite 右上角的活動 emoji
-      const glyph = activityGlyphFor(npc.activity)
+      // sprite 右上角的行為 emoji（事件行為優先：爭執/吃飯 不要只顯示泛用活動）
+      const glyph = npc.behaviorIcon ?? activityGlyphFor(npc.activity)
       const activityIcon = this.add.text(
         target.x + NPC_SPRITE_SIZE * 0.55,
         target.y - NPC_SPRITE_SIZE * 0.55,

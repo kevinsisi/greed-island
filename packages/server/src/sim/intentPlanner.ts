@@ -24,6 +24,18 @@ export interface IntentStack {
   computedAtTick: number
 }
 
+export type PlayerRelationshipPlannerBias = Readonly<{
+  maxResentment: number
+  minTrust: number
+  maxTrust: number
+  maxAffinity: number
+  maxFamiliarity: number
+  interactionCount: number
+  positiveInteractionCount: number
+  negativeInteractionCount: number
+  tradeInteractionCount: number
+}>
+
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
 /** Returns val if it is a finite number, otherwise returns def. */
@@ -153,6 +165,48 @@ function computeSocialIntent(
   }
 }
 
+function computePlayerRelationshipIntents(
+  profile: NpcProfile,
+  currentTile: string,
+  bias: PlayerRelationshipPlannerBias | undefined,
+): IntentEntry[] {
+  if (!bias || bias.interactionCount <= 0) return []
+  const entries: IntentEntry[] = []
+
+  if (bias.maxResentment >= 65 || bias.minTrust <= 30) {
+    const resentmentPressure = Math.max(0, bias.maxResentment - 50) * 1.35
+    const distrustPressure = Math.max(0, 50 - bias.minTrust) * 0.8
+    const familiarityPressure = Math.min(12, bias.interactionCount * 2)
+    entries.push({
+      kind: 'social',
+      urgency: Math.min(100, Math.round(35 + resentmentPressure + distrustPressure + familiarityPressure)),
+      targetTile: profile.defaultLocation || currentTile,
+      reason: `player_relationship_caution resentment=${bias.maxResentment} minTrust=${bias.minTrust} interactions=${bias.interactionCount}`,
+    })
+  }
+
+  if (bias.maxTrust >= 70 && (bias.maxAffinity >= 25 || bias.maxFamiliarity >= 6)) {
+    entries.push({
+      kind: 'social',
+      urgency: Math.min(100, Math.round(32 + Math.max(0, bias.maxTrust - 60) * 0.6 + bias.maxAffinity * 0.45 + Math.min(12, bias.maxFamiliarity))),
+      targetTile: currentTile,
+      reason: `player_relationship_affinity trust=${bias.maxTrust} affinity=${bias.maxAffinity} familiarity=${bias.maxFamiliarity} positives=${bias.positiveInteractionCount}`,
+    })
+  }
+
+  if (bias.maxTrust >= 65 && bias.tradeInteractionCount >= 2) {
+    const economyWeight = numOrDefault(profile.personality?.economyWeight, 0.7)
+    entries.push({
+      kind: 'economic',
+      urgency: Math.min(100, Math.round((45 + bias.tradeInteractionCount * 5 + Math.max(0, bias.maxTrust - 60) * 0.4) * economyWeight)),
+      targetTile: profile.defaultLocation || currentTile,
+      reason: `player_relationship_reciprocity trust=${bias.maxTrust} trades=${bias.tradeInteractionCount} affinity=${bias.maxAffinity}`,
+    })
+  }
+
+  return entries
+}
+
 /**
  * Ecosystem intent: fires when ecosystem_health 'depleted' is believed on currentTile.
  * Target: first adjacent tile with no depleted ecosystem belief, fallback defaultLocation.
@@ -206,6 +260,7 @@ export function computeIntentStack(
   // v0.88.0 — NPC 自己立下的人生目標回饋到行動層：目標方向對應的
   // intent kind 得到額外 multiplier 偏壓（與 memoryUrgencyBoost 同型）。
   lifeGoalBoost: Readonly<Partial<Record<IntentKind, number>>> = {},
+  playerRelationshipBias?: PlayerRelationshipPlannerBias,
 ): IntentStack {
   const entries: IntentEntry[] = []
 
@@ -222,6 +277,8 @@ export function computeIntentStack(
 
   const social = computeSocialIntent(beliefs, profile, currentTile, npcFaction, socialMultiplier)
   if (social) entries.push(social)
+
+  entries.push(...computePlayerRelationshipIntents(profile, currentTile, playerRelationshipBias))
 
   const ecosystem = computeEcosystemIntent(beliefs, profile, currentTile, ecosystemMultiplier)
   if (ecosystem) entries.push(ecosystem)

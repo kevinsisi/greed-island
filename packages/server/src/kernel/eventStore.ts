@@ -69,6 +69,10 @@ export class SqliteEventStore {
     initializeKernelSchema(db)
   }
 
+  runInTransaction<T>(operation: () => T): T {
+    return this.db.transaction(operation)()
+  }
+
   appendEvents(drafts: readonly EventDraft[]): Event[] {
     if (drafts.length === 0) {
       return []

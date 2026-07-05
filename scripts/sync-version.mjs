@@ -2,6 +2,7 @@
 /**
  * Reads version from root package.json and writes it to:
  *   - packages/server/src/version.ts  (read by /healthz)
+ *   - packages/web/src/version.ts     (rendered in UI shell)
  *   - packages/server/package.json
  *   - packages/web/package.json
  *
@@ -18,10 +19,14 @@ const rootPkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const { version } = rootPkg
 
 // 1. packages/server/src/version.ts
-const versionTsPath = join(root, 'packages/server/src/version.ts')
-writeFileSync(versionTsPath, `export const APP_VERSION = '${version}'\n`)
+const serverVersionTsPath = join(root, 'packages/server/src/version.ts')
+writeFileSync(serverVersionTsPath, `export const APP_VERSION = '${version}'\n`)
 
-// 2. packages/server/package.json
+// 2. packages/web/src/version.ts
+const webVersionTsPath = join(root, 'packages/web/src/version.ts')
+writeFileSync(webVersionTsPath, `export const APP_VERSION = '${version}'\n`)
+
+// 3. packages/server/package.json
 const serverPkgPath = join(root, 'packages/server/package.json')
 const serverPkg = JSON.parse(readFileSync(serverPkgPath, 'utf8'))
 if (serverPkg.version !== version) {
@@ -29,7 +34,7 @@ if (serverPkg.version !== version) {
   writeFileSync(serverPkgPath, JSON.stringify(serverPkg, null, 2) + '\n')
 }
 
-// 3. packages/web/package.json
+// 4. packages/web/package.json
 const webPkgPath = join(root, 'packages/web/package.json')
 const webPkg = JSON.parse(readFileSync(webPkgPath, 'utf8'))
 if (webPkg.version !== version) {

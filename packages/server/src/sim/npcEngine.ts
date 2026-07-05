@@ -297,9 +297,9 @@ const ACTIVITY_DRIFT: Readonly<
   guard:   { mood: -0.05, health: -0.05 }
 }
 
-const INTERACT_PROBABILITY = 0.08 // 每對同 tile NPC，每 tick 觸發機率
+const INTERACT_PROBABILITY = 0.25 // 每對同 tile NPC，每 tick 觸發機率；要讓玩家真的常看到社交事件
 const INTERACT_COOLDOWN_TICKS = 10
-const INTERACT_MAX_PLANAR_DISTANCE = 2
+const INTERACT_MAX_PLANAR_DISTANCE = 5
 const INTERACT_MAX_Z_DISTANCE = 0
 const PLAYER_DIALOG_HOLD_TICKS = TICKS_PER_MINUTE
 const PRODUCTIVE_ACTION_PROBABILITY = 0.52

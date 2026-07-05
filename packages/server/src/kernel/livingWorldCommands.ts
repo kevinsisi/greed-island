@@ -86,6 +86,7 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
   'PLAYER_INTERVENE',
+  'PLAYER_NPC_DIALOGUE',
   'PLAYER_ENERGY_SET',
   'NPC_DIALOG_HOLD',
   // v0.15.0 — Combat Phase B (single-shot judgement)
@@ -252,6 +253,11 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'BUILDING_CAPTURED',
   // Dynamic Tile Generation (v0.84.0)
   'TILE_GENERATED',
+  // Player Survival Needs (v0.85.0 / SP1)
+  'PLAYER_NEEDS_SEEDED',
+  'PLAYER_NEEDS_RECONCILED',
+  'PLAYER_COLLAPSED',
+  'PLAYER_ATE',
 ] as const
 export type LivingWorldCommandType = (typeof LIVING_WORLD_COMMAND_TYPES)[number]
 
@@ -429,6 +435,9 @@ export type NpcFreeformActionKind =
   | 'travel'
   | 'work'
   | 'build'
+  | 'buy_goods'
+  | 'learn'
+  | 'invent'
   | 'rest'
   | 'socialize'
   | 'buy_card'
@@ -846,6 +855,37 @@ export type TileGeneratedCmd = Readonly<{
   narration: string
 }>
 
+// Player Survival Needs (v0.85.0 / SP1)
+export type PlayerNeedsSeededCmd = Readonly<{
+  accountId: number
+  asOfTick: number
+  nourishment: number
+  vigor: number
+  collapsed: boolean
+}>
+
+export type PlayerNeedsReconciledCmd = Readonly<{
+  accountId: number
+  asOfTick: number
+  nourishment: number
+  vigor: number
+  collapsed: boolean
+}>
+
+export type PlayerCollapsedCmd = Readonly<{
+  accountId: number
+  tick: number
+}>
+
+export type PlayerAteCmd = Readonly<{
+  accountId: number
+  asOfTick: number
+  nourishment: number
+  vigor: number
+  collapsed: boolean
+  goldCost: number
+}>
+
 export type NpcInteractCmd = Readonly<{
   tile: string
   participants: readonly [string, string]
@@ -990,6 +1030,23 @@ export type PlayerIntervenecmd = Readonly<{
   /** 玩家自由輸入的原文（可空字串：純按鈕介入） */
   message: string
   /** 一行敘事，給 catch-up summary / SSE listener 用 */
+  narration: string
+}>
+
+export type PlayerDialogIntent = 'greet' | 'ask' | 'trade'
+
+export type PlayerNpcDialogueCmd = Readonly<{
+  playerAccountId: string
+  npcId: string
+  tile: string
+  intent: PlayerDialogIntent
+  playerMessage: string
+  npcReplyZh: string
+  npcReplyEn: string
+  trustDelta: number
+  trustAfter: number
+  interactionCount: number
+  /** 一行敘事，讓玩家對話成為可 replay 的世界事件，而不是私有聊天紀錄。 */
   narration: string
 }>
 
@@ -1862,6 +1919,7 @@ export type LivingWorldCommandPayload =
   | RareWindowCloseCmd
   | WorldTickCmd
   | PlayerIntervenecmd
+  | PlayerNpcDialogueCmd
   | PlayerEnergySetCmd
   | NpcDialogHoldCmd
   | CombatInitiateCmd
@@ -1986,6 +2044,10 @@ export type LivingWorldCommandPayload =
   | WallBuiltCmd
   | WallDemolishedCmd
   | NpcHouseholdJointDecisionCmd
+  | PlayerNeedsSeededCmd
+  | PlayerNeedsReconciledCmd
+  | PlayerCollapsedCmd
+  | PlayerAteCmd
 
 export type LivingWorldCommand = Command<LivingWorldCommandPayload> &
   Readonly<{
@@ -2188,7 +2250,7 @@ const VALIDATORS: Readonly<
     if (typeof p.proposal.expectedOutcome !== 'string' || p.proposal.expectedOutcome.length === 0) return 'proposal.expectedOutcome required'
     if (p.proposal.utterance !== null && typeof p.proposal.utterance !== 'string') return 'proposal.utterance must be string or null'
     if (!isRecord(p.resolved)) return 'resolved required'
-    const validKinds = ['travel', 'work', 'build', 'rest', 'socialize', 'buy_card', 'challenge_combat', 'spread_rumor', 'custom_social_scene']
+    const validKinds = ['travel', 'work', 'build', 'buy_goods', 'learn', 'invent', 'rest', 'socialize', 'buy_card', 'challenge_combat', 'spread_rumor', 'custom_social_scene']
     if (typeof p.resolved.kind !== 'string' || !validKinds.includes(p.resolved.kind)) return 'resolved.kind invalid'
     if (p.resolved.targetTile !== null && (typeof p.resolved.targetTile !== 'string' || p.resolved.targetTile.length === 0)) return 'resolved.targetTile must be string or null'
     if (p.resolved.targetNpcId !== null && (typeof p.resolved.targetNpcId !== 'string' || p.resolved.targetNpcId.length === 0)) return 'resolved.targetNpcId must be string or null'
@@ -2602,6 +2664,21 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.message !== 'string') return 'message required (can be empty string)'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  PLAYER_NPC_DIALOGUE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.playerAccountId !== 'string' || p.playerAccountId.length === 0) return 'playerAccountId required'
+    if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
+    if (typeof p.tile !== 'string' || p.tile.length === 0) return 'tile required'
+    if (p.intent !== 'greet' && p.intent !== 'ask' && p.intent !== 'trade') return 'intent invalid'
+    if (typeof p.playerMessage !== 'string' || p.playerMessage.length === 0) return 'playerMessage required'
+    if (typeof p.npcReplyZh !== 'string' || p.npcReplyZh.length === 0) return 'npcReplyZh required'
+    if (typeof p.npcReplyEn !== 'string' || p.npcReplyEn.length === 0) return 'npcReplyEn required'
+    if (typeof p.trustDelta !== 'number' || !Number.isFinite(p.trustDelta)) return 'trustDelta required'
+    if (typeof p.trustAfter !== 'number' || !Number.isFinite(p.trustAfter)) return 'trustAfter required'
+    if (typeof p.interactionCount !== 'number' || !Number.isInteger(p.interactionCount) || p.interactionCount <= 0) return 'interactionCount required'
+    if (typeof p.narration !== 'string' || p.narration.length === 0) return 'narration required'
     return null
   },
   PLAYER_ENERGY_SET: (p) => {
@@ -3699,6 +3776,40 @@ const VALIDATORS: Readonly<
     if (!isNonNegativeInteger(p.goldCommitted)) return 'goldCommitted must be non-negative integer'
     if (!isNonNegativeInteger(p.decidedAtTick)) return 'decidedAtTick must be non-negative integer'
     if (typeof p.narration !== 'string') return 'narration required'
+    return null
+  },
+  PLAYER_NEEDS_SEEDED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.accountId !== 'number' || !Number.isFinite(p.accountId)) return 'accountId required'
+    if (typeof p.asOfTick !== 'number' || !Number.isFinite(p.asOfTick)) return 'asOfTick required'
+    if (typeof p.nourishment !== 'number' || !Number.isFinite(p.nourishment)) return 'nourishment required'
+    if (typeof p.vigor !== 'number' || !Number.isFinite(p.vigor)) return 'vigor required'
+    if (typeof p.collapsed !== 'boolean') return 'collapsed required'
+    return null
+  },
+  PLAYER_NEEDS_RECONCILED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.accountId !== 'number' || !Number.isFinite(p.accountId)) return 'accountId required'
+    if (typeof p.asOfTick !== 'number' || !Number.isFinite(p.asOfTick)) return 'asOfTick required'
+    if (typeof p.nourishment !== 'number' || !Number.isFinite(p.nourishment)) return 'nourishment required'
+    if (typeof p.vigor !== 'number' || !Number.isFinite(p.vigor)) return 'vigor required'
+    if (typeof p.collapsed !== 'boolean') return 'collapsed required'
+    return null
+  },
+  PLAYER_COLLAPSED: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.accountId !== 'number' || !Number.isFinite(p.accountId)) return 'accountId required'
+    if (typeof p.tick !== 'number' || !Number.isFinite(p.tick)) return 'tick required'
+    return null
+  },
+  PLAYER_ATE: (p) => {
+    if (!isRecord(p)) return 'payload must be object'
+    if (typeof p.accountId !== 'number' || !Number.isFinite(p.accountId)) return 'accountId required'
+    if (typeof p.asOfTick !== 'number' || !Number.isFinite(p.asOfTick)) return 'asOfTick required'
+    if (typeof p.nourishment !== 'number' || !Number.isFinite(p.nourishment)) return 'nourishment required'
+    if (typeof p.vigor !== 'number' || !Number.isFinite(p.vigor)) return 'vigor required'
+    if (typeof p.collapsed !== 'boolean') return 'collapsed required'
+    if (typeof p.goldCost !== 'number' || !Number.isFinite(p.goldCost)) return 'goldCost required'
     return null
   },
 }

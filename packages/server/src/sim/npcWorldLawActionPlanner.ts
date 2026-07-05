@@ -1,6 +1,7 @@
 import type { NpcFreeformActionProposedCmd, NpcFreeformActionKind } from '../kernel/livingWorldCommands.js'
 import type { NpcLifeNeedKey, NpcLifeView } from './cityLife.js'
 import type { NpcRuntimeState } from './npcEngine.js'
+import type { IntentEntry } from './intentPlanner.js'
 import type { NpcAutonomousPlannerTileScore } from './npcAutonomousPlanner.js'
 import type { NpcCognitiveProfile } from './npcCognitiveRuntime.js'
 
@@ -14,12 +15,14 @@ export type NpcWorldLawActionPlannerInput = Readonly<{
   threshold: number
   needs: NpcLifeView['needs']
   lifeGoal: NpcLifeView['goal']
+  intentEntries: readonly IntentEntry[]
   currentOverride: NpcRuntimeState['intentOverride']
   adjacentTiles: readonly string[]
   tileScores: Readonly<Record<string, NpcAutonomousPlannerTileScore>>
   tileNames: Readonly<Record<string, string | undefined>>
   cognitive?: NpcCognitiveProfile | null
   memoryContext: string
+  recentActionKinds?: readonly NpcFreeformActionKind[]
 }>
 
 type WorldLawCandidate = Readonly<{
@@ -34,7 +37,7 @@ type WorldLawCandidate = Readonly<{
 }>
 
 export function planNpcWorldLawAction(input: NpcWorldLawActionPlannerInput): NpcFreeformActionProposedCmd | null {
-  const candidate = chooseWorldLawCandidate(input)
+  const candidate = applyActionCooldown(input, chooseWorldLawCandidate(input))
   if (!candidate || candidate.pressure <= input.threshold) return null
   const targetName = candidate.targetTile ? tileName(input, candidate.targetTile) : tileName(input, input.currentTile)
   const reason = buildReason(input, candidate, targetName)
@@ -60,11 +63,108 @@ export function planNpcWorldLawAction(input: NpcWorldLawActionPlannerInput): Npc
     accepted: true,
     rejectionReason: null,
     decidedAtTick: input.currentTick,
-    narration: `${input.npcNameZh}${candidate.actionZh}，不是被排程推著走，而是在世界限制內選擇回應${targetName}的壓力。`,
+    narration: buildNarration(input.npcNameZh, candidate, targetName),
+  }
+}
+
+function applyActionCooldown(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate | null): WorldLawCandidate | null {
+  if (!candidate) return null
+  const recent = input.recentActionKinds ?? []
+  if (!recent.includes(candidate.kind)) return candidate
+  if (candidate.pressure >= input.threshold + 55) return candidate
+  const alternatives = buildCooldownAlternatives(input, candidate)
+    .filter((alt) => alt.kind !== candidate.kind && !recent.slice(0, 2).includes(alt.kind))
+    .sort((a, b) => b.pressure - a.pressure || a.kind.localeCompare(b.kind))
+  return alternatives[0] ?? candidate
+}
+
+function buildCooldownAlternatives(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate): WorldLawCandidate[] {
+  const targetTile = bestTile(input, 'economy')
+  const safeTile = bestTile(input, 'safety')
+  const pressure = Math.max(input.threshold + 6, Math.floor(candidate.pressure * 0.82))
+  return [
+    {
+      kind: 'work', targetTile, pressure, need: 'money',
+      actionZh: `改去${tileName(input, targetTile)}接一件短工，避免連續重複同一種安排`,
+      riskZh: '轉換工作會消耗時間，但能讓收入、消息與需求重新流動。',
+      expectedOutcomeZh: '把卡住的行為分布拉回實際生產與交易。',
+      utteranceZh: '換件活做。',
+    },
+    {
+      kind: 'buy_goods', targetTile, pressure: pressure - 1, need: 'food',
+      actionZh: `改到${tileName(input, targetTile)}補一趟日用品與食物`,
+      riskZh: '價格與庫存可能不穩，但能讓 household 消耗閉環繼續運轉。',
+      expectedOutcomeZh: '補足日常物資，並把金錢壓力轉進市場。',
+      utteranceZh: '順路補貨。',
+    },
+    {
+      kind: 'learn', targetTile, pressure: pressure - 2, need: 'life_goal',
+      actionZh: `改在${tileName(input, targetTile)}請教一段能改善下次工作的手法`,
+      riskZh: '學習不一定立刻帶來收入，但能避免世界只剩單調勞動。',
+      expectedOutcomeZh: '累積技能證據，給後續工作與發明留下基礎。',
+      utteranceZh: '問一下做法。',
+    },
+    {
+      kind: 'build', targetTile, pressure: pressure - 3, need: 'housing',
+      actionZh: `改去${tileName(input, targetTile)}查看是否有能整理的工地或公共角落`,
+      riskZh: '材料可能不足，但能讓建設線索保持活躍。',
+      expectedOutcomeZh: '把閒置壓力導向可視化建設進度。',
+      utteranceZh: '看看哪裡能修。',
+    },
+    {
+      kind: 'rest', targetTile: input.defaultTile || input.currentTile, pressure: pressure - 4, need: 'rest',
+      actionZh: `回到${tileName(input, input.defaultTile || input.currentTile)}短暫整理體力`,
+      riskZh: '休息會暫停收入，但能防止疲勞累積。',
+      expectedOutcomeZh: '把體力恢復到能繼續行動的狀態。',
+      utteranceZh: '先緩一下。',
+    },
+    {
+      kind: 'travel', targetTile: safeTile, pressure: pressure - 5, need: 'safety',
+      actionZh: `改往${tileName(input, safeTile)}走一趟，重新確認安全與下一步`,
+      riskZh: '移動會錯過目前街區的機會，但能切換場景壓力。',
+      expectedOutcomeZh: '降低同地點重複行為，讓事件流回到多區域探索。',
+      utteranceZh: '換個地方看看。',
+    },
+  ]
+}
+
+function buildNarration(npcNameZh: string, candidate: WorldLawCandidate, targetName: string): string {
+  switch (candidate.kind) {
+    case 'build':
+      return `${npcNameZh}在${targetName}查看空地、牆角與通道，試著把閒置角落整理成可用的公共空間。`
+    case 'custom_social_scene':
+      return `${npcNameZh}留在${targetName}和熟人交換近況與人情，順手打聽誰最近需要幫忙、誰又欠了誰一個回應。`
+    case 'travel':
+      return candidate.actionZh.includes('退路')
+        ? `${npcNameZh}離開壓力最高的街角，轉往${targetName}確認退路與下一步消息。`
+        : `${npcNameZh}把未走完的事放在心上，動身前往${targetName}。`
+    case 'work':
+      return candidate.actionZh.includes('水源') || candidate.actionZh.includes('棲地')
+        ? `${npcNameZh}前往${targetName}巡看水源、棲地與採集邊界，確認環境變化有沒有壓到居民日常。`
+        : `${npcNameZh}前往${targetName}接下一件能用上${candidate.actionZh.includes('身分') ? '自己手藝' : '自身能力'}的工作，把壓力換成收入與消息。`
+    case 'buy_goods':
+      return `${npcNameZh}前往${targetName}採買食物、工具與日用品，先把生活缺口補起來。`
+    case 'learn':
+      return `${npcNameZh}在${targetName}找人請教、觀察手法並練習一段還不熟的技能。`
+    case 'invent':
+      return `${npcNameZh}在${targetName}攤開草圖與材料，把零散觀察整理成一個可試的原型點子。`
+    case 'rest':
+      return `${npcNameZh}在${targetName}暫時收住腳步，先把體力與判斷力拉回來。`
+    case 'buy_card':
+      return `${npcNameZh}前往${targetName}尋找紋卡機會，把最近的壓力押在一次可能的轉機上。`
+    case 'challenge_combat':
+      return `${npcNameZh}在${targetName}接受挑戰，試著用正面衝突壓下眼前的威脅。`
+    case 'spread_rumor':
+      return `${npcNameZh}在${targetName}放出一句傳聞，讓消息先替自己探路。`
+    default:
+      return `${npcNameZh}在${targetName}做出一個臨場選擇，讓世界多了一條新的後續線索。`
   }
 }
 
 function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLawCandidate | null {
+  const relationshipCandidate = fromRelationshipPressure(input)
+  if (relationshipCandidate) return relationshipCandidate
+
   if (input.currentOverride && input.currentOverride.targetTile !== input.currentTile) {
     return {
       kind: 'travel',
@@ -96,6 +196,85 @@ function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLaw
       expectedOutcomeZh: '取得安全位置與下一步情報，而不是在壓力最高處硬撐。',
       utteranceZh: '先找條退路。',
     }
+  }
+
+  if (input.lifeGoal.kind === 'learn_skill' && lifeGoalPressure >= primary.value) {
+    const targetTile = bestTile(input, 'economy')
+    const wantsInvent = (input.cognitive?.patienceBias ?? 1) >= 1.35 || /發明|研究|學者|starreader|invent|scholar|research/i.test(input.roleZh)
+    return wantsInvent
+      ? {
+          kind: 'invent',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}發想一個能驗證「${input.lifeGoal.narration}」的小型原型`,
+          riskZh: '想法可能失敗，也可能被旁人看成浪費材料。',
+          expectedOutcomeZh: '留下草圖、假設與下一步可測試的原型方向。',
+          utteranceZh: '先試一個小原型。',
+        }
+      : {
+          kind: 'learn',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}學習「${input.lifeGoal.narration}」需要的手法`,
+          riskZh: '學習會花時間，也可能暴露自己還不熟練。',
+          expectedOutcomeZh: '累積能被後續工作與建設使用的技能線索。',
+          utteranceZh: '找人教我一段。',
+        }
+  }
+
+  if (input.lifeGoal.kind === 'eat' || primary.key === 'food') {
+    const targetTile = bestTile(input, 'economy')
+    return {
+      kind: 'buy_goods',
+      targetTile,
+      pressure: Math.max(primary.value, lifeGoalPressure),
+      need: primary.key === 'food' ? 'food' : 'life_goal',
+      actionZh: `前往${tileName(input, targetTile)}採買食物、工具與能立刻派上用場的日用品`,
+      riskZh: '價格可能被哄抬，貨源也可能不穩，走一趟仍會消耗體力。',
+      expectedOutcomeZh: '把飢餓與日常缺口轉成可補足的採買清單。',
+      utteranceZh: '先把缺的買齊。',
+    }
+  }
+
+  if (primary.key === 'rest' || input.lifeGoal.kind === 'rest') {
+    return {
+      kind: 'rest',
+      targetTile: input.defaultTile || input.currentTile,
+      pressure: Math.max(primary.value, lifeGoalPressure),
+      need: primary.key === 'rest' ? 'rest' : 'life_goal',
+      actionZh: `回到${tileName(input, input.defaultTile || input.currentTile)}整理呼吸並恢復體力`,
+      riskZh: '休息會暫停眼前的收入與社交機會。',
+      expectedOutcomeZh: '讓體力與判斷力回到能繼續工作的狀態。',
+      utteranceZh: '先歇一下。',
+    }
+  }
+
+  if (input.lifeGoal.kind === 'learn_skill') {
+    const targetTile = bestTile(input, 'economy')
+    const wantsInvent = (input.cognitive?.patienceBias ?? 1) >= 1.35 || /發明|研究|學者|starreader|invent|scholar|research/i.test(input.roleZh)
+    return wantsInvent
+      ? {
+          kind: 'invent',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}發想一個能驗證「${input.lifeGoal.narration}」的小型原型`,
+          riskZh: '想法可能失敗，也可能被旁人看成浪費材料。',
+          expectedOutcomeZh: '留下草圖、假設與下一步可測試的原型方向。',
+          utteranceZh: '先試一個小原型。',
+        }
+      : {
+          kind: 'learn',
+          targetTile,
+          pressure: lifeGoalPressure,
+          need: 'life_goal',
+          actionZh: `在${tileName(input, targetTile)}學習「${input.lifeGoal.narration}」需要的手法`,
+          riskZh: '學習會花時間，也可能暴露自己還不熟練。',
+          expectedOutcomeZh: '累積能被後續工作與建設使用的技能線索。',
+          utteranceZh: '找人教我一段。',
+        }
   }
 
   if (input.lifeGoal.kind === 'build_city' || primary.key === 'housing') {
@@ -152,9 +331,67 @@ function chooseWorldLawCandidate(input: NpcWorldLawActionPlannerInput): WorldLaw
   }
 }
 
+function fromRelationshipPressure(input: NpcWorldLawActionPlannerInput): WorldLawCandidate | null {
+  const entry = input.intentEntries
+    .filter((candidate) => candidate.urgency > input.threshold && candidate.reason.includes('player_relationship_'))
+    .sort((a, b) => b.urgency - a.urgency || a.targetTile.localeCompare(b.targetTile))[0]
+  if (!entry) return null
+  const targetTile = entry.targetTile || input.currentTile
+
+  if (entry.reason.includes('player_relationship_caution')) {
+    return {
+      kind: 'spread_rumor',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `在${tileName(input, targetTile)}提醒熟人別太靠近讓自己戒備的玩家`,
+      riskZh: '提醒同伴可能被玩家聽見，也可能讓原本的誤會變得更深。',
+      expectedOutcomeZh: '讓附近同伴提高警覺，自己也保留退路。',
+      utteranceZh: '先別太靠近那個人。',
+    }
+  }
+
+  if (entry.reason.includes('player_relationship_affinity')) {
+    return {
+      kind: 'custom_social_scene',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `主動在${tileName(input, targetTile)}找信任的玩家聊一下近況`,
+      riskZh: '太主動可能顯得露骨，也可能耽誤原本工作。',
+      expectedOutcomeZh: '維持親近感，交換近況，留下下一次合作的理由。',
+      utteranceZh: '有空聊一下嗎？',
+    }
+  }
+
+  if (entry.reason.includes('player_relationship_reciprocity')) {
+    return {
+      kind: 'work',
+      targetTile,
+      pressure: entry.urgency,
+      need: 'memory',
+      actionZh: `去${tileName(input, targetTile)}留一手合適的貨或工作機會給熟客`,
+      riskZh: '偏向熟客會壓縮其他人的機會，也可能讓庫存調度變緊。',
+      expectedOutcomeZh: '把重複交易累積成可回報的交易互惠。',
+      utteranceZh: '這個留給熟客。',
+    }
+  }
+
+  return null
+}
+
 function buildReason(input: NpcWorldLawActionPlannerInput, candidate: WorldLawCandidate, targetName: string): string {
   const primary = strongestNeed(input.needs)
   const memory = input.memoryContext.trim()
+  if (candidate.actionZh.includes('讓自己戒備的玩家')) {
+    return `玩家關係形成戒備壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
+  if (candidate.actionZh.includes('信任的玩家')) {
+    return `玩家關係累積親近壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
+  if (candidate.actionZh.includes('熟客')) {
+    return `玩家關係形成交易互惠壓力 ${Math.round(candidate.pressure)}；${candidate.expectedOutcomeZh}`
+  }
   const memoryLine = memory ? `記憶線索「${truncate(memory, 42)}」也指向${targetName}。` : ''
   const thought = input.cognitive?.thoughtZh ? ` ${input.cognitive.thoughtZh}` : ''
   const needText = candidate.need === 'life_goal'

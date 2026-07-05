@@ -1,7 +1,872 @@
+## 2026-07-03 — Handoff Snapshot @ v0.98.45 (map-M5: WorldMapSvg 全面重做 — 有機島嶼、玩家移動、NPC 漂移)
+
+- **WorldMapSvg 三大問題一次修好**：
+  1. **視覺重設計**：深夜海背景 `#07111e`，SVG `<polygon>` 有機多邊形島嶼取代矩形填色；低飽和島嶼底色 + 派系色 10–20% tint；Big Shoulders 羊皮卷標籤 pill；11 條虛線海航路；district anchor ember 光點（兩層 pulse 動畫）；NPC hover 餘燼光暈。
+  2. **玩家移動**：新增 `playerDistrictId` state（localStorage `gi:hubPos:v2` 持久化）；點擊地區 → 玩家 token 以 `transition: transform 0.5s ease-in-out` 流暢移動；`onAreaEnter` + `onPositionChange` 照舊觸發；`controlsEnabled` 閘控。
+  3. **NPC 自主漂移**：FNV-1a 哈希決定論漂移函式 `npcIdleDrift(npcId, tick)`，`setInterval(3500ms)` 累積 `driftTick`，`useMemo` 重算每個 NPC 偏移量（±1–2px）；CSS `transition: 4.5s ease-in-out` 平滑補間。
+- **HubPage.tsx「世界現在」面板**：移除 `即時事件流 Phase 2 實裝` placeholder；改顯示 `events.filter(e=>e.narration).slice(0,5)` 真實敘事，空時顯示「世界安靜著…」。
+- **驗證**：
+  - `tsc --noEmit` 0 errors ✅
+  - web vitest 16 tests (WorldMapSvg.test.ts) 全綠 ✅
+  - Playwright 截圖 (1440×900 / 390×844) 確認有機島嶼、標籤、海路 ✅
+  - NPC 漂移 DOM 驗證：`translate(660.787px, 101.046px)` → `translate(661.558px, 99.6618px)` after 8s ✅
+- **版本**：`packages/web/package.json` → 0.98.45
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.44 (map-M4: medallion token 視覺重做)
+
+- **NPC / player token 全面換成航海圖徽章式 medallion**（WorldMapSvg + AreaMapSvg + BuildingSvg）：
+  - 刪除所有頭圓+身體矩形人形程式碼。
+  - 新建 `tokenMedallion.tsx`：`NpcGlyph`（activity→職業線性圖示，stroke 1.3 line-icon 風格）+ `CompassStar`（玩家羅盤星）。
+  - 職業 glyph 對照：guard/patrol=盾、trade=天平、read/study=書卷、craft/work=鎚、pray=十字架、perform=音符、write=羽毛筆、eat=魚鉤；無對照（idle/move/sleep）→首字母 Big Shoulders 800。
+  - NPC 外環：faction color，說話時 ember 脈光環，移動中 opacity 0.65，低健康轉 rust，低情緒轉暗金（AreaMapSvg）。
+  - Player medallion：tide 外環+ember 內環，羅盤星中央，呼吸 glow animation。
+  - Radial gradient 深色羊皮紙底（#2d2418→#120d06 for NPC，#14232a→#08101a for player）。
+  - 名字 pill：半透明深底 + faction color text，嵌在 medallion 下緣。
+- **驗證**：web vitest 35 files / 260 pass（全綠），`tsc -b && vite build` clean（chunk warning 預存在）。
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.43 (map-M3: human silhouette tokens + BuildingSvg vector building interior)
+
+- **緊急修復兩個上線 regression**（4a68aa0 Hub + de5401a Area 向量地圖替換後）：
+  1. **人型消失**：WorldMapSvg / AreaMapSvg NPC token 從圓點換成 SVG 人形剪影（頭圓形+身體矩形），配 faction 色 + `#fff5b8` 描邊；活動 emoji 移至頭頂右肩。玩家 token 也同步人形化：AreaMapSvg 玩家仍用六角形框但加人頭；WorldMapSvg peer player 也改人形。
+  2. **建築沒圖（Phase M3）**：新建 `BuildingSvg.tsx` 取代 `BuildingPhaserGame`，`BuildingPage.tsx` 改 import。向量室內視圖：棋盤格地板（依建築類型配色）、家具 emoji glyph、NPC 人形 token（isOwner 金邊）、名稱標籤、🚪 離開按鈕。
+- **新增 `BuildingSvg.test.ts`**：10 個 `buildingNpcPosition` 純邏輯測試（單人/多人/越界/分行）。
+- **驗證**：
+  - web vitest：35 test files / 260 pass（新增 10 tests 全綠）。
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在（Phaser 仍在 bundle 供 CombatScene 用）。
+- **Phaser 剩餘引用**：`CombatHud.tsx` + `CombatScene.ts`（Phase B 戰鬥）；`BuildingPhaserGame.tsx` + `BuildingScene.ts` 已閒置（BuildingPage 不再引用），Phase M4 可清理。
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.42 (map-visual-replacement Phase M2 — AreaMapSvg 向量地圖取代 AreaPhaserGame)
+
+- 實作 Phase M2（`docs/superpowers/specs/2026-07-02-map-visual-replacement.md`）：以 CSS Grid + 絕對定位圖層的向量地圖替換 AreaPage 的 Phaser canvas。
+- **新增 `AreaMapSvg.tsx`**（`packages/web/src/components/map/`，≈370 行）：
+  - 地形層：CSS Grid 15×10，色調自 `terrainMask` 查表（`#2a2218`~`#0a1520` 深色系）；點格子移動玩家 token（click-to-move）。
+  - NPC token：絕對定位 32px 圓形，`subCol/subRow → left/top %`，4.5 秒 CSS transition 移動，右肩活動 emoji，低心情/低血量指示，AI 語音氣泡（60 字截斷，am-bubble-in 動畫）。
+  - 玩家 token：SVG 六角形，tide 藍填色 + ember 描邊；位置 localStorage 持久化（v2 格式 col/row，避免衝突）。
+  - 建築：glyph + 狀態色框（operational=ember/damaged=rust/construction=黃/abandoned=灰），靠近顯示 ✋ am-float 動畫，施工進度條。
+  - 掉落物：rank 顏色閃爍（am-drop 動畫），44px 觸控面積。
+  - 生態層：植株 chip（透明度由 saturationPct 決定）、動物 emoji（可點擊狩獵）、漁場底部進度條、遷徙/捕食者 chip。
+  - 天氣 VFX：CSS filter（overcast/mist/storm/breeze）+ 雨點/🍃 CSS animation。
+  - 多人：peer player token（CSS transition 7.5s）；`onNearbyNpcsChange`/`onNearbyBuildingChange` Chebyshev 距離閘（2 cells / 1.5 cells）。
+  - 純工具函式 export：`colToPercent`, `rowToPercent`, `pixelXToPercent`, `pixelYToPercent`, `gridDistance`, `buildTerrainGrid`, `terrainToCssColor`, `numToHex`。
+- **新增 `AreaMapSvg.test.ts`**：34 個純邏輯測試全綠（numToHex / colToPercent / rowToPercent / pixel→% / gridDistance / terrainToCssColor / buildTerrainGrid）。
+- **修改 `AreaPage.tsx`**：import AreaMapSvg，不再 import/渲染 AreaPhaserGame；所有 props 介面對齊（含 ecology / weather / onAnimalHunt / onFish）。
+- **刪除 `AreaPhaserGame.tsx`**：唯一引用者（AreaPage）已切換，安全刪除。
+- **Phaser 剩餘引用（不可刪除）**：`CombatHud.tsx` + `CombatScene.ts`（Phase B 戰鬥，已上線）、`BuildingPhaserGame.tsx` + `BuildingPage.tsx`（Phase M3 待做）、`AreaScene.ts`（AreaPage/AreaMapSvg 仍 import 其型別 + `normaliseWeather`，待 M3 後一起清理）。Phaser package 繼續留在 package.json。
+- **驗證**：
+  - web vitest：35 test files / 1602 pass（新增 AreaMapSvg 34 tests 全綠；3 pre-existing timeout failures 與本 change 無關）。
+  - `npm run build`（tsc -b + vite）clean，零新 TS error；chunk size warning 預先存在。
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.41 (map-visual-replacement — SVG 向量航海圖取代 Phaser 像素圖)
+
+- 實作 OpenSpec change `2026-07-02-map-visual-replacement` 方案 A：以 SVG 向量航海圖取代 HubPage 的 Phaser 像素圖。AreaPage 仍保留 Phaser（不動）。
+- **新增 `WorldMapSvg.tsx`**（`packages/web/src/components/map/`，550 行）：
+  - 18 世紀航海圖 × 廢土港口視覺語言（背景 #2a2e36、ember #f39c20、tide #4db8c8）。
+  - 9 個圖層：背景 → 地區填色 → 派系/安全/經濟 overlay → 遷徙路線箭頭 → 地區名稱標籤 → 生態徽章 → 建設浮標 → 點擊區域 → 玩家/NPC token。
+  - NPC token 含角色縮寫、活動 emoji、截斷對話泡泡；旅行 NPC 自動定位在路線中點。
+  - 區域點擊觸發 `onAreaEnter(districtId)` → `navigate(/area/:id)`；呼叫 `onPositionChange` 更新社交 presence。
+  - `controlsEnabled=false` 時純讀（未登入訪客模式）。
+- **新增 `WorldMapSvg.test.ts`**（174 行）：33 個純邏輯測試（numToHex / darkenNum / npcPixelPos 靜態+旅行+越界 / DISTRICT_RECTS 完整性）全綠。
+- **修改 `HubPage.tsx`**：import WorldMapSvg，不再 import/渲染 PhaserGame；所有 props（npcs / players / areaOverlays / activeDistrictIds / constructionActivities / ecologyByTile / controlsEnabled）完整傳入。
+- **驗證**：
+  - web vitest：33 test files / 218 tests 全綠。
+  - server vitest：171 passed / 2 pre-existing flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在。
+- CI/CD：push 後 GitHub Actions 將自動部署至 dev。
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 1 — NpcMindSheet, 本機未 push)
+
+- 實作 UI Engagement Redesign Phase 1：NPC MindSheet（讓玩家看見 Hermes 等級 NPC 的內心）。
+- **後端 runtime 新增 3 個公開方法**（`sim/runtime.ts`）：
+  - `getNpcBeliefs(npcId)` → 原始 `BeliefRow[]`（供 API 層直接使用）
+  - `getNpcIntentStack(npcId)` → 計算當前意圖堆疊 `IntentEntry[]`，邏輯與 `attachNpcAgent` 的 `computeIntentEntries` 相同（從私有欄位組裝 beliefs/weights/memoryBoost/lifeGoalBoost/playerBias）
+  - `getNpcLearningWeights(npcId)` → `IntentProjection.getLearningWeights` 的薄包裝，供 lessons 轉換
+- **後端 API 兩支新端點**（`http/npc.ts`）：
+  - `GET /api/npc/:id/intent` → top 3 intents（含 kind/label/urgencyLabel/reasonZh）+ 教訓列表（學習權重 > 1.0 的 intent 轉人話）；已過 `requireLivingNpc` 死亡閘（404/410）
+  - `GET /api/npc/:id/beliefs` → top 5 beliefs by confidence（含 label/confidenceLabel/kind）；confidence 轉語氣規則：≥80「她確信」/≥50「她相信」/≥30「她隱約覺得」/<30「她不太確定」；信念標籤用 `TILE_NAME_BY_ID` + 商品中文名組合；所有欄位為顯示就緒字串，禁止 debug 數字出現在回應
+- **前端 API 型別**（`web/src/api/client.ts`）：`NpcIntentResponse`/`NpcBeliefsResponse`/`NpcIntentEntry`/`NpcLesson`/`NpcBeliefEntry` 型別 + `npcIntent`/`npcBeliefs` 呼叫函式
+- **NpcMindSheet component**（新建 `web/src/components/game/NpcMindSheet.tsx`）：並行拉兩支 API；四個區塊：「她現在在想什麼」（前 2 個意圖預設展開，可展開全部）、「她相信的事」（折疊）、「她學到的教訓」（折疊）、「你們的關係」（折疊）；信念 confidence 顏色：tide（不確定）→ ember（確信）；取消後不污染舊 npcId 資料（npcIdRef 防止 race）
+- **NpcDialog 整合**（`web/src/components/game/NpcDialog.tsx`）：import NpcMindSheet；在 `</header>` 後、對話區前插入 MindSheet 折疊區塊（按鈕可收起）；手機：隨 NpcDialog bottom sheet 一起上滑；桌機：在 NpcDialog 右側面板內
+- **測試**（新建 `packages/server/src/http/npcMindSheet.test.ts`）：7 個測試全綠：intent 端點 200/404/410、beliefs 端點 200/200(空)/404/410
+- **驗證**：
+  - server vitest 新增測試全綠（7/7）；npc 相關 HTTP tests 全綠（25/25）；pre-existing 3 flaky timeout failures（npcEngine/runtimeGoodsInventory/runtimeSettlementFamine）與本 change 無關
+  - `tsc --noEmit` 兩個 package 皆 clean
+  - `npm run build`（tsc -b + vite）clean，chunk size warning 預先存在
+- 待辦：push 時機由使用者決定；live 視覺驗收（MindSheet 顯示）；Phase 2 WorldSignal 即時流
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (ui-engagement-redesign Phase 0, 本機未 push)
+
+- 實作 UI Engagement Redesign Phase 0：HubPage 雙形態版型重構 + WhenYouWereGone 入場卡。
+- **HubPage 版型重構**（`pages/HubPage.tsx`）：
+  - 手機（< sm）：36px 精簡頂列 → Phaser 地圖 → WhenYouWereGone（地圖下嵌入） → SurvivalHud compact strip → WorldSignal 佔位條 → 固定底部 ActionBar（進入區域 + 進食 + …）。
+  - 桌機（≥ sm）：左側 220px 面板（SurvivalHud compact + WorldSignal 佔位） + 中央地圖 + 右側 280px 情境面板（Phase 0 顯示選中區域基本資訊）。
+  - 使用 `sm:` breakpoint；Phaser 容器邏輯零改動。
+- **WhenYouWereGone**（新建 `components/game/WhenYouWereGone.tsx`）：取代 `SinceLastVisitPanel` 彈窗，改為嵌入式卡片（非 modal）；沿用同一 `sessionStorage` key；並行拉 `worldSinceLastVisit` + `playerNeeds`；最多 3 則 NPC/世界敘事句（NPC 行動 > 區域壓力 > 世界事件優先）+ 離線衰退摘要（「你的溫飽掉到 48%，體況尚可」格式）+ 直接行動按鈕（去區域 + 進食 + 知道了）。
+- **ActionBar**（新建 `components/game/ActionBar.tsx`）：手機固定底部 56px、桌機嵌入地圖下方；進入區域（走近區域才 active）+ 進食（−10 金）+ … 佔位。
+- **SurvivalHud**（`components/game/SurvivalHud.tsx`）：新增 `compact` prop，compact 模式隱藏進食按鈕（由 ActionBar 承接）。
+- **純邏輯模組**（新建 `whenYouWereGoneLogic.ts`）：`selectNarrativeItems` / `formatDecaySummary` / `ticksToHoursLabel` / `buildActionButtons` / `wygHasContent` 全部可單元測試。
+- **hubPanelVisibility.ts**：新增 `canEnterArea` / `shouldShowWhenYouWereGone` 兩個 layout 判斷函數。
+- **驗證**：
+  - web vitest：32 test files / 199 tests 全綠（新增 `whenYouWereGoneLogic.test.ts` 30 個測試 + `hubLayoutSmoke.test.ts` 8 個測試）。
+  - server vitest：170 passed / 2 pre-existing flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+  - `npm run build`（tsc -b + vite）clean，無新 TypeScript error。
+- 待辦：push 時機由使用者決定；live 視覺驗收（手機/桌機版型）；Phase 1 NpcMindSheet、Phase 2 WorldSignal 即時流。
+
+## 2026-07-02 — Handoff Snapshot @ v0.98.40 (player-survival-needs SP1, 本機未 push)
+
+- 實作 OpenSpec change `player-survival-needs`（SP1）全部 24 個 tasks，完成玩家求生需求最小閉合迴圈。
+- **後端**（`kernel/livingWorldCommands.ts`）：新增 `PLAYER_NEEDS_SEEDED` / `PLAYER_NEEDS_RECONCILED` / `PLAYER_COLLAPSED` / `PLAYER_ATE` 四個事件類型及對應 validator、命令型別定義，加入 `LivingWorldCommandPayload` union。
+- **投影重建**（`sim/runtime.ts`）：`PlayerSurvivalProjection` 補上 `rebuildFromEvents`；runtime 的小 log 與大 log 兩條 boot 分支（v0.25.3/v0.87.3 鐵則）皆已接入。event fan-out 同步加掛。
+- **API**（`http/playerSurvivalRouter.ts`）：`GET /api/player/needs`（首次自動 seed → 惰性對帳至 currentTick，跨整數 tick 且值變才發 `PLAYER_NEEDS_RECONCILED`）；`POST /api/player/eat`（扣 wallet 10 金、金幣不足回 402、昏厥仍可進食）。
+- **前端**（`api/client.ts` + `SurvivalHud.tsx` + `HubPage.tsx`）：`playerNeeds`/`eatRation` API 呼叫；雙需求條 + 瀕危 rust pulse + 狀態句 + 進食按鈕 + 昏厥呈現；HUD 掛在主畫面地圖正下方（已登入時顯示），随 SSE/polling tick 節奏刷新。
+- 設計文件：`docs/superpowers/specs/2026-06-30-survival-actor-core-design.md`（SP1 核心設計）、`docs/superpowers/specs/2026-07-02-ui-engagement-redesign.md`（§4.1/§7 HUD 位置規範）。
+- **驗證**：新增 26 個 server-side tests（rebuildFromEvents 3 + 路由 7 個場景）全綠；`npm run build`（tsc + vite）clean；pre-existing 2 flaky failures（npc.test.ts OpenCode timeout、runtimeSettlementFamine timeout）與本 change 無關。
+- 待辦：push 時機由使用者決定（push main = rollout 重啟線上 pod）；live 視覺驗收（HUD 顯示、進食效果）。
+
+## 2026-07-01 — Handoff Snapshot @ v0.98.40
+
+- Hardened the desktop deploy smoke check after the v0.98.38/v0.98.39 deploys reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke now retries each endpoint with bounded curl timeouts, checks `/api/version` explicitly, requires `/api/world`, and converts native `curl.exe` non-zero exit codes into caught retry failures instead of false-positive `ok` logs.
+- Verified: local full `npm run check` passed at v0.98.39 before this CI/CD-only hardening; v0.98.40 version sync completed.
+
+## 2026-07-01 — Handoff Snapshot @ v0.98.39
+
+- Hardened the desktop deploy smoke check after the v0.98.38 deploy reached live version/world endpoints but GitHub Deploy Dev failed at smoke. Smoke retries were added, but PowerShell native-command exit handling still allowed curl 502s to log `ok`, so v0.98.40 follows up with explicit `$LASTEXITCODE` handling.
+
+## 2026-07-01 — Handoff Snapshot @ v0.98.38
+
+- Tightened the slow `runtimePredation` starvation regressions so they isolate the predator-starvation invariant instead of dragging in unrelated NPC aggression/defense and biome spawn side paths. The targeted file now runs in ~6s locally instead of the previous ~115s hotspot inside the full server suite.
+- Fixed `scripts/sync-version.mjs` to also sync `packages/web/src/version.ts`, preventing the UI shell from carrying a stale bundled client version after root/package version bumps.
+- Verified: targeted server predation test passed (`runtimePredation`; 3 tests); full `npm run check` passed (`server 1304`, `web 154`, build included).
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (ui-visual-foundation-refresh, 本機未 push)
+
+- 對症「操作介面很醜、沒有玩的慾望」：確立「salvage-lit treasure port at night」視覺基礎，集中在 design token + component + app chrome，一次改全站生效（不逐頁重寫）。純呈現層，無後端/行為/契約變動。
+- 配色（`tailwind.config.ts`）：amber(ember) 暖主光 + 新增 oxidized-teal(`tide`) 冷副光 + parchment(`sand`) 暖白標題，橋接暖色像素世界；保留 moss/rust。
+- 字體分工：`font-display`→Big Shoulders Display（characterful condensed 海報體）+Noto Sans TC；新增 `font-data`(JetBrains Mono) **僅供數值/版本**；`font-body`=Noto Sans TC。全域 display 改動讓既有標題即時去除「mono debug console」觀感。
+- 縱深/氛圍（`styles/index.css`）：`.gi-panel` 改帶頂部內高光+柔投影+hover 暖框；body 改分層 radial 光暈+vignette+細顆粒，取代死板純色。新增 `.gi-heading`/`.gi-eyebrow`/`.gi-data`/`.gi-tag-tide` + `shadow-panel/raised/glow-*` token + `rise/glow-pulse` 動畫。
+- 圖示：新增 `Icon.tsx`（12 個一致 stroke 線性圖示），取代 GameShell 的 Unicode 幾何字元 nav glyph（`◈ ☷ ⬡`）。chrome 微互動：desktop rail active 加 glow+accent bar、BrandMark glow、數值改 `font-data` 對齊。
+- OpenSpec: `ui-visual-foundation-refresh`（新 capability `ui-visual-foundation`，strict 通過）。
+- 驗證：`npm run build`（tsc -b + vite，server+web）clean。**本機 preview 截圖工具在此環境無法 settle**（頁面健康、558 fonts loaded、eval 正常，截圖逾時，非程式問題）→ 改以 live 部署為權威視覺確認（同 slice 1/2 模式）。
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (npc-agent-liveness-and-retry, 本機未 push)
+
+- 對症「NPC 沒有真的有智慧」根因之一：`NpcAgentRunner` 先前每個 NPC 每模擬小時（720 ticks≈60min）才 AI 思考一次、且失敗即靜默放棄不重試。
+- 排程改造（`packages/server/src/npcs/npcAgentRunner.ts`）：以 `lastDeliberatedTick` staleness 輪轉取代固定 hash 相位 —— 每 tick 在合格 NPC 中挑「最久沒思考」者，受全域硬上限 `NPC_AGENT_MAX_DELIBERATIONS_PER_TICK`（預設 1）封頂。**成本上限與 NPC 數量脫鉤**。間隔 `NPC_AGENT_DECISION_INTERVAL_TICKS` 由 720 降為 `TICKS_PER_MINUTE*10`（120≈10min）。
+- 可靠性：`deliberate` 對暫時性失敗（provider throw / 回傳無法解析 JSON）指數退避重試 `NPC_AGENT_MAX_RETRIES`（預設 2）次，任一次成功即送出，耗盡才記 error/parse_failed（不 throw 給 tick）。穩態（成功）零額外呼叫。
+- 全部旋鈕可由 settings 覆寫免改碼調 liveness↔成本：`npc_agent_interval_ticks` / `npc_agent_max_per_tick` / `npc_agent_max_retries` / `npc_agent_retry_base_ms`。沿用既有 `npc_agent_enabled=false` 全關與「無 provider→不啟用」。
+- 架構鐵則不變：AI 仍只在 server freeform 提案上選擇並走 `resolveFreeformAgentProposal` + Rule Engine。無事件 shape 變動 → replay 零影響。
+- **成本 envelope（已配置 AI key 時）**：全域上限預設 1 次/ tick（≈12 次/分 ceiling，實際依到期數，約為原 ~0.85 次/分的數倍）；無 key 部署零影響。可用上述 settings 下修。
+- OpenSpec: `openspec/changes/npc-agent-liveness-and-retry/`（新 capability `npc-agent-liveness`，strict validate 通過）。
+- 驗證：`npcAgentRunner.test.ts` 9/9（全域上限、staleness、min-interval、retry 成功/耗盡/parse_failed、enabled 閘門、既有測試）；full server suite **1320/1320 全綠**；`npm run build`（server+web）clean。
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.37 (autonomous-world-narration, 本機未 push)
+
+- 對症「世界感覺只在玩家開畫面才動」的**敘事層**根因（先前 v0.98.35/36 只修了 scheduler/tick cadence，沒碰旁白生成路徑）。診斷：世界骨架（NPC 移動/事件）本就每 5s tick 自主推進，但 `AmbientNarrator` 的氛圍旁白只在玩家觀看某區（area-view API）或最近觀看過（`tickRefresh`）時才生成 —— 沒人看的區域旁白永遠不更新，造成「我一開畫面它才開始有氣氛」。
+- 新增 `AmbientNarrator.backgroundRefresh`（`packages/server/src/sim/ambientNarrator.ts`）：runtime tick listener 在既有 `tickRefresh` 之後，對全 world tile（`MAP_TILES`）做 round-robin，每 `AMBIENT_BACKGROUND_REFRESH_PERIOD_TICKS`（=6，≈30s）最多挑「最久沒更新（含從未生成）」的 1 個 tile 主動刷新 —— **即使沒有玩家在看**，世界各區氛圍敘事持續演化。
+- 安全/成本保證：無 active AI provider（無 key 且無 OpenCode）→ no-op 零呼叫；單執行緒下每 period 最多 1 個 tile（不塞 event loop）；沿用 `inflight` 去重；recent-visitor tile 由 `tickRefresh` 負責、背景跳過；走既有 read-only `runRefresh`（不寫 EventLog、不下 Command，遵守 ARCHITECTURE.md）。無事件 shape 變動 → replay 零影響。
+- OpenSpec: `openspec/changes/autonomous-world-narration/`（proposal/design/specs/tasks，strict validate 通過；`living-world` 新增 requirement「Ambient 旁白 SHALL 自主背景演化」）。
+- 驗證：新測試 `ambientNarrator.test.ts` 8/8 綠（無 visitor 刷新、速率封頂、零成本、in-flight 去重、決定性挑選、round-robin）；`build:server` tsc 綠；full server suite 1311/1312（唯一失敗 `npc.test.ts` OpenCode 20ms-timeout failover 與本change無關，單獨重跑 11/11 綠）。
+- 待辦：本機 server log 觀察背景生成（保留待使用者方便時，避免重啟線上 pod）；push 保留批次處理（push main = rollout 重啟線上 pod）。
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.37
+
+- Fixed mobile nearby-shout timeout shown as `NPC 回應逾時` for abusive/rude shouts such as `廢物們`: local shout now recognizes rude speech before invoking AI and returns the existing grounded NPC reprimand immediately, still recording the player/NPC dialogue through the normal world-event path.
+- Raised the mobile local-shout client abort window from 18s to 45s so normal AI-backed replies do not get aborted just before the server-side AI timeout/fallback path can finish under live load.
+- Verified so far: RED router regression failed because rude local shout still waited for OpenCode; targeted server NPC router tests passed (`npc`; 11 tests).
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.36
+
+- Reworked the world tick loop to follow a fixed wall-clock schedule instead of adding a slow-tick HTTP cooldown. If the event loop is late, the runtime computes missed ticks from elapsed wall time and catches up one scheduler turn at a time, so the world no longer intentionally sleeps longer just because a tick was expensive or nobody has the page open.
+- Removed the 30–60s recovery-window behavior from v0.98.35. HTTP responsiveness now comes from yielding 2 seconds between overdue one-tick catch-up turns, not from making simulation time drift behind real time.
+- Verified so far: RED scheduler regression failed on the old cooldown/missing catch-up behavior; targeted server scheduler tests passed (`runtimeScheduler`; 4 tests).
+
+## 2026-06-30 — Handoff Snapshot @ v0.98.35
+
+- Fixed the world feeling like it only moves when the player opens the page: live probes showed `/healthz`, `/api/world`, and recent events stayed on the same tick for 36+ seconds even without browser interaction. Root cause was the slow-tick HTTP recovery scheduler imposing 120–240s cooldowns after slow ticks, which kept HTTP responsive but made the autonomous world appear paused.
+- Reduced slow-tick recovery to 30–60s (`elapsedMs * 1.5`, capped) so background simulation keeps progressing while still leaving an HTTP recovery window after expensive ticks.
+- Verified: RED scheduler regression failed on old 120/240s behavior; targeted server tests passed (`runtimeScheduler`, `runtimePhaseTiming`; 5 tests).
+
+## 2026-06-29 — Handoff Snapshot @ v0.98.34
+
+- Fixed the restored pixel Hub looking frozen: NPC sprites now keep a bounded display-only stroll/motion loop while their authoritative server presence remains visible. Routed/moving NPCs keep walking along their route vector; local outdoor NPCs get a small deterministic stroll around their server-projected sub-tile anchor. No world state or speech is invented.
+- Added pure Hub NPC motion-policy regressions and verified in a local browser that sprite positions changed over 3 seconds (`changedCount=8` on fixture Hub).
+- Verified so far: targeted web tests passed (`hubNpcMotion`, `hubCharacterVisualState`; 8 tests); web build passed.
+
+## 2026-06-29 — Handoff Snapshot @ v0.98.33
+
+- Kept the restored pixel Hub/母地圖 path, but removed the default world-goal/technology info wall from the first screen. The civilization/world-goal panel now stays collapsed behind `⚔ 文明面板`, including guest/read-only browsing, so the pixel map remains the main visual surface.
+- Added pure panel-visibility regressions for the default-collapsed state and explicit opt-in behavior.
+- Verified so far: targeted web test passed (`hubPanelVisibility`; 2 tests); web build passed.
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.32
+
+- Shipped npc presence/liveness hotfix plus snapshot/economy/distribution follow-up: `/api/npcs` and `/api/world` reuse tick-level snapshots; accepted `buy_goods` now transfers market `daily_supplies` to NPC inventory and spends household gold; world-law action planning rotates away from recently repeated non-critical actions; hub map now shows local outdoor NPCs plus recent speech bubbles, while child area maps keep moving outdoor NPCs visible instead of looking frozen.
+- Tests: targeted server tests passed (`npcWorldLawActionPlanner`, `goodsInventory`, `runtimeBuyGoodsEconomy`, `runtimeSnapshotCache`; 24 tests); targeted web tests passed (`npcProjection`, `areaSubtitles`; 18 tests); server build passed; web build passed.
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.29
+
+- Shipped npc-life-action-consequences: accepted `buy_goods` freeform actions rebuild into NPC `daily_supplies`; accepted `learn` actions rebuild into `learning` XP; accepted `invent` actions rebuild into world technology evidence. Boot/hydration filters now include freeform events for the affected projections.
+- Tests: targeted server projection/hydration tests passed; full server/web tests passed (`server 1298`, `web 148`); server/web builds passed; live health reached `v0.98.29`.
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.28
+
+- Shipped npc-life-action-ui-alignment: Timeline now labels `buy_goods`/`learn`/`invent` as shopping/learning/invention, and area NPC badges show recent committed freeform actions as採買/學習/發想 instead of idle.
+- Tests: OpenSpec strict validation passed; targeted web tests passed (`TimelinePage.test.ts`, `areaBehavior.test.ts`, `areaSubtitles.test.ts`); web build passed; server build passed; live health verified `version=0.98.28`, `tick=288497`.
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.27
+
+- Shipped npc-life-action-diversity: NPC world-law planner now emits validated `buy_goods`, `learn`, and `invent` freeform actions for food/procurement, learning/apprenticeship, and idea/prototype pressure instead of collapsing everything into build/work.
+- Tests: OpenSpec strict validation passed; targeted server tests passed (`npcWorldLawActionPlanner.test.ts`, `npcAgent.test.ts`); server build passed; web build passed; full repo tests passed (`server 1295`, `web 147`); live health verified `https://hunter.sisihome.org/healthz` => `version=0.98.27`, `tick=288485`.
+
 # Greed Island Progress Handoff
 
 This file records current development state for the next AI or human
 developer. Keep latest status at the top.
+
+---
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.26
+
+### Current Version
+`0.98.26` — Player Relationship Action Dialog Context：玩家打開 NPC 對話時，dialog header 也會顯示目前 relationship action context，包含「關係行動 · label」與 NPC 實際 utterance/detail。
+
+### What Changed
+- `packages/web/src/components/game/NpcDialog.tsx`
+  - 重用 `npcRelationshipActionMarker()`。
+  - 在 NPC dialog header 的 relationship / tier 下方渲染 relationship action marker。
+- `openspec/changes/player-relationship-action-dialog-context/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run version:sync` — pass（version synced: `0.98.26`）
+- `npx openspec validate player-relationship-action-dialog-context --strict` — pass
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaSubtitles.test.ts` — pass（18 tests）
+- `npm run build -w @greed-island/web` — pass
+- `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.26`, `ok=true`, tick `288402` during verification.
+
+### Continue
+- Continue world consequences: make relationship action kinds affect available quick intents / dialog prompt hints so NPCs under caution/affinity/reciprocity offer different conversation affordances.
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.20
+
+### Current Version
+`0.98.20` — Player Relationship Pressure Actions：玩家↔NPC 關係不只進 planner，現在會落到具體 world-law action。戒備會提醒/放話，親近會主動靠近聊天，交易互惠會保留合適工作/貨物給熟客。
+
+### What Changed
+- `packages/server/src/sim/npcWorldLawActionPlanner.ts`
+  - `NpcWorldLawActionPlannerInput` 新增 `intentEntries`。
+  - `player_relationship_caution` → `spread_rumor` warning action。
+  - `player_relationship_affinity` → `custom_social_scene` approach/check-in action。
+  - `player_relationship_reciprocity` → `work` trade-opportunity action。
+- `packages/server/src/sim/runtime.ts`
+  - runtime 將 `stack.entries` 傳進 world-law action planner，讓 replayed relationship pressure 進入 `NPC_FREEFORM_ACTION_PROPOSED`。
+- `packages/server/src/sim/npcWorldLawActionPlanner.test.ts`
+  - 新增三個 relationship pressure → concrete action regression。
+- `openspec/changes/player-relationship-pressure-actions/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run version:sync` — pass（version synced: `0.98.20`）
+- `npx openspec validate player-relationship-pressure-actions --strict` — pass
+- `npm run test -w @greed-island/server -- npcWorldLawActionPlanner.test.ts intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（45 tests）
+- `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.20`, `ok=true`, tick `288352` during verification.
+- GitHub Actions API still rate-limited during post-push status polling; deploy was verified by live health.
+
+### Next Slice
+- 把 relationship action 的結果投影到玩家可見 UI/API：附近動態、字幕、NPC 狀態標籤，讓「提醒同伴 / 主動靠近 / 留給熟客」能被玩家直接看見。
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.19
+
+### Current Version
+`0.98.19` — Player Relationship Complexity Planner：修正 v0.98.18 太偏「怨懟/戒備」的問題。玩家↔NPC 長期關係現在同時投影信任、怨懟、親近、熟悉、正/負互動、交易往來，planner 可產生戒備、親近、互惠三種 deterministic relationship pressure。
+
+### What Changed
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - relationship arc 新增 `affinity`、`positiveInteractionCount`、`negativeInteractionCount`、`tradeInteractionCount`。
+  - 正向互動會降低怨懟、增加親近；負向互動會提高怨懟、降低親近。
+  - `plannerBiasForNpc()` 現在聚合 `maxTrust`、`maxAffinity`、`maxFamiliarity`、正/負互動數與交易數。
+- `packages/server/src/sim/intentPlanner.ts`
+  - `player_relationship_caution`：高怨懟/低信任 → social caution。
+  - `player_relationship_affinity`：高信任 + 高親近/熟悉 → social approach/attachment。
+  - `player_relationship_reciprocity`：高信任 + 重複交易 → economic reciprocity。
+- `openspec/changes/player-relationship-complexity-planner/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run version:sync` — pass（version synced: `0.98.19`）
+- `npx openspec validate player-relationship-complexity-planner --strict` — pass
+- `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（38 tests）
+- `npm run build -w @greed-island/server` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.19`, `ok=true`, tick `288342` during verification.
+- GitHub Actions API hit unauthenticated rate limit while polling after CI run `28277902792` started; deployment was verified by live health.
+
+### Next Slice
+- 把這三種 relationship pressure 落到更具體 action：靠近/避開玩家、給折扣/加價、提醒同伴、主動提供幫助或拒絕協助。
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.18
+
+### Current Version
+`0.98.18` — Player Relationship Influences NPC Planner：玩家和 NPC 的長期關係不只影響 AI 回話，現在會進 deterministic intent planner。高怨懟或低信任的玩家歷史會讓 NPC 產生 `social` caution intent，未來行動選擇開始受玩家過往互動影響。
+
+### What Changed
+- `packages/server/src/sim/intentPlanner.ts`
+  - `computeIntentStack()` 新增 `PlayerRelationshipPlannerBias` input。
+  - 當 `maxResentment >= 65` 或 `minTrust <= 30` 時，產生 `social` caution intent，reason 含 `player_relationship`。
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - 新增 `plannerBiasForNpc()`，由 replayed player↔NPC arcs 聚合 `maxResentment`、`minTrust`、`interactionCount`。
+- `packages/server/src/sim/runtime.ts`
+  - deterministic runtime planning 與 NPC agent legal-option generation 都讀取 player relationship planner bias。
+- `openspec/changes/player-relationship-influences-npc-planner/`
+  - 新增 proposal / tasks / spec。
+
+### Verified
+- `npm run version:sync` — pass（version synced: `0.98.18`）
+- `npx openspec validate player-relationship-influences-npc-planner --strict` — pass
+- `npm run test -w @greed-island/server -- intentPlanner.test.ts playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（36 tests）
+- `npm run build -w @greed-island/server` — pass
+- GitHub Actions CI `28277532696` — pass
+- GitHub Actions Deploy Dev `28277569443` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.18`, `ok=true`, tick `288288` during verification.
+
+### Next Slice
+- 讓 `social` caution intent 實際落到更具體的世界行動：拒絕幫忙、避開玩家、通知同伴、或提高交易門檻。
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.17
+
+### Current Version
+`0.98.17` — Player Dialogue Long-term Relationship Consequences：玩家對 NPC 說過的話現在會形成可重播的長期關係投影，後續 NPC AI 對話會讀到信任、怨懟、熟悉度、互動次數與最近玩家訊息，讓回應自然反映累積後果。
+
+### What Changed
+- `packages/server/src/projections/playerNpcRelationshipProjection.ts`
+  - 新增 `PlayerNpcRelationshipProjection`，從 `PLAYER_NPC_DIALOGUE` EventLog 重建 `(playerAccountId, npcId)` 關係弧。
+  - 追蹤 `trust`、`resentment`、`familiarity`、`interactionCount`、`lastIntent`、`lastPlayerMessage`、`lastTick`。
+- `packages/server/src/sim/runtime.ts`
+  - live fanout、小 log boot、large-log deferred hydration 都接上 player↔NPC relationship projection。
+  - 新增 `getFormattedPlayerRelationshipContext()` 供對話 prompt 讀取。
+- `packages/server/src/npcs/aiDialog.ts` / `packages/server/src/http/npc.ts`
+  - direct interact 與 local shout 的 AI prompt 會注入 EventLog 重放出的長期關係摘要。
+  - prompt 明確要求低信任/高怨懟時保留警覺，高信任時較願意提供資訊。
+- `openspec/changes/player-dialogue-long-term-relationship-consequences/`
+  - 新增 proposal / tasks / spec。
+- Version bump：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.17`。
+
+### Verified
+- `npx openspec validate player-dialogue-long-term-relationship-consequences --strict` — pass
+- `npm run test -w @greed-island/server -- playerNpcRelationshipProjection.test.ts npc.test.ts` — pass（12 tests；含既有 local-shout OpenCode regressions）
+- `npm run build -w @greed-island/server` — pass
+- GitHub Actions CI `28277179070` — pass
+- GitHub Actions Deploy Dev `28277217148` — pass
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.17`, `ok=true`, tick `288281` during verification.
+
+### Next Slice
+- 把這個長期關係投影接到 deterministic planner：同一個 world state 下，高怨懟玩家觸發的 NPC 應更可能拒絕、避開、警戒或找人抱怨。
+---
+
+## 2026-06-27 — Handoff Snapshot @ v0.98.16
+
+### Current Version
+`0.98.16` — OpenCode Local Shout Timeout Strategy：修正 v0.98.15 把「整條 local shout AI provider chain」和「單一 OpenCode endpoint 呼叫」共用 6 秒 timeout 的問題。現在附近發話整體最多等 15 秒、每個 OpenCode endpoint 最多等 8 秒，第一個 endpoint 慢或壞掉時會嘗試下一個 endpoint；前端 local shout abort 提高到 18 秒，避免 browser 比 server fallback 更早取消。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - `LOCAL_SHOUT_AI_TIMEOUT_MS` 調整為 `15_000`，作為附近發話整體 AI budget。
+  - 新增 `OPENCODE_ENDPOINT_TIMEOUT_MS = 8_000`，拆開 OpenCode endpoint timeout 與 local shout outer guard。
+  - `createNpcRouter()` 支援測試用 `openCodeEndpointTimeoutMs` 覆寫。
+  - local shout 與 direct `/npc/:npcId/interact` 都將 OpenCode endpoint timeout 傳入 AI provider chain，避免壞 endpoint 用 60 秒 default 卡住互動。
+- `packages/server/src/npcs/openCodeClient.ts`
+  - per-call `timeoutMs` 現在是單一 OpenCode endpoint 的總 deadline，涵蓋 create-session + send-message，不再讓一個 endpoint 各吃一次 timeout。
+- `packages/server/src/http/npc.test.ts`
+  - 新增 regression：第一個 OpenCode endpoint message timeout 後，第二個 endpoint 成功時仍回 `replySource: "ai"`。
+  - regression 也覆蓋 first endpoint create-session 幾乎吃完整個 endpoint budget 的情境，防止 outer local-shout budget 先於 failover 觸發。
+  - 更新慢 provider regression：endpoint timeout 後 server 在 mobile/client timeout 前回 fallback。
+  - 測試 close helper 會關閉 test HTTP connections，避免 aborted mock request 被 keep-alive idle timeout 拖慢。
+- `packages/web/src/pages/AreaPage.tsx`
+  - nearby local shout client timeout 改為 `18_000ms`，高於 server 15 秒 fallback budget。
+- Version bump：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.16`。
+
+### Verified
+- `npm install` — pass（fresh worktree dependency install；`npm audit` 既有 8 vulnerabilities remains known non-blocking）
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（10 tests；OpenCode endpoint failover + slow provider fallback regressions included）
+- `npm run version:sync` — pass（version synced: `0.98.16`）
+- `npm run build -w @greed-island/server` — pass
+- `npm test` — pass（server 1280 tests + web 141 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass（Git line-ending warnings only）
+- Reviewer gate — pass（separate reviewer found and rechecked the endpoint-deadline fix; final review: no findings）
+- GitHub Actions CI `28259571138` — pass（OpenSpec validate + build/typecheck/test；Node.js 20 deprecation annotation remains known non-blocking）
+- GitHub Actions Deploy Dev `28259664683` — pass（Docker build/push + desktop restart/smoke；Node.js 20 deprecation annotation remains known non-blocking）
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.16`, `ok=true`, tick `287976` during verification.
+- Provider health after DNS fix:
+  - `http://100.73.52.37:4096/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `https://provider-amd.sisihome.org/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `https://provider-home.sisihome.org/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+  - `http://100.83.112.20:4098/global/health` — `200`, `{"healthy":true,"version":"1.15.5"}`
+- Live Greed provider settings patched in `/app/data/greed-island.sqlite`:
+  - `opencode_servers=http://100.73.52.37:4096\nhttp://100.83.112.20:4098`
+  - `opencode_base_url=http://100.73.52.37:4096`
+  - `provider_priority=opencode,gemini`
+- Live local shout smoke through deployed server — `200` in `12508ms`, `replySource="ai"`, `aiError=null`, `worldEventId=event_a2fa12a991e8a5dbf7e20f36897d04a3`, reply `聽到了，很清楚。潮鳴市的脈網這段時間很穩，你的紋卡訊號沒問題。`
+
+### Next Slice
+- Monitor live local shout latency now that `provider-amd` direct is first and provider-home direct is backup; if responses often exceed 15 seconds, tune prompt length/provider order rather than disabling AI.
+- Keep Gemini fallback unavailable noted until active keys are restored; current live route depends on OpenCode endpoints.
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.15
+
+### Current Version
+`0.98.15` — Local Shout AI Timeout Guard 已部署到 dev/live。修正 v0.98.14 把附近發話接回 AI 後，手機前端 8 秒 timeout 會先於慢 OpenCode 回覆發生，導致「NPC 回應逾時」。`POST /api/npc/local-shout` 現在對整條 AI provider chain 最多等 6 秒；超時就回到 v0.98.13 grounded fallback，保留 AI 可用時的回覆，但不讓手機 UI 先失敗。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - local shout 加入 `LOCAL_SHOUT_AI_TIMEOUT_MS = 6_000`，包住整條 AI provider chain。
+  - `createNpcRouter()` 支援測試用 `localShoutAiTimeoutMs` 覆寫。
+  - local shout 呼叫 `generateAiReply()` 時同時傳入 OpenCode timeout，讓 server 在前端 8 秒 timeout 前 fallback。
+- `packages/server/src/npcs/openCodeClient.ts`
+  - OpenCode generation 支援 per-call `timeoutMs`。
+  - message fetch + response body parsing 都受 AbortController timeout 保護；AbortError 會明確回 `OpenCode send-message timeout after ...ms`。
+- `packages/server/src/npcs/aiDialog.ts` / `aiProvider.ts`
+  - 將 local shout 的 OpenCode timeout option 傳到 provider client。
+- `packages/server/src/http/npc.test.ts`
+  - 新增慢 OpenCode mock：message endpoint 不回應時，local shout 仍在 1 秒內回 `replySource: "fallback"`。
+
+### Verified
+- User-path repro before fix: live `POST /api/npc/:id/interact` over `https://hunter.sisihome.org/api` succeeded but took `86,621ms`, confirming provider works but AI path can exceed mobile UX timeout.
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（9 tests；slow OpenCode local-shout fallback regression included）
+- `npm run build -w @greed-island/server` — pass
+- `npm test` — pass（server 1279 tests + web 141 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- GitHub Actions CI `28245805348` — pass（OpenSpec validate + build/typecheck/test；Node.js 20 deprecation annotation remains known non-blocking）
+- GitHub Actions Deploy Dev `28245908417` — pass（Docker build/push + desktop restart/smoke；Node.js 20 deprecation annotation remains known non-blocking）
+- Live health `https://hunter.sisihome.org/healthz` — `version=0.98.15`, `ok=true`, tick `287776` during verification.
+- Live local shout smoke over `https://hunter.sisihome.org/api/npc/local-shout` — `200` in `7022ms`, `replySource="fallback"`, `aiError="Local shout AI timeout after 6000ms"`, `worldEventId=event_83bf86ea596d1e1c0ec9b94aff6cb729`.
+- Live logs after smoke: `greed-island-server` showed expected `[npc] local-shout AI dialog failed, using fallback Local shout AI timeout after 6000ms`; `provider-home` had no new `ConfigInvalidError` / config errors.
+
+### Next Slice
+- 若仍想提升體驗，可把 local shout pending 文案改成「正在等附近 NPC 回應…」，但根因修正是 server-side timeout/fallback，不是只改 UI。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.14
+
+### Current Version
+`0.98.14` — AI-backed Local Shout：修正 `local-shout` 實際沒有接 AI 的問題。`POST /api/npc/local-shout` 現在是 async；有 OpenCode/Gemini provider 時會呼叫 `generateAiReply()`，回傳 `replySource: "ai"`，只有 provider 失敗或沒設定才掉到 identity-grounded fallback。新增 mock OpenCode regression，證明 nearby shout 真的打到 AI message endpoint。
+
+### What Changed
+- `packages/server/src/http/npc.ts`
+  - `POST /api/npc/local-shout` 改為 async。
+  - local shout 先選單一同區 responder，再用該 NPC profile + player message + relation/history 建 `AiDialogContext`。
+  - AI 成功時使用 sanitize 後台詞、AI intent、`replySource: "ai"`。
+  - AI unavailable/fail 才使用 v0.98.13 identity-grounded fallback。
+  - `PLAYER_NPC_DIALOGUE` event 仍只允許 greet/ask/trade；AI 判 leave 時事件 intent 映射為 ask，避免 schema invalid。
+- `packages/server/src/http/npc.test.ts`
+  - 新增 `uses AI for local shout when an AI provider is configured`，用本機 mock OpenCode server 驗證 message endpoint 被呼叫一次。
+
+### Verified
+- `npm run test -w @greed-island/server -- npc.test.ts`
+- `npm run build -w @greed-island/server`
+
+### Next Slice
+- 若還覺得慢，下一步不是再改罐頭，而是讓前端 pending 狀態顯示「正在請星沉回應…」，並在 AI timeout 時明確顯示 fallback reason。
+
+### Current Version
+`0.98.13` — Grounded Local Shout Fallback：修正 v0.98.12 只是字幕去重的治標問題。`POST /api/npc/local-shout` 在無 AI / AI fallback 時不再呼叫共用 `pickLine()` 罐頭（例如「夜市那條街，問阿鬼…」），改用 `localShoutFallbackLine()` 依 responder 的 NPC 名字、角色、玩家喊話摘要、tile、關係熟悉度產生 deterministic 回覆，從源頭降低 clone speech。
+
+### What Changed
+- **Root-cause fallback fix**：local shout fallback 不再使用共用 rumor line pool。
+- **Grounded response**：fallback 回覆包含 responder identity/role/player shout/tile/familiarity。
+- **Deterministic variants**：仍以 tick / interactionCount / trust / npc id 長度選 deterministic variant，保留可 replay/debug。
+- **Regression test**：local shout fallback 測試要求回覆包含 NPC 名字與角色，且不含「阿鬼」共用罐頭。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.13`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（7 tests）
+- `npm run build -w @greed-island/server` — pass
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.12
+
+### Current Version
+`0.98.12` — Clone Subtitle Dedup：修正附近對話字幕仍可能顯示多位 NPC 講完全相同一句（例如「夜市那條街，問阿鬼，他什麼都聽得見。」）。字幕去重現在對 NPC/system 行以文字內容去重，不再用 speaker+text；玩家行仍保留 speaker+text，避免不同玩家同句被誤刪。
+
+### What Changed
+- **Cross-speaker NPC dedupe**：`dedupeSubtitleLines()` 對非玩家字幕用 `tone + text` 作 key。
+- **Player-safe dedupe**：玩家字幕仍用 `tone + speaker + text`。
+- **Regression test**：新增 clone NPC speech 測試，覆蓋海石/星沉同句只留一行。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.12`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.11
+
+### Current Version
+`0.98.11` — Local Shout Responder Rotation：後端 `POST /api/npc/local-shout` 不再永遠挑 candidate 第一位 NPC。現在同區可回應 NPC 會依玩家對該 NPC 的 `lastInteractionTick`、`interactionCount` 排序，優先讓最近沒回過的人接話，降低連續喊話一直同一人、同一種 fallback 句型的重複感。
+
+### What Changed
+- **Responder rotation**：local shout 選擇 responder 時避開剛回答過玩家的 NPC。
+- **Deterministic ordering**：同分時保留 candidate 原順序，仍可 replay/debug。
+- **Regression test**：新增「剛回過的 NPC 不應優先接下一次附近發話」測試。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.11`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（7 tests）
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.10
+
+### Current Version
+`0.98.10` — Server-side Local Shout：新增 `POST /api/npc/local-shout`。前端 inline「附近發話」現在只送一次 local shout request，後端依 `tileId + candidateNpcIds` 選一位合法、活著、同區 NPC 回應，並提交 replayable `PLAYER_NPC_DIALOGUE` world command/event。這取代 v0.98.9 的前端單一 responder 熱修，避免前端假群聊與多請求 fan-out。
+
+### What Changed
+- **Server local shout endpoint**：新增 `/npc/local-shout`，驗證 `tileId/candidateNpcIds/message`，後端選 responder。
+- **Replayable event**：local shout 仍走 `PLAYER_NPC_DIALOGUE` command/event，NPC memory、player relation、personal event 同步寫入。
+- **Frontend integration**：AreaPage 改呼叫 `api.npcLocalShout()`，不再直接打 `/npc/:id/interact`。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.10`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npc.test.ts` — pass（6 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.9
+
+### Current Version
+`0.98.9` — Stable Local Shout：修正附近發話慢、重複、失敗洗版。前端不再用三次 `/npc/:id/interact` 假裝群聊；一次發話只送第一順位/最近的可用 NPC，避免三個 AI 回同型句與任一失敗拖垮整批。字幕仍保留「你」的即時喊話，但最多只顯示一位 NPC 的 pending/reply。失敗時改成單一友善系統訊息，不再逐人顯示 `發話失敗：Load failed`。
+
+Also includes v0.98.8 behavior: nearby subtitles no longer treat `cognitiveLine` inner-state summaries as spoken dialogue, so NPCs stop repeating「觀察眼前局勢，正在盤算生計、資源與下一個機會」。
+
+### What Changed
+- **Single responder**：inline 附近發話不再 fan-out 3 個 single-NPC API request；只送第一順位/最近 NPC。
+- **No repeated pending replies**：`optimisticLocalShoutLines` 最多產生一位 NPC pending/reply，避免三人同時 `……` 或同型句。
+- **Timeout**：inline speech request 加 8s timeout，避免手機 UI 卡太久。
+- **Friendly failure**：失敗只顯示單一「NPC 暫時沒有回應，稍後再試。」或逾時訊息，不再暴露 `Load failed`。
+- **No cognition subtitles**：`ambientNpcChatterLines` 不再 fallback 到 `cognitiveLine.zh`。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.9`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Notes / Next
+- 這是熱修。真正的群體喊話應改為 server-side local shout command/event，讓後端選 1–2 位附近 NPC 回應；不要前端 fan-out 多個 single-NPC interact request。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.7
+
+### Current Version
+`0.98.7` — Behavior Plausibility Projection：把「行為合理性」從雨天特例抽成共用區域呈現規則。街景與附近字幕現在先判定 NPC 是否社交可用：移動中、睡覺、室內、死亡 NPC 不再被當成站在玩家旁邊可聊天/可字幕發聲的人；具體工作/交易/巡邏/表演等行為仍優先於 idle 人群顯示。
+
+### What Changed
+- **Generic social availability rule**：新增 `isAreaSociallyAvailableNpc()`，集中判斷區域街景/附近字幕可用 NPC。
+- **Not weather-only**：雨天避雨只是其中一個 affordance；核心規則改為 activity/presence first。
+- **No sleeping chatter**：sleep NPC 的 cognition 不再進附近 ambient subtitle，避免「睡覺的人在旁邊講話」。
+- **No travelling pileups**：move NPC 仍只走 hub travel route projection，不塞進 child area local social scene。
+- **Regression tests**：`npcProjection.test.ts` 覆蓋 socially unavailable NPC 排除；`areaSubtitles.test.ts` 覆蓋 sleep cognition 不當 ambient speech。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.7`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 141 tests）
+- `npm run test -w @greed-island/web -- npcProjection.test.ts areaSubtitles.test.ts` — pass（16 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.6
+
+### Current Version
+`0.98.6` — Rainy Crowd & Chatter Sanity Fix：修正區域畫面在驟雨中仍塞滿大量 NPC、NPC 不撐傘/不避雨、附近字幕用罐頭 greeting 造成多人講一樣話的不合理感。雨天街景會降載顯示室外人群、顯示避雨/雨具狀態，並明示街景只顯示部分人；ambient 字幕只採用近期自主發話或 cognition，不再拿靜態 greetLine 充當多人同時發言。
+
+### What Changed
+- **Storm crowd cap**：新增 `areaVisibleNpcs`；區域街景平時最多顯示 24 位，驟雨最多顯示 12 位，避免 600x400 地圖塞 60+ 人。
+- **Move/presence rule preserved**：仍以 `areaOutdoorNpcs` 排除 `activity=move` 與室內 NPC；街景 cap 只影響顯示，不改 EventLog/world truth。
+- **Speech-aware priority**：街景降載時優先保留有 `recentUtterance`、`cognitiveLine`、非 idle 行為的 NPC，避免把正在說話的人藏掉。
+- **Rain affordance**：驟雨中 idle NPC sprite 顯示 `☂️ / 正在避雨`，地圖下方提示「多數人進騎樓或室內避雨」。
+- **No canned ambient clones**：`ambientNpcChatterLines` 不再 fallback 到靜態 `greetLine`，並去除相同文字，避免三個人同時講一樣罐頭句。
+- **UI crowd disclosure**：NPC tab 與場景說明顯示 `可見/總室外` 人數，避免玩家以為世界實際只剩可見那幾位。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.6`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 141 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts npcProjection.test.ts` — pass（16 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先修玩家可見的合理性；更深層的「為什麼 64 位 NPC 同時被 server location 歸到 t_central」仍應在後續從 movement/settlement planner 做世界規則層修正。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.5
+
+### Current Version
+`0.98.5` — Local Shout & Subtitle Dedupe：字幕輸入改成「向附近 NPC 喊話」，不再鎖死單一目標；附近多位 NPC 會一起收到玩家發話並各自回應；字幕 feed 會去除 optimistic echo / committed events 造成的重複行，並補上 NPC 自主 utterance 與附近 ambient chatter。
+
+### What Changed
+- **Local shout audience**：新增 `nearbySpeechRecipients`，優先選玩家身邊 NPC，最多 3 位；沒有距離資料時 fallback 到同區 1 位。
+- **Multi-NPC optimistic transcript**：新增 `optimisticLocalShoutLines`，一次顯示一行「你」與多位 NPC pending/reply 行。
+- **Subtitle dedupe**：新增 `dedupeSubtitleLines`，避免同一句玩家發話或 NPC 回覆在 optimistic / SSE / EventLog 追上後重複出現。
+- **Real speech sources**：字幕 feed 支援 `NPC_FREEFORM_ACTION_PROPOSED.proposal.utterance`，沒有近期事件時也會用附近 NPC 的 `recentUtterance` / greeting / cognitive line 當 ambient chatter。
+- **UI copy**：手機上改顯示 `向附近 N 人發話` / `向附近 N 人說話…`，不再誤導成只能對單一 NPC 私訊。
+- **Regression coverage**：`areaSubtitles.test.ts` 覆蓋 freeform utterance、ambient chatter、local shout audience、多 NPC optimistic lines、dedupe。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.5`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 140 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這版仍透過既有 `/api/npc/:id/interact` 對多位 NPC fan-out；每位 NPC 都會產生自己的 replayable `PLAYER_NPC_DIALOGUE` event，但前端字幕會把重複的玩家發話壓成一行。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.4
+
+### Current Version
+`0.98.4` — Mobile Subtitle Send Feedback Fix：修正手機上字幕發話看起來「沒用」的體感；送出後會立即在字幕 feed 顯示「你」的訊息與 NPC 等待回覆，成功後替換成真實 NPC 回覆，失敗也直接在字幕行顯示錯誤；送出按鈕不再只顯示省略號。
+
+### What Changed
+- **Immediate subtitle echo**：玩家按「發話」後先插入 optimistic「你：訊息」與「NPC：……」，避免等待 API 時 UI 像沒反應。
+- **Response replacement**：NPC API 成功後用真實 `worldEventId` / tick / NPC 回覆替換 pending 字幕。
+- **Visible failure state**：API 失敗時把 pending NPC 行改成「發話失敗：...」，並保留 toast/error。
+- **Clearer mobile button**：busy label 從 `…` 改成 `發話中`，手機上不會誤以為按鈕沒作用。
+- **Regression coverage**：`areaSubtitles.test.ts` 新增 optimistic speech line 測試。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.4`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts` — pass（4 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先修發話回饋；若 live API 偶發慢 tick，字幕至少會先顯示玩家已送出與等待回覆。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.3
+
+### Current Version
+`0.98.3` — Area Dialogue Subtitles：區域地圖下方新增「附近對話字幕」即時紀錄，玩家走近 NPC 時可看到附近 NPC 對談、爭執、玩家/NPC 對話回合，也能直接在字幕欄對附近 NPC 發話。
+
+### What Changed
+- **Subtitle feed helper**：新增 `areaSubtitles`，把 `NPC_INTERACT` 與 `PLAYER_NPC_DIALOGUE` event 轉成玩家可讀的字幕行，支援 rule-engine `payload.data`。
+- **Inline speech input**：AreaPage 新增字幕輸入欄；送出後呼叫既有 `/api/npc/:id/interact`，因此玩家發話仍提交 replayable `PLAYER_NPC_DIALOGUE` world event。
+- **Nearby target selection**：字幕欄優先對玩家身邊 NPC 發話；沒有附近 NPC 時提示靠近 NPC。
+- **Optimistic transcript**：發話成功後立即把「你」與 NPC 回覆補到字幕 feed，等 SSE/event refresh 追上。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.3`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 134 tests）
+- `npm run test -w @greed-island/web -- areaSubtitles.test.ts areaSocial.test.ts areaBehavior.test.ts` — pass（9 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先接同區/附近字幕與玩家發話入口；下一刀可把 subtitle feed 改成 server-side area conversation projection，避免只依賴目前 world-state recent events window。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.2
+
+### Current Version
+`0.98.2` — Behavior-Aligned Area UI：Area UI 現在直接把 NPC/動物行為翻成玩家看得懂的狀態；NPC 吃飯顯示「正在吃飯」，NPC_INTERACT argue 會顯示「正在爭執」，動物依 ecology intent 顯示「覓食中 / 狩獵中 / 遷徙中 / 成群移動」。
+
+### What Changed
+- **NPC behavior badges**：新增 `areaBehavior` helper，NPC list 以 event-aware badge 顯示當下行為；`eat` 不再只靠泛用 intent line，`argue` 會被近期 `NPC_INTERACT` 事件覆蓋成衝突狀態。
+- **Map sprite icon alignment**：AreaScene NPC sprite 的右上角圖示支援 behavior override；爭執顯示 💢，吃飯顯示 🍚。
+- **Animal behavior labels**：場景分頁新增「動物行為證據」；動物 sprite 與群聚 label 顯示 ecology intent，狩獵/遷徙不再套吃草 bob。
+- **Regression coverage**：新增 `areaBehavior.test.ts`，覆蓋吃飯、爭執、動物 intent 三種 UI 映射。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.2`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/web -- areaBehavior.test.ts areaCharacterVisualState.test.ts hubEcology.test.ts` — pass（13 tests）
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先把 UI 讀法對齊權威行為資料；下一步可把更多 server event types（吃飯消耗資源、交易、巡邏、受傷）接成同一套 `BehaviorBadge` surface。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.1
+
+### Current Version
+`0.98.1` — Player Dialogue World Consequences：玩家與 NPC 對話不再只是私有聊天紀錄；每次 `/api/npc/:id/interact` 會提交 replayable `PLAYER_NPC_DIALOGUE` 事件，並讓 runtime 將該事件套成短期 NPC intent override，NPC 接下來的行動會被玩家對話拉向社交/交易脈絡。
+
+### What Changed
+- **Replayable player dialogue event**：新增 `PLAYER_NPC_DIALOGUE` command/event schema，包含 player、npc、tile、intent、玩家訊息、NPC 回覆、信任變化與 narration。
+- **Router integration**：NPC interact endpoint 仍保留 per-player private history，但同時把對話送入 LivingWorld RuleEngine / EventLog；response 回傳 `worldEventId`。
+- **Runtime consequence**：`PLAYER_NPC_DIALOGUE` publish 後會更新 NPC speech bubble，並設定短期 `intentOverride`；`trade` 導向 economic，`greet`/`ask` 導向 social。
+- **Regression coverage**：新增 router 測試證明 interact 會提交 world event；新增 runtime 測試證明 event 會改變 NPC intent override。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.1`.
+
+### Verification Evidence
+- `npm test` — pass（server 1275 tests + web 128 tests）
+- `npm run test -w @greed-island/server -- npc.test.ts runtimeIntentResolution.test.ts` — pass（13 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先讓玩家對話進入 EventLog 並影響短期 NPC 行動。下一刀可把 `PLAYER_NPC_DIALOGUE` 接到更長期的 NPC cognition / relationship projection，讓反覆對話真正改變性格、信念、關係與人生目標。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.98.0
+
+### Current Version
+`0.98.0` — NPC Interaction Visibility：把「可以跟誰互動」和「NPC 彼此真的有社交事件」直接放到區域場景；NPC 分頁不再因距離把同區 NPC 全部鎖死，登入後可直接點名字對話。NPC_INTERACT 事件也會在場景卡片顯示成最近人際互動證據。
+
+### What Changed
+- **Player interaction affordance**：Area NPC list 登入後可直接點任何同區室外 NPC 開啟對話，不再只靠地圖 proximity click；附近 NPC 仍標示「身邊，可地圖點擊」。
+- **Social proof surface**：場景分頁新增「NPC 互動證據」，把最近 `NPC_INTERACT` 事件格式化顯示，避免世界看起來只有一群人在走路。
+- **Social cadence tuning**：NPC 同 tile 社交事件機率從 `0.08` 提到 `0.25`、互動距離從 2 格放寬到 5 格，讓 live 玩家更常看見交談/爭執事件。
+- **Regression coverage**：新增 `areaSocial.test.ts`，覆蓋 NPC_INTERACT 辨識、姓名格式化、narration 優先。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.98.0`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- npcEngine.test.ts runtimePresence.test.ts` — pass（58 tests）
+- `npm run test -w @greed-island/web -- areaSocial.test.ts` — pass（3 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+
+### Known Notes
+- 這版先把互動入口與社交證據露出來。下一刀應做「室內 NPC 彼此互動」與「對話後改變 NPC 計畫/關係」的更深層世界因果，而不是只顯示社交事件。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.97.9
+
+### Current Version
+`0.97.9` — NPC Workplace Occupancy + Chronicle Naturalization：修正「建築有職缺但 NPC 沒人在工作」的世界畫面斷裂；非 owner NPC 只要在同 tile 做 `work` / `trade`，會被導入有 hiring slot 或相符用途的建築 occupant，讓職缺/建築/人物畫面接起來。同時把編年史 freeform 主文改得更像事件，不再反覆解釋「不是被排程推著走」。
+
+### What Changed
+- **BuildingRuntime root cause fix**：`resolveNpcBuildingId()` 可在 building API view 中把工作/交易中的非 owner NPC 導到同 tile 的工作建築；simulation hot paths 仍保留戶外輸入，避免阻斷採集、建設、家庭經濟等事件鏈。
+- **Occupant metadata**：非 owner workplace occupant 會帶第一個 hiring shift，UI 可看出不是空建築。
+- **Chronicle copy**：NPC freeform accepted motivation 縮短成系統驗證說明；主敘事由 planner 產出較自然事件句型。
+- **Regression coverage**：新增 building runtime 測試，先重現「非 owner NPC 在職缺建築外閒晃」再修正。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.9`.
+
+### Verification Evidence
+- `npm test` — pass（server 1273 tests + web 125 tests）
+- `npm run test -w @greed-island/server -- buildingRuntime.test.ts runtimeExpansion.test.ts runtimeGoodsInventory.test.ts buildingsRouter.test.ts` — pass（10 tests，覆蓋前一版 CI failure）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版先讓「有人正在建築裡工作」出現在權威 building occupant surface。下一刀應把職缺容量、NPC 職責/技能、班表與薪資投影成更完整的 NPC employment economy，而不是只用 activity 對建築用途配對。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.97.8
+
+### Current Version
+`0.97.8` — Slow Tick Phase Timing Observability：在 scheduled simulation tick 內加入 phase-level timing，slow tick warning 會列出最慢 phase，讓下一刀能根據 live log 鎖定真正卡 HTTP 的同步段。
+
+### What Changed
+- **Server runtime**：`runTick()` 現在回傳 `TickPhaseTiming[]`，scheduled loop 在 tick 超過 cadence 時把 slow phase summary 接到 warning。
+- **Measured phases**：`plan-commands`、`rule-evaluation`、`append-events`、`npc-sqlite-projections`、`projection-fanout`、`tick-listeners`。
+- **Pure helper**：新增 `summarizeSlowTickPhaseTimings()`，threshold 過濾、duration desc 排序、最多顯示 6 段。
+- **Tests**：新增 `runtimePhaseTiming.test.ts`，先 RED 後 GREEN 覆蓋排序與 threshold 行為。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.8`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimePhaseTiming.test.ts runtimeScheduler.test.ts` — pass（5 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- 這版是 observability slice，不直接拆 chunk。下一步應該先看 live slow tick warning 的 `slow phases:`，再對最慢段做 yield/chunk 或 fanout 降載。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.97.7
+
+### Current Version
+`0.97.7` — Long Tick Data Timeout Mitigation：v0.97.6 live 仍可重現資料 API 在 long tick 期間整批 8 秒 timeout。這版把 slow-tick 後的 HTTP recovery window 拉長，並把 world-state 前端 timeout 提高，優先讓手機 UI 拿到真實資料，不再太早掉 fallback / incomplete state。
+
+### Live Evidence Before Fix
+- v0.97.6 live batch probe 每 5 秒打 `/api/version`、`/api/world`、`/api/map`、`/api/npcs`、`/api/events`、`/api/areas`。
+- 多數輪次 < 1s，但撞到 long tick 時出現連續輪次 8s timeout；最嚴重一輪 6/6 endpoints 全 timeout。
+- 同一批 endpoint 等 long tick 結束後可在約 2.5s 內回正確資料，表示資料仍在，問題仍是 Node event loop 被同步 tick 卡住。
+
+### What Shipped
+- **Longer slow-tick cooldown**：`computeNextTickDelayMs()` slow tick cooldown 從 30–60s 改成 120–240s，明確降低玩家刷新撞到下一輪 long tick 的機率。
+- **Longer app-level world refresh timeout**：`MOBILE_LOAD_TIMEOUT_MS` 從 45s 提高到 120s。
+- **Regression coverage**：更新 scheduler cooldown 與 resilientLoad timeout tests。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.7`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- runtimeScheduler.test.ts` — pass（3 tests）
+- `npm run test -w @greed-island/web -- resilientLoad.test.ts` — pass（4 tests）
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- This is still a mitigation, not the permanent architecture fix. Permanent fix remains phase-level timing + splitting/yielding the actual slow tick phases so HTTP can run during simulation work.
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.97.6
+
+### Current Version
+`0.97.6` — Hub Map Action Placement Hotfix：修正 Hub 行動版地圖互動按鈕被「世界目標與科技」面板擠到下方的反直覺排序。玩家選到街區後，`目前位置 / 進入 {name}` 與 `文明面板` 都緊貼地圖下方。
+
+### What Shipped
+- **Map-adjacent action row**：`HubPage` 將 `進入目前位置` 與 `文明面板` 移到 `PhaserGame` 後、`WorldCivilizationPanel` 前。
+- **Mobile-friendly controls**：行動版維持直向排列與 44px+ 觸控高度；桌面版改為同列排列。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.6`.
+
+### Verification Evidence
+- `npm run build -w @greed-island/web` — pass（Vite chunk-size warning remains known non-blocking）
+- `npm run build -w @greed-island/server` — pass
+- `git diff --check` — pass
+
+### Known Notes
+- 這是 UI placement hotfix；不改地圖狀態、API、simulation 或 EventLog。
+
+---
+
+## 2026-06-26 — Handoff Snapshot @ v0.97.5
+
+### Current Version
+`0.97.5` — Tick Projection SQLite Batching：延續 v0.97.4 的 slow tick / HTTP timeout hotfix，開始修 tick 本身的同步阻塞來源。每輪 committed events fanout 到 NPC memory / relationship SQLite 投影時，改成單一 transaction，避免逐 event/row autocommit 把 Node.js event loop 卡住。
+
+### What Shipped
+- **Shared transaction primitive**：`SqliteEventStore.runInTransaction()`，讓同一個 SQLite connection 上的 projection writes 可被 runtime 批次包住。
+- **Batched NPC projection fanout**：新增 `projectCommittedNpcSqliteStores()`，把 `npcMemory.project()`、`npcMemory.projectWithLocality()`、`npcRelationships.project()` 對同一批 committed events 的寫入包成一個 transaction。
+- **Both commit paths covered**：regular simulation tick fanout 與 `publishCommittedEvents()` 都走同一個 batching helper。
+- **Determinism preserved**：仍照 committed event order 投影；既有 memory `INSERT OR IGNORE` 與 relationship upsert 語意不變，只改 SQLite transaction boundary。
+- **Version bump**：workspace/server/web package versions and server/web `APP_VERSION` updated to `0.97.5`.
+
+### Verification Evidence
+- `npm run test -w @greed-island/server -- eventStoreTransaction.test.ts runtimeBudget.test.ts runtimeScheduler.test.ts` — pass（12 tests / 3 files）
+- `npm run build -w @greed-island/server` — pass
+- `npm run build` — pass（server + web；Vite chunk-size warning remains known non-blocking）
+- `npm run openspec:check` — pass（15 active changes）
+- `git diff --check` — pass
+
+### Known Notes
+- This targets the most likely synchronous SQLite fanout cost behind 13–24s live ticks. If live still shows long ticks after deploy, next slice should add phase-level timing around command planning, rule evaluation, append, SQLite projection fanout, and listener fanout to identify the next bottleneck.
 
 ---
 

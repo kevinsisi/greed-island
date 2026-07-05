@@ -430,6 +430,7 @@ export type ServerNpcInteraction = {
     occurredAt: string
     intent: NpcInteractIntent
   }
+  worldEventId?: string | null
 }
 
 export type ServerApiKeySummary = {
@@ -946,16 +947,51 @@ export const api = {
   npcInteract: (
     token: string,
     npcId: string,
-    payload: { message?: string; intent?: NpcInteractIntent }
-  ) =>
-    jsonFetch<ServerNpcInteraction>(
+    payload: { message?: string; intent?: NpcInteractIntent },
+    options?: { timeoutMs?: number }
+  ) => {
+    const timeoutMs = options?.timeoutMs
+    if (!timeoutMs) {
+      return jsonFetch<ServerNpcInteraction>(
+        `/npc/${encodeURIComponent(npcId)}/interact`,
+        {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(payload)
+        }
+      )
+    }
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+    return jsonFetch<ServerNpcInteraction>(
       `/npc/${encodeURIComponent(npcId)}/interact`,
       {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       }
-    ),
+    ).finally(() => window.clearTimeout(timer))
+  },
+  npcLocalShout: (
+    token: string,
+    payload: { tileId: string; candidateNpcIds: readonly string[]; message: string },
+    options?: { timeoutMs?: number }
+  ) => {
+    const timeoutMs = options?.timeoutMs
+    const init: RequestInit = {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(payload),
+    }
+    if (!timeoutMs) return jsonFetch<ServerNpcInteraction>('/npc/local-shout', init)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+    return jsonFetch<ServerNpcInteraction>('/npc/local-shout', {
+      ...init,
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timer))
+  },
   npcDialogHold: (token: string, npcId: string) =>
     jsonFetch<ServerNpcDialogHold>(
       `/npc/${encodeURIComponent(npcId)}/dialog-hold`,
@@ -1505,6 +1541,24 @@ export const api = {
       method: 'POST',
       headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, payload })
+    }),
+  // ── v0.96.0  MindSheet — NPC 意圖 ──
+  npcIntent: (token: string, npcId: string) =>
+    jsonFetch<NpcIntentResponse>(`/npc/${encodeURIComponent(npcId)}/intent`, {
+      headers: authHeaders(token)
+    }),
+  // ── v0.96.0  MindSheet — NPC 信念 ──
+  npcBeliefs: (token: string, npcId: string) =>
+    jsonFetch<NpcBeliefsResponse>(`/npc/${encodeURIComponent(npcId)}/beliefs`, {
+      headers: authHeaders(token)
+    }),
+  // ── SP1 — Player Survival Needs ──
+  playerNeeds: (token: string) =>
+    jsonFetch<PlayerNeedsState>('/player/needs', { headers: authHeaders(token) }),
+  eatRation: (token: string) =>
+    jsonFetch<{ accepted: boolean; needs: PlayerNeedsState }>('/player/eat', {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     })
 }
 
@@ -1586,6 +1640,40 @@ export type GoodsInventoryEntry = {
   quantity: number
   nameZh: string
   unit: string
+}
+
+export type PlayerNeedsState = {
+  nourishment: number
+  vigor: number
+  collapsed: boolean
+  asOfTick: number
+}
+
+export type NpcIntentEntry = {
+  kind: string
+  label: string
+  urgencyLabel: string
+  reasonZh: string
+}
+
+export type NpcLesson = {
+  kind: string
+  text: string
+}
+
+export type NpcIntentResponse = {
+  intents: NpcIntentEntry[]
+  lessons: NpcLesson[]
+}
+
+export type NpcBeliefEntry = {
+  label: string
+  confidenceLabel: string
+  kind: string
+}
+
+export type NpcBeliefsResponse = {
+  beliefs: NpcBeliefEntry[]
 }
 
 export function streamUrl(): string {

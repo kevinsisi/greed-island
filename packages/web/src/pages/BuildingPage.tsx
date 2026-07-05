@@ -10,7 +10,7 @@ import {
   type ServerPlayerWallet,
   type ServerShift
 } from '../api/client'
-import { BuildingPhaserGame } from '../game/BuildingPhaserGame'
+import { BuildingSvg } from '../components/map/BuildingSvg'
 import type { BuildingSceneNpc } from '../game/BuildingScene'
 import { NpcDialog } from '../components/game/NpcDialog'
 import type { NpcSummary } from '../state/types'
@@ -264,8 +264,8 @@ export function BuildingPage() {
         {def.descriptionZh}
       </p>
 
-      {/* 室內小場景 */}
-      <BuildingPhaserGame
+      {/* 室內場景 — Phase M3 向量視圖 */}
+      <BuildingSvg
         building={def}
         npcs={sceneNpcs}
         onNpcInteract={handleNpcInteract}

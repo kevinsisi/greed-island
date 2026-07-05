@@ -43,7 +43,7 @@ describe('resilientLoad', () => {
     await assertion
   })
 
-  it('keeps refresh loads longer than the live slow-tick window', () => {
-    expect(MOBILE_LOAD_TIMEOUT_MS).toBeGreaterThanOrEqual(45_000)
+  it('keeps refresh loads well above the live slow-tick window', () => {
+    expect(MOBILE_LOAD_TIMEOUT_MS).toBeGreaterThanOrEqual(120_000)
   })
 })

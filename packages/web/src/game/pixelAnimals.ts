@@ -219,6 +219,8 @@ export type AnimalActorConfig = Readonly<{
   y: number
   color: number
   nameZh: string
+  behaviorLabel?: string
+  intent?: 'foraging' | 'herding' | 'migrating' | 'hunting'
   bounds: Phaser.Geom.Rectangle
   /** 顯示層移動可行性（避免走進開放水域 / 建築）。 */
   canStandAt: (x: number, y: number) => boolean
@@ -262,8 +264,17 @@ export class AnimalActor {
       stroke: '#0a0a0a',
       strokeThickness: 2,
     }).setOrigin(0.5, 0)
+    const behaviorLabel = cfg.behaviorLabel
+      ? scene.add.text(0, 19, cfg.behaviorLabel, {
+          fontFamily: '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
+          fontSize: '8px',
+          color: cfg.intent === 'hunting' ? '#ffb4a8' : cfg.intent === 'migrating' ? '#b6e3ff' : '#c8d4a6',
+          stroke: '#0a0a0a',
+          strokeThickness: 2,
+        }).setOrigin(0.5, 0)
+      : null
 
-    this.container = scene.add.container(cfg.x, cfg.y, [shadow, this.sprite, label])
+    this.container = scene.add.container(cfg.x, cfg.y, [shadow, this.sprite, label, ...(behaviorLabel ? [behaviorLabel] : [])])
     this.container.setDepth(44)
     this.container.setSize(36, 36)
     this.container.setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains)
@@ -279,15 +290,17 @@ export class AnimalActor {
       loop: true,
       callback: () => this.decide(),
     })
-    // 吃草 bob（移動時暫停視覺上也無妨 — 小幅度）。
-    this.grazeTween = scene.tweens.add({
-      targets: this.sprite,
-      y: { from: 0, to: 1.5 },
-      duration: 700 + (seed % 500),
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    })
+    // 覓食/成群才低頭吃草；狩獵與遷徙不要顯示成「正在吃」。
+    if (cfg.intent === 'foraging' || cfg.intent === 'herding' || !cfg.intent) {
+      this.grazeTween = scene.tweens.add({
+        targets: this.sprite,
+        y: { from: 0, to: 1.5 },
+        duration: 700 + (seed % 500),
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      })
+    }
   }
 
   private decide(): void {

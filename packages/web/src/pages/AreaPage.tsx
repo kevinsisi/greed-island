@@ -8,7 +8,7 @@ import { NpcDialog } from '../components/game/NpcDialog'
 import { CombatHud } from '../components/game/CombatHud'
 import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
-import { AreaPhaserGame } from '../game/AreaPhaserGame'
+import { AreaMapSvg } from '../components/map/AreaMapSvg'
 import {
   normaliseWeather,
   type AreaMapBuilding,
@@ -34,8 +34,12 @@ import {
 const AGGRESSIVE_SPECIES_IDS = new Set([
   'moss_boar', 'fog_wolf', 'ash_serpent', 'mountain_bear', 'iron_hound', 'white_marsh_leviathan'
 ])
-import { areaOutdoorNpcs } from './npcProjection'
+const LOCAL_SHOUT_CLIENT_TIMEOUT_MS = 45_000
+import { areaOutdoorNpcs, areaVisibleNpcs } from './npcProjection'
 import { eventBelongsToArea } from './areaEvents'
+import { formatNpcInteractionEvent, isNpcInteractionEvent } from './areaSocial'
+import { animalBehaviorLabel, behaviorToneClass, npcBehaviorBadge, npcRelationshipActionMarker } from './areaBehavior'
+import { areaSubtitleLines, ambientNpcChatterLines, dedupeSubtitleLines, nearbySpeechRecipients, optimisticLocalShoutLines, relationshipActionSubtitleLines, type AreaSubtitleLine } from './areaSubtitles'
 
 const ACTIVITY_KEY: Readonly<Record<NpcActivity, TranslationKey>> = {
   idle:    'npc.activity.idle',
@@ -94,6 +98,10 @@ export function AreaPage() {
   const [animalCombatConfirm, setAnimalCombatConfirm] = useState<{ speciesId: string; animalId: string } | null>(null)
   const [animalCombatSession, setAnimalCombatSession] = useState<ServerCombatSession | null>(null)
   const [animalCombatHand, setAnimalCombatHand] = useState<ServerCombatHandCard[] | null>(null)
+  const [subtitleDraft, setSubtitleDraft] = useState('')
+  const [subtitleBusy, setSubtitleBusy] = useState(false)
+  const [subtitleError, setSubtitleError] = useState<string | null>(null)
+  const [optimisticSubtitles, setOptimisticSubtitles] = useState<AreaSubtitleLine[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -155,6 +163,9 @@ export function AreaPage() {
 
   useEffect(() => {
     setPlayerPosition(null)
+    setSubtitleDraft('')
+    setSubtitleError(null)
+    setOptimisticSubtitles([])
   }, [tileId])
 
   usePresenceTouch(tile ? tileId : null, playerPosition?.tileId === tileId ? playerPosition : null)
@@ -189,11 +200,14 @@ export function AreaPage() {
     return acc
   }, [map.tiles])
 
+  const npcNameById = useMemo(() => new Map(npcs.map((npc) => [npc.id, npc.name] as const)), [npcs])
+
   const occupants = useMemo(
     () => npcs.filter((npc) => npc.location === tileId),
     [npcs, tileId]
   )
-  const outdoorOccupants = useMemo(() => areaOutdoorNpcs(npcs, tileId), [npcs, tileId])
+  const allOutdoorOccupants = useMemo(() => areaOutdoorNpcs(npcs, tileId), [npcs, tileId])
+  const outdoorOccupants = useMemo(() => areaVisibleNpcs(npcs, tileId, weather), [npcs, tileId, weather])
 
   const localEvents = useMemo(() => {
     if (!tile) return []
@@ -203,10 +217,76 @@ export function AreaPage() {
       .slice(0, 12)
   }, [events, occupants, tile, tileId])
 
+  const localSocialEvents = useMemo(
+    () => localEvents.filter(isNpcInteractionEvent).slice(0, 3),
+    [localEvents]
+  )
+
+  const nearbyNpcIdList = useMemo(
+    () => outdoorOccupants.filter((npc) => nearbyNpcIds.has(npc.id)).map((npc) => npc.id),
+    [nearbyNpcIds, outdoorOccupants]
+  )
+  const subtitleRecipientIds = useMemo(
+    () => nearbySpeechRecipients(nearbyNpcIdList, outdoorOccupants.map((npc) => npc.id)),
+    [nearbyNpcIdList, outdoorOccupants]
+  )
+  const subtitleRecipients = useMemo(
+    () => subtitleRecipientIds
+      .map((id) => outdoorOccupants.find((npc) => npc.id === id) ?? null)
+      .filter((npc): npc is NonNullable<typeof npc> => npc !== null),
+    [outdoorOccupants, subtitleRecipientIds]
+  )
+  const subtitleTargetNpc = subtitleRecipients[0] ?? null
+  const subtitleAudienceLabel = subtitleRecipients.length > 1
+    ? `附近 ${subtitleRecipients.length} 人`
+    : subtitleTargetNpc?.name ?? '附近 NPC'
+  const subtitleAudiencePlaceholder = subtitleRecipients.length > 1
+    ? `向附近 ${subtitleRecipients.length} 人說話…`
+    : subtitleTargetNpc ? `對 ${subtitleTargetNpc.name} 說話…` : '靠近 NPC 後說話…'
+  const liveSubtitles = useMemo(
+    () => areaSubtitleLines({
+      events: localEvents,
+      npcNameById,
+      nearbyNpcIds: new Set(nearbyNpcIdList.length > 0 ? nearbyNpcIdList : outdoorOccupants.map((npc) => npc.id)),
+      playerAccountId: account ? String(account.id) : null,
+      limit: 6,
+    }),
+    [account, localEvents, nearbyNpcIdList, npcNameById, outdoorOccupants]
+  )
+  const ambientSubtitles = useMemo(
+    () => ambientNpcChatterLines({
+      npcs: outdoorOccupants,
+      nearbyNpcIds: new Set(nearbyNpcIdList.length > 0 ? nearbyNpcIdList : subtitleRecipientIds),
+      tick: world.tick,
+      limit: 3,
+    }),
+    [nearbyNpcIdList, outdoorOccupants, subtitleRecipientIds, world.tick]
+  )
+  const relationshipSubtitles = useMemo(
+    () => relationshipActionSubtitleLines({
+      npcs: outdoorOccupants,
+      nearbyNpcIds: new Set(nearbyNpcIdList.length > 0 ? nearbyNpcIdList : subtitleRecipientIds),
+      limit: 4,
+    }),
+    [nearbyNpcIdList, outdoorOccupants, subtitleRecipientIds]
+  )
+  const subtitleFeed = useMemo(
+    () => dedupeSubtitleLines([
+      ...liveSubtitles,
+      ...relationshipSubtitles,
+      ...(liveSubtitles.length === 0 && relationshipSubtitles.length === 0 ? ambientSubtitles : []),
+      ...optimisticSubtitles,
+    ]),
+    [ambientSubtitles, liveSubtitles, optimisticSubtitles, relationshipSubtitles]
+  )
+
+  const interactionReadyCount = outdoorOccupants.length
+
   const mapNpcs = useMemo<AreaMapNpc[]>(
     () =>
       outdoorOccupants.map((npc) => {
         const activity: AreaNpcActivity = npc.activity ?? 'idle'
+        const behavior = npcBehaviorBadge(npc, localEvents)
         const base: AreaMapNpc = {
           id: npc.id,
           name: npc.name,
@@ -216,7 +296,11 @@ export function AreaPage() {
           subRow: typeof npc.subRow === 'number' ? npc.subRow : 5,
           ...(typeof npc.subZ === 'number' ? { subZ: npc.subZ } : {}),
           color: typeof npc.color === 'number' ? npc.color : 0xfff5b8,
-          activity
+          activity,
+          behaviorLabel: behavior.primary,
+          ...(behavior.tone === 'conflict' ? { behaviorIcon: '💢' } : {}),
+          ...(behavior.tone === 'food' ? { behaviorIcon: '🍚' } : {}),
+          ...(weather === 'storm' && behavior.tone === 'idle' ? { behaviorIcon: '☂️', behaviorLabel: '正在避雨' } : {})
         }
         if (npc.activity) base.activityLabel = t(ACTIVITY_KEY[npc.activity])
         // v0.14.0：mood/health 給 AreaScene 視覺化用
@@ -227,7 +311,7 @@ export function AreaPage() {
         if (npc.recentUtterance?.text) base.recentUtterance = npc.recentUtterance.text
         return base
       }),
-    [locale, outdoorOccupants, t]
+    [locale, localEvents, outdoorOccupants, t, weather]
   )
 
   const mapPlayers = useMemo<AreaMapPlayer[]>(
@@ -340,6 +424,68 @@ export function AreaPage() {
     window.setTimeout(() => setActionFeedback(null), 2000)
   }, [])
 
+  const handleSubtitleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (!token || subtitleRecipients.length === 0 || subtitleBusy) return
+      const message = subtitleDraft.trim()
+      if (!message) return
+      setSubtitleBusy(true)
+      setSubtitleError(null)
+      const pendingBaseId = `pending-${Date.now()}`
+      const pendingTick = events[0]?.tick ?? world.tick ?? 0
+      const recipients = subtitleRecipients
+      setOptimisticSubtitles((prev) => [
+        ...prev.filter((line) => !line.id.startsWith(`${pendingBaseId}:`)),
+        ...optimisticLocalShoutLines({
+          baseId: pendingBaseId,
+          tick: pendingTick,
+          playerMessage: message,
+          recipients: recipients.map((npc) => ({ id: npc.id, name: npc.name, replyZh: null })),
+        })
+      ].slice(-8))
+      setSubtitleDraft('')
+      try {
+        const respondent = recipients[0]
+        if (!respondent) return
+        const result = await api.npcLocalShout(token, {
+          tileId,
+          candidateNpcIds: recipients.map((npc) => npc.id),
+          message,
+        }, { timeoutMs: LOCAL_SHOUT_CLIENT_TIMEOUT_MS })
+        const baseId = result.worldEventId ?? `local-${Date.now()}`
+        const replacement = optimisticLocalShoutLines({
+          baseId,
+          tick: result.tick ?? pendingTick,
+          playerMessage: message,
+          recipients: [{
+            id: respondent.id,
+            name: respondent.name,
+            replyZh: result.line.zh,
+          }],
+        })
+        setOptimisticSubtitles((prev) => [
+          ...prev.filter((line) => !line.id.startsWith(`${pendingBaseId}:`)),
+          ...replacement,
+        ].slice(-8))
+      } catch (err) {
+        const msg = err instanceof DOMException && err.name === 'AbortError'
+          ? 'NPC 回應逾時，稍後再試。'
+          : 'NPC 暫時沒有回應，稍後再試。'
+        setSubtitleError(msg)
+        setOptimisticSubtitles((prev) => prev.map((line) =>
+          line.id.startsWith(`${pendingBaseId}:npc`)
+            ? { ...line, text: msg, tone: 'system' }
+            : line
+        ))
+        showFeedback(false, msg)
+      } finally {
+        setSubtitleBusy(false)
+      }
+    },
+    [events, showFeedback, subtitleBusy, subtitleDraft, subtitleRecipients, token, world.tick]
+  )
+
   const refreshEcology = useCallback(() => {
     api.areaEcology(tileId).then((eco) => setEcology(eco)).catch(() => {})
   }, [tileId])
@@ -425,7 +571,7 @@ export function AreaPage() {
 
       {/* 地圖 — 純畫面，沒有疊任何 HTML 按鈕 */}
       <div className="w-full">
-        <AreaPhaserGame
+        <AreaMapSvg
           tileId={tileId as DistrictId}
           npcs={mapNpcs}
           players={mapPlayers}
@@ -449,6 +595,62 @@ export function AreaPage() {
           onFish={handleFish}
           controlsEnabled={!!token}
         />
+        {allOutdoorOccupants.length > outdoorOccupants.length && (
+          <div className="mt-1 px-2 text-[10px] text-ground-500 leading-snug">
+            {weather === 'storm'
+              ? `驟雨中，多數人進騎樓或室內避雨；街上只顯示 ${outdoorOccupants.length}/${allOutdoorOccupants.length} 位。`
+              : `此區人潮擁擠；街景只顯示 ${outdoorOccupants.length}/${allOutdoorOccupants.length} 位。`}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2 mx-2 border border-cyan-800/70 bg-ground-950/90 rounded-sharp p-2 shadow-lg">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="font-display text-[10px] uppercase tracking-tightest text-cyan-300">
+            附近對話字幕
+          </div>
+          <div className="text-[10px] text-ground-500 truncate">
+            {subtitleRecipients.length > 0
+              ? `向 ${subtitleAudienceLabel} 發話`
+              : '靠近 NPC 就能聽見與發話'}
+          </div>
+        </div>
+        <div className="max-h-28 overflow-y-auto flex flex-col gap-1 pr-1">
+          {subtitleFeed.length > 0 ? (
+            subtitleFeed.map((line) => (
+              <div key={line.id} className="text-[12px] leading-snug text-ground-200">
+                <span className={[
+                  'font-display text-[10px] uppercase tracking-tightest mr-1',
+                  line.tone === 'player' ? 'text-ember-300' : line.tone === 'npc' ? 'text-cyan-200' : 'text-ground-500'
+                ].join(' ')}>
+                  {line.speaker}
+                </span>
+                <span>{line.text}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-[12px] text-ground-500 italic">
+              走近 NPC 後，附近說話、NPC 對談、玩家發話都會出現在這裡。
+            </div>
+          )}
+        </div>
+        <form onSubmit={handleSubtitleSubmit} className="mt-2 flex gap-2">
+          <input
+            value={subtitleDraft}
+            onChange={(event) => setSubtitleDraft(event.target.value)}
+            disabled={!token || subtitleRecipients.length === 0 || subtitleBusy}
+            placeholder={subtitleAudiencePlaceholder}
+            className="min-w-0 flex-1 bg-ground-900 border border-ground-700 focus:border-cyan-500 rounded-sharp px-2 py-2 text-[13px] text-ground-100 placeholder:text-ground-600 outline-none disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!token || subtitleRecipients.length === 0 || subtitleBusy || subtitleDraft.trim().length === 0}
+            className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border border-cyan-600 text-cyan-200 hover:bg-cyan-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {subtitleBusy ? '發話中' : '發話'}
+          </button>
+        </form>
+        {subtitleError && <div className="mt-1 text-[11px] text-rust-300">{subtitleError}</div>}
       </div>
 
       {!token && (
@@ -490,7 +692,7 @@ export function AreaPage() {
             onClick={() => toggleTab('scene')}
           />
           <DrawerTabButton
-            label={`${t('area.npcs')} ${outdoorOccupants.length}`}
+            label={`${t('area.npcs')} ${outdoorOccupants.length}${allOutdoorOccupants.length > outdoorOccupants.length ? `/${allOutdoorOccupants.length}` : ''}`}
             active={drawerTab === 'npcs'}
             onClick={() => toggleTab('npcs')}
           />
@@ -523,6 +725,62 @@ export function AreaPage() {
                     {ambient?.text ?? lore.scene[locale]}
                   </p>
                   <p className="text-[11px] text-ground-500 italic leading-relaxed">{lore.whisper[locale]}</p>
+
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="border border-ember-800/70 rounded-sharp px-2 py-2 bg-ground-950/50">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-ember-500">
+                        可互動 NPC
+                      </div>
+                      <div className="mt-1 text-[12px] text-ground-100 leading-snug">
+                        {token
+                          ? interactionReadyCount > 0
+                            ? allOutdoorOccupants.length > outdoorOccupants.length
+                              ? `此區有 ${allOutdoorOccupants.length} 位室外 NPC；街景目前顯示 ${outdoorOccupants.length} 位可互動代表。`
+                              : `此區有 ${interactionReadyCount} 位室外 NPC，可在 NPC 分頁直接點名字對話。`
+                            : '此區室外暫時沒有人；進入有人的建築可以對話。'
+                          : '登入後可以點 NPC 名字對話、問事情或交易。'}
+                      </div>
+                    </div>
+                    <div className="border border-cyan-900/70 rounded-sharp px-2 py-2 bg-ground-950/50">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-cyan-300">
+                        NPC 互動證據
+                      </div>
+                      {localSocialEvents.length > 0 ? (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {localSocialEvents.map((event) => (
+                            <li key={event.sequence} className="text-[11px] text-ground-200 leading-snug">
+                              · {formatNpcInteractionEvent(event, npcNameById)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-ground-500 leading-snug">
+                          這一區最近沒有 NPC 對談或爭執；切到「事件」可以看所有活動紀錄。
+                        </div>
+                      )}
+                    </div>
+                    <div className="border border-lime-900/70 rounded-sharp px-2 py-2 bg-ground-950/50 sm:col-span-2">
+                      <div className="font-display text-[9px] uppercase tracking-tightest text-lime-300">
+                        動物行為證據
+                      </div>
+                      {ecology?.animals.length ? (
+                        <ul className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {ecology.animals.slice(0, 4).map((row) => {
+                            const behavior = animalBehaviorLabel(row)
+                            return (
+                              <li key={row.speciesId} className="text-[11px] text-ground-200 leading-snug">
+                                · {speciesLabel(row.speciesId)} ×{row.count}：{behavior.primary}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-ground-500 leading-snug">
+                          這一區沒有動物族群資料。
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   {areaState && (
                     <div className="mt-2 pt-2 border-t border-ground-700 flex flex-col gap-1.5">
@@ -568,26 +826,28 @@ export function AreaPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {outdoorOccupants.map((npc) => {
                         const isNearby = nearbyNpcIds.has(npc.id)
+                        const behavior = npcBehaviorBadge(npc, localEvents)
+                        const relationshipMarker = npcRelationshipActionMarker(npc)
                         return (
                           <button
                             key={npc.id}
                             type="button"
-                            disabled={!token || !isNearby}
+                            disabled={!token}
                             onClick={() =>
-                              token && isNearby ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
+                              token ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
                             }
                             className={[
                               'text-left flex items-center gap-3 px-2 py-2 rounded-sharp border transition-colors',
-                              token && isNearby
+                              token
                                 ? 'border-ground-700 hover:border-ember-600 cursor-pointer'
                                 : 'border-ground-800 opacity-50 cursor-not-allowed'
                             ].join(' ')}
-                            title={!token ? '登入後才能互動' : isNearby ? '' : t('npc.tooFarHint')}
+                            title={!token ? '登入後才能互動' : '點擊對話'}
                           >
                             <span
                               className={[
                                 'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
-                                token && isNearby
+                                token
                                   ? 'border-ember-600/60 text-ember-300'
                                   : 'border-ground-700 text-ground-500'
                               ].join(' ')}
@@ -601,6 +861,22 @@ export function AreaPage() {
                               <div className="font-display font-extrabold text-[13px] tracking-tightest text-ground-100 truncate">
                                 {npc.name}
                               </div>
+                              <div className={[
+                                'mt-1 w-fit rounded-sharp border px-1.5 py-0.5 text-[10px] leading-none',
+                                behaviorToneClass(behavior.tone)
+                              ].join(' ')}>
+                                {behavior.primary}
+                              </div>
+                              {relationshipMarker && (
+                                <div className="mt-1 rounded-sharp border border-ember-700/50 bg-ember-950/15 px-1.5 py-1 text-[10px] leading-snug text-ember-100">
+                                  <div className="font-display uppercase tracking-tightest text-ember-300">
+                                    {relationshipMarker.label}
+                                  </div>
+                                  <div className="truncate text-ground-200">
+                                    {relationshipMarker.detail}
+                                  </div>
+                                </div>
+                              )}
                               {npc.intentLine && (
                                 <div className="text-[11px] text-ember-300 truncate">
                                   {locale === 'zh' ? npc.intentLine.zh : npc.intentLine.en}
@@ -619,11 +895,15 @@ export function AreaPage() {
                               <div className="text-[10px] font-display uppercase tracking-tightest text-ground-500">
                                 {t('npc.relationship')}{' '}
                                 <span className="text-ground-200">{npc.relationshipScore}</span>
-                                {!isNearby && (
-                                  <span className="ml-2 text-ground-600 normal-case tracking-normal">
-                                    · {t('npc.tooFarBadge')}
+                                {isNearby ? (
+                                  <span className="ml-2 text-ember-400 normal-case tracking-normal">
+                                    · 身邊，可地圖點擊
                                   </span>
-                                )}
+                                ) : token ? (
+                                  <span className="ml-2 text-ground-400 normal-case tracking-normal">
+                                    · 可點名字對話
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </button>
@@ -787,6 +1067,12 @@ function ResourceBar({ label, value, colorOk }: { label: string; value: number; 
       <span className="text-[10px] text-ground-300 w-8 text-right">{v}</span>
     </div>
   )
+}
+
+function speciesLabel(speciesId: string): string {
+  const words = speciesId.split('_').filter(Boolean)
+  if (words.length === 0) return speciesId
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
 function factionLabel(faction: string): string {

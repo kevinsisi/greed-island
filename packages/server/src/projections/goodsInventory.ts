@@ -19,6 +19,7 @@ const GOODS_DESTROYED = 'GOODS_DESTROYED'
 const PLAYER_PICKED_UP_GOODS = 'PLAYER_PICKED_UP_GOODS'
 const PLAYER_DEPOSIT_GOODS = 'PLAYER_DEPOSIT_GOODS'
 const HOUSEHOLD_INHERITANCE_ASSIGNED = 'HOUSEHOLD_INHERITANCE_ASSIGNED'
+const NPC_FREEFORM_ACTION_PROPOSED = 'NPC_FREEFORM_ACTION_PROPOSED'
 
 export class GoodsInventoryProjection {
   private rows = new Map<string, GoodsInventoryRow>()
@@ -29,6 +30,23 @@ export class GoodsInventoryProjection {
   }
 
   project(event: Event): void {
+    if (event.eventType === NPC_FREEFORM_ACTION_PROPOSED) {
+      const payload = readFreeformBuyGoodsPayload(event)
+      if (!payload) return
+      this.subtract(
+        { goodsId: 'daily_supplies', holderType: 'settlement', holderId: payload.marketSettlementId, tileId: payload.targetTile },
+        payload.quantity,
+        payload.tick,
+        event.sequence
+      )
+      this.add(
+        { goodsId: 'daily_supplies', holderType: 'npc', holderId: payload.npcId, tileId: payload.targetTile },
+        payload.quantity,
+        payload.tick,
+        event.sequence
+      )
+      return
+    }
     if (event.eventType === GOODS_STORED) {
       const payload = readStoredPayload(event)
       if (!payload) return
@@ -175,6 +193,30 @@ export class GoodsInventoryProjection {
 
 function inventoryKey(holderType: GoodsHolderType, holderId: string, goodsId: string): string {
   return `${holderType}:${holderId}:${goodsId}`
+}
+
+function readFreeformBuyGoodsPayload(event: Event): { npcId: string; targetTile: string; marketSettlementId: string; quantity: number; tick: number } | null {
+  const payload = readData(event)
+  if (!payload || payload.accepted !== true) return null
+  const resolved = payload.resolved
+  if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) return null
+  const r = resolved as Record<string, unknown>
+  if (r.kind !== 'buy_goods') return null
+  const npcId = typeof payload.npcId === 'string' ? payload.npcId : null
+  const targetTile = typeof r.targetTile === 'string' && r.targetTile.length > 0
+    ? r.targetTile
+    : typeof payload.tile === 'string' ? payload.tile : null
+  const marketSettlementId = typeof r.marketSettlementId === 'string' && r.marketSettlementId.length > 0
+    ? r.marketSettlementId
+    : 'settlement.t_central'
+  const quantity = typeof r.quantity === 'number' && Number.isFinite(r.quantity) && r.quantity > 0
+    ? Math.max(1, Math.floor(r.quantity))
+    : 2
+  const tick = typeof payload.decidedAtTick === 'number' && Number.isInteger(payload.decidedAtTick)
+    ? payload.decidedAtTick
+    : event.tick ?? 0
+  if (!npcId || !targetTile) return null
+  return { npcId, targetTile, marketSettlementId, quantity, tick }
 }
 
 function readStoredPayload(event: Event): (GoodsInventoryRow & { storedAtTick: number }) | null {

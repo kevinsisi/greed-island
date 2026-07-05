@@ -23,6 +23,7 @@ export type OpenCodeGenerationOptions = Readonly<{
   userPrompt: string
   /** Override the default model (e.g. `openai/gpt-4o-mini`). */
   model?: string
+  timeoutMs?: number
 }>
 
 export class OpenCodeUnavailableError extends Error {
@@ -76,6 +77,10 @@ type OpenCodeSessionResponse = { id?: string }
 type OpenCodeMessagePart = { type: string; text?: string; synthetic?: boolean }
 type OpenCodeMessageResponse = { parts?: OpenCodeMessagePart[] }
 
+function remainingTimeoutMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now())
+}
+
 async function readJson<T>(res: Response, op: string): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -96,12 +101,14 @@ export async function generateWithOpenCode(
 ): Promise<string> {
   const rawModel = options.model ?? OPENCODE_DEFAULT_MODEL
   const model = parseModel(rawModel)
+  const timeoutMs = Math.max(1, options.timeoutMs ?? OPENCODE_REQUEST_TIMEOUT_MS)
+  const deadline = Date.now() + timeoutMs
   const sessionModel = { providerID: model.providerID, id: model.modelID }
   const headers = { 'Content-Type': 'application/json' }
 
   // 1. Create session
   const abortCreate = new AbortController()
-  const timerCreate = setTimeout(() => abortCreate.abort(), OPENCODE_REQUEST_TIMEOUT_MS)
+  const timerCreate = setTimeout(() => abortCreate.abort(), remainingTimeoutMs(deadline))
   let sessionID: string
   try {
     const sessionRes = await fetch(`${baseURL}/session`, {
@@ -116,7 +123,7 @@ export async function generateWithOpenCode(
   } catch (err) {
     clearTimeout(timerCreate)
     if ((err as { name?: string }).name === 'AbortError') {
-      throw new OpenCodeUnavailableError(`OpenCode create-session timeout after ${OPENCODE_REQUEST_TIMEOUT_MS}ms`)
+      throw new OpenCodeUnavailableError(`OpenCode create-session timeout after ${timeoutMs}ms`)
     }
     if (err instanceof OpenCodeUnavailableError) throw err
     throw new OpenCodeUnavailableError(`OpenCode create-session error: ${(err as Error).message}`)
@@ -127,10 +134,9 @@ export async function generateWithOpenCode(
   // 2. Send message → read response
   try {
     const abortMsg = new AbortController()
-    const timerMsg = setTimeout(() => abortMsg.abort(), OPENCODE_REQUEST_TIMEOUT_MS)
-    let msgRes: Response
+    const timerMsg = setTimeout(() => abortMsg.abort(), remainingTimeoutMs(deadline))
     try {
-      msgRes = await fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}/message`, {
+      const msgRes = await fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}/message`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -141,21 +147,26 @@ export async function generateWithOpenCode(
         }),
         signal: abortMsg.signal,
       })
+      const msg = await readJson<OpenCodeMessageResponse>(msgRes, 'send message')
+      const text = (msg.parts ?? [])
+        .filter((p): p is OpenCodeMessagePart & { text: string } =>
+          p.type === 'text' && !p.synthetic && typeof p.text === 'string'
+        )
+        .map((p) => p.text)
+        .join('')
+        .trim()
+      if (text.length === 0) {
+        throw new OpenCodeUnavailableError('OpenCode returned empty text response')
+      }
+      return text
+    } catch (err) {
+      if ((err as { name?: string }).name === 'AbortError') {
+        throw new OpenCodeUnavailableError(`OpenCode send-message timeout after ${timeoutMs}ms`)
+      }
+      throw err
     } finally {
       clearTimeout(timerMsg)
     }
-    const msg = await readJson<OpenCodeMessageResponse>(msgRes, 'send message')
-    const text = (msg.parts ?? [])
-      .filter((p): p is OpenCodeMessagePart & { text: string } =>
-        p.type === 'text' && !p.synthetic && typeof p.text === 'string'
-      )
-      .map((p) => p.text)
-      .join('')
-      .trim()
-    if (text.length === 0) {
-      throw new OpenCodeUnavailableError('OpenCode returned empty text response')
-    }
-    return text
   } finally {
     // Fire-and-forget cleanup.
     fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}`, {

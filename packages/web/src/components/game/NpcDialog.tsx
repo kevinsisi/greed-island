@@ -14,6 +14,8 @@ import {
 } from '../../api/client'
 import type { Locale, TranslationKey } from '../../i18n/types'
 import { CombatHud } from './CombatHud'
+import { NpcMindSheet } from './NpcMindSheet'
+import { npcRelationshipActionMarker } from '../../pages/areaBehavior'
 
 const INTENT_TAG_KEY: Readonly<Record<NpcInteractIntent, TranslationKey>> = {
   greet: 'npc.intentGreet',
@@ -63,6 +65,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const [combatUsedCards, setCombatUsedCards] = useState<string[]>([])
   const [combatBusy, setCombatBusy] = useState(false)
   const [dynamicGreet, setDynamicGreet] = useState<LocalizedLine | null>(null)
+  const [showMindSheet, setShowMindSheet] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const conversationRef = useRef<HTMLDivElement | null>(null)
 
@@ -293,6 +296,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
 
   // 顯示 challenge 按鈕的條件：低 trust + NPC health > 0
   const canChallenge = (trust ?? 0) <= 30 && (npc.health ?? 0) > 0
+  const relationshipMarker = npcRelationshipActionMarker(npc)
 
   return (
     <div
@@ -345,6 +349,16 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
                 </>
               )}
             </div>
+            {relationshipMarker && (
+              <div className="mt-2 rounded-sharp border border-ember-700/50 bg-ember-950/20 px-2 py-1.5 text-[12px] leading-snug text-ground-100">
+                <div className="font-display text-[10px] uppercase tracking-tightest text-ember-300">
+                  {relationshipMarker.label}
+                </div>
+                <div className="mt-0.5 text-ground-200">
+                  {relationshipMarker.detail}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             {canChallenge && account && (
@@ -367,6 +381,18 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
             </button>
           </div>
         </header>
+
+        {/* MindSheet — NPC 內心狀態面板，預設展開，可收起 */}
+        <div className="overflow-y-auto max-h-[40vh] sm:max-h-none">
+          <button
+            type="button"
+            onClick={() => setShowMindSheet((v) => !v)}
+            className="w-full text-left mb-1 text-[10px] font-display uppercase tracking-tightest text-ground-600 hover:text-ground-400 transition-colors"
+          >
+            {showMindSheet ? '▲ 收起內心狀態' : '▼ 展開內心狀態'}
+          </button>
+          {showMindSheet && <NpcMindSheet npc={npc} />}
+        </div>
 
         <div
           ref={conversationRef}

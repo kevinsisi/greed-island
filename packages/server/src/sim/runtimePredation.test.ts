@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, it } from 'vitest'
 import { loadCardCatalog } from '../cards/loader.js'
-import { PREDATOR_STARVATION_THRESHOLD_TICKS } from '../config/world.js'
+import { PREDATOR_STARVATION_THRESHOLD_TICKS, TILE_INACTIVE_DRIFT_PERIOD } from '../config/world.js'
 import type { Animal } from '../ecosystem/species.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { LivingWorldRuleEngine, makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
@@ -41,47 +41,50 @@ describe('SimulationRuntime predation', () => {
   it('does NOT emit ANIMAL_STARVED before starvation threshold', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
-    seedAnimal(eventStore, animal('wolf-a', 'fog_wolf', 't_forest'))
-    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    seedAnimal(eventStore, animal('hound-a', 'iron_hound', 't_predation_lab'))
+    // Starvation is the invariant under test here. Empty NPC profiles plus an
+    // off-biome predator keep the integration loop focused on predation instead
+    // of spending ~100s in unrelated spawn / NPC aggression / defense side paths
+    // before any starvation can be observed.
+    const runtime = new SimulationRuntime(eventStore, [], loadCardCatalog())
     try {
-      // Run fewer ticks than the threshold — starvation must not fire
-      const safeTicks = PREDATOR_STARVATION_THRESHOLD_TICKS - 1
+      // Run the last ecology-eligible tick before the threshold — starvation must not fire.
+      const safeTicks = PREDATOR_STARVATION_THRESHOLD_TICKS - TILE_INACTIVE_DRIFT_PERIOD
       for (let i = 0; i < safeTicks; i++) {
         ;(runtime as unknown as Internal).runTick()
       }
 
-      expect(eventStore.readEvents().some((ev) => ev.eventType === 'ANIMAL_STARVED')).toBe(false)
-      // Note: Sprint 2B + 2C may have triggered the aggression chain
-      // (hungry wolf attacks an NPC on t_forest) and/or a defense
-      // party that put the wolf down before the starvation threshold.
-      // The invariant this test guards is "no ANIMAL_STARVED before
-      // threshold"; the wolf's survival is incidental.
+      expect(eventStore.readEventsByTypes(['ANIMAL_STARVED'])).toEqual([])
     } finally {
       runtime.stop()
       db.close()
     }
   })
 
-  it('emits ANIMAL_STARVED and removes predator at starvation threshold', { timeout: 120000 }, async () => {
+  it('emits ANIMAL_STARVED and removes predator at starvation threshold', () => {
     const db = new Database(':memory:')
     const eventStore = new SqliteEventStore(db)
-    seedAnimal(eventStore, animal('wolf-a', 'fog_wolf', 't_forest'))
-    const runtime = new SimulationRuntime(eventStore, loadNpcProfiles(), loadCardCatalog())
+    seedAnimal(eventStore, animal('hound-a', 'iron_hound', 't_predation_lab'))
+    const runtime = new SimulationRuntime(eventStore, [], loadCardCatalog())
     try {
+      let starvedEvents = [] as ReturnType<SqliteEventStore['readEventsByTypes']>
       for (let i = 0; i < PREDATOR_STARVATION_THRESHOLD_TICKS * 3; i++) {
         ;(runtime as unknown as Internal).runTick()
-        if (i % 20 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
-        if (eventStore.readEvents().some((ev) => ev.eventType === 'ANIMAL_STARVED')) break
+        if (i >= PREDATOR_STARVATION_THRESHOLD_TICKS && i % TILE_INACTIVE_DRIFT_PERIOD === 0) {
+          starvedEvents = eventStore.readEventsByTypes(['ANIMAL_STARVED'])
+          if (starvedEvents.some((event) => starvedAnimalId(event.payload) === 'hound-a')) break
+        }
       }
 
-      const allEvents = eventStore.readEvents()
-      const starvedEvent = allEvents.find((ev) => ev.eventType === 'ANIMAL_STARVED')
+      starvedEvents = eventStore.readEventsByTypes(['ANIMAL_STARVED'])
+      const starvedEvent = starvedEvents.find((event) => starvedAnimalId(event.payload) === 'hound-a')
       expect(starvedEvent).toBeDefined()
-      // Read the actual starved animal id from the event — spawning may add wolves so we can't assume wolf-a was the one selected
-      const starvedId = (starvedEvent?.payload as { data?: { predatorAnimalId?: string } } | undefined)?.data?.predatorAnimalId
+      // Read the actual starved animal id from the event — the assertion stays
+      // tied to the committed EventLog payload instead of a hardcoded fixture id.
+      const starvedId = starvedAnimalId(starvedEvent?.payload)
       expect(typeof starvedId).toBe('string')
-      const wolfRow = runtime.getAnimalPopulation().find((row) => row.speciesId === 'fog_wolf' && row.tileId === 't_forest')
-      expect(wolfRow?.animalIds ?? []).not.toContain(starvedId)
+      const predatorRow = runtime.getAnimalPopulation().find((row) => row.speciesId === 'iron_hound' && row.tileId === 't_predation_lab')
+      expect(predatorRow?.animalIds ?? []).not.toContain(starvedId)
       expect(runtime.getRecentEvents(50).some((ev) => ev.eventType === 'ANIMAL_STARVED')).toBe(false)
     } finally {
       runtime.stop()
@@ -89,6 +92,10 @@ describe('SimulationRuntime predation', () => {
     }
   })
 })
+
+function starvedAnimalId(payload: unknown): string | undefined {
+  return (payload as { data?: { predatorAnimalId?: string } } | undefined)?.data?.predatorAnimalId
+}
 
 function seedAnimal(eventStore: SqliteEventStore, value: Animal): void {
   const ruleEngine = new LivingWorldRuleEngine()

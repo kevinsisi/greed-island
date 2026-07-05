@@ -39,7 +39,8 @@ import {
   type GoodsHolderType,
   type IntentKind,
   type LivingWorldCommand,
-  type LivingWorldEventPayload
+  type LivingWorldEventPayload,
+  type NpcFreeformActionKind
 } from '../kernel/livingWorldCommands.js'
 import type { SqliteNpcMemoryStore } from '../kernel/npcMemory.js'
 import type { SqliteNpcRelationshipsStore } from '../kernel/npcRelationships.js'
@@ -270,12 +271,15 @@ import { WorldStateProjection, WORLD_STATE_BOOT_EVENT_TYPES } from '../projectio
 import { BioNodeProjection, BIO_NODE_BOOT_EVENT_TYPES, type BioNodeRow } from '../projections/bioNode.js'
 import { BuildingStateProjection, BUILDING_STATE_BOOT_EVENT_TYPES } from '../projections/buildingState.js'
 import { BuildingOccupantsProjection, BUILDING_OCCUPANTS_BOOT_EVENT_TYPES } from '../projections/buildingOccupants.js'
-import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY } from '../projections/beliefProjection.js'
+import { BeliefProjection, formatBeliefContext, TILE_ADJACENCY, type BeliefRow } from '../projections/beliefProjection.js'
 import { IntentProjection, formatReflectionContext } from '../projections/intentProjection.js'
 import { LifeGoalsProjection, formatLifeGoalContext } from '../projections/lifeGoals.js'
+import { PlayerNpcRelationshipProjection, formatPlayerRelationshipContext, PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES } from '../projections/playerNpcRelationshipProjection.js'
+import { PlayerRelationshipActionProjection, PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, type PlayerRelationshipActionView } from '../projections/playerRelationshipActions.js'
+import { PlayerSurvivalProjection, PLAYER_SURVIVAL_BOOT_EVENT_TYPES } from '../projections/playerSurvival.js'
 import { planInheritanceTransfers } from './inheritancePlanner.js'
 import { planMaturationInheritance } from './maturationInheritancePlanner.js'
-import { computeIntentStack } from './intentPlanner.js'
+import { computeIntentStack, type IntentEntry } from './intentPlanner.js'
 import { planNpcAutonomousDecision } from './npcAutonomousPlanner.js'
 import { deriveNpcCognitiveProfileFromRuntime } from './npcCognitiveRuntime.js'
 import { planNpcWorldLawAction } from './npcWorldLawActionPlanner.js'
@@ -346,16 +350,45 @@ const RARE_WINDOW_OPEN_TICKS = TICKS_PER_MINUTE * 4
 const BOOT_PROJECTION_REBUILD_EVENT_LIMIT = 20_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_TICKS = 10_000
 const LARGE_LOG_RECENT_ECOLOGY_HYDRATION_LIMIT = 50_000
-const SLOW_TICK_MIN_HTTP_COOLDOWN_MS = 30_000
-const SLOW_TICK_MAX_HTTP_COOLDOWN_MS = 60_000
-const SLOW_TICK_HTTP_COOLDOWN_FACTOR = 2
+const SLOW_TICK_PHASE_REPORT_THRESHOLD_MS = 250
+const MAX_CATCH_UP_TICKS_PER_CALLBACK = 1
+const OVERDUE_TICK_HTTP_YIELD_MS = 2_000
 
-export function computeNextTickDelayMs(input: { tickDurationMs: number; elapsedMs: number }): number {
-  if (input.elapsedMs <= input.tickDurationMs) return input.tickDurationMs
-  return Math.min(
-    SLOW_TICK_MAX_HTTP_COOLDOWN_MS,
-    Math.max(SLOW_TICK_MIN_HTTP_COOLDOWN_MS, Math.ceil(input.elapsedMs * SLOW_TICK_HTTP_COOLDOWN_FACTOR))
-  )
+export type TickPhaseTiming = Readonly<{ label: string; elapsedMs: number }>
+
+export function computeDueTickCount(input: {
+  tickDurationMs: number
+  nowMs: number
+  nextDueAtMs: number
+  maxCatchUpTicks?: number
+}): number {
+  if (input.tickDurationMs <= 0) return 1
+  if (input.nowMs < input.nextDueAtMs) return 0
+  const dueTicks = Math.floor((input.nowMs - input.nextDueAtMs) / input.tickDurationMs) + 1
+  if (input.maxCatchUpTicks === undefined) return dueTicks
+  return Math.min(input.maxCatchUpTicks, dueTicks)
+}
+
+export function computeNextTickDelayMs(input: {
+  nowMs: number
+  nextDueAtMs: number
+  overdueYieldMs?: number
+}): number {
+  const delayMs = input.nextDueAtMs - input.nowMs
+  if (delayMs >= 0) return delayMs
+  return input.overdueYieldMs ?? OVERDUE_TICK_HTTP_YIELD_MS
+}
+
+export function summarizeSlowTickPhaseTimings(
+  timings: readonly TickPhaseTiming[],
+  thresholdMs = SLOW_TICK_PHASE_REPORT_THRESHOLD_MS,
+): string {
+  return timings
+    .filter((phase) => phase.elapsedMs >= thresholdMs)
+    .sort((a, b) => b.elapsedMs - a.elapsedMs)
+    .slice(0, 6)
+    .map((phase) => `${phase.label}=${phase.elapsedMs}ms`)
+    .join(' ')
 }
 
 const COMBAT_BOOT_EVENT_TYPES = [
@@ -388,6 +421,7 @@ const WORLD_CIVILIZATION_BOOT_EVENT_TYPES = [
   'WORLD_GOAL_DECLARED',
   'WORLD_GOAL_PROGRESS_RECORDED',
   'WORLD_TECH_DISCOVERED',
+  'NPC_FREEFORM_ACTION_PROPOSED',
 ] as const
 const WORLD_CIVILIZATION_EVIDENCE_EVENT_TYPES = new Set<string>([
   'NPC_OBSERVED_SKILL',
@@ -457,6 +491,7 @@ const GOODS_BOOT_EVENT_TYPES = [
   'MARKET_PRICE_DISCOVERED',
   'PLAYER_PICKED_UP_GOODS',
   'PLAYER_DEPOSIT_GOODS',
+  'NPC_FREEFORM_ACTION_PROPOSED',
 ] as const
 // NPC mortality projection event types — read selectively during fast-boot.
 const MORTALITY_BOOT_EVENT_TYPES = [
@@ -531,6 +566,8 @@ export type SimNpcState = Readonly<{
   deceased: boolean
   /** Most recent AI freeform utterance if it is still within the visibility window; null otherwise. */
   recentUtterance: { text: string; tick: number } | null
+  /** Most recent relationship-driven action surfaced for player-facing NPC state. */
+  relationshipAction: PlayerRelationshipActionView | null
 }>
 
 export type TickCommandStats = Readonly<{
@@ -600,10 +637,13 @@ export class SimulationRuntime {
   private rareWindowOpen = false
   private rareWindowClosesAtTick = 0
   private readonly recentEvents: NarrativeEvent[] = []
+  private npcSnapshotCache: { tick: number; lastSequence: number; includeDeceased: SimNpcState[]; living: SimNpcState[] } | null = null
+  private worldSnapshotCache: { tick: number; lastSequence: number; snapshot: WorldSnapshot } | null = null
   private readonly listeners = new Set<Listener>()
   private readonly tickListeners = new Set<TickListener>()
   private timer: NodeJS.Timeout | null = null
   private tickLoopActive = false
+  private nextTickDueAtMs: number | null = null
   private deferredHydrationState: DeferredHydrationState = 'not_needed'
   private deferredHydrationPromise: Promise<void> | null = null
   private deferredHydrationError: string | null = null
@@ -703,6 +743,9 @@ export class SimulationRuntime {
   private readonly intentProjection = new IntentProjection()
   private readonly lifeGoalsProjection = new LifeGoalsProjection()
   private readonly npcCognitiveProjection = new NpcCognitiveProjectionStore()
+  private readonly playerNpcRelationshipProjection = new PlayerNpcRelationshipProjection()
+  private readonly playerRelationshipActionProjection = new PlayerRelationshipActionProjection()
+  private readonly playerSurvivalProjection = new PlayerSurvivalProjection()
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -778,8 +821,14 @@ export class SimulationRuntime {
     this.ambientNarrator = narrator
     // v0.15.1：每 tick 主動推「最近被玩家請求過、cache 已過期」的 tile 進下一輪
     // refresh，這樣下次 polling 拿到的 ambient 文字真的會變動，而不是靜止 30 tick。
+    // autonomous-world-narration：背景輪轉的全 world tile 來源 —— 與
+    // AreaStateEngine 的 seed 同一份（runtime ctor: MAP_TILES.map(t => t.id)）。
+    const worldTileIds = MAP_TILES.map((t) => t.id)
     this.subscribeTick((tick) => {
+      // (1) recent-visitor refresh：玩家正在看的 tile，較快節奏。
       narrator.tickRefresh(tick, (tileId) => this.buildAmbientContext(tileId))
+      // (2) 自主背景演化：沒人看的角落也持續更新（成本/速率由 narrator 內部封頂）。
+      narrator.backgroundRefresh(tick, worldTileIds, (tileId) => this.buildAmbientContext(tileId))
     })
     return narrator
   }
@@ -811,7 +860,7 @@ export class SimulationRuntime {
         return computeIntentStack(
           npcId, beliefs, profile, weights,
           state.tile, state.faction || undefined, this.currentTick,
-          memoryBoost, lifeGoalBoost,
+          memoryBoost, lifeGoalBoost, this.playerNpcRelationshipProjection.plannerBiasForNpc(npcId),
         ).entries
       },
       getNeedsLine: (npcId) => {
@@ -895,11 +944,13 @@ export class SimulationRuntime {
   start(): void {
     if (this.tickLoopActive) return
     this.tickLoopActive = true
-    this.scheduleNextTick()
+    this.nextTickDueAtMs = Date.now() + this.tickDurationMs
+    this.scheduleNextTick(this.tickDurationMs)
   }
 
   stop(): void {
     this.tickLoopActive = false
+    this.nextTickDueAtMs = null
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -915,14 +966,34 @@ export class SimulationRuntime {
     this.timer = setTimeout(() => {
       this.timer = null
       if (!this.tickLoopActive) return
+      if (this.nextTickDueAtMs === null) this.nextTickDueAtMs = Date.now()
+
+      const dueAtStartMs = this.nextTickDueAtMs
       const startedAt = Date.now()
-      this.runTickSafely()
-      const elapsedMs = Date.now() - startedAt
-      const nextDelayMs = computeNextTickDelayMs({ tickDurationMs: this.tickDurationMs, elapsedMs })
-      if (elapsedMs > this.tickDurationMs) {
+      const dueTickCount = Math.max(
+        1,
+        computeDueTickCount({
+          tickDurationMs: this.tickDurationMs,
+          nowMs: startedAt,
+          nextDueAtMs: dueAtStartMs,
+          maxCatchUpTicks: MAX_CATCH_UP_TICKS_PER_CALLBACK,
+        })
+      )
+      const phaseTimings: TickPhaseTiming[] = []
+      for (let i = 0; i < dueTickCount; i += 1) {
+        phaseTimings.push(...this.runTickSafely())
+        this.nextTickDueAtMs += this.tickDurationMs
+      }
+
+      const endedAt = Date.now()
+      const elapsedMs = endedAt - startedAt
+      const nextDelayMs = computeNextTickDelayMs({ nowMs: endedAt, nextDueAtMs: this.nextTickDueAtMs })
+      if (elapsedMs > this.tickDurationMs || dueTickCount > 1 || nextDelayMs === 0) {
+        const phaseSummary = summarizeSlowTickPhaseTimings(phaseTimings)
         console.warn(
-          `[sim] tick ${this.currentTick} took ${elapsedMs}ms; ` +
-            `delaying next tick by ${nextDelayMs}ms to keep HTTP responsive`
+          `[sim] tick ${this.currentTick} ran ${dueTickCount} due tick(s) in ${elapsedMs}ms; ` +
+            `next tick delay ${nextDelayMs}ms from fixed world clock` +
+            (phaseSummary ? `; slow phases: ${phaseSummary}` : '')
         )
       }
       this.scheduleNextTick(nextDelayMs)
@@ -1103,7 +1174,11 @@ export class SimulationRuntime {
   }
 
   getSnapshot(): WorldSnapshot {
-    return {
+    if (this.worldSnapshotCache?.tick === this.currentTick && this.worldSnapshotCache.lastSequence === this.lastSequence) {
+      return this.worldSnapshotCache.snapshot
+    }
+    const worldCivilization = this.worldCivilizationProjection.snapshot()
+    const snapshot: WorldSnapshot = {
       tick: this.currentTick,
       lastSequence: this.lastSequence,
       eventCount: this.eventCount,
@@ -1139,9 +1214,9 @@ export class SimulationRuntime {
         migrationRoutes: this.animalMigrationProjection.list(),
         predatorHunger: this.predatorHungerProjection.list(),
         npcRumors: this.rumorProjection.list(),
-        worldCivilization: this.worldCivilizationProjection.snapshot(),
+        worldCivilization,
       },
-      worldCivilization: this.worldCivilizationProjection.snapshot(),
+      worldCivilization,
       worldConfig: {
         tickDurationMs: this.tickDurationMs,
         ticksPerDay: TICKS_PER_DAY,
@@ -1163,6 +1238,8 @@ export class SimulationRuntime {
       },
       generatedAt: new Date().toISOString()
     }
+    this.worldSnapshotCache = { tick: this.currentTick, lastSequence: this.lastSequence, snapshot }
+    return snapshot
   }
 
   getHouseholdEconomy(): readonly HouseholdEconomyRow[] {
@@ -1194,7 +1271,8 @@ export class SimulationRuntime {
         this.buildingRuntime.snapshotForTile(
           tileId,
           this.npcEngine.snapshotAll(),
-          this.completedConstructionBuildingDefs()
+          this.completedConstructionBuildingDefs(),
+          { includeWorkplaces: true }
         )
       )
     )
@@ -1209,7 +1287,8 @@ export class SimulationRuntime {
   getAllBuildings(): readonly BuildingRuntimeView[] {
     const existing = this.buildingRuntime.snapshotAll(
       this.npcEngine.snapshotAll(),
-      this.completedConstructionBuildingDefs()
+      this.completedConstructionBuildingDefs(),
+      { includeWorkplaces: true }
     )
     const byId = new Map(existing.map((view) => [view.def.id, view] as const))
     for (const def of listAllBuildings(this.lifeExpansion.unlockedBuildingIds)) {
@@ -1448,6 +1527,32 @@ export class SimulationRuntime {
     return formatBeliefContext(this.beliefProjection.getBeliefs(npcId), this.currentTick)
   }
 
+  /** v0.96.0 — Raw belief rows for MindSheet API (top entries by confidence). */
+  getNpcBeliefs(npcId: string): readonly BeliefRow[] {
+    return this.beliefProjection.getBeliefs(npcId)
+  }
+
+  /** v0.96.0 — Computed intent stack for MindSheet API (entries sorted by urgency). */
+  getNpcIntentStack(npcId: string): IntentEntry[] {
+    const profile = this.npcEngine.listProfiles().find((p) => p.id === npcId)
+    const state = this.npcEngine.getState(npcId)
+    if (!profile || !state) return []
+    const beliefs = this.beliefProjection.getBeliefs(npcId)
+    const weights = this.intentProjection.getLearningWeights(npcId, this.currentTick)
+    const memoryBoost = this.npcMemory ? this.npcMemory.getMemoryUrgencyBoost(npcId, this.currentTick) : 0
+    const lifeGoalBoost = this.computeLifeGoalIntentBoost(npcId)
+    return computeIntentStack(
+      npcId, beliefs, profile, weights,
+      state.tile, state.faction || undefined, this.currentTick,
+      memoryBoost, lifeGoalBoost, this.playerNpcRelationshipProjection.plannerBiasForNpc(npcId),
+    ).entries
+  }
+
+  /** v0.96.0 — Learning weights per intent kind for MindSheet lessons. */
+  getNpcLearningWeights(npcId: string): Readonly<Partial<Record<IntentKind, number>>> {
+    return this.intentProjection.getLearningWeights(npcId, this.currentTick)
+  }
+
   /** v0.52.0 — NPC's reflection memory (formatted string for AI dialog prompt). */
   getFormattedReflectionContext(npcId: string): string {
     return formatReflectionContext(this.intentProjection.getReflections(npcId), this.currentTick)
@@ -1508,6 +1613,11 @@ export class SimulationRuntime {
       householdId: this.npcLineageProjection.householdId(npcId),
       allowedDeceasedNpcIds: this.bornNpcsProjection.getParentNpcIds(npcId),
     })
+  }
+
+  /** Phase 3 — player dialog leaves replayable, long-term relationship context. */
+  getFormattedPlayerRelationshipContext(playerAccountId: string | number, npcId: string): string {
+    return formatPlayerRelationshipContext(this.playerNpcRelationshipProjection.read(playerAccountId, npcId)) ?? ''
   }
 
   /** Phase E5 — BioNode plant ecology rows for a specific tile. */
@@ -1622,7 +1732,7 @@ export class SimulationRuntime {
    * §43.1 「後代會記得他」 holds), call `getNpcsIncludingDeceased()` instead.
    */
   getNpcs(): SimNpcState[] {
-    return this.getNpcsIncludingDeceased().filter((npc) => !npc.deceased)
+    return this.getNpcSnapshotCache().living
   }
 
   /**
@@ -1636,9 +1746,16 @@ export class SimulationRuntime {
    * player interaction endpoints — those see only the living.
    */
   getNpcsIncludingDeceased(): SimNpcState[] {
+    return this.getNpcSnapshotCache().includeDeceased
+  }
+
+  private getNpcSnapshotCache(): { includeDeceased: SimNpcState[]; living: SimNpcState[] } {
+    if (this.npcSnapshotCache?.tick === this.currentTick && this.npcSnapshotCache.lastSequence === this.lastSequence) {
+      return this.npcSnapshotCache
+    }
     // Iterate the NpcEngine's profile registry so matured born NPCs (registered
     // via NpcEngine.registerDynamicNpc) appear alongside config-loaded profiles.
-    return this.npcEngine.listProfiles().map((profile) => {
+    const includeDeceased = this.npcEngine.listProfiles().map((profile) => {
       const s =
         this.npcEngine.getState(profile.id) ??
         ({
@@ -1675,7 +1792,7 @@ export class SimulationRuntime {
         memoryContext,
         currentTick: this.currentTick,
       })
-      const cognitiveEvolution = this.deriveNpcCognitiveEvolutionSummary(profile.id, profile.name.zh, cognitive, life, memoryContext)
+      const cognitiveEvolution = this.derivePublicNpcCognitiveEvolutionSummary(profile.id, cognitive.thoughtZh)
       return {
         id: profile.id,
         name: { zh: profile.name.zh, en: profile.name.en },
@@ -1712,8 +1829,40 @@ export class SimulationRuntime {
           if (this.currentTick - u.tick > NPC_AGENT_UTTERANCE_VISIBLE_TICKS) return null
           return u
         })(),
+        relationshipAction: this.playerRelationshipActionProjection.getForNpc(profile.id),
       }
     })
+    const living = includeDeceased.filter((npc) => !npc.deceased)
+    this.npcSnapshotCache = { tick: this.currentTick, lastSequence: this.lastSequence, includeDeceased, living }
+    return this.npcSnapshotCache
+  }
+
+  private derivePublicNpcCognitiveEvolutionSummary(npcId: string, currentThoughtZh: string): NpcCognitiveEvolutionSummary {
+    const projected = this.npcCognitiveProjection.get(npcId)
+    if (!projected) {
+      return {
+        reflectionCount: 0,
+        currentThoughtZh,
+        lastReflectionZh: null,
+        personalityTraceZh: null,
+        lifeGoalTraceZh: null,
+        relationshipTraceZh: null,
+      }
+    }
+    const personalityParts = Object.entries(projected.personalityDeltas)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key} ${signedTraceDelta(value as number)}`)
+    const recentRelationshipTrace = projected.relationshipReflectionTrace.slice(-3)
+    return {
+      reflectionCount: projected.reflectionCount,
+      currentThoughtZh,
+      lastReflectionZh: projected.lastReflectionSummaryZh,
+      personalityTraceZh: personalityParts.length > 0 ? `人格演化：${personalityParts.join('、')}` : null,
+      lifeGoalTraceZh: projected.currentLifeGoalOverride ? `人生目標：${projected.currentLifeGoalOverride.narration}（壓力 ${Math.round(projected.currentLifeGoalOverride.pressure)}）` : null,
+      relationshipTraceZh: recentRelationshipTrace.length > 0
+        ? recentRelationshipTrace.map((row) => `${row.targetNpcId}：${row.dimension} ${signedTraceDelta(row.delta)}，${row.reason}`).join('；')
+        : null,
+    }
   }
 
   private getLivingNpcRuntimeSnapshots(): Array<Pick<SimNpcState, 'id' | 'location' | 'activity'>> {
@@ -1894,6 +2043,10 @@ export class SimulationRuntime {
 
   getCurrentTick(): number {
     return this.currentTick
+  }
+
+  getPlayerSurvivalProjection(): PlayerSurvivalProjection {
+    return this.playerSurvivalProjection
   }
 
   getPlayerCivilizationSnapshot(accountId: string) {
@@ -2122,7 +2275,22 @@ export class SimulationRuntime {
     const kind = typeof resolved.kind === 'string' ? resolved.kind : ''
     const targetTile = typeof resolved.targetTile === 'string' ? resolved.targetTile : null
     if (!targetTile) return
-    const steerableKinds = new Set(['travel', 'work', 'build', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
+    if (kind === 'buy_goods') {
+      const quantity = typeof resolved.quantity === 'number' && Number.isFinite(resolved.quantity) && resolved.quantity > 0
+        ? Math.max(1, Math.floor(resolved.quantity))
+        : 2
+      const unitPrice = this.marketPricesProjection.get({ settlementId: 'settlement.t_central', goodsId: 'daily_supplies' })?.priceGold ?? 8
+      const spend = this.planHouseholdGoldSpend({
+        npcId,
+        tileId: targetTile,
+        amount: Math.max(1, Math.ceil(unitPrice * quantity)),
+        purpose: 'buy_goods:daily_supplies',
+        sourceId: ev.eventId,
+        tick: ev.tick ?? this.currentTick,
+      })
+      if (spend && this.householdBalanceForNpc(npcId) > 0) this.commitLivingWorldCommand(spend)
+    }
+    const steerableKinds = new Set(['travel', 'work', 'build', 'buy_goods', 'learn', 'invent', 'rest', 'socialize', 'buy_card', 'challenge_combat'])
     if (!steerableKinds.has(kind)) return
     this.npcEngine.setIntentOverride(npcId, {
       targetTile,
@@ -2130,6 +2298,27 @@ export class SimulationRuntime {
       intentType: kind === 'rest' ? 'survival' : kind === 'socialize' || kind === 'challenge_combat' ? 'social' : 'economic',
       urgency: 65,
       reason: `${kind === 'build' ? 'freeform-agent-build' : 'freeform-agent'}:${typeof resolved.summary === 'string' ? resolved.summary : kind}`,
+    })
+  }
+
+  /** Player dialogue is now a replayable EventLog fact, not only private chat history. */
+  private applyPlayerNpcDialogueEvent(ev: Event): void {
+    const data = (ev.payload as { data?: unknown } | null)?.data as Record<string, unknown> | undefined
+    if (!data) return
+    const npcId = typeof data.npcId === 'string' ? data.npcId : null
+    const targetTile = typeof data.tile === 'string' ? data.tile : null
+    if (!npcId || !targetTile) return
+    const intent = data.intent === 'trade' || data.intent === 'greet' || data.intent === 'ask' ? data.intent : 'ask'
+    const reply = typeof data.npcReplyZh === 'string' && data.npcReplyZh.trim().length > 0
+      ? data.npcReplyZh.trim()
+      : null
+    if (reply) this.npcUtteranceMap.set(npcId, { text: reply, tick: ev.tick ?? this.currentTick })
+    this.npcEngine.setIntentOverride(npcId, {
+      targetTile,
+      expiresAtTick: (ev.tick ?? this.currentTick) + Math.max(4, Math.floor(INTENT_OVERRIDE_DURATION_TICKS / 2)),
+      intentType: intent === 'trade' ? 'economic' : 'social',
+      urgency: intent === 'trade' ? 62 : 58,
+      reason: `player-dialogue:${intent}`,
     })
   }
 
@@ -2199,6 +2388,7 @@ export class SimulationRuntime {
   ): void {
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
     const npcTileMap = this.getLivingNpcLocationMap()
+    this.projectCommittedNpcSqliteStores(committed, npcTileMap)
     for (const ev of committed) {
       this.combatStore?.projectEvent(ev)
       this.playerJobsStore?.projectEvent(ev)
@@ -2231,11 +2421,6 @@ export class SimulationRuntime {
           }
         }
       }
-      if (this.npcMemory) {
-        this.npcMemory.project(ev)
-        this.npcMemory.projectWithLocality(ev, npcTileMap)
-      }
-      if (this.npcRelationships) this.npcRelationships.project(ev)
       this.constructionProjects.project(ev)
       this.buildingStateProjection.project(ev)
       this.buildingOccupantsProjection.project(ev)
@@ -2248,6 +2433,9 @@ export class SimulationRuntime {
       this.intentProjection.project(ev)
       this.lifeGoalsProjection.project(ev)
       this.npcCognitiveProjection.project(ev)
+      this.playerNpcRelationshipProjection.apply(ev)
+      this.playerRelationshipActionProjection.project(ev)
+      this.playerSurvivalProjection.project(ev)
       this.npcStateProjection.project(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
@@ -2283,6 +2471,7 @@ export class SimulationRuntime {
       // v0.89.0 — NPC AI agent 決策事件：套用（或解除）intentOverride。
       if (ev.eventType === 'NPC_AGENT_DECISION') this.applyAgentDecisionEvent(ev)
       if (ev.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') this.applyFreeformAgentActionEvent(ev)
+      if (ev.eventType === 'PLAYER_NPC_DIALOGUE') this.applyPlayerNpcDialogueEvent(ev)
       this.factionControlProjection.project(ev)
       this.factionDominanceProjection.project(ev)
       this.historyChronicleProjection.project(ev)
@@ -2451,6 +2640,29 @@ export class SimulationRuntime {
     }
   }
 
+  private projectCommittedNpcSqliteStores(
+    committed: readonly Event[],
+    npcTileMap: ReadonlyMap<string, string>
+  ): void {
+    if (committed.length === 0) return
+    if (!this.npcMemory && !this.npcRelationships) return
+    // Live ticks may commit hundreds/thousands of events. Projecting NPC
+    // memory/relationship rows one event at a time used to pay SQLite's
+    // autocommit cost for every derived row, which can block the Node event
+    // loop long enough for HTTP refreshes to time out. Batch the SQLite-backed
+    // NPC projections in one transaction while keeping the same per-event order
+    // and idempotent INSERT/UPSERT semantics.
+    this.store.runInTransaction(() => {
+      for (const ev of committed) {
+        if (this.npcMemory) {
+          this.npcMemory.project(ev)
+          this.npcMemory.projectWithLocality(ev, npcTileMap)
+        }
+        if (this.npcRelationships) this.npcRelationships.project(ev)
+      }
+    })
+  }
+
   private hydrateCombatRuntimeFromEvents(events: readonly Event[]): void {
     this.combatSubTicks.rebuildFromEvents(events)
     for (const combatId of computeUnresolvedCombats(events)) {
@@ -2460,11 +2672,12 @@ export class SimulationRuntime {
     }
   }
 
-  private runTickSafely(): void {
+  private runTickSafely(): readonly TickPhaseTiming[] {
     try {
-      this.runTick()
+      return this.runTick()
     } catch (err) {
       console.error('[sim] tick failed', err)
+      return []
     }
   }
 
@@ -2497,8 +2710,15 @@ export class SimulationRuntime {
     return this.npcMortalityProjection
   }
 
-  private runTick(): void {
+  private runTick(): readonly TickPhaseTiming[] {
     const nextTick = this.currentTick + 1
+    const phaseTimings: TickPhaseTiming[] = []
+    let phaseStartedAt = Date.now()
+    const recordPhase = (label: string): void => {
+      const now = Date.now()
+      phaseTimings.push({ label, elapsedMs: now - phaseStartedAt })
+      phaseStartedAt = now
+    }
     // Two parallel collections per Living Deterministic World law:
     //   1. stateDrafts — FACT_SET state snapshots (npc state, area
     //      state, building occupants, weather, season, rare window,
@@ -5345,6 +5565,7 @@ export class SimulationRuntime {
     })) {
       commands.push(command)
     }
+    recordPhase('plan-commands')
 
     // ---- Phase 1 budget gate ----
     // Slice 1 (observability): record raw command volume, update peak,
@@ -5889,28 +6110,28 @@ export class SimulationRuntime {
         }
       }
     }
+    recordPhase('rule-evaluation')
 
     // Append in one transaction. Normal state snapshots stay before typed events;
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
     const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
+    recordPhase('append-events')
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
       // Fan out: NPC memory + relationships projections, listeners.
       const npcTileMap = this.getLivingNpcLocationMap()
+      this.projectCommittedNpcSqliteStores(committed, npcTileMap)
+      recordPhase('npc-sqlite-projections')
       for (const ev of committed) {
-        if (this.npcMemory) {
-          this.npcMemory.project(ev)
-          this.npcMemory.projectWithLocality(ev, npcTileMap)
-        }
-        if (this.npcRelationships) this.npcRelationships.project(ev)
         this.constructionProjects.project(ev)
         this.buildingStateProjection.project(ev)
         this.buildingOccupantsProjection.project(ev)
         this.roadNetworkProjection.project(ev)
         this.wallNetworkProjection.project(ev)
         this.activeRuleOperatorsProjection.project(ev)
+        this.playerRelationshipActionProjection.project(ev)
         this.npcIncapacitationProjection.project(ev)
         this.npcStateProjection.project(ev)
         this.animalPopulationProjection.project(ev)
@@ -5987,6 +6208,7 @@ export class SimulationRuntime {
           }
         }
       }
+      recordPhase('projection-fanout')
     }
 
     this.currentTick = nextTick
@@ -5998,6 +6220,8 @@ export class SimulationRuntime {
         console.error('[sim] tick listener error', err)
       }
     }
+    recordPhase('tick-listeners')
+    return phaseTimings
   }
 
   /**
@@ -6244,6 +6468,7 @@ export class SimulationRuntime {
       ...Object.fromEntries(generatedTiles.map((tile) => [tile.id, tile.name])),
     }
     const commands: LivingWorldCommand[] = []
+    const recentFreeformActionKinds = this.collectRecentNpcFreeformActionKinds(420)
     for (const [index, profile] of profiles.entries()) {
       if (this.npcMortalityProjection.isDeceased(profile.id)) continue
       const phase = index % plannerCadence
@@ -6286,6 +6511,7 @@ export class SimulationRuntime {
         nextTick,
         memoryBoost,
         lifeGoalBoost,
+        this.playerNpcRelationshipProjection.plannerBiasForNpc(profile.id),
       )
       const adjacentTiles = adjacency[state.tile] ?? []
       const scoredTiles = [state.tile, profile.defaultLocation, ...adjacentTiles]
@@ -6324,12 +6550,14 @@ export class SimulationRuntime {
         threshold: INTENT_URGENCY_THRESHOLD,
         needs: life.needs,
         lifeGoal: life.goal,
+        intentEntries: stack.entries,
         currentOverride: state.intentOverride ?? null,
         adjacentTiles,
         tileScores,
         tileNames,
         cognitive,
         memoryContext,
+        recentActionKinds: recentFreeformActionKinds.get(profile.id) ?? [],
       })
       if (worldLawAction) {
         commands.push(makeLivingWorldCommand(
@@ -6366,6 +6594,25 @@ export class SimulationRuntime {
       ))
     }
     return commands
+  }
+
+  private collectRecentNpcFreeformActionKinds(limit: number): Map<string, NpcFreeformActionKind[]> {
+    const out = new Map<string, NpcFreeformActionKind[]>()
+    for (const event of this.store.readRecentEvents(limit)) {
+      if (event.eventType !== 'NPC_FREEFORM_ACTION_PROPOSED') continue
+      const data = (event.payload as { data?: Record<string, unknown> })?.data
+      if (!data || data.accepted !== true) continue
+      const npcId = typeof data.npcId === 'string' ? data.npcId : null
+      const resolved = data.resolved
+      const kind = resolved && typeof resolved === 'object' && !Array.isArray(resolved)
+        ? (resolved as Record<string, unknown>).kind
+        : null
+      if (!npcId || !isCooldownTrackedNpcActionKind(kind)) continue
+      const list = out.get(npcId) ?? []
+      if (list.length < 4) list.push(kind)
+      out.set(npcId, list)
+    }
+    return out
   }
 
   private isNpcInsideOwnedBuilding(npcId: string, state: NpcRuntimeState): boolean {
@@ -6635,7 +6882,7 @@ export class SimulationRuntime {
   }): LivingWorldCommand | null {
     const amount = Math.max(0, Math.floor(input.amount))
     if (amount <= 0) return null
-    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    const householdId = this.resolveHouseholdIdForNpc(input.npcId)
     if (!householdId) return null
     return makeLivingWorldCommand(
       'HOUSEHOLD_GOLD_CONTRIBUTED',
@@ -6668,7 +6915,7 @@ export class SimulationRuntime {
   }): LivingWorldCommand | null {
     const amount = Math.max(0, Math.floor(input.amount))
     if (amount <= 0) return null
-    const householdId = householdIdForNpc(this.lifeExpansion, input.npcId)
+    const householdId = this.resolveHouseholdIdForNpc(input.npcId)
     if (!householdId) return null
     return makeLivingWorldCommand(
       'HOUSEHOLD_GOLD_SPENT',
@@ -6690,8 +6937,16 @@ export class SimulationRuntime {
     )
   }
 
-  private householdBalanceForNpc(npcId: string): number {
+  private resolveHouseholdIdForNpc(npcId: string): string | null {
     const householdId = householdIdForNpc(this.lifeExpansion, npcId)
+    if (householdId) return householdId
+    return this.householdEconomyProjection.list()
+      .find((row) => row.contributorNpcIds.includes(npcId))
+      ?.householdId ?? null
+  }
+
+  private householdBalanceForNpc(npcId: string): number {
+    const householdId = this.resolveHouseholdIdForNpc(npcId)
     if (!householdId) return 0
     return this.householdEconomyProjection.getByHouseholdId(householdId)?.balance ?? 0
   }
@@ -6796,6 +7051,8 @@ export class SimulationRuntime {
       this.npcIncapacitationProjection.rebuildFromEvents(allEvents)
       this.intentProjection.rebuildFromEvents(allEvents)
       this.npcCognitiveProjection.rebuildFromEvents(allEvents)
+      this.playerNpcRelationshipProjection.rebuildFromEvents(allEvents)
+      this.playerRelationshipActionProjection.rebuildFromEvents(allEvents)
       // v0.87.3 boot-bug fix: mortality / lineage / born-npc projections were
       // wired into the large-log else-branch but NOT here. Result was that
       // every small-world restart resurrected every deceased NPC (the very
@@ -6805,6 +7062,7 @@ export class SimulationRuntime {
       this.npcLineageProjection.rebuildFromEvents(allEvents)
       this.bornNpcsProjection.rebuildFromEvents(allEvents)
       this.lifeGoalsProjection.rebuildFromEvents(allEvents)
+      this.playerSurvivalProjection.rebuildFromEvents(allEvents)
     } else {
       // Availability-first large-log boot: only rebuild projections required
       // for HTTP availability before any typed replay begins. On very large
@@ -6968,6 +7226,9 @@ export class SimulationRuntime {
       { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
       { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
+      { label: 'player-npc-relationships', eventTypes: PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES, apply: (events) => this.playerNpcRelationshipProjection.rebuildFromEvents(events) },
+      { label: 'player-relationship-actions', eventTypes: PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, apply: (events) => this.playerRelationshipActionProjection.rebuildFromEvents(events) },
+      { label: 'player-survival', eventTypes: PLAYER_SURVIVAL_BOOT_EVENT_TYPES, apply: (events) => this.playerSurvivalProjection.rebuildFromEvents(events) },
       // Do not replay high-volume projections here. Live has >15M events and
       // batches such as NPC_STATE_RECORDED allocate enough rows to hit V8's
       // heap limit, causing a restart loop after HTTP listen. Those projections
@@ -7566,3 +7827,12 @@ function inferWorldCivilizationDomain(eventType: string, data: Record<string, un
 }
 
 
+
+function isCooldownTrackedNpcActionKind(value: unknown): value is NpcFreeformActionKind {
+  return value === 'work' || value === 'build' || value === 'buy_goods' || value === 'learn' || value === 'invent' || value === 'rest' || value === 'socialize' || value === 'custom_social_scene' || value === 'travel'
+}
+
+function signedTraceDelta(value: number): string {
+  const rounded = Math.round(value * 100) / 100
+  return rounded >= 0 ? `+${rounded}` : String(rounded)
+}

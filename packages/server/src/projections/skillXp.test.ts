@@ -63,6 +63,33 @@ function mentorshipCompletedEvent(mentorNpcId: string, menteeNpcId: string, skil
   }
 }
 
+function freeformActionEvent(npcId: string, kind: string, tick: number): Event {
+  const s = nextSeq()
+  return {
+    sequence: s,
+    eventId: `event-freeform-${s}`,
+    eventType: 'NPC_FREEFORM_ACTION_PROPOSED',
+    actorId: npcId,
+    occurredAt: 0,
+    tick,
+    payload: {
+      actorType: 'npc',
+      data: {
+        npcId,
+        tile: 't_central',
+        proposal: { action: kind, target: { tileId: 't_central', npcId: null, cardId: null }, reason: 'practice', risk: 'low', expectedOutcome: 'learn', utterance: null },
+        resolved: { kind, targetTile: 't_central', targetNpcId: null, cardId: null, summary: kind },
+        accepted: true,
+        rejectionReason: null,
+        decidedAtTick: tick,
+      },
+      narration: `${npcId} ${kind}`,
+    },
+    deterministicKey: `key-freeform-${s}`,
+    version: 1,
+  }
+}
+
 describe('SkillXpProjection', () => {
   it('NPC_OBSERVED_SKILL creates row with SKILL_XP_PER_OBSERVE when no xpDelta provided', () => {
     const proj = new SkillXpProjection()
@@ -90,6 +117,14 @@ describe('SkillXpProjection', () => {
     const rows = proj.getByNpc('npc_a')
     expect(rows[0]?.xp).toBeGreaterThanOrEqual(SKILL_XP_LEVEL_THRESHOLD)
     expect(rows[0]?.level).toBeGreaterThanOrEqual(1)
+  })
+
+  it('accepted learn freeform actions grant practice XP', () => {
+    const proj = new SkillXpProjection()
+    proj.project(freeformActionEvent('npc_student', 'learn', 20))
+
+    expect(proj.getByNpc('npc_student')[0]).toMatchObject({ npcId: 'npc_student', skillId: 'learning' })
+    expect(proj.getByNpc('npc_student')[0]?.xp).toBeGreaterThan(0)
   })
 
   it('returns empty array for unknown NPC', () => {

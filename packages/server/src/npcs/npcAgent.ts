@@ -31,6 +31,9 @@ export const FREEFORM_AGENT_ACTIONS = [
   'travel',
   'work',
   'build',
+  'buy_goods',
+  'learn',
+  'invent',
   'rest',
   'socialize',
   'buy_card',
@@ -166,6 +169,9 @@ export function buildFreeformAgentPrompt(input: {
     '- travel: 去某個地區',
     '- work: 做工作、服務、打獵、採集、巡邏',
     '- build: 主動修建、擴建、開新建案、整理道路或公共設施',
+    '- buy_goods: 購物、採買食物、工具、材料或日用品',
+    '- learn: 學習、拜師、觀察手藝、練習技能',
+    '- invent: 發想、設計實驗、做草圖、嘗試原型',
     '- rest: 休息、躲避、恢復',
     '- socialize: 找某個人、拜訪、求助、告白、道歉、結盟',
     '- buy_card: 想去買卡、換卡、追求某張卡',
@@ -178,7 +184,7 @@ export function buildFreeformAgentPrompt(input: {
     '- 不要宣稱你已經拿到卡、改變金錢、殺死誰、治癒誰或瞬間移動；你只能提出想做的事。',
     '- target 裡不知道的欄位填 null。tileId 必須像 t_central；npcId 必須是你知道的 NPC id；cardId 可以是想追求的卡。',
     '- JSON 格式：',
-    '{ "action": "travel|work|build|rest|socialize|buy_card|challenge_combat|spread_rumor|custom_social_scene", "target": { "tileId": string|null, "npcId": string|null, "cardId": string|null }, "reason": "第一人稱中文理由", "risk": "願意承擔的風險", "expectedOutcome": "希望發生什麼", "utterance": "一句≤30字自言自語" }',
+    '{ "action": "travel|work|build|buy_goods|learn|invent|rest|socialize|buy_card|challenge_combat|spread_rumor|custom_social_scene", "target": { "tileId": string|null, "npcId": string|null, "cardId": string|null }, "reason": "第一人稱中文理由", "risk": "願意承擔的風險", "expectedOutcome": "希望發生什麼", "utterance": "一句≤30字自言自語" }',
   ].filter((line) => line !== '').join('\n')
   const userPrompt = `世界刻度 ${input.worldTick}。請以 ${profile.name.zh} 的身分，自由提出你此刻真正想做的一件事。`
   return { systemPrompt, userPrompt }
@@ -314,11 +320,13 @@ function isKnownTile(tileId: string): boolean {
 }
 
 function requiresTile(kind: FreeformAgentActionKind): boolean {
-  return kind === 'travel' || kind === 'work' || kind === 'build' || kind === 'rest' || kind === 'buy_card' || kind === 'challenge_combat'
+  return kind === 'travel' || kind === 'work' || kind === 'build' || kind === 'buy_goods' || kind === 'learn' || kind === 'invent' || kind === 'rest' || kind === 'buy_card' || kind === 'challenge_combat'
 }
 
 function defaultTileFor(kind: FreeformAgentActionKind, context: FreeformAgentResolveContext): string | null {
   if (kind === 'buy_card') return 't_dock'
+  if (kind === 'buy_goods') return 't_dock'
+  if (kind === 'learn' || kind === 'invent') return context.defaultTile || context.currentTile
   if (kind === 'rest') return context.defaultTile || context.currentTile
   if (kind === 'work' || kind === 'build' || kind === 'travel' || kind === 'challenge_combat') return context.currentTile
   return null

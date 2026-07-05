@@ -255,6 +255,56 @@ describe('computeIntentStack', () => {
     expect(boostedEconomic).toBeCloseTo(baseEconomic * 1.25)
     expect(boostedSurvival).toBeCloseTo(baseSurvival)
   })
+
+  it('high player resentment creates a social caution intent even without faction pressure', () => {
+    const base = computeIntentStack('npc_test', [], makeProfile(), {}, CURRENT_TILE, undefined, 0)
+    expect(base.entries).toHaveLength(0)
+
+    const hostilePlayer = computeIntentStack(
+      'npc_test', [], makeProfile(), {}, CURRENT_TILE, undefined, 0,
+      0,
+      {},
+      { maxResentment: 82, minTrust: 18, maxTrust: 45, maxAffinity: 4, maxFamiliarity: 5, interactionCount: 5, positiveInteractionCount: 0, negativeInteractionCount: 4, tradeInteractionCount: 0 },
+    )
+
+    expect(hostilePlayer.entries[0]).toMatchObject({
+      kind: 'social',
+      targetTile: 't_dock',
+    })
+    expect(hostilePlayer.entries[0]!.urgency).toBeGreaterThan(60)
+    expect(hostilePlayer.entries[0]!.reason).toContain('player_relationship_caution')
+  })
+
+  it('trusted familiar players create a social affinity intent instead of only resentment logic', () => {
+    const trustedPlayer = computeIntentStack(
+      'npc_test', [], makeProfile(), {}, CURRENT_TILE, undefined, 0,
+      0,
+      {},
+      { maxResentment: 20, minTrust: 72, maxTrust: 86, maxAffinity: 42, maxFamiliarity: 9, interactionCount: 9, positiveInteractionCount: 7, negativeInteractionCount: 0, tradeInteractionCount: 0 },
+    )
+
+    expect(trustedPlayer.entries[0]).toMatchObject({
+      kind: 'social',
+      targetTile: CURRENT_TILE,
+    })
+    expect(trustedPlayer.entries[0]!.urgency).toBeGreaterThan(50)
+    expect(trustedPlayer.entries[0]!.reason).toContain('player_relationship_affinity')
+  })
+
+  it('trusted repeated trade creates an economic reciprocity intent', () => {
+    const tradePartner = computeIntentStack(
+      'npc_test', [], makeProfile({ economyWeight: 1.0 }), {}, CURRENT_TILE, undefined, 0,
+      0,
+      {},
+      { maxResentment: 20, minTrust: 68, maxTrust: 78, maxAffinity: 28, maxFamiliarity: 6, interactionCount: 6, positiveInteractionCount: 4, negativeInteractionCount: 0, tradeInteractionCount: 3 },
+    )
+
+    expect(tradePartner.entries[0]).toMatchObject({
+      kind: 'economic',
+      targetTile: 't_dock',
+    })
+    expect(tradePartner.entries[0]!.reason).toContain('player_relationship_reciprocity')
+  })
 })
 
 // ─── selectHighestIntent ──────────────────────────────────────────────────────

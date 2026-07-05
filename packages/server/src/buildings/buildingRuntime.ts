@@ -14,6 +14,10 @@ import type { NpcRuntimeState, NpcActivity } from '../sim/npcEngine.js'
 import type { BuildingDef, BuildingOccupant, BuildingRuntimeView } from './types.js'
 import { findOwnerBuilding, listAllBuildings, listBuildingsForTile } from './catalog.js'
 
+type BuildingPresenceOptions = Readonly<{
+  includeWorkplaces?: boolean
+}>
+
 const INDOOR_ACTIVITIES: ReadonlySet<NpcActivity> = new Set([
   'work',
   'trade',
@@ -45,12 +49,15 @@ export class BuildingRuntime {
   resolveNpcBuildingId(
     npcId: string,
     state: NpcRuntimeState,
-    extraBuildings: readonly BuildingDef[] = []
+    extraBuildings: readonly BuildingDef[] = [],
+    options: BuildingPresenceOptions = {}
   ): string | null {
     const owner = findOwnerBuilding(npcId) ?? extraBuildings.find((building) => building.ownerNpcId === npcId) ?? null
     if (owner && state.tile === owner.tileId && INDOOR_ACTIVITIES.has(state.activity)) {
       return owner.id
     }
+    const workplace = options.includeWorkplaces ? this.resolveNpcWorkplace(state, extraBuildings) : null
+    if (workplace) return workplace.id
     if (state.activity === 'sleep') {
       const homes = listBuildingsForTile(state.tile).filter(
         (b) => b.type === 'residential'
@@ -68,47 +75,72 @@ export class BuildingRuntime {
     npcId: string,
     buildingId: string,
     state: NpcRuntimeState,
-    extraBuildings: readonly BuildingDef[] = []
+    extraBuildings: readonly BuildingDef[] = [],
+    options: BuildingPresenceOptions = {}
   ): boolean {
-    return this.resolveNpcBuildingId(npcId, state, extraBuildings) === buildingId
+    return this.resolveNpcBuildingId(npcId, state, extraBuildings, options) === buildingId
   }
 
   occupantsOf(
     buildingId: string,
     npcStates: ReadonlyMap<string, NpcRuntimeState>,
-    extraBuildings: readonly BuildingDef[] = []
+    extraBuildings: readonly BuildingDef[] = [],
+    options: BuildingPresenceOptions = {}
   ): readonly BuildingOccupant[] {
     const out: BuildingOccupant[] = []
     for (const [npcId, state] of npcStates) {
-      if (this.resolveNpcBuildingId(npcId, state, extraBuildings) !== buildingId) continue
+      if (this.resolveNpcBuildingId(npcId, state, extraBuildings, options) !== buildingId) continue
       const owner = findOwnerBuilding(npcId) ?? extraBuildings.find((building) => building.ownerNpcId === npcId) ?? null
+      const def = this.findBuildingById(buildingId, extraBuildings)
+      const ownerOccupant = owner ? owner.id === buildingId : false
       out.push({
         npcId,
-        shift: null,
-        isOwner: owner ? owner.id === buildingId : false
+        shift: ownerOccupant ? null : def?.hiring[0]?.shift ?? null,
+        isOwner: ownerOccupant
       })
     }
     return out
   }
 
+  private resolveNpcWorkplace(
+    state: NpcRuntimeState,
+    extraBuildings: readonly BuildingDef[] = []
+  ): BuildingDef | null {
+    if (state.activity !== 'work' && state.activity !== 'trade') return null
+    const candidates = [...listBuildingsForTile(state.tile), ...extraBuildings.filter((def) => def.tileId === state.tile)]
+      .filter((def) => def.hiring.length > 0 || this.activityMatchesBuilding(state.activity, def))
+    return candidates[0] ?? null
+  }
+
+  private activityMatchesBuilding(activity: NpcActivity, def: BuildingDef): boolean {
+    if (activity === 'trade') return def.type === 'shop' || def.type === 'exchange' || def.type === 'restaurant'
+    return def.type === 'shop' || def.type === 'restaurant' || def.type === 'office' || def.type === 'factory' || def.type === 'temple' || def.type === 'library' || def.hiring.length > 0
+  }
+
+  private findBuildingById(buildingId: string, extraBuildings: readonly BuildingDef[] = []): BuildingDef | null {
+    return [...listAllBuildings(), ...extraBuildings].find((def) => def.id === buildingId) ?? null
+  }
+
   snapshotForTile(
     tileId: string,
     npcStates: ReadonlyMap<string, NpcRuntimeState>,
-    extraBuildings: readonly BuildingDef[] = []
+    extraBuildings: readonly BuildingDef[] = [],
+    options: BuildingPresenceOptions = {}
   ): BuildingRuntimeView[] {
     return [...listBuildingsForTile(tileId), ...extraBuildings.filter((def) => def.tileId === tileId)].map((def) => ({
       def,
-      occupants: this.occupantsOf(def.id, npcStates, extraBuildings)
+      occupants: this.occupantsOf(def.id, npcStates, extraBuildings, options)
     }))
   }
 
   snapshotAll(
     npcStates: ReadonlyMap<string, NpcRuntimeState>,
-    extraBuildings: readonly BuildingDef[] = []
+    extraBuildings: readonly BuildingDef[] = [],
+    options: BuildingPresenceOptions = {}
   ): BuildingRuntimeView[] {
     return [...listAllBuildings(), ...extraBuildings].map((def) => ({
       def,
-      occupants: this.occupantsOf(def.id, npcStates, extraBuildings)
+      occupants: this.occupantsOf(def.id, npcStates, extraBuildings, options)
     }))
   }
 

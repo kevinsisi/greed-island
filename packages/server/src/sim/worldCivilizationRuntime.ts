@@ -51,6 +51,12 @@ export class WorldCivilizationProjection {
   projectEvent(event: Pick<Event, 'eventType' | 'tick' | 'payload'>): void {
     const data = readEventData(event.payload)
     if (!data) return
+    if (event.eventType === 'NPC_FREEFORM_ACTION_PROPOSED') {
+      const freeformTech = readFreeformInventTechnology(event, data)
+      if (!freeformTech) return
+      this.technologies.set(freeformTech.techId, freeformTech)
+      return
+    }
     if (event.eventType === 'WORLD_GOAL_DECLARED') {
       const goalId = stringField(data.goalId)
       const domain = stringField(data.domain)
@@ -145,6 +151,30 @@ export function planWorldCivilizationCommands(input: WorldCivilizationPlannerInp
     }))
   }
   return commands
+}
+
+function readFreeformInventTechnology(
+  event: Pick<Event, 'eventType' | 'tick' | 'payload'>,
+  data: Record<string, unknown>
+): WorldTechnology | null {
+  if (data.accepted !== true) return null
+  const npcId = stringField(data.npcId)
+  const resolved = data.resolved
+  if (!npcId || !resolved || typeof resolved !== 'object' || Array.isArray(resolved)) return null
+  const r = resolved as Record<string, unknown>
+  if (r.kind !== 'invent') return null
+  const tick = typeof data.decidedAtTick === 'number' && Number.isInteger(data.decidedAtTick)
+    ? data.decidedAtTick
+    : event.tick ?? 0
+  const summary = stringField(r.summary) ?? '未命名原型'
+  return {
+    techId: `tech.freeform.${npcId}.${tick}`,
+    domain: 'learning',
+    title: summary,
+    discoveredAtTick: tick,
+    evidenceEventIds: [`NPC_FREEFORM_ACTION_PROPOSED:${tick}:${npcId}`],
+    unlocks: ['prototype-practice'],
+  }
 }
 
 function groupEvidenceByDomain(evidence: readonly WorldCivilizationEvidence[]): Map<string, WorldCivilizationEvidence[]> {

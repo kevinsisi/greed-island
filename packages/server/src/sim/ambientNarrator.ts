@@ -23,6 +23,20 @@ export const AMBIENT_REFRESH_TICKS = 30
  */
 const RECENT_VISITOR_WINDOW_TICKS = 12
 
+/**
+ * 自主背景 ambient 演化速率（autonomous-world-narration change）。
+ *
+ * 每隔這麼多 tick，背景路徑最多挑「最久沒更新（含從未生成）」的 1 個 world
+ * tile 主動刷新一次旁白 —— 即使沒有任何玩家在看。讓沒人觀看的角落之氛圍敘事
+ * 也持續演化，而不是「玩家一開畫面才第一次生成」。
+ *
+ * 「每次 1 個」在單執行緒 event loop 下天然限流，避免併發 AI 呼叫塞爆 HTTP；
+ * 含 8 個 tile 時，每 tile 平均每 PERIOD×8 ticks 自主更新一次。調大此值可降低
+ * AI 成本、調小可讓世界更「活」。recent-visitor refresh（tickRefresh）不受此值
+ * 影響，玩家正在看的 tile 仍以 AMBIENT_REFRESH_TICKS 的較快節奏更新。
+ */
+export const AMBIENT_BACKGROUND_REFRESH_PERIOD_TICKS = 6
+
 export type AmbientContext = Readonly<{
   tileId: string
   weather: string
@@ -100,6 +114,58 @@ export class AmbientNarrator {
       const ctx = getContext(tileId)
       if (!ctx) continue
       void this.refresh(ctx, currentTick).catch(() => {})
+    }
+  }
+
+  /**
+   * autonomous-world-narration：自主背景演化。由 runtime tick listener 在
+   * tickRefresh 之後呼叫。與 tickRefresh 不同，背景路徑**不要求玩家最近看過**
+   * 該 tile —— 它對「全 world tile」做 round-robin，每 PERIOD tick 最多挑 1 個
+   * 「最久沒更新（含從未生成）」的 tile 主動刷新，讓沒人觀看的角落也持續演化。
+   *
+   * 成本與限流保證：
+   *  - 無 active AI provider（無 key 且無 OpenCode）→ 直接 no-op，零 AI 呼叫。
+   *  - 僅在 currentTick 為 PERIOD 整數倍時動作；每次最多 1 個 tile（單執行緒限流）。
+   *  - 沿用 inflight 去重；已被 recent-visitor refresh 涵蓋的 tile 由背景跳過。
+   *  - 走與 view-time 相同的 runRefresh（read-only：只寫記憶體 cache，不碰 EventLog）。
+   */
+  backgroundRefresh(
+    currentTick: number,
+    allTileIds: readonly string[],
+    getContext: (tileId: string) => AmbientContext | null
+  ): void {
+    // 成本閘門：與 runRefresh 一致 —— 沒有任何 provider 就完全不花費。
+    if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) return
+    // 速率封頂：每 PERIOD tick 才動一次。
+    if (AMBIENT_BACKGROUND_REFRESH_PERIOD_TICKS <= 0) return
+    if (currentTick % AMBIENT_BACKGROUND_REFRESH_PERIOD_TICKS !== 0) return
+
+    // 候選：排除 in-flight、以及最近被玩家請求過（交給 tickRefresh 處理）的 tile。
+    const candidates = allTileIds
+      .filter((tileId) => {
+        if (this.inflight.has(tileId)) return false
+        const lastRequested = this.lastRequestedTickByTile.get(tileId)
+        if (lastRequested !== undefined && currentTick - lastRequested <= RECENT_VISITOR_WINDOW_TICKS) {
+          return false
+        }
+        return true
+      })
+      // 最舊優先（從未生成 = -∞ 最優先）；同齡以 tileId 字典序決定性挑選，避免抖動。
+      .sort((a, b) => {
+        const ta = this.cache.get(a)?.generatedAtTick ?? Number.NEGATIVE_INFINITY
+        const tb = this.cache.get(b)?.generatedAtTick ?? Number.NEGATIVE_INFINITY
+        if (ta !== tb) return ta - tb
+        return a < b ? -1 : a > b ? 1 : 0
+      })
+
+    for (const tileId of candidates) {
+      const ctx = getContext(tileId)
+      if (!ctx) continue
+      const cached = this.cache.get(tileId)
+      // 最舊的那個都還很新 → 全世界都新，這輪不花費。
+      if (cached && currentTick - cached.generatedAtTick < AMBIENT_REFRESH_TICKS) return
+      void this.refresh(ctx, currentTick).catch(() => {})
+      return // 每 PERIOD 最多 1 個 tile
     }
   }
 

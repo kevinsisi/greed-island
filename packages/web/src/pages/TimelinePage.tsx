@@ -265,7 +265,7 @@ function freeformAgentMotivation(event: EventSummary): TimelineEventMotivation {
   const resolved = isRecord(event.payload.resolved) ? event.payload.resolved : null
   const action = typeof resolved?.kind === 'string' ? freeformActionLabel(resolved.kind) : '自由行為'
   if (accepted) {
-    return { explanation: `這是 NPC AI agent 依照自身需求、人生目標、信念與反思提出的自由行為；server 驗證後接受為「${action}」。` }
+    return { explanation: `NPC 依照需求、目標、信念與反思提出行動；server 驗證後接受為「${action}」。` }
   }
   const reason = typeof event.payload.rejectionReason === 'string' && isPublicMotivationText(event.payload.rejectionReason)
     ? `拒絕原因：${event.payload.rejectionReason}`
@@ -278,6 +278,9 @@ function freeformActionLabel(kind: string): string {
     case 'travel': return '移動 / 旅行'
     case 'work': return '工作 / 服務'
     case 'build': return '建造 / 開墾'
+    case 'buy_goods': return '購物 / 採買'
+    case 'learn': return '學習 / 拜師'
+    case 'invent': return '發想 / 原型'
     case 'rest': return '休息 / 恢復'
     case 'socialize': return '社交 / 拜訪'
     case 'buy_card': return '追求紋卡'
