@@ -38,6 +38,7 @@ import { createHistoryRouter } from './historyRouter.js'
 import { createBioNodesRouter } from './bioNodesRouter.js'
 import { createCombatRouter } from './combatRouter.js'
 import { createTechniqueShopRouter } from './techniqueShopRouter.js'
+import { createPropertiesRouter, createPropertyContextProvider } from './propertiesRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type Database from 'better-sqlite3'
 import { APP_VERSION } from '../version.js'
@@ -224,6 +225,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       dataDir: options.dataDir,
     })
   )
+  const propertyContextProvider = createPropertyContextProvider(options.db, accountStore, options.runtime)
   app.use(
     '/api',
     createNpcRouter({
@@ -232,6 +234,7 @@ export function createHttpApp(options: HttpAppOptions): Express {
       settings: settingsStore,
       accounts: accountStore,
       authConfig: options.auth,
+      getPropertyContext: propertyContextProvider,
     })
   )
   app.use(
@@ -363,6 +366,12 @@ export function createHttpApp(options: HttpAppOptions): Express {
       db: options.db,
     })
   )
+  app.use('/api', createPropertiesRouter({
+    db: options.db,
+    accounts: accountStore,
+    runtime: options.runtime,
+    authConfig: options.auth,
+  }))
   app.use('/api', createSseRouter(options.runtime))
 
   app.use((req: Request, res: Response) => {

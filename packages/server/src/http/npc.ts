@@ -94,6 +94,7 @@ export function createNpcRouter(input: {
   settings: SettingsStore
   accounts: AccountStore
   authConfig: AuthConfig
+  getPropertyContext?: (npcId: string) => Promise<readonly { title: string; price: number; address: string; rooms: number; hall: number; bath: number; sizePing: number; buildingType: string; floor: string | null; age: number | null }[]>
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
@@ -332,6 +333,12 @@ export function createNpcRouter(input: {
           ...(memoryCtx ? { memoryContext: memoryCtx } : {}),
           ...(lifeGoalCtx ? { lifeGoalContext: lifeGoalCtx } : {}),
           ...(buildingContext ? { buildingContext } : {}),
+        }
+        if (input.getPropertyContext) {
+          const pc = await input.getPropertyContext(npcId)
+          if (pc.length > 0) {
+            (dialogCtx as Record<string, unknown>).propertyContext = pc
+          }
         }
         const ai = await generateAiReply(input.settings, dialogCtx)
         const sanitized = sanitizeNpcReplyForUnknownEntities({

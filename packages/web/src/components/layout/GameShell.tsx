@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/timeline', labelKey: 'nav.timeline', glyph: '≡' },
   { to: '/ecology',  labelKey: 'nav.ecology',  glyph: '⬡' },
   { to: '/market',   labelKey: 'nav.market',   glyph: '⊛' },
+  { to: '/properties', labelKey: 'nav.properties', glyph: '⌂' },
   { to: '/social',   labelKey: 'nav.social',   glyph: '☍' },
   {
     to: '/profile',

@@ -851,6 +851,32 @@ export type SocialStreamEvent =
   | { type: 'presence.leave'; userId: number; tileId: string; occurredAt: string }
   | { type: 'alliance.invited'; from: number; allianceId: number; occurredAt: string }
 
+export type ServerPropertyListing = Readonly<{
+  id: string
+  title: string
+  price: number
+  address: string
+  lat: number
+  lng: number
+  rooms: number
+  hall: number
+  bath: number
+  sizePing: number
+  buildingType: string
+  floor: string | null
+  age: number | null
+  photoUrls: readonly string[]
+  agentName: string
+  agentContact: string
+}>
+
+export type ServerPropertyListResponse = Readonly<{
+  listings: readonly ServerPropertyListing[]
+  total: number
+  page: number
+  pageSize: number
+}>
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -1194,6 +1220,10 @@ export const api = {
   // Goods and market
   marketPrices: () =>
     jsonFetch<readonly MarketPriceEntry[]>('/goods/market-prices'),
+  properties: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return jsonFetch<ServerPropertyListResponse>(`/properties${qs}`)
+  },
   goodsInventory: (ownerId: string) =>
     jsonFetch<readonly GoodsInventoryEntry[]>(`/goods/inventory/${encodeURIComponent(ownerId)}`),
   // -- profile -------------------------------------------------------

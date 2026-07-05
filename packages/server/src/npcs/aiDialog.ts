@@ -76,6 +76,19 @@ export type SocialHistoryContext = Readonly<{
   dominantIntent: string | null
 }>
 
+export type PropertyContextRow = Readonly<{
+  title: string
+  price: number
+  address: string
+  rooms: number
+  hall: number
+  bath: number
+  sizePing: number
+  buildingType: string
+  floor: string | null
+  age: number | null
+}>
+
 export function computeSocialHistory(
   totalInteractions: number,
   history: readonly Pick<PersonalEventRecord, 'intent' | 'trustAfter'>[],
@@ -157,6 +170,7 @@ export type AiDialogContext = Readonly<{
   memoryContext?: string
   lifeGoalContext?: string
   buildingContext?: string | null
+  propertyContext?: readonly PropertyContextRow[]
 }>
 
 export class AiDialogError extends Error {
@@ -287,6 +301,7 @@ function buildSystemPrompt(ctx: AiDialogContext): string {
     ...buildReflectionBlock(ctx.reflectionContext),
     ...buildMemoryBlock(ctx.memoryContext),
     ...buildLifeGoalBlock(ctx.lifeGoalContext),
+    ...buildPropertyBlock(ctx.propertyContext),
     `### 回應規則`,
     `- 一定要回傳 **嚴格的 JSON**（純 JSON，不要包 markdown code fence）。`,
     `- 結構必須包含且只包含以下四個欄位：`,
@@ -756,6 +771,31 @@ export function buildMemoryBlock(memoryContext: string | undefined): string[] {
     '- 僅引用以下實際記錄的記憶，不可虛構記憶以外的事件',
     '- 可自然融入對話，表達情緒、態度、或過去的經歷',
     '- 不要逐字列出記憶清單，要自然融入人物個性',
+    '',
+  ]
+}
+
+export function buildPropertyBlock(
+  rows: readonly PropertyContextRow[] | undefined,
+): string[] {
+  if (!rows || rows.length === 0) return []
+  const summary = rows.map((r) => {
+    const ageText = r.age === null ? '未知' : r.age === 0 ? '新成屋' : `${r.age}年`
+    const floorText = r.floor ?? '無'
+    return `  · ${r.title}｜${r.price}萬｜${r.rooms}房${r.hall}廳${r.bath}衛｜${r.sizePing}坪｜${r.buildingType}｜${r.address}｜${r.floor}樓｜屋齡${ageText}`
+  })
+  return [
+    '## 房產案件（⚠️ 鐵則：你只可引用以下清單中的案件，不可虛構、編造、或暗示還有其他未列出的案件）',
+    `你目前代理以下 ${summary.length} 筆房產案件：`,
+    ...summary,
+    '',
+    '⚠️ 房產對話規則（極重要）：',
+    `- 你只能介紹以下清單中實際列出的案件。如果玩家問的條件（價格區間、區域、房型、坪數等）不在清單中，你必須誠實說「目前我手上沒有符合這條件的案件」，不可自行編造。`,
+    '- 玩家問「你有什麼案件」時，挑 2~3 筆最適合玩家的介紹，不要一次列全部清單。',
+    '- 玩家問特定區域或條件時，只介紹清單中符合的幾筆。',
+    '- 介紹案件時，用口語自然描述（價格、格局、地點、特色），不要逐字背誦清單。',
+    '- 禁止用以下詞彙：不編碼、不明示「案件清單」「以下列出」「資料庫」等 meta 詞彙。',
+    '- 你是個真正的房仲，你介紹的是你手頭上真實的物件，不是你從資料庫撈出來的。',
     '',
   ]
 }

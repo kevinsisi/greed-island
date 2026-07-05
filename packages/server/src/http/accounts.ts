@@ -19,9 +19,9 @@ import bcrypt from 'bcryptjs'
 
 type DatabaseConnection = Database.Database
 
-export type AccountRole = 'player' | 'gm' | 'admin'
+export type AccountRole = 'player' | 'gm' | 'admin' | 'agent'
 
-export const ACCOUNT_ROLES: readonly AccountRole[] = ['player', 'gm', 'admin']
+export const ACCOUNT_ROLES: readonly AccountRole[] = ['player', 'gm', 'admin', 'agent']
 
 export const DEFAULT_AVATAR = 'tide'
 
@@ -37,7 +37,7 @@ export const AVATAR_PRESETS: readonly string[] = [
 ]
 
 export function isAccountRole(value: unknown): value is AccountRole {
-  return value === 'player' || value === 'gm' || value === 'admin'
+  return value === 'player' || value === 'gm' || value === 'admin' || value === 'agent'
 }
 
 export function isAvatarPreset(value: unknown): value is string {

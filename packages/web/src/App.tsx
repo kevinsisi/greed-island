@@ -21,6 +21,7 @@ import { AdminWorldPage } from './pages/AdminWorldPage'
 import { AdminCardsPage } from './pages/AdminCardsPage'
 import { EcologyPage } from './pages/EcologyPage'
 import { MarketPage } from './pages/MarketPage'
+import { PropertyBrowserPage } from './pages/PropertyBrowserPage'
 
 export function App() {
   return (
@@ -41,6 +42,7 @@ export function App() {
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/ecology" element={<EcologyPage />} />
               <Route path="/market" element={<MarketPage />} />
+              <Route path="/properties" element={<PropertyBrowserPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/world" element={<AdminWorldPage />} />
               <Route path="/admin/npcs" element={<AdminNpcsPage />} />
