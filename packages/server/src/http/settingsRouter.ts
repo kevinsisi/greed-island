@@ -199,9 +199,13 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
       ? { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
       : {}
 
-    const SHOW_PROVIDERS = new Set(['opencode', 'openai', 'github-copilot', 'google', 'anthropic'])
+    // `opencode-go` (paid Zen subscription) and `openai` (No-OpenAI rule) are
+    // never shown. Remaining models are cost-filtered to free-only below, since
+    // the Zen workspace balance is 0 and any paid model returns 401.
+    const SHOW_PROVIDERS = new Set(['opencode', 'github-copilot', 'google', 'anthropic'])
 
-    type ProviderModel = { id?: string; name?: string; cost?: { input?: number } }
+    type ProviderModel = { id?: string; name?: string; cost?: { input?: number; output?: number } }
+    const isFreeModel = (m: ProviderModel) => m.cost?.input === 0 && m.cost?.output === 0
     type RawProvider = { id?: string; name?: string; models?: Record<string, ProviderModel> }
 
     void (async () => {
@@ -224,7 +228,7 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
         const groups: Array<{ provider: string; name: string; authed: boolean; models: Array<{ id: string; name: string; free: boolean }> }> = []
         for (const provider of providerList as RawProvider[]) {
           if (!provider.id || !SHOW_PROVIDERS.has(provider.id)) continue
-          const models = Object.values(provider.models ?? {})
+          const models = Object.values(provider.models ?? {}).filter(isFreeModel)
           if (models.length === 0) continue
           groups.push({
             provider: provider.id,
@@ -233,7 +237,7 @@ export function createSettingsRouter(input: SettingsRouterInput): Router {
             models: models.map((m) => ({
               id: `${provider.id}/${m.id ?? ''}`,
               name: m.name ?? m.id ?? '',
-              free: m.cost?.input === 0,
+              free: true,
             })),
           })
         }
