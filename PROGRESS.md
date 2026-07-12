@@ -1,3 +1,20 @@
+## 2026-07-12 — Handoff Snapshot @ v0.99.0 (map-visual-language: 地圖五元素視覺重造)
+
+- **OpenSpec**: `openspec/changes/map-visual-language/`(proposal/tasks/spec 齊)。使用者在視覺提案 mockup 確認後執行:「可以,就照這樣去做,此遊戲有戰鬥與一切生活,記得也一併做上去」。純呈現層,無 Command/Event/API 變更。
+- **地形(AreaMapSvg)**:色票撐開亮度 6%–42%(舊版全擠在 4%–16% → 線上實看一片黑);不變量:path 最亮可走面、水唯一藍系、ember 只給活物。新增 `TerrainDetailLayer` 決定論紋理(FNV-1a `detailRand`):波浪/苔點/沙點/石板縫/稜線/木板縫 + 沙-水海岸咬合。
+- **人形(tokenFigure.tsx 新增)**:`NpcFigure`/`PlayerFigure`/`PeerFigure`/`FigureBody` — 頭/肩/袍/腳剪影+腳下影,派系色上披風,職業 medallion 縮成頭頂徽記(NpcGlyph 沿用);玩家 ember 披風+羅盤星+呼吸光環。AreaMapSvg/BuildingSvg/WorldMapSvg(peer+self)全換用;漂移/氣泡/低血量/低心情/nearby 光暈邏輯不動。
+- **建築(buildingFacade.tsx 新增)**:正面立面(牆+屋頂+門+窗),貼地渲染;**窗光=狀態**(operational 全亮/damaged 半亮+屋頂缺口/construction 骨架+進度條/abandoned 全黑);屋頂色依 type。BuildingSvg 室內地板色票同步撐亮。
+- **動物(animalFigure.tsx 新增)**:側面剪影 6 archetype(deer/heavy/quadruped/bird/fish/crawler),`archetypeFor` 關鍵字歸類;地圖動物群=剪影群(≤3+×N)、漁場=躍水魚+密度條;狩獵/捕魚點擊沿用;生態儀表板動物卡附剪影。
+- **世界(HubPage)**:版面反轉 — WorldMapSvg 解除 800px 上限成滿版舞台(sm 16:9),「世界現在」/「情境面板」改地圖上可收合浮層;手機單欄照舊。
+- **戰鬥(CombatHud)**:新增 `CombatStage` 對峙舞台(玩家 ember 人形 vs NPC rust 人形/動物剪影,低血量披風變暗),插在 header 與 hp bars 之間;Phase B 行為不動。
+- **驗證**:
+  - `tsc -b && vite build` clean(chunk warning 預存在)✅
+  - web vitest 36 files / **271 pass**(新增 `mapVisualLanguage.test.ts` 14 tests;測試抓到 detailRand 符號 bug 已修:`h ^= h>>>13` 會產生負數 → 全部 `>>> 0`)✅
+  - headless 截圖 1440×900(hub / t_desert / t_dock)+ 390×844(hub)確認:地形分層可讀、海陸冷暖分離、人形+徽記、浮層版面 ✅(dev proxy 暫指 hunter API 取示意資料,已還原 localhost:3000)
+- **既有測試調整**:AreaMapSvg.test.ts 兩個色票斷言更新為新 palette(#0e2438/#3c4a2e)。
+- **版本**:root/web/server → **0.99.0**(sync-version)。
+- **未完(後續 change)**:WorldMapSvg NPC 仍用小徽記(世界層縮尺,spec 允許);Phase C CombatScene(Phaser,未被使用)未重繪;BuildingSvg 家具仍為 emoji glyph。
+
 ## 2026-07-03 — Handoff Snapshot @ v0.98.45 (map-M5: WorldMapSvg 全面重做 — 有機島嶼、玩家移動、NPC 漂移)
 
 - **WorldMapSvg 三大問題一次修好**：

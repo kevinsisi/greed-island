@@ -7,20 +7,21 @@
 
 import type { ServerBuildingDef } from '../../api/client'
 import type { BuildingSceneNpc } from '../../game/BuildingScene'
-import { NpcGlyph } from './tokenMedallion'
+import { NpcFigure } from './tokenFigure'
 
 // ── Floor colour pairs [light, dark] by building type ─────────────────────
 
+// map-visual-language:室內地板同步撐開亮度(棋盤兩色差拉大,型別可辨)
 const FLOOR_COLORS: Readonly<Record<string, readonly [string, string]>> = {
-  restaurant:  ['#2e1a0e', '#22130a'],
-  library:     ['#1a2020', '#121818'],
-  factory:     ['#1e1c1c', '#151313'],
-  temple:      ['#1c1c28', '#141420'],
-  residential: ['#221c14', '#1a1510'],
+  restaurant:  ['#4a2c18', '#392112'],
+  library:     ['#2c3434', '#222929'],
+  factory:     ['#343130', '#272424'],
+  temple:      ['#2e2e44', '#242438'],
+  residential: ['#3a3022', '#2d251a'],
 }
 
 function floorColors(type: string): readonly [string, string] {
-  return FLOOR_COLORS[type] ?? ['#1e1a2c', '#17142a']
+  return FLOOR_COLORS[type] ?? ['#332e4a', '#282343']
 }
 
 // ── NPC grid positioning (pure — exported for tests) ──────────────────────
@@ -179,32 +180,19 @@ export function BuildingSvg({
               role={controlsEnabled ? 'button' : undefined}
               aria-label={npc.name}
             >
-              {/* NPC Medallion */}
-              <svg width="28" height="36" viewBox="-14 -14 28 36"
-                style={{ overflow: 'visible' }} aria-hidden="true">
-                {/* Owner highlight ring */}
-                {isOwner && (
-                  <circle r="13" fill="none" stroke="#ffd966" strokeWidth="1.5" opacity="0.55" />
-                )}
-                {/* Outer faction ring */}
-                <circle r="11" fill="none"
-                  stroke={isOwner ? '#ffd966' : npcColor}
-                  strokeWidth={isOwner ? 2.5 : 2} />
-                {/* Glow */}
-                <circle r="11" fill="none" stroke={npcColor} strokeWidth="4" opacity="0.12" />
-                {/* Dark base */}
-                <circle r="9" fill="url(#bs-npc-base)" />
-                {/* Occupation glyph */}
-                <NpcGlyph activity={npc.activity} initial={npc.shortName} color={isOwner ? '#ffd966' : npcColor} />
-                {/* Name pill */}
-                <rect x="-12" y="11.5" width="24" height="8.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
-                <text y="17.5" textAnchor="middle" fontSize="5.5"
-                  fill={isOwner ? '#ffd966' : npcColor}
-                  fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                  fontWeight="700" letterSpacing="0.03em">
-                  {npc.shortName}
-                </text>
-              </svg>
+              {/* NPC 人形剪影(owner 金色高亮) */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  filter: isOwner ? 'drop-shadow(0 0 6px rgba(255,217,102,0.6))' : 'none',
+                }}
+              >
+                <NpcFigure
+                  color={isOwner ? '#ffd966' : npcColor}
+                  shortName={npc.shortName}
+                  activity={npc.activity}
+                />
+              </div>
             </div>
           )
         })}

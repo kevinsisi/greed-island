@@ -24,6 +24,7 @@ import type { HubEcologySummary } from '../../pages/hubEcology'
 import { activityGlyphFor } from '../../game/npcVisuals'
 import { visualForSpecies } from '../../game/speciesPalette'
 import { NpcGlyph, CompassStar } from './tokenMedallion'
+import { FigureBody } from './tokenFigure'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -321,7 +322,7 @@ export function WorldMapSvg({
 
   return (
     <div
-      className="w-full max-w-[800px] mx-auto aspect-[4/3] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
+      className="w-full mx-auto aspect-[4/3] sm:aspect-[16/9] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
       role="region"
       aria-label={locale === 'zh' ? '世界地圖' : 'World Map'}
     >
@@ -633,25 +634,14 @@ export function WorldMapSvg({
               }}
               pointerEvents="none"
             >
-              {/* Peer player medallion */}
-              <g opacity={0.88}>
-              {/* Breathing glow */}
-              <circle r="13.5" fill="none" stroke="rgba(77,184,200,0.3)" strokeWidth="3"
-                style={{ animation: 'wm-player-breathe 2.5s ease-in-out infinite' }} />
-              {/* Outer tide ring */}
-              <circle r="11" fill="none" stroke="#4db8c8" strokeWidth="2" />
-              {/* Inner ember ring */}
-              <circle r="8.5" fill="none" stroke="#f39c20" strokeWidth="1" opacity="0.7" />
-              {/* Dark base */}
-              <circle r="7.5" fill="url(#wm-player-base)" />
-              {/* Compass star */}
-              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
-              {/* Name pill */}
-              <rect x="-9" y="10" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.82)" />
-              <text y="15.5" textAnchor="middle" fontSize="5"
-                fill="#fff5b8" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
-                {p.shortName}
-              </text>
+              {/* Peer player 人形剪影(tide 披風;腳底貼 token 中心下緣) */}
+              <g opacity={0.88} transform="translate(0, 12)">
+                <FigureBody cloak="#3a7a8a" scale={0.85} />
+                <rect x="-9" y="2" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.82)" />
+                <text y="7.5" textAnchor="middle" fontSize="5"
+                  fill="#4db8c8" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
+                  {p.shortName}
+                </text>
               </g>
             </g>
           ))}
@@ -665,21 +655,16 @@ export function WorldMapSvg({
             }}
             pointerEvents="none"
           >
-            <g opacity={0.95}>
-              {/* Ember breathing glow */}
-              <circle r="14" fill="none" stroke="rgba(243,156,32,0.25)" strokeWidth="3"
+            <g opacity={0.95} transform="translate(0, 12)">
+              {/* Ember 呼吸光環(圍住人形) */}
+              <circle cy={-11} r="15" fill="none" stroke="rgba(243,156,32,0.35)" strokeWidth="2"
                 style={{ animation: 'wm-player-breathe 2.5s ease-in-out infinite' }} />
-              {/* Outer ember ring */}
-              <circle r="11" fill="none" stroke="#f39c20" strokeWidth="2" />
-              {/* Inner tide ring */}
-              <circle r="8.5" fill="none" stroke="#4db8c8" strokeWidth="1" opacity="0.6" />
-              {/* Dark base */}
-              <circle r="7.5" fill="url(#wm-player-base)" />
-              {/* Compass star */}
-              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
-              {/* Name pill */}
-              <rect x="-9" y="10" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.88)" />
-              <text y="15.5" textAnchor="middle" fontSize="5"
+              <FigureBody cloak="#f39c20" scale={0.9} />
+              <g transform="translate(0, -10.5) scale(0.5)">
+                <CompassStar tideFill="#4db8c8" emberFill="#fff5b8" />
+              </g>
+              <rect x="-9" y="2" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.88)" />
+              <text y="7.5" textAnchor="middle" fontSize="5"
                 fill="#f39c20" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
                 {playerName ? playerName.charAt(0).toUpperCase() : '你'}
               </text>
