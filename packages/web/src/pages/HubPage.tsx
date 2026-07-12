@@ -74,6 +74,9 @@ export function HubPage() {
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
   const [showCivPanel, setShowCivPanel] = useState(false)
+  // map-visual-language:浮層可收合(地圖是主畫面,面板讓路)
+  const [nowOpen, setNowOpen] = useState(true)
+  const [ctxOpen, setCtxOpen] = useState(true)
 
   // ActionBar eat result — SurvivalHud picks up the change on next tick via polling
 
@@ -267,45 +270,101 @@ export function HubPage() {
         <span className="ml-auto font-data text-[10px] text-ground-500 shrink-0">● 世界運轉中</span>
       </div>
 
-      {/* ── 主體：手機 = 單欄，桌機 ≥ sm = 三欄 ─────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:min-h-[600px]">
+      {/* ── 主體：地圖就是主畫面(map-visual-language 版面反轉)。 ──
+          手機 = 單欄照舊;桌機 = 滿版地圖舞台 + 可收合浮層。 */}
+      <div className="flex flex-col">
 
-        {/* ── 左側面板（桌機專屬，220px）────────────────────────── */}
-        <aside className="hidden sm:flex sm:flex-col sm:w-[220px] sm:shrink-0 sm:border-r sm:border-ground-700 sm:bg-ground-900/40 sm:p-3 sm:gap-3">
-          {token && (
-            <SurvivalHud compact token={token} tick={world.tick} />
-          )}
+        {/* ── 滿版地圖舞台 ─────────────────────────────────────── */}
+        <div className="relative w-full">
+          {phaserMap}
 
-          <div className="gi-panel px-2 py-2 flex flex-col gap-1 flex-1 overflow-hidden">
-            <div className="gi-eyebrow">世界現在</div>
-            {events.filter(e => e.narration).slice(0, 5).length === 0 ? (
-              <p className="text-[10px] text-ground-600 leading-relaxed">世界安靜著…</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {events.filter(e => e.narration).slice(0, 5).map(evt => (
-                  <li key={evt.sequence} className="text-[10px] text-ground-400 leading-snug line-clamp-2">
-                    {evt.narration}
-                  </li>
-                ))}
-              </ul>
+          {/* 桌機浮層:左上 = 生存 HUD + 世界現在(可收合) */}
+          <div className="hidden sm:flex absolute top-2 left-2 z-30 w-[236px] flex-col gap-2 pointer-events-none">
+            {token && (
+              <div className="pointer-events-auto">
+                <SurvivalHud compact token={token} tick={world.tick} />
+              </div>
+            )}
+            <div className="pointer-events-auto gi-panel px-2 py-2 flex flex-col gap-1 bg-ground-900/85 backdrop-blur-sm border border-ground-700 rounded-sharp">
+              <button
+                type="button"
+                onClick={() => setNowOpen(v => !v)}
+                aria-expanded={nowOpen}
+                className="gi-eyebrow text-left flex items-center gap-1"
+              >
+                <span>{nowOpen ? '▾' : '▸'}</span> 世界現在
+              </button>
+              {nowOpen && (
+                events.filter(e => e.narration).slice(0, 5).length === 0 ? (
+                  <p className="text-[10px] text-ground-600 leading-relaxed">世界安靜著…</p>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {events.filter(e => e.narration).slice(0, 5).map(evt => (
+                      <li key={evt.sequence} className="text-[10px] text-ground-400 leading-snug line-clamp-2">
+                        {evt.narration}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* 桌機浮層:右上 = 情境面板(可收合)+ 文明面板切換 */}
+          <div className="hidden sm:flex absolute top-2 right-2 z-30 w-[248px] flex-col gap-2 pointer-events-none">
+            <div className="pointer-events-auto gi-panel p-3 flex flex-col gap-2 bg-ground-900/85 backdrop-blur-sm border border-ground-700 rounded-sharp">
+              <button
+                type="button"
+                onClick={() => setCtxOpen(v => !v)}
+                aria-expanded={ctxOpen}
+                className="gi-eyebrow text-left flex items-center gap-1"
+              >
+                <span>{ctxOpen ? '▾' : '▸'}</span> 情境面板
+              </button>
+              {ctxOpen && (
+                currentName ? (
+                  <>
+                    <p className="text-[11px] text-ground-500">目前選中區域</p>
+                    <p className="font-display font-bold text-[14px] tracking-tightest text-ground-200">
+                      {currentName}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleOpenCurrentArea}
+                      className="gi-touch mt-1 px-3 py-1.5 border border-ember-600 rounded-sharp text-[11px] font-display tracking-eyebrow uppercase text-ember-300 bg-ember-500/10 hover:bg-ember-500/20 transition-colors"
+                    >
+                      前往 {currentName}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-ground-500 leading-relaxed">
+                    點選地圖區域以查看詳情
+                  </p>
+                )
+              )}
+            </div>
+            {shouldRenderHubCivilizationButton(isSignedIn) && (
+              <button
+                type="button"
+                onClick={() => setShowCivPanel((v) => !v)}
+                aria-expanded={showCivPanel}
+                className="pointer-events-auto gi-touch px-3 py-2 bg-ground-900/85 backdrop-blur-sm border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors text-left"
+              >
+                ⚔ 文明面板
+              </button>
             )}
           </div>
-        </aside>
+        </div>
 
-        {/* ── 中央欄（地圖 + 嵌入元件）─────────────────────────── */}
-        <div className="flex-1 min-w-0 flex flex-col">
-
-          {/* Phaser 地圖 */}
-          <div className="relative w-full">
-            {phaserMap}
-          </div>
+        {/* ── 地圖下方(流程元件照舊) ──────────────────────────── */}
+        <div className="w-full flex flex-col">
 
           {/* WhenYouWereGone — 地圖下方、HUD 上方，非彈窗 */}
           {token && showWyg && (
             <WhenYouWereGone token={token} onDismiss={dismissWyg} />
           )}
 
-          {/* 手機：SurvivalHud 緊貼地圖下（桌機在左側面板） */}
+          {/* 手機：SurvivalHud 緊貼地圖下（桌機在左上浮層） */}
           {token && (
             <div className="sm:hidden">
               <SurvivalHud compact token={token} tick={world.tick} />
@@ -347,45 +406,6 @@ export function HubPage() {
           />
 
         </div>
-
-        {/* ── 右側情境面板（桌機專屬，280px）──────────────────── */}
-        <aside className="hidden sm:flex sm:flex-col sm:w-[280px] sm:shrink-0 sm:border-l sm:border-ground-700 sm:bg-ground-900/40 sm:p-3 sm:gap-3">
-          {/* 文明面板切換按鈕 */}
-          {shouldRenderHubCivilizationButton(isSignedIn) && (
-            <button
-              type="button"
-              onClick={() => setShowCivPanel((v) => !v)}
-              aria-expanded={showCivPanel}
-              className="gi-touch px-3 py-2 bg-ground-900 border border-ground-700 rounded-sharp text-[11px] text-ground-400 hover:border-ember-600 hover:text-ember-300 transition-colors text-left"
-            >
-              ⚔ 文明面板
-            </button>
-          )}
-
-          {/* 選中區域資訊（Phase 0 佔位；NpcMindSheet 在 Phase 1 接入） */}
-          <div className="gi-panel p-3 flex flex-col gap-2 flex-1">
-            <div className="gi-eyebrow">情境面板</div>
-            {currentName ? (
-              <>
-                <p className="text-[11px] text-ground-500">目前選中區域</p>
-                <p className="font-display font-bold text-[14px] tracking-tightest text-ground-200">
-                  {currentName}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOpenCurrentArea}
-                  className="gi-touch mt-1 px-3 py-1.5 border border-ember-600 rounded-sharp text-[11px] font-display tracking-eyebrow uppercase text-ember-300 bg-ember-500/10 hover:bg-ember-500/20 transition-colors"
-                >
-                  前往 {currentName}
-                </button>
-              </>
-            ) : (
-              <p className="text-[11px] text-ground-500 leading-relaxed">
-                點選地圖區域以查看詳情
-              </p>
-            )}
-          </div>
-        </aside>
       </div>
 
       <NpcDialog npc={activeNpc} onClose={() => setActiveNpc(null)} />

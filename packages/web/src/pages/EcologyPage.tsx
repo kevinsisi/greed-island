@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { AnimalFigure } from '../components/map/animalFigure'
+import { visualForSpecies } from '../game/speciesPalette'
 import { useI18n } from '../i18n'
 import { api, type AreaEcologyView } from '../api/client'
 
@@ -102,8 +104,17 @@ export function EcologyPage() {
                     key={`${a.speciesId}-${a.biomeRegion}`}
                     className="bg-ground-800 rounded-sharp border border-ground-700 px-3 py-2"
                   >
-                    <div className="text-xs font-display uppercase text-ground-400 truncate">
-                      {a.speciesId}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-display uppercase text-ground-400 truncate">
+                        {a.speciesId}
+                      </div>
+                      {/* 側面剪影(與地圖同語言) */}
+                      <svg width="34" height="24" viewBox="-17 -20 34 24" className="shrink-0" aria-hidden="true">
+                        <AnimalFigure
+                          speciesId={a.speciesId}
+                          color={'#' + visualForSpecies(a.speciesId).color.toString(16).padStart(6, '0')}
+                        />
+                      </svg>
                     </div>
                     <div className="text-ground-100 font-bold text-lg">{a.count}</div>
                     <div className="text-[10px] text-ground-600">{a.biomeRegion}</div>

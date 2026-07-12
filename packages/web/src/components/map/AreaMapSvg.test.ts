@@ -137,7 +137,7 @@ describe('gridDistance', () => {
 describe('terrainToCssColor', () => {
   it('returns the darkest colour for open_water', () => {
     const c = terrainToCssColor('open_water')
-    expect(c).toBe('#0a1520')
+    expect(c).toBe('#0e2438')
   })
 
   it('returns a distinct colour for land vs open_water', () => {
@@ -161,7 +161,7 @@ describe('terrainToCssColor', () => {
   it('falls back to the land colour for unknown terrain', () => {
     // @ts-expect-error intentional unknown value
     const c = terrainToCssColor('banana')
-    expect(c).toBe('#2a2218')
+    expect(c).toBe('#3c4a2e')
   })
 })
 

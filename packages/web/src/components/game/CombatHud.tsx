@@ -4,6 +4,8 @@
 // Phase C (CombatHudPhaseC): SSE-driven real-time HUD + card hand + client prediction.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { FigureBody } from '../map/tokenFigure'
+import { AnimalFigure } from '../map/animalFigure'
 import Phaser from 'phaser'
 import { api, ApiError, type ServerCombatHandCard, type ServerCombatSession } from '../../api/client'
 import { useAuth } from '../../state/AuthContext'
@@ -120,6 +122,9 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc',
             關閉
           </button>
         </header>
+
+        {/* 戰鬥舞台:同一套人形/動物剪影語言(map-visual-language) */}
+        <CombatStage npcName={npcName} enemyType={enemyType} playerPct={playerPct} npcPct={npcPct} />
 
         <div className="flex flex-col gap-3">
           <HpBar label="你 / You" value={session.playerHp} max={session.initialHp} pct={playerPct} colorClass="bg-moss-500" />
@@ -563,4 +568,59 @@ function extractPayloadData(payload: unknown): Record<string, unknown> {
   const p = payload as Record<string, unknown>
   if (typeof p.data === 'object' && p.data !== null) return p.data as Record<string, unknown>
   return p
+}
+
+
+// ── CombatStage — 夜之對峙舞台(純視覺,map-visual-language) ────────────────
+
+function CombatStage({
+  npcName,
+  enemyType,
+  playerPct,
+  npcPct,
+}: {
+  npcName: string
+  enemyType: 'npc' | 'animal'
+  playerPct: number
+  npcPct: number
+}) {
+  return (
+    <div className="w-full rounded-sharp border border-ground-800 overflow-hidden bg-[#0b1521]">
+      <svg viewBox="0 0 480 120" className="block w-full" aria-hidden="true">
+        {/* 夜地面 */}
+        <rect x="0" y="96" width="480" height="24" fill="#1d1a12" />
+        <path d="M 0 96 H 480" stroke="#43392a" strokeWidth="1.5" />
+        {/* 月光 */}
+        <ellipse cx="240" cy="96" rx="170" ry="9" fill="#8fb6c9" opacity="0.05" />
+        {/* 玩家(左,ember;低血量披風轉暗) */}
+        <g transform="translate(150, 96) scale(1.9)">
+          <circle cy={-13} r={15} fill="none" stroke="rgba(243,156,32,0.4)" strokeWidth="1" />
+          <FigureBody cloak={playerPct > 30 ? '#f39c20' : '#8a5a20'} />
+        </g>
+        {/* 敵方(右) */}
+        {enemyType === 'animal' ? (
+          <g transform="translate(330, 96) scale(-2.4, 2.4)">
+            <AnimalFigure speciesId="boar" color={npcPct > 30 ? '#c0532a' : '#6e3a24'} />
+          </g>
+        ) : (
+          <g transform="translate(330, 96) scale(1.9)">
+            <FigureBody cloak={npcPct > 30 ? '#c0532a' : '#6e3a24'} />
+          </g>
+        )}
+        {/* 對峙火花線 */}
+        <path
+          d="M 210 60 h 60"
+          stroke="#f39c20"
+          strokeWidth="1"
+          strokeDasharray="3 5"
+          opacity="0.35"
+        />
+        {/* 名牌 */}
+        <text x="150" y="112" textAnchor="middle" fontSize="9" fill="#f39c20"
+          fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">你</text>
+        <text x="330" y="112" textAnchor="middle" fontSize="9" fill="#c0532a"
+          fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">{npcName}</text>
+      </svg>
+    </div>
+  )
 }

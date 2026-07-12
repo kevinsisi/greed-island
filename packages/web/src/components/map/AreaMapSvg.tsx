@@ -17,7 +17,9 @@ import type {
 import type { DistrictId } from '../../game/districts'
 import { activityGlyphFor } from '../../game/npcVisuals'
 import { visualForSpecies } from '../../game/speciesPalette'
-import { NpcGlyph, CompassStar } from './tokenMedallion'
+import { NpcFigure, PlayerFigure, PeerFigure } from './tokenFigure'
+import { BuildingFacade } from './buildingFacade'
+import { AnimalFigure } from './animalFigure'
 import {
   effectiveTerrainAt,
   type AnyTerrain,
@@ -39,36 +41,49 @@ const BUILDING_ENTER_CELLS = 1.5
 // localStorage key prefix (v2 col/row format; avoids collision with old Phaser {x,y} keys)
 const POS_PREFIX = 'gi:areaPos:v2:'
 
-// ── CSS colour maps (salvage-lit dark palette) ────────────────────────────
+// ── CSS colour maps (night nautical, readable) ─────────────────────────────
+// map-visual-language 契約:亮度撐開到 6%–42%。不變量:
+//   1. path 是全圖最亮的可走面(玩家視線沿路走)
+//   2. 水是唯一的藍色系(冷暖分離,一眼分出海陸)
+//   3. ember 光只給「活的東西」(窗、燈、玩家光環),不進地形
 
 const SUBCELL_CSS: Readonly<Record<SubcellTerrain, string>> = {
-  land:          '#2a2218',
-  pier:          '#1e2a30',
-  shore:         '#1a2830',
-  shallow_water: '#0f1f2a',
-  open_water:    '#0a1520',
+  land:          '#3c4a2e',
+  pier:          '#63482e',
+  shore:         '#5e5138',
+  shallow_water: '#17394f',
+  open_water:    '#0e2438',
 }
 
 const LAND_CSS: Readonly<Record<LandTerrain, string>> = {
-  open:     '#2a2218',
-  rough:    '#1e1810',
-  path:     '#252018',
-  blocked:  '#0e0c08',
-  building: '#2a2218',
+  open:     '#3c4a2e',
+  rough:    '#43392a',
+  path:     '#8a7550',
+  blocked:  '#2e333b',
+  building: '#332c1e',
 }
+
+// 紋理層顏色(每種地形一種 detail mark)
+const DETAIL_CSS = {
+  wave:       '#2b5878',
+  waveShallow:'#3d6c85',
+  grass:      '#55683f',
+  grassDot:   '#4d5f39',
+  sand:       '#6f6045',
+  stone:      '#6e5c3f',
+  rubble:     '#5a4c36',
+  rubbleDark: '#33291d',
+  rockFace:   '#3a414c',
+  rockEdge:   '#4a5260',
+  rockShade:  '#262b33',
+  plank:      '#472f1c',
+} as const
 
 const DROP_RANK_COLOR: Readonly<Record<string, string>> = {
   SS: '#f39c20',
   S:  '#e07030',
   A:  '#9060d0',
   H:  '#606060',
-}
-
-const BUILDING_STATE_COLOR: Readonly<Record<string, string>> = {
-  operational:        '#f39c20',
-  damaged:            '#c0532a',
-  under_construction: '#d4c800',
-  abandoned:          '#4a4a4a',
 }
 
 // ── Pure utilities (exported for tests) ───────────────────────────────────
@@ -107,7 +122,7 @@ export function gridDistance(c1: number, r1: number, c2: number, r2: number): nu
 export function terrainToCssColor(terrain: AnyTerrain): string {
   if (terrain in SUBCELL_CSS) return SUBCELL_CSS[terrain as SubcellTerrain]
   if (terrain in LAND_CSS) return LAND_CSS[terrain as LandTerrain]
-  return '#2a2218'
+  return '#3c4a2e'
 }
 
 /** Build a ROWS×COLS terrain grid for the given district + placed buildings. */
@@ -119,6 +134,191 @@ export function buildTerrainGrid(
     Array.from({ length: COLS }, (_, col) =>
       effectiveTerrainAt(tileId, col, row, buildings)
     )
+  )
+}
+
+// ── Terrain detail marks (deterministic, FNV-1a) ───────────────────────────
+// 每格依地形撒 0–4 個向量記號:波浪/苔點/沙點/石板縫/稜線/木板縫。
+// 同格永遠同紋理(hash by col,row),重渲染不閃爍。
+
+/** FNV-1a 變體 → 0..1;salt 讓同格可取多個獨立亂數。 */
+export function detailRand(col: number, row: number, salt: number): number {
+  let h = (2166136261 ^ salt) >>> 0
+  h = Math.imul(h ^ col, 16777619) >>> 0
+  h = Math.imul(h ^ row, 16777619) >>> 0
+  h = (h ^ (h >>> 13)) >>> 0
+  h = Math.imul(h, 0x5bd1e995) >>> 0
+  h = (h ^ (h >>> 15)) >>> 0
+  return h / 4294967296
+}
+
+const CELL_W = PIXEL_W / COLS // 40
+const CELL_H = PIXEL_H / ROWS // 40
+
+/** 單格紋理(SVG elements,座標為 legacy 600×400 像素空間)。 */
+function cellDetail(terrain: AnyTerrain, col: number, row: number): JSX.Element | null {
+  const x = col * CELL_W
+  const y = row * CELL_H
+  const r1 = detailRand(col, row, 7)
+  const r2 = detailRand(col, row, 13)
+  const key = `td-${col}-${row}`
+
+  if (terrain === 'open_water' || terrain === 'shallow_water') {
+    if (r1 < 0.4) return null
+    const wy = y + 8 + r2 * (CELL_H - 16)
+    const wx = x + 4
+    return (
+      <path
+        key={key}
+        d={`M ${wx} ${wy} q ${CELL_W / 4} -3.4 ${CELL_W / 2} 0 q ${CELL_W / 4} 3.4 ${CELL_W / 2 - 10} 0`}
+        stroke={terrain === 'open_water' ? DETAIL_CSS.wave : DETAIL_CSS.waveShallow}
+        strokeWidth={1.2}
+        fill="none"
+        strokeLinecap="round"
+        opacity={0.8}
+      />
+    )
+  }
+  if (terrain === 'open' || terrain === 'land') {
+    return (
+      <g key={key}>
+        {[0, 1, 2].map(i => {
+          const gx = x + 4 + detailRand(col, row, 20 + i) * (CELL_W - 8)
+          const gy = y + 4 + detailRand(col, row, 30 + i) * (CELL_H - 8)
+          return detailRand(col, row, 40 + i) > 0.5 ? (
+            <path
+              key={i}
+              d={`M ${gx} ${gy} l 1.5 -3.6 M ${gx + 2.6} ${gy} l 1.1 -2.8`}
+              stroke={DETAIL_CSS.grass}
+              strokeWidth={1}
+              strokeLinecap="round"
+              fill="none"
+            />
+          ) : (
+            <circle key={i} cx={gx} cy={gy} r={1} fill={DETAIL_CSS.grassDot} />
+          )
+        })}
+      </g>
+    )
+  }
+  if (terrain === 'shore') {
+    return (
+      <g key={key}>
+        {[0, 1, 2, 3].map(i => (
+          <circle
+            key={i}
+            cx={x + 4 + detailRand(col, row, 50 + i) * (CELL_W - 8)}
+            cy={y + 4 + detailRand(col, row, 60 + i) * (CELL_H - 8)}
+            r={0.9}
+            fill={DETAIL_CSS.sand}
+          />
+        ))}
+      </g>
+    )
+  }
+  if (terrain === 'path') {
+    return (
+      <path
+        key={key}
+        d={`M ${x + 3 + r1 * 10} ${y + CELL_H * 0.35} h ${CELL_W * 0.4} M ${x + 5 + r2 * 10} ${y + CELL_H * 0.72} h ${CELL_W * 0.3}`}
+        stroke={DETAIL_CSS.stone}
+        strokeWidth={1.1}
+        strokeLinecap="round"
+        fill="none"
+      />
+    )
+  }
+  if (terrain === 'rough') {
+    return (
+      <g key={key}>
+        <path
+          d={`M ${x + 5 + r1 * 12} ${y + 9 + r2 * 16} l 5 -2.2 l 4.4 3.2`}
+          stroke={DETAIL_CSS.rubble}
+          strokeWidth={1.2}
+          fill="none"
+          strokeLinecap="round"
+        />
+        <circle cx={x + CELL_W - 9 - r2 * 9} cy={y + CELL_H - 8} r={1.7} fill={DETAIL_CSS.rubbleDark} />
+      </g>
+    )
+  }
+  if (terrain === 'blocked') {
+    return (
+      <g key={key}>
+        <path
+          d={`M ${x + 6} ${y + CELL_H - 7} L ${x + CELL_W * 0.4} ${y + 7 + r1 * 7} L ${x + CELL_W * 0.62} ${y + CELL_H * 0.5} L ${x + CELL_W - 6} ${y + CELL_H - 7} Z`}
+          fill={DETAIL_CSS.rockFace}
+          stroke={DETAIL_CSS.rockEdge}
+          strokeWidth={1}
+        />
+        <path
+          d={`M ${x + CELL_W * 0.4} ${y + 7 + r1 * 7} L ${x + CELL_W * 0.45} ${y + CELL_H - 8}`}
+          stroke={DETAIL_CSS.rockShade}
+          strokeWidth={1}
+          fill="none"
+        />
+      </g>
+    )
+  }
+  if (terrain === 'pier') {
+    return (
+      <path
+        key={key}
+        d={`M ${x} ${y + CELL_H * 0.33} h ${CELL_W} M ${x} ${y + CELL_H * 0.66} h ${CELL_W}`}
+        stroke={DETAIL_CSS.plank}
+        strokeWidth={1.3}
+        fill="none"
+      />
+    )
+  }
+  return null
+}
+
+/** 沙-淺水左界海岸咬合:把沙色鋸齒咬進水格,消掉矩形感。 */
+function coastBite(col: number, row: number): JSX.Element {
+  const x = col * CELL_W
+  const y = row * CELL_H
+  const segs: string[] = [`M ${x} ${y}`]
+  let yy = 0
+  let i = 0
+  while (yy < CELL_H) {
+    const step = 5 + detailRand(col, row, 90 + i) * 6
+    segs.push(
+      `l ${2 + detailRand(col, row, 80 + i) * 4.5} ${step / 2} l ${-(1 + detailRand(col, row, 70 + i) * 3)} ${step / 2}`
+    )
+    yy += step
+    i++
+  }
+  segs.push(`L ${x} ${y + CELL_H} Z`)
+  return <path key={`cb-${col}-${row}`} d={segs.join(' ')} fill={SUBCELL_CSS.shore} opacity={0.92} />
+}
+
+/** 整張地圖的紋理+海岸層(pointer-events 穿透,蓋在地形格上)。 */
+function TerrainDetailLayer({ grid }: { grid: AnyTerrain[][] }) {
+  const marks: JSX.Element[] = []
+  for (let r = 0; r < grid.length; r++) {
+    const rowArr = grid[r]
+    if (!rowArr) continue
+    for (let c = 0; c < rowArr.length; c++) {
+      const t = rowArr[c]
+      if (!t) continue
+      const m = cellDetail(t, c, r)
+      if (m) marks.push(m)
+      // 左鄰是沙、本格是水 → 咬合
+      if ((t === 'shallow_water' || t === 'open_water') && c > 0 && rowArr[c - 1] === 'shore') {
+        marks.push(coastBite(c, r))
+      }
+    }
+  }
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox={`0 0 ${PIXEL_W} ${PIXEL_H}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {marks}
+    </svg>
   )
 }
 
@@ -360,7 +560,6 @@ export function AreaMapSvg({
               key={`${c}-${r}`}
               style={{
                 backgroundColor: terrainToCssColor(terrain),
-                border: '1px solid rgba(255,255,255,0.03)',
                 cursor:
                   controlsEnabled &&
                   terrain !== 'open_water' &&
@@ -373,6 +572,9 @@ export function AreaMapSvg({
           ))
         )}
       </div>
+
+      {/* ── Layer 0.5: 地形紋理+海岸咬合(決定論,點擊穿透) ─────────── */}
+      <TerrainDetailLayer grid={terrainGrid} />
 
       {/* Hidden SVG defs for medallion gradients */}
       <svg aria-hidden="true" style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
@@ -484,7 +686,20 @@ export function AreaMapSvg({
               }}
               title={`${group.speciesId} ×${group.count}`}
             >
-              <span style={{ fontSize: 15 }}>{vis.emoji}</span>
+              {/* 側面剪影群:最多畫 3 隻,超過以 ×N 表示(數量=生態密度可視化) */}
+              <svg
+                width={56}
+                height={30}
+                viewBox="-28 -24 56 30"
+                style={{ overflow: 'visible', display: 'block' }}
+                aria-hidden="true"
+              >
+                {Array.from({ length: Math.min(group.count, 3) }, (_, i) => (
+                  <g key={i} transform={`translate(${(i - 1) * 15}, ${i % 2 === 0 ? 0 : 3}) scale(${i === 1 ? 1 : 0.82})`}>
+                    <AnimalFigure speciesId={group.speciesId} color={numToHex(vis.color)} />
+                  </g>
+                ))}
+              </svg>
               {isCluster && (
                 <span
                   style={{
@@ -500,17 +715,37 @@ export function AreaMapSvg({
           )
         })}
 
-        {/* ── Fishery bar (bottom strip, clickable) ─────────────────── */}
+        {/* ── Fishery:躍水魚剪影 + 密度條(bottom strip, clickable) ── */}
         {ecology?.fishery && (
           <div
             className="absolute pointer-events-auto"
-            style={{ bottom: 0, left: 0, right: 0, height: 8, cursor: 'pointer', zIndex: 20 }}
+            style={{ bottom: 0, left: 0, right: 0, height: 26, cursor: 'pointer', zIndex: 20 }}
             onClick={() => onFish?.()}
             title="捕魚"
           >
+            {/* 魚躍剪影:密度 → 0–3 隻 */}
+            {!ecology.fishery.collapsed && (
+              <svg
+                width="100%"
+                height="18"
+                viewBox="0 0 600 18"
+                preserveAspectRatio="none"
+                style={{ display: 'block', pointerEvents: 'none' }}
+                aria-hidden="true"
+              >
+                {Array.from(
+                  { length: Math.max(1, Math.min(3, Math.round(ecology.fishery.density * 3))) },
+                  (_, i) => (
+                    <g key={i} transform={`translate(${120 + i * 170}, 14)`}>
+                      <AnimalFigure speciesId="marsh_fish" color="#8fb6c9" scale={1.1} />
+                    </g>
+                  )
+                )}
+              </svg>
+            )}
             <div
               style={{
-                height: '100%',
+                height: 8,
                 width: `${ecology.fishery.collapsed ? 5 : Math.round(ecology.fishery.density * 100)}%`,
                 backgroundColor: ecology.fishery.collapsed ? '#c0532a' : '#4db8c8',
                 transition: 'width 1s ease',
@@ -569,72 +804,75 @@ export function AreaMapSvg({
           )
         })}
 
-        {/* ── Buildings (clickable) ──────────────────────────────────── */}
+        {/* ── Buildings:正面立面,窗光=狀態(clickable) ────────────── */}
         {buildings.map((b) => {
-          const borderColor = BUILDING_STATE_COLOR[b.state] ?? '#6b5e4a'
           const isNearby = nearbyBuildingId === b.id
           const isClickable = controlsEnabled && b.enterable
+          // size(格數)→ 立面寬:1 格 38px,每多 1 格 +14
+          const facadeW = 38 + Math.max(0, (b.size ?? 1) - 1) * 14
+          const facadeH = facadeW * 0.6 + facadeW * 0.32
           return (
             <div
               key={`bld-${b.id}`}
               className="absolute pointer-events-auto"
               style={{
                 left: colToPercent(b.col),
-                top: rowToPercent(b.row),
-                transform: 'translate(-50%, -50%)',
-                minWidth: 44,
-                minHeight: 44,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexDirection: 'column',
+                // 貼地:立面底部對齊格子下緣
+                top: `${((b.row + 1) / ROWS) * 100}%`,
+                transform: 'translate(-50%, -100%)',
                 cursor: isClickable ? 'pointer' : 'default',
                 zIndex: 15,
+                filter: isNearby ? 'drop-shadow(0 0 8px rgba(243,156,32,0.45))' : 'none',
+                transition: 'filter 0.3s ease',
               }}
               onClick={isClickable ? () => handleBuildingClick(b) : undefined}
               title={b.nameZh}
             >
-              <div
-                style={{
-                  border: `2px solid ${isNearby ? '#f39c20' : borderColor}`,
-                  borderRadius: 2,
-                  backgroundColor: '#1a1510cc',
-                  padding: '3px 6px',
-                  boxShadow: isNearby ? '0 0 10px 3px rgba(243,156,32,0.35)' : 'none',
-                  transition: 'box-shadow 0.3s ease',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
+              <svg
+                width={facadeW + 12}
+                height={facadeH + 14}
+                viewBox={`${-(facadeW + 12) / 2} ${-(facadeH + 6)} ${facadeW + 12} ${facadeH + 14}`}
+                style={{ overflow: 'visible', display: 'block' }}
+                aria-hidden="true"
               >
-                <span style={{ fontSize: 18, lineHeight: 1 }}>{b.glyph}</span>
-                {/* Construction progress bar */}
-                {b.state === 'under_construction' && b.constructionProgress !== undefined && (
-                  <div
-                    style={{
-                      width: 28,
-                      height: 3,
-                      backgroundColor: '#1a1510',
-                      borderRadius: 1,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${b.constructionProgress}%`,
-                        height: '100%',
-                        backgroundColor: '#d4c800',
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
+                <BuildingFacade
+                  type={b.type}
+                  state={b.state}
+                  w={facadeW}
+                  constructionProgress={b.constructionProgress}
+                />
+                {/* 名牌 */}
+                <rect
+                  x={-facadeW / 2}
+                  y={6}
+                  width={facadeW}
+                  height={8}
+                  rx={1.5}
+                  fill="rgba(26,16,8,0.82)"
+                />
+                <text
+                  y={12}
+                  textAnchor="middle"
+                  fontSize={5.5}
+                  fill="#d4c89a"
+                  fontFamily="'Big Shoulders Display', system-ui, sans-serif"
+                  fontWeight={700}
+                >
+                  {b.nameZh}
+                </text>
+              </svg>
               {/* Nearby entry hint */}
               {isNearby && (
                 <span
                   className="am-float"
-                  style={{ fontSize: 11, marginTop: 2, lineHeight: 1 }}
+                  style={{
+                    position: 'absolute',
+                    top: -14,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
                 >
                   ✋
                 </span>
@@ -658,28 +896,15 @@ export function AreaMapSvg({
                 zIndex: 18,
               }}
             >
-              {/* Peer player medallion */}
-              <svg width="26" height="26" viewBox="-13 -13 26 26"
-                style={{ overflow: 'visible', opacity: 0.88 }} aria-hidden="true">
-                {/* Breathing glow */}
-                <circle r="12.5" fill="none" stroke="rgba(77,184,200,0.28)" strokeWidth="2.5"
-                  style={{ animation: 'am-player-breathe 2.5s ease-in-out infinite' }} />
-                <circle r="10" fill="none" stroke="#4db8c8" strokeWidth="2" />
-                <circle r="7.5" fill="none" stroke="#f39c20" strokeWidth="1" opacity="0.7" />
-                <circle r="6.5" fill="url(#am-player-base)" />
-                <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
-                <rect x="-8" y="8.5" width="16" height="6.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
-                <text y="13.5" textAnchor="middle" fontSize="4.5"
-                  fill="#fff5b8" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
-                  {p.shortName}
-                </text>
-              </svg>
+              {/* Peer player figure(人形剪影,tide 披風) */}
+              <PeerFigure label={p.shortName} />
             </div>
           ))}
 
         {/* ── NPC tokens ────────────────────────────────────────────── */}
         {npcs.map(npc => {
           const npcColor = numToHex(npc.color ?? 0xf6c560)
+          // 職業 glyph 已由頭頂徽記(FigureBadge)表達;behavior emoji 僅在無職業 glyph 時補位
           const actEmoji = activityGlyphFor(npc.activity)
           const behaviorEmoji = npc.behaviorIcon && !actEmoji ? npc.behaviorIcon : null
           const isNearby = nearbyNpcIdSet.has(npc.id)
@@ -739,45 +964,26 @@ export function AreaMapSvg({
                 </div>
               )}
 
-              {/* NPC Medallion */}
-              <div style={{ position: 'relative', display: 'inline-flex' }}>
-                <svg width="28" height="36" viewBox="-14 -14 28 36"
-                  style={{
-                    overflow: 'visible',
-                    filter: isNearby ? `drop-shadow(0 0 5px ${npcColor}90)` : 'none',
-                    transition: 'filter 0.3s ease',
-                  }}
-                  aria-hidden="true"
-                >
-                  {/* Speaking pulse ring */}
-                  {truncated && (
-                    <circle r="13" fill="none" stroke="#f39c20" strokeWidth="1.5"
-                      style={{ animation: 'am-npc-pulse 1.8s ease-in-out infinite' }} />
-                  )}
-                  {/* Outer ring */}
-                  <circle r="11" fill="none"
-                    stroke={isLowHealth ? '#c0532a' : (isLowMood ? '#6a5830' : npcColor)}
-                    strokeWidth="2" />
-                  {/* Glow */}
-                  <circle r="11" fill="none" stroke={npcColor} strokeWidth="4" opacity="0.12" />
-                  {/* Dark base */}
-                  <circle r="9" fill="url(#am-npc-base)" />
-                  {/* Glyph */}
-                  <NpcGlyph activity={npc.activity} initial={npc.shortName} color={npcColor} />
-                  {/* Name pill */}
-                  <rect x="-11" y="11.5" width="22" height="8.5" rx="1.5" fill="rgba(26,16,8,0.82)" />
-                  <text y="17.5" textAnchor="middle" fontSize="5.5"
-                    fill={isLowMood ? '#6a6a5a' : npcColor}
-                    fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                    fontWeight="700" letterSpacing="0.03em">
-                    {npc.shortName}
-                  </text>
-                </svg>
-
-                {/* Activity / behavior emoji badge (right upper corner) */}
-                {(actEmoji || behaviorEmoji) && (
+              {/* NPC 人形剪影(職業徽記在頭頂;behavior emoji 保留右肩) */}
+              <div
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  filter: isNearby ? `drop-shadow(0 0 5px ${npcColor}90)` : 'none',
+                  transition: 'filter 0.3s ease',
+                }}
+              >
+                <NpcFigure
+                  color={npcColor}
+                  shortName={npc.shortName}
+                  activity={npc.activity}
+                  speaking={Boolean(truncated)}
+                  lowHealth={isLowHealth}
+                  lowMood={isLowMood}
+                />
+                {behaviorEmoji && (
                   <span style={{ position: 'absolute', top: -5, right: -10, fontSize: 11, lineHeight: 1 }}>
-                    {actEmoji || behaviorEmoji}
+                    {behaviorEmoji}
                   </span>
                 )}
               </div>
@@ -798,27 +1004,8 @@ export function AreaMapSvg({
               pointerEvents: 'none',
             }}
           >
-            {/* Player self medallion */}
-            <svg width="34" height="34" viewBox="-17 -17 34 34"
-              style={{ overflow: 'visible' }} aria-hidden="true">
-              {/* Breathing glow ring */}
-              <circle r="15" fill="none" stroke="rgba(77,184,200,0.28)" strokeWidth="3"
-                style={{ animation: 'am-player-breathe 2.5s ease-in-out infinite' }} />
-              {/* Outer tide ring */}
-              <circle r="12" fill="none" stroke="#4db8c8" strokeWidth="2.5" />
-              {/* Inner ember ring */}
-              <circle r="9.5" fill="none" stroke="#f39c20" strokeWidth="1.5" />
-              {/* Dark base */}
-              <circle r="8" fill="url(#am-player-base)" />
-              {/* Compass star */}
-              <CompassStar tideFill="#4db8c8" emberFill="#f39c20" />
-              {/* Name pill */}
-              <rect x="-11" y="11.5" width="22" height="8.5" rx="1.5" fill="rgba(26,16,8,0.88)" />
-              <text y="17.5" textAnchor="middle" fontSize="6"
-                fill="#f39c20" fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="800">
-                {playerName ? playerName.charAt(0).toUpperCase() : '你'}
-              </text>
-            </svg>
+            {/* 玩家人形剪影(ember 披風+胸前羅盤星+呼吸光環) */}
+            <PlayerFigure label={playerName ? playerName.charAt(0).toUpperCase() : '你'} />
           </div>
         )}
 
