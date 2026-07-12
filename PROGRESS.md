@@ -1,3 +1,22 @@
+## 2026-07-12 — Handoff Snapshot @ v0.99.1 (painterly-hub-map: 俯視插畫風 hub 地圖精修)
+
+- **背景**:使用者回報 v0.99.0 上線後「主要地圖依然不是我要的效果」。重新評估 hub 世界地圖(`WorldMapSvg.tsx`,首頁與履歷截圖的主角):v0.99.0 雖已改有機島嶼,但島嶼仍用 `ISLAND_FILL` 近黑色(亮度 8%–16%)、忽略每區身分色、emoji 生態徽章雜訊 → 履歷縮圖近乎全黑。使用者於視覺方向選 **C 俯視插畫風 + B 演出活的世界**,最終要靜態截圖。
+- **OpenSpec**:`openspec/changes/painterly-hub-map/`(tracker-only,proposal+tasks,無 specs delta)。純呈現層,無 Command/Event/API/replay 變更;延用 `map-visual-language` 已定的視覺語言(ember 主光/tide 副光/parchment 標題),只精修 hub 執行力,故不新增 capability delta。
+- **WorldMapSvg 重寫視覺層(資料接線/互動/匯出純函式全保留)**:
+  - **海** = `url(#wm-sea)` 深青徑向漸層 + `feTurbulence` 波光 caustics + 天光/暗角,取代近黑背景。
+  - **島嶼 = 有光的陸地**:恢復每區身分色(`DISTRICTS[id].color`)作地形底,per-district 垂直漸層塑形(頂端提亮暖色/底部壓深)+ `feDropShadow` 落海陰影 + `feGaussianBlur` 海岸淺灘光暈 + `wm-grain`(turbulence,`feComposite in SourceAlpha`裁切到島形)painterly 顆粒 + 沙色海岸線 + 共用 `wm-sheen` 頂光體積。
+  - **手繪地標(`TerrainMotifs`,決定論 FNV-1a scatter)**:forest 松林/mountain 雪頂峰/port·town 屋舍+暖窗/ley 發光晶簇/flats 沙丘/ruin 斷柱/dock 棧橋小舟/marsh 蘆葦;取代 v0.99.0 hub 的 🦋⚠ emoji 徽章(已移除,含 `visualForSpecies` import)。
+  - **活的世界(靜幀可見)**:`activityByDistrict`(在場 NPC 數 + 施工)驅動 `TownLights` 暖窗火亮度;`hottestDistrict` 罩暖光 + `wm-hot` 脈動環;海航線 `wm-lane` 流動虛線;遷徙箭頭沿用。
+  - NPC token:加地面暗影讓其在亮島上跳出;說話氣泡/漂移/低血量沿用。
+- **新增匯出純函式**:`mixNum` / `lightenNum`(色彩混合,供漸層與地標);既有 `numToHex`/`darkenNum`/`npcPixelPos`/`DISTRICT_RECTS` 不變。
+- **驗證**:
+  - `tsc -b && vite build` clean(chunk warning 預存)✅ — build 抓到 `fill={base}`(number)兩處型別錯,已改 `numToHex(base)`。
+  - web vitest 36 files / **271 pass**(WorldMapSvg.test.ts 16 綠,匯出契約不變)✅
+  - 本機 vite dev(proxy 暫指 hunter API 取真實世界資料)逐島 headless 截圖確認:海陸分明、九區地標可辨、夜潮區暖光脈動、晶簇/雪峰/松林到位;proxy 已還原 localhost:3000 ✅
+- **版本**:root/web/server → **0.99.1**(sync-version)。
+- **待辦(本 change 後續)**:AreaMapSvg(進街區後的細部地圖)尚未套同一 painterly 語言;履歷截圖待部署至 hunter 後截線上實站再換(resume-demo `projects.ts` screenshot)。
+- **CI/CD**:待 push 觸發 Deploy Dev(Docker Hub → desktop bind mount);world DB volume 已於 v0.99.0 修復,重建續命。
+
 ## 2026-07-12 — Handoff Snapshot @ v0.99.0 (map-visual-language: 地圖五元素視覺重造)
 
 - **OpenSpec**: `openspec/changes/map-visual-language/`(proposal/tasks/spec 齊)。使用者在視覺提案 mockup 確認後執行:「可以,就照這樣去做,此遊戲有戰鬥與一切生活,記得也一併做上去」。純呈現層,無 Command/Event/API 變更。
