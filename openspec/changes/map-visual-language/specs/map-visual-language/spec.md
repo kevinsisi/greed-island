@@ -44,3 +44,7 @@ Hub SHALL 以世界地圖為主畫面(滿版舞台),「世界現在」與「情�
 
 ### Requirement: 戰鬥與生活同語言
 戰鬥 HUD SHALL 內含對峙舞台(玩家 ember 人形 vs 敵方 rust 人形/動物剪影,低血量披風變暗);生態儀表板動物列 SHALL 附側面剪影。純呈現層,不動 Command/Event。
+
+#### Scenario: 戰鬥低血量
+- **WHEN** 任一方 hp 低於 30%
+- **THEN** 該方剪影披風色轉暗(視覺告警),hp bar 與行動按鈕行為不變
