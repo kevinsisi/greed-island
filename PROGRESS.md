@@ -13,6 +13,9 @@
   - headless 截圖 1440×900(hub / t_desert / t_dock)+ 390×844(hub)確認:地形分層可讀、海陸冷暖分離、人形+徽記、浮層版面 ✅(dev proxy 暫指 hunter API 取示意資料,已還原 localhost:3000)
 - **既有測試調整**:AreaMapSvg.test.ts 兩個色票斷言更新為新 palette(#0e2438/#3c4a2e)。
 - **版本**:root/web/server → **0.99.0**(sync-version)。
+- **CI/CD 狀態(2026-07-12)**:CI ✅(openspec validate 全 34 changes 過)、Deploy Dev「Build & push Docker images」✅(kevin950805/greed-island-{server,web}:dev 已在 Docker Hub)、「Deploy to desktop」❌ — **前置損壞,非本 change 造成**:桌機 `D:\GitClone\_HomeProject\greed-island` 整個 clone(含 `deploy\data` 的 SQLite EventLog)已被刪除,上一版 main(7f8d73e)部署就已同因失敗。
+- **⚠ 活世界資料現況**:運行中容器 fd 仍指向已刪除的 `greed-island.sqlite`(FUSE 端不可回收,`/proc/1/fd` 讀取 ENOENT),**世界目前只存活在容器記憶體**;任何容器重建=世界從空 DB 重啟。全機搜尋無 sqlite 備份。
+- **已修復的部署前置(2026-07-12)**:桌機 repo 已重新 clone 至原路徑(main @ f9c0d91)、`deploy\.env` 已從運行中容器 env 完整重建(JWT_SECRET 未輪替,cookie 不失效)、`deploy\data` 為空目錄待新世界。**Re-run「Deploy Dev」workflow 即可上線 v0.99.0——但等同重置世界,由 operator 決定時機。**
 - **未完(後續 change)**:WorldMapSvg NPC 仍用小徽記(世界層縮尺,spec 允許);Phase C CombatScene(Phaser,未被使用)未重繪;BuildingSvg 家具仍為 emoji glyph。
 
 ## 2026-07-03 — Handoff Snapshot @ v0.98.45 (map-M5: WorldMapSvg 全面重做 — 有機島嶼、玩家移動、NPC 漂移)
