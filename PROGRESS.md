@@ -16,6 +16,7 @@
 - **CI/CD 狀態(2026-07-12)**:CI ✅(openspec validate 全 34 changes 過)、Deploy Dev「Build & push Docker images」✅(kevin950805/greed-island-{server,web}:dev 已在 Docker Hub)、「Deploy to desktop」❌ — **前置損壞,非本 change 造成**:桌機 `D:\GitClone\_HomeProject\greed-island` 整個 clone(含 `deploy\data` 的 SQLite EventLog)已被刪除,上一版 main(7f8d73e)部署就已同因失敗。
 - **⚠ 活世界資料現況**:運行中容器 fd 仍指向已刪除的 `greed-island.sqlite`(FUSE 端不可回收,`/proc/1/fd` 讀取 ENOENT),**世界目前只存活在容器記憶體**;任何容器重建=世界從空 DB 重啟。全機搜尋無 sqlite 備份。
 - **已修復的部署前置(2026-07-12)**:桌機 repo 已重新 clone 至原路徑(main @ f9c0d91)、`deploy\.env` 已從運行中容器 env 完整重建(JWT_SECRET 未輪替,cookie 不失效)、`deploy\data` 為空目錄待新世界。**Re-run「Deploy Dev」workflow 即可上線 v0.99.0——但等同重置世界,由 operator 決定時機。**
+- **✅ 部署完成(2026-07-12,使用者指示「請把volume修好」後執行)**:Deploy Dev re-run success → 容器以正確 bind mount 重建;`deploy\data\greed-island.sqlite`(+wal/shm)實際落在 Windows 磁碟、WAL 持續成長=寫入落盤;live https://hunter.sisihome.org `/api/version` 回 **0.99.0**,世界從空 DB 重啟並正常運轉(事件流/地圖/浮層版面實測 OK)。volume 斷裂問題解除:之後容器重建世界都會從磁碟續命。
 - **未完(後續 change)**:WorldMapSvg NPC 仍用小徽記(世界層縮尺,spec 允許);Phase C CombatScene(Phaser,未被使用)未重繪;BuildingSvg 家具仍為 emoji glyph。
 
 ## 2026-07-03 — Handoff Snapshot @ v0.98.45 (map-M5: WorldMapSvg 全面重做 — 有機島嶼、玩家移動、NPC 漂移)
