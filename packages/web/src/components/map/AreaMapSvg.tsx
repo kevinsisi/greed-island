@@ -526,7 +526,9 @@ export function AreaMapSvg({
       className={`relative w-full max-w-[600px] mx-auto aspect-[3/2] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none ${weatherClass}`}
       role="region"
       aria-label={locale === 'zh' ? '區域地圖' : 'Area Map'}
-      style={{ touchAction: 'none' }}
+      // pan-y 讓手機能沿垂直方向捲動頁面(點地移動是 tap,不受影響);
+      // 舊值 'none' 會吃掉所有觸控手勢 → 手機在地圖上完全無法捲頁。
+      style={{ touchAction: 'pan-y' }}
     >
       <style>{`
         .am-overcast { filter: brightness(0.82) saturate(0.7) }
@@ -808,19 +810,24 @@ export function AreaMapSvg({
         {buildings.map((b) => {
           const isNearby = nearbyBuildingId === b.id
           const isClickable = controlsEnabled && b.enterable
-          // size(格數)→ 立面寬:1 格 38px,每多 1 格 +14
-          const facadeW = 38 + Math.max(0, (b.size ?? 1) - 1) * 14
+          // size(格數)→ 立面寬:1 格 38px,每多 1 格 +12,**上限 ~2.5 格**。
+          // (未鉗制時 size 大的建築會算出 300px+ 的立面,加上 overflow:visible
+          //  讓外層 div 判定框覆蓋整張地圖、吃掉點地移動的點擊 → 移動失效。)
+          const sizeCells = Math.min(5, Math.max(0, (b.size ?? 1) - 1))
+          const facadeW = 38 + sizeCells * 12
           const facadeH = facadeW * 0.6 + facadeW * 0.32
           return (
             <div
               key={`bld-${b.id}`}
-              className="absolute pointer-events-auto"
+              className="absolute"
               style={{
                 left: colToPercent(b.col),
                 // 貼地:立面底部對齊格子下緣
                 top: `${((b.row + 1) / ROWS) * 100}%`,
                 transform: 'translate(-50%, -100%)',
                 cursor: isClickable ? 'pointer' : 'default',
+                // 只有「可進入」的建築才攔截點擊;其餘一律穿透,讓玩家能點地移動。
+                pointerEvents: isClickable ? 'auto' : 'none',
                 zIndex: 15,
                 filter: isNearby ? 'drop-shadow(0 0 8px rgba(243,156,32,0.45))' : 'none',
                 transition: 'filter 0.3s ease',

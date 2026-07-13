@@ -1,16 +1,18 @@
-// Hub world map — SVG vector implementation (Phase M1 → painterly hub, v0.100).
+// Hub world map — SVG vector implementation (top-down illustrated city, v0.102).
 // Replaces PhaserGame/MapScene for HubPage.
 //
-// Visual language (map-visual-language / painterly-hub):
-//   潮鳴市 as a warm-lit island archipelago seen from above at dusk.
-//   Sea is real teal water (not near-black); each district is a LIT landmass
-//   that keeps its identity colour, floats above the water with depth
-//   (coastal shallows glow + drop shadow), carries hand-drawn terrain motifs,
-//   and glows with warm town-lights so the world reads as inhabited. The most
-//   active district pulses — the world looks alive even in a still frame.
-//   Ember #f39c20 warm light / tide #4db8c8 cold water.
+// Design goals (painterly-hub-map v4 — "make the hub look like the sub-map"):
+//   潮鳴市 as ONE organic island city, drawn in the SAME visual grammar as the
+//   area (sub) map: naturalistic terrain materials (grass / stone / sand / water)
+//   with deterministic detail marks, a tan street network, DENSE building facades
+//   (reusing <BuildingFacade/>) forming neighbourhoods, and actual character
+//   figures (reusing <FigureBody/>) — not abstract colour blocks. Wards are
+//   irregular Voronoi neighbourhoods that flow together; a tidal river runs
+//   through the city. Life is data-driven (people-count per ward, latest event
+//   pins a quest marker, busiest ward glows). Legible on a phone.
+//   Ember #f39c20 warm light / tide #4db8c8 water.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DISTRICTS,
   DISTRICT_IDS,
@@ -26,27 +28,21 @@ import type {
   MapPlayer,
 } from '../../game/MapScene'
 import type { HubEcologySummary } from '../../pages/hubEcology'
-import { activityGlyphFor } from '../../game/npcVisuals'
-import { NpcGlyph, CompassStar } from './tokenMedallion'
+import { BuildingFacade } from './buildingFacade'
 import { FigureBody } from './tokenFigure'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const VIEW_W = 800
 const VIEW_H = 600
-const DEFAULT_NPC_COLOR = 0xf6c560 // NPC_BADGE_COLOR fallback
 
 const TIDE = '#4db8c8'
 const EMBER = '#f39c20'
 const SAND = '#e6d3a3'
-const WINDOW_LIGHT = '#ffcf6e'
+const STREET = '#8a7550'
+const STREET_EDGE = '#5f4e34'
 
-/**
- * District bounding boxes as [c0, r0, c1, r1] inclusive tile coordinates.
- * Derived from the districtAt() geometry in districts.ts.
- */
 type DR = readonly [c0: number, r0: number, c1: number, r1: number]
-
 export const DISTRICT_RECTS: Readonly<Partial<Record<DistrictId, DR>>> = {
   t_forest:     [0,   0,  4,  4],
   t_mountain:   [5,   0, 13,  3],
@@ -59,93 +55,173 @@ export const DISTRICT_RECTS: Readonly<Partial<Record<DistrictId, DR>>> = {
   t_dock:       [0,  13, 14, 14],
 }
 
-const FACTION_STYLE: Readonly<Record<FactionLeanId, {
-  fill: string
-  stroke: string
-  strokeDasharray?: string
-}>> = {
-  tide_hunters: { fill: 'rgba(77,184,200,0.16)',  stroke: '#4db8c8', strokeDasharray: '4 2' },
-  guild:        { fill: 'rgba(243,156,32,0.13)',  stroke: '#f39c20' },
-  free_runners: { fill: 'rgba(110,200,100,0.13)', stroke: '#6ec864', strokeDasharray: '2 2' },
-  civilian:     { fill: 'rgba(0,0,0,0)',          stroke: 'rgba(180,180,180,0.22)' },
+const FACTION_STYLE: Readonly<Record<FactionLeanId, { stroke: string; dash?: string }>> = {
+  tide_hunters: { stroke: '#4db8c8', dash: '5 3' },
+  guild:        { stroke: '#f39c20' },
+  free_runners: { stroke: '#6ec864', dash: '3 3' },
+  civilian:     { stroke: 'rgba(180,180,180,0.4)' },
 }
 
-const SEA_ROUTES: Array<[DistrictId, DistrictId]> = [
-  ['t_forest',   't_mountain'],
-  ['t_mountain', 't_temple'],
-  ['t_mountain', 't_dimai'],
-  ['t_dimai',    't_central'],
-  ['t_forest',   't_desert'],
-  ['t_desert',   't_dock'],
-  ['t_central',  't_dock'],
-  ['t_ruin',     't_dock'],
-  ['t_central',  't_ruin'],
-  ['t_temple',   't_ruin'],
-  ['t_ruin',     't_salt_marsh'],
+type Biome = 'forest' | 'mountain' | 'port' | 'ley' | 'flats' | 'town' | 'ruin' | 'dock' | 'marsh'
+
+interface WardMeta {
+  biome: Biome
+  /** naturalistic terrain base (sub-map palette, tinted per district) */
+  ground: string
+  /** building roof "type" for BuildingFacade / roofColorFor */
+  buildType: string
+  /** how built-up: buildings per ward */
+  density: number
+}
+
+const WARD: Readonly<Record<DistrictId, WardMeta>> = {
+  t_forest:     { biome: 'forest',   ground: '#37482c', buildType: 'residential', density: 8 },
+  t_mountain:   { biome: 'mountain', ground: '#42392c', buildType: 'workshop',    density: 6 },
+  t_temple:     { biome: 'port',     ground: '#37442f', buildType: 'warehouse',   density: 12 },
+  t_dimai:      { biome: 'ley',      ground: '#39324a', buildType: 'temple',      density: 6 },
+  t_desert:     { biome: 'flats',    ground: '#544631', buildType: 'market',      density: 7 },
+  t_central:    { biome: 'town',     ground: '#464a33', buildType: 'tavern',      density: 15 },
+  t_ruin:       { biome: 'ruin',     ground: '#463a2b', buildType: 'factory',     density: 8 },
+  t_dock:       { biome: 'dock',     ground: '#33454f', buildType: 'warehouse',   density: 10 },
+  t_salt_marsh: { biome: 'marsh',    ground: '#2f4650', buildType: 'residential', density: 5 },
+  t_road:       { biome: 'flats',    ground: '#8a7550', buildType: 'residential', density: 0 },
+}
+
+type Pt = [number, number]
+
+const SEED: Readonly<Record<DistrictId, Pt>> = {
+  t_dimai:      [402, 300],
+  t_forest:     [196, 196],
+  t_mountain:   [406, 138],
+  t_temple:     [612, 190],
+  t_desert:     [150, 344],
+  t_ruin:       [648, 344],
+  t_dock:       [292, 486],
+  t_central:    [452, 452],
+  t_salt_marsh: [636, 486],
+  t_road:       [0, 0],
+}
+
+const ISLAND_PTS: Pt[] = [
+  [122, 158], [210, 100], [322, 78], [430, 72], [548, 88], [652, 122], [714, 182],
+  [744, 268], [726, 350], [746, 432], [706, 500], [628, 540], [548, 552],
+  [470, 560], [430, 522], [360, 556], [268, 556], [172, 542], [96, 500],
+  [62, 424], [80, 338], [58, 262], [88, 196],
 ]
 
-/** Organic polygon point-strings per district. */
-const ISLAND_PATHS: Readonly<Partial<Record<DistrictId, string>>> = {
-  t_forest:     '12,15 65,5 115,3 175,16 197,58 198,120 192,175 165,197 102,200 40,196 7,162 4,92',
-  t_mountain:   '204,8 295,3 390,2 490,4 552,8 558,52 556,118 548,158 458,162 375,160 290,162 208,158 202,112 200,52',
-  t_temple:     '566,10 670,3 792,6 798,58 800,135 794,196 738,200 665,200 584,196 562,157 560,82',
-  t_dimai:      '288,208 378,202 472,208 478,254 476,338 465,358 378,362 290,360 282,340 278,252',
-  t_desert:     '7,368 82,362 196,368 198,415 200,482 194,518 120,522 38,520 6,512 3,465 0,412',
-  t_central:    '248,368 378,362 516,368 520,415 518,484 512,518 378,522 244,518 240,482 238,415',
-  t_ruin:       '565,368 680,362 795,368 800,412 800,484 796,518 708,522 618,520 563,516 558,482 560,412',
-  t_salt_marsh: '608,525 720,520 798,525 800,562 798,598 726,600 640,598 606,592',
-  t_dock:       '6,525 185,520 388,520 554,525 558,565 555,598 378,600 193,598 58,600 6,595',
+const RIVER_PATH = 'M406,150 Q430,220 402,300 Q378,378 360,430 Q330,486 292,520'
+
+// ── Geometry ──────────────────────────────────────────────────────────────────
+
+function clipHalfPlane(poly: Pt[], P: Pt, Q: Pt): Pt[] {
+  const mx = (P[0] + Q[0]) / 2, my = (P[1] + Q[1]) / 2
+  const nx = Q[0] - P[0], ny = Q[1] - P[1]
+  const f = (pt: Pt) => (pt[0] - mx) * nx + (pt[1] - my) * ny
+  const out: Pt[] = []
+  const n = poly.length
+  for (let i = 0; i < n; i++) {
+    const A = poly[i]!, B = poly[(i + 1) % n]!
+    const fa = f(A), fb = f(B)
+    if (fa <= 0) out.push(A)
+    if ((fa <= 0) !== (fb <= 0)) {
+      const t = fa / (fa - fb)
+      out.push([A[0] + t * (B[0] - A[0]), A[1] + t * (B[1] - A[1])])
+    }
+  }
+  return out
 }
 
-type Biome =
-  | 'forest' | 'mountain' | 'port' | 'ley'
-  | 'flats' | 'town' | 'ruin' | 'dock' | 'marsh'
+function voronoiCell(id: DistrictId): Pt[] {
+  let poly = ISLAND_PTS.slice()
+  const P = SEED[id]
+  for (const other of DISTRICT_IDS) {
+    if (other === id) continue
+    poly = clipHalfPlane(poly, P, SEED[other])
+    if (poly.length < 3) break
+  }
+  return poly
+}
 
-const BIOME: Readonly<Partial<Record<DistrictId, Biome>>> = {
-  t_forest:     'forest',
-  t_mountain:   'mountain',
-  t_temple:     'port',
-  t_dimai:      'ley',
-  t_desert:     'flats',
-  t_central:    'town',
-  t_ruin:       'ruin',
-  t_dock:       'dock',
-  t_salt_marsh: 'marsh',
+const CELLS: Partial<Record<DistrictId, Pt[]>> = (() => {
+  const m: Partial<Record<DistrictId, Pt[]>> = {}
+  for (const id of DISTRICT_IDS) m[id] = voronoiCell(id)
+  return m
+})()
+
+function roundedPath(pts: Pt[], r = 10): string {
+  const n = pts.length
+  if (n < 3) return ''
+  let d = ''
+  for (let i = 0; i < n; i++) {
+    const P = pts[(i - 1 + n) % n]!, V = pts[i]!, N = pts[(i + 1) % n]!
+    const v1: Pt = [P[0] - V[0], P[1] - V[1]]
+    const v2: Pt = [N[0] - V[0], N[1] - V[1]]
+    const l1 = Math.hypot(v1[0], v1[1]) || 1
+    const l2 = Math.hypot(v2[0], v2[1]) || 1
+    const t1 = Math.min(r, l1 / 2) / l1
+    const t2 = Math.min(r, l2 / 2) / l2
+    const A: Pt = [V[0] + v1[0] * t1, V[1] + v1[1] * t1]
+    const B: Pt = [V[0] + v2[0] * t2, V[1] + v2[1] * t2]
+    d += (i === 0 ? `M${A[0].toFixed(1)},${A[1].toFixed(1)} ` : `L${A[0].toFixed(1)},${A[1].toFixed(1)} `)
+    d += `Q${V[0].toFixed(1)},${V[1].toFixed(1)} ${B[0].toFixed(1)},${B[1].toFixed(1)} `
+  }
+  return d + 'Z'
+}
+
+function pointInPoly(p: Pt, poly: Pt[]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i]![0], yi = poly[i]![1], xj = poly[j]![0], yj = poly[j]![1]
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+function centroid(poly: Pt[]): Pt {
+  let x = 0, y = 0
+  for (const p of poly) { x += p[0]; y += p[1] }
+  return [x / poly.length, y / poly.length]
+}
+
+function makeRng(seed: string): () => number {
+  let h = 2166136261
+  for (let i = 0; i < seed.length; i++) h = (h ^ seed.charCodeAt(i)) * 16777619 >>> 0
+  let s = h >>> 0
+  return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
+}
+
+function scatterInCell(cell: Pt[], seed: Pt, rng: () => number, n: number, spread: number, minR = 0): Pt[] {
+  const out: Pt[] = []
+  let tries = 0
+  while (out.length < n && tries < n * 14) {
+    tries++
+    const ang = rng() * Math.PI * 2
+    const r = (minR + Math.sqrt(rng()) * (spread - minR))
+    const p: Pt = [seed[0] + Math.cos(ang) * r, seed[1] + Math.sin(ang) * r]
+    if (pointInPoly(p, cell)) out.push(p)
+  }
+  return out
 }
 
 // ── Pure utilities (exported for tests) ───────────────────────────────────────
 
-/** Convert 24-bit RGB number to CSS hex string. */
 export function numToHex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0')
 }
-
-/** Darken a 24-bit RGB number. factor=0.7 → 30% darker. */
 export function darkenNum(n: number, factor = 0.7): string {
   const r = Math.min(255, Math.round(((n >> 16) & 0xff) * factor))
   const g = Math.min(255, Math.round(((n >> 8)  & 0xff) * factor))
   const b = Math.min(255, Math.round((n         & 0xff) * factor))
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
-
-/** Mix a 24-bit RGB number toward another (0..1), return CSS hex. */
 export function mixNum(n: number, toward: number, t: number): string {
   const r = Math.round(((n >> 16) & 0xff) * (1 - t) + ((toward >> 16) & 0xff) * t)
   const g = Math.round(((n >> 8)  & 0xff) * (1 - t) + ((toward >> 8)  & 0xff) * t)
   const b = Math.round((n         & 0xff) * (1 - t) + (toward         & 0xff) * t)
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
+export function lightenNum(n: number, t = 0.3): string { return mixNum(n, 0xffffff, t) }
 
-/** Lighten a 24-bit RGB number toward white. */
-export function lightenNum(n: number, t = 0.3): string {
-  return mixNum(n, 0xffffff, t)
-}
-
-/**
- * Compute SVG pixel position for an NPC token.
- * - Travelling NPC: mid-point between fromDistrict and toDistrict anchors.
- * - Static NPC: district anchor ± subCol/subRow spread offset.
- */
 export function npcPixelPos(npc: MapNpc): [number, number] {
   if (npc.travelRoute) {
     const from = DISTRICTS[npc.travelRoute.fromDistrictId]
@@ -156,238 +232,45 @@ export function npcPixelPos(npc: MapNpc): [number, number] {
     const ty = to.anchor.row * TILE_SIZE + TILE_SIZE / 2
     return [(fx + tx) / 2, (fy + ty) / 2]
   }
-
-  const def    = DISTRICTS[npc.districtId]
+  const def = DISTRICTS[npc.districtId]
   const anchorX = def.anchor.col * TILE_SIZE + TILE_SIZE / 2
   const anchorY = def.anchor.row * TILE_SIZE + TILE_SIZE / 2
-
   if (npc.subCol !== undefined && npc.subRow !== undefined) {
-    // subCol: 0..14 (center≈7), subRow: 0..9 (center≈4.5)
-    // Spread NPCs within ±1.8 tiles of district anchor.
     const SPREAD = TILE_SIZE * 1.8
-    const ox = ((npc.subCol - 7)   / 7)   * SPREAD
-    const oy = ((npc.subRow - 4.5) / 4.5) * SPREAD
-    return [anchorX + ox, anchorY + oy]
+    return [anchorX + ((npc.subCol - 7) / 7) * SPREAD, anchorY + ((npc.subRow - 4.5) / 4.5) * SPREAD]
   }
-
   return [anchorX, anchorY]
 }
 
-// ── Island geometry (parsed once from ISLAND_PATHS) ───────────────────────────
+// ── Terrain detail marks (deterministic, sub-map grammar) ─────────────────────
 
-interface IslandGeo {
-  pts: Array<[number, number]>
-  cx: number
-  cy: number
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
-  w: number
-  h: number
-  size: number
-}
-
-function parsePoints(s: string): Array<[number, number]> {
-  return s.trim().split(/\s+/).map(p => {
-    const [a, b] = p.split(',').map(Number)
-    return [a!, b!] as [number, number]
-  })
-}
-
-const ISLAND_GEO: Partial<Record<DistrictId, IslandGeo>> = (() => {
-  const out: Partial<Record<DistrictId, IslandGeo>> = {}
-  for (const id of DISTRICT_IDS) {
-    const path = ISLAND_PATHS[id]
-    if (!path) continue
-    const pts = parsePoints(path)
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    let sx = 0, sy = 0
-    for (const [x, y] of pts) {
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y)
-      sx += x; sy += y
-    }
-    const w = maxX - minX, h = maxY - minY
-    out[id] = {
-      pts, minX, minY, maxX, maxY, w, h,
-      cx: sx / pts.length, cy: sy / pts.length,
-      size: Math.min(w, h),
-    }
-  }
-  return out
-})()
-
-/** Deterministic 0..1 RNG seeded by a string. */
-function makeRng(seed: string): () => number {
-  let h = 2166136261
-  for (let i = 0; i < seed.length; i++) h = (h ^ seed.charCodeAt(i)) * 16777619 >>> 0
-  let s = h >>> 0
-  return () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff
-    return s / 0x7fffffff
-  }
-}
-
-/** Scatter n points within a radius around a centre (deterministic). */
-function scatter(cx: number, cy: number, radius: number, n: number, rng: () => number) {
-  const out: Array<[number, number]> = []
-  for (let i = 0; i < n; i++) {
-    const ang = rng() * Math.PI * 2
-    const r = Math.sqrt(rng()) * radius
-    out.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r])
-  }
-  return out
-}
-
-// ── NPC idle drift (module-level, deterministic) ──────────────────────────────
-
-function npcIdleDrift(npcId: string, tick: number): { dx: number; dy: number } {
-  let h = 5381
-  for (let i = 0; i < npcId.length; i++) h = ((h * 33) ^ npcId.charCodeAt(i)) >>> 0
-  const phase = tick * 0.35 + (h % 628) / 100
-  const amp   = 1.6 + (h % 10) * 0.08
-  return {
-    dx: Math.cos(phase + (h % 20) * 0.31) * amp,
-    dy: Math.sin(phase * 1.25 + (h % 15) * 0.44) * amp,
-  }
-}
-
-// ── Player position persistence ──────────────────────────────────────────────
-
-const HUB_POS_KEY = 'gi:hubPos:v2'
-
-function loadHubPlayerDistrict(): DistrictId | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(HUB_POS_KEY)
-    if (raw && isDistrict(raw as DistrictId)) return raw as DistrictId
-  } catch { /* storage unavailable */ }
-  return null
-}
-
-function saveHubPlayerDistrict(id: DistrictId): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(HUB_POS_KEY, id)
-  } catch { /* quota */ }
-}
-
-// ── Terrain motifs (decorative, deterministic, per biome) ─────────────────────
-
-/** A little hand-drawn terrain cluster for one district's biome. */
-function TerrainMotifs({ id, biome, geo }: { id: DistrictId; biome: Biome; geo: IslandGeo }) {
-  const base = DISTRICTS[id].color
-  const baseHex = numToHex(base)
-  const dark = darkenNum(base, 0.55)
-  const light = lightenNum(base, 0.55)
-  const rng = makeRng(id + biome)
-  const R = geo.size * 0.36
-  const n =
-    biome === 'town' || biome === 'port' ? 7 :
-    biome === 'forest' ? 8 :
-    biome === 'marsh' ? 5 : 6
-  const spots = scatter(geo.cx, geo.cy, R, n, rng)
-  // sort by y so nearer (lower) motifs draw on top
-  spots.sort((a, b) => a[1] - b[1])
-
+function TerrainMarks({ id }: { id: DistrictId }) {
+  const cell = CELLS[id]; if (!cell) return null
+  const meta = WARD[id]
+  const rng = makeRng(id + 'terr')
+  const seed = SEED[id]
+  const pts = scatterInCell(cell, seed, rng, 14, 78)
   return (
     <g pointerEvents="none">
-      {spots.map(([x, y], i) => {
-        const s = 0.75 + rng() * 0.6
-        const k = `${id}-m-${i}`
-        switch (biome) {
+      {pts.map((p, i) => {
+        const k = `${id}-t-${i}`
+        const s = 0.8 + rng() * 0.7
+        const t = `translate(${p[0].toFixed(1)},${p[1].toFixed(1)}) scale(${s.toFixed(2)})`
+        switch (meta.biome) {
           case 'forest':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <path d="M0,3 L0,-2" stroke="#3a2a18" strokeWidth={1.4} strokeLinecap="round" />
-                <path d="M0,-9 L4.5,-1 L-4.5,-1 Z" fill={dark} />
-                <path d="M0,-6 L4,1.5 L-4,1.5 Z" fill={mixNum(base, 0x8fd070, 0.3)} />
-                <path d="M0,-3.5 L3,3 L-3,3 Z" fill={mixNum(base, 0xbdf090, 0.4)} />
-              </g>
-            )
-          case 'mountain':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <path d={`M-6,4 L0,-9 L6,4 Z`} fill={dark} />
-                <path d={`M-6,4 L0,-9 L1.5,-2 L-1,1 Z`} fill={baseHex} opacity={0.9} />
-                <path d="M-2.4,-4.2 L0,-9 L2.4,-4.2 L1,-3 L0,-5 L-1,-3 Z" fill="#eef2f4" opacity={0.92} />
-              </g>
-            )
-          case 'port':
-          case 'town': {
-            const warm = biome === 'town'
-            const roof = warm ? mixNum(base, 0xff7a3c, 0.35) : mixNum(base, 0x9fd4e8, 0.4)
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <rect x={-4} y={-2} width={8} height={7} fill={dark} />
-                <path d={`M-5.2,-2 L0,-8 L5.2,-2 Z`} fill={roof} />
-                <rect x={-2} y={0} width={1.8} height={1.8} fill={WINDOW_LIGHT} opacity={0.9} />
-                <rect x={1} y={0} width={1.8} height={1.8} fill={WINDOW_LIGHT} opacity={0.75} />
-              </g>
-            )
-          }
-          case 'ley':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <path d="M0,-8 L3,0 L0,8 L-3,0 Z" fill={mixNum(base, 0xffffff, 0.15)} opacity={0.5} />
-                <path d="M0,-8 L1.6,0 L0,8 L-1.6,0 Z" fill={mixNum(base, 0xe0b8ff, 0.55)} />
-                <circle r={1.5} fill="#f2e0ff" opacity={0.9} />
-              </g>
-            )
+            return <g key={k} transform={t}><path d="M0,2 L0,-1" stroke="#2c3f22" strokeWidth={1} /><path d="M0,-5 L2.6,0 L-2.6,0 Z" fill="#3f5230" /></g>
+          case 'mountain': case 'ruin':
+            return <path key={k} transform={t} d="M-3,2 L0,-2.5 L3,2 Z" fill={meta.biome === 'ruin' ? '#4a3d2c' : '#4a5260'} opacity={0.8} />
           case 'flats':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <path d={`M-6,2 Q-2,-3 2,0 Q5,2 6,2`} fill="none" stroke={light} strokeWidth={1.2} strokeLinecap="round" opacity={0.6} />
-                <ellipse cx={1} cy={2} rx={3.5} ry={1.4} fill={dark} opacity={0.7} />
-              </g>
-            )
-          case 'ruin':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <rect x={-2.5} y={-7} width={2} height={11} fill={baseHex} />
-                <rect x={1} y={-4} width={2} height={8} fill={dark} />
-                <rect x={-3.5} y={4} width={8} height={2} fill={dark} />
-                <rect x={-2.6} y={-8} width={2.2} height={1.6} fill={light} opacity={0.7} />
-              </g>
-            )
-          case 'dock':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <rect x={-6} y={-1} width={12} height={2} fill={darkenNum(base, 0.4)} />
-                <path d="M-3,4 Q0,7 3,4 L3,3 L-3,3 Z" fill={mixNum(base, 0x2a1a10, 0.5)} />
-                <path d="M0,3 L0,-6" stroke={SAND} strokeWidth={0.9} opacity={0.7} />
-                <path d="M0,-6 L4,-3 L0,-3 Z" fill={SAND} opacity={0.8} />
-              </g>
-            )
-          case 'marsh':
-            return (
-              <g key={k} transform={`translate(${x},${y}) scale(${s})`}>
-                <path d="M-3,5 L-3,-4 M0,5 L0,-6 M3,5 L3,-3" stroke={light} strokeWidth={1} strokeLinecap="round" opacity={0.65} />
-                <circle cx={0} cy={-6} r={1} fill={mixNum(base, 0xffe0a0, 0.5)} />
-                <ellipse cx={0} cy={5} rx={5} ry={1.5} fill={TIDE} opacity={0.18} />
-              </g>
-            )
-          default:
-            return null
+            return <ellipse key={k} transform={t} cx={0} cy={0} rx={3} ry={1.1} fill="#6f6045" opacity={0.6} />
+          case 'dock': case 'marsh':
+            return <path key={k} transform={t} d="M-4,0 Q-2,-2 0,0 Q2,2 4,0" fill="none" stroke="#3d6c85" strokeWidth={1} opacity={0.6} />
+          case 'ley':
+            return <path key={k} transform={t} d="M0,-2.6 L1.1,0 L0,2.6 L-1.1,0 Z" fill="#b89bd8" opacity={0.5} />
+          default: // town, port
+            return <rect key={k} transform={t} x={-1.5} y={-1.5} width={3} height={3} rx={0.6} fill="#5b5038" opacity={0.5} />
         }
       })}
-    </g>
-  )
-}
-
-/** Warm town-lights: a cluster of glowing windows near the district centre. */
-function TownLights({ id, geo, count, glow }: { id: DistrictId; geo: IslandGeo; count: number; glow: number }) {
-  const rng = makeRng(id + 'lights')
-  const spots = scatter(geo.cx, geo.cy + geo.size * 0.08, geo.size * 0.32, count, rng)
-  return (
-    <g pointerEvents="none">
-      {spots.map(([x, y], i) => (
-        <g key={`${id}-l-${i}`}>
-          <circle cx={x} cy={y} r={3.2} fill={WINDOW_LIGHT} opacity={0.12 * glow} filter="url(#wm-bloom)" />
-          <circle cx={x} cy={y} r={0.9} fill={WINDOW_LIGHT} opacity={0.85} />
-        </g>
-      ))}
     </g>
   )
 }
@@ -408,532 +291,339 @@ export interface WorldMapSvgProps {
   constructionActivities?: MapConstructionActivity[]
   ecologyByTile?: readonly HubEcologySummary[]
   controlsEnabled?: boolean
+  focusDistrictId?: DistrictId | null
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function WorldMapSvg({
   npcs,
-  players = [],
   locale,
   playerName,
   onAreaEnter,
-  onNpcInteract,
   onPositionChange,
   areaOverlays = [],
   activeDistrictIds,
   constructionActivities = [],
-  ecologyByTile = [],
   controlsEnabled = true,
+  focusDistrictId = null,
 }: WorldMapSvgProps) {
   const [hoveredDistrict, setHoveredDistrict] = useState<DistrictId | null>(null)
   const [playerDistrictId, setPlayerDistrictId] = useState<DistrictId | null>(loadHubPlayerDistrict)
 
-  // null activeSet = all districts are active (no restriction)
   const activeSet = useMemo(
     () => (activeDistrictIds ? new Set<DistrictId>(activeDistrictIds) : null),
     [activeDistrictIds],
   )
-
   const isActiveDistrict = useCallback(
     (id: DistrictId) => !isDistrict(id) || activeSet === null || activeSet.has(id),
     [activeSet],
   )
 
-  // Group construction activities by district
-  const constructionMap = useMemo(() => {
+  const npcsByDistrict = useMemo(() => {
+    const m = new Map<DistrictId, MapNpc[]>()
+    for (const npc of npcs) {
+      const arr = m.get(npc.districtId) ?? []; arr.push(npc); m.set(npc.districtId, arr)
+    }
+    return m
+  }, [npcs])
+
+  const constructionByDistrict = useMemo(() => {
     const m = new Map<DistrictId, MapConstructionActivity[]>()
     for (const a of constructionActivities) {
-      const arr = m.get(a.districtId) ?? []
-      arr.push(a)
-      m.set(a.districtId, arr)
+      const arr = m.get(a.districtId) ?? []; arr.push(a); m.set(a.districtId, arr)
     }
     return m
   }, [constructionActivities])
 
-  // Filter ecology to known district IDs
-  const districtSet = useMemo(() => new Set<string>(DISTRICT_IDS), [])
-  const knownEcology = useMemo(
-    () => ecologyByTile.filter(e => districtSet.has(e.tileId)),
-    [ecologyByTile, districtSet],
-  )
-
-  // Per-district liveliness = NPCs present (+ construction). Drives town-light
-  // brightness and the "hottest district" pulse so the still frame reads alive.
-  const activityByDistrict = useMemo(() => {
-    const m = new Map<DistrictId, number>()
-    for (const npc of npcs) {
-      if (npc.travelRoute) continue
-      const d = npc.districtId
-      m.set(d, (m.get(d) ?? 0) + 1)
-    }
-    for (const [d, acts] of constructionMap) m.set(d, (m.get(d) ?? 0) + acts.length)
-    return m
-  }, [npcs, constructionMap])
-
   const hottestDistrict = useMemo(() => {
-    let best: DistrictId | null = null
-    let bestN = 0
+    let best: DistrictId | null = null, bestN = 0
     for (const id of DISTRICT_IDS) {
       if (!isActiveDistrict(id)) continue
-      const n = activityByDistrict.get(id) ?? 0
+      const n = npcsByDistrict.get(id)?.length ?? 0
       if (n > bestN) { bestN = n; best = id }
     }
     return best
-  }, [activityByDistrict, isActiveDistrict])
+  }, [npcsByDistrict, isActiveDistrict])
 
-  // Signal initial position for social presence (once on mount)
   useEffect(() => {
     if (!onPositionChange) return
-    const def = DISTRICTS['t_central']
-    onPositionChange({
-      x: def.anchor.col * TILE_SIZE + TILE_SIZE / 2,
-      y: def.anchor.row * TILE_SIZE + TILE_SIZE / 2,
-      z: 0,
-    })
-  // Run once on mount only
+    onPositionChange({ x: SEED.t_dimai[0], y: SEED.t_dimai[1], z: 0 })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // NPC idle drift tick
-  const driftTickRef = useRef(0)
-  const [driftTick, setDriftTick] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      driftTickRef.current += 1
-      setDriftTick(driftTickRef.current)
-    }, 3500)
-    return () => clearInterval(id)
-  }, [])
-
-  const idleDrift = useMemo(() => {
-    const m = new Map<string, { dx: number; dy: number }>()
-    for (const npc of npcs) m.set(npc.id, npcIdleDrift(npc.id, driftTick))
-    return m
-  }, [npcs, driftTick])
-
-  const playerPixelPos = useMemo(() => {
-    if (!playerDistrictId) return null
-    const def = DISTRICTS[playerDistrictId]
-    return {
-      x: def.anchor.col * TILE_SIZE + TILE_SIZE / 2,
-      y: def.anchor.row * TILE_SIZE + TILE_SIZE / 2,
-    }
-  }, [playerDistrictId])
 
   const handleDistrictClick = useCallback(
     (id: DistrictId) => {
       if (!isActiveDistrict(id)) return
-      if (controlsEnabled) {
-        setPlayerDistrictId(id)
-        saveHubPlayerDistrict(id)
-      }
+      if (controlsEnabled) { setPlayerDistrictId(id); saveHubPlayerDistrict(id) }
       onAreaEnter(id)
-      if (onPositionChange) {
-        const def = DISTRICTS[id]
-        onPositionChange({
-          x: def.anchor.col * TILE_SIZE + TILE_SIZE / 2,
-          y: def.anchor.row * TILE_SIZE + TILE_SIZE / 2,
-          z: 0,
-        })
-      }
+      if (onPositionChange) onPositionChange({ x: SEED[id][0], y: SEED[id][1], z: 0 })
     },
     [isActiveDistrict, controlsEnabled, onAreaEnter, onPositionChange],
   )
 
+  // Streets: main avenues from the core to each ward + a ring joining neighbours.
+  const streets = useMemo(() => {
+    const spokes = DISTRICT_IDS.filter(id => id !== 't_dimai').map(id => ({ a: SEED.t_dimai, b: SEED[id] }))
+    const ring: Array<{ a: Pt; b: Pt }> = []
+    const around: DistrictId[] = ['t_forest', 't_mountain', 't_temple', 't_ruin', 't_salt_marsh', 't_central', 't_dock', 't_desert']
+    for (let i = 0; i < around.length; i++) ring.push({ a: SEED[around[i]!], b: SEED[around[(i + 1) % around.length]!] })
+    return { spokes, ring }
+  }, [])
+
+  // Buildings + figures across the whole city (sorted by y for depth).
+  const buildings = useMemo(() => {
+    const list: Array<{ id: DistrictId; p: Pt; w: number; type: string; state: string; prog?: number | undefined }> = []
+    for (const id of DISTRICT_IDS) {
+      if (!isActiveDistrict(id)) continue
+      const cell = CELLS[id]; if (!cell) continue
+      const meta = WARD[id]
+      const rng = makeRng(id + 'bld')
+      const cons = constructionByDistrict.get(id) ?? []
+      const pts = scatterInCell(cell, SEED[id], rng, meta.density, meta.biome === 'town' ? 66 : 56, 8)
+      pts.forEach((p, i) => {
+        const w = 22 + rng() * 12
+        const underCons = i < cons.length
+        list.push({
+          id, p, w, type: meta.buildType,
+          state: underCons ? 'under_construction' : (rng() > 0.9 ? 'damaged' : 'operational'),
+          prog: underCons ? cons[i]!.progressAfter : undefined,
+        })
+      })
+    }
+    list.sort((a, b) => a.p[1] - b.p[1])
+    return list
+  }, [isActiveDistrict, constructionByDistrict])
+
+  const figures = useMemo(() => {
+    const list: Array<{ p: Pt; color: string; name: string }> = []
+    for (const id of DISTRICT_IDS) {
+      if (!isActiveDistrict(id)) continue
+      const cell = CELLS[id]; if (!cell) continue
+      const people = npcsByDistrict.get(id) ?? []
+      const rng = makeRng(id + 'fig')
+      const shown = people.slice(0, 6)
+      const pts = scatterInCell(cell, SEED[id], rng, shown.length, 60, 14)
+      shown.forEach((npc, i) => {
+        const p = pts[i]; if (!p) return
+        list.push({ p, color: numToHex(npc.color ?? 0xf6c560), name: npc.shortName })
+      })
+    }
+    list.sort((a, b) => a.p[1] - b.p[1])
+    return list
+  }, [isActiveDistrict, npcsByDistrict])
+
   return (
     <div
-      className="w-full mx-auto aspect-[4/3] sm:aspect-[16/9] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
+      className="w-full mx-auto aspect-[4/3] sm:aspect-[16/10] rounded-sharp overflow-hidden border border-ground-700 bg-ground-900 select-none"
       role="region"
       aria-label={locale === 'zh' ? '世界地圖' : 'World Map'}
     >
-      <svg
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        preserveAspectRatio="xMidYMid meet"
-        width="100%"
-        height="100%"
-        style={{ display: 'block' }}
-      >
+      <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} preserveAspectRatio="xMidYMid meet"
+        width="100%" height="100%" style={{ display: 'block' }}>
         <defs>
           <style>{`
-            @keyframes wm-float { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-3px); } }
-            .wm-float { animation: wm-float 3s ease-in-out infinite; }
-            @keyframes wm-npc-pulse { 0%,100% { opacity:1 } 50% { opacity:0.2 } }
-            .wm-npc-pulse { animation: wm-npc-pulse 1.8s ease-in-out infinite; }
-            @keyframes wm-player-breathe { 0%,100% { opacity:0.3 } 50% { opacity:0.85 } }
-            @keyframes wm-ember-pulse { 0%,100% { opacity:0.35 } 50% { opacity:0.85 } }
-            .wm-ember-pulse { animation: wm-ember-pulse 2.8s ease-in-out infinite; }
-            @keyframes wm-hot { 0% { opacity:0.5; transform: scale(0.86) } 70%,100% { opacity:0; transform: scale(1.25) } }
-            .wm-hot { animation: wm-hot 3.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
-            @keyframes wm-lane { to { stroke-dashoffset: -40; } }
-            .wm-lane { animation: wm-lane 5.5s linear infinite; }
-            .wm-npc:hover > g { filter: drop-shadow(0 0 5px rgba(243,156,32,0.7)); }
+            @keyframes wm-hot { 0% { opacity:0.5; transform:scale(0.95) } 70%,100% { opacity:0; transform:scale(1.05) } }
+            .wm-hot { animation: wm-hot 3.2s ease-out infinite; transform-origin:center; transform-box:fill-box; }
+            @keyframes wm-lane { to { stroke-dashoffset:-30 } }
+            .wm-lane { animation: wm-lane 8s linear infinite; }
+            @keyframes wm-pin { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-3px) } }
+            .wm-pin { animation: wm-pin 2.4s ease-in-out infinite; }
           `}</style>
-
-          {/* Sea */}
-          <radialGradient id="wm-sea" cx="50%" cy="42%" r="72%">
-            <stop offset="0%"  stopColor="#16465a" />
-            <stop offset="48%" stopColor="#0d3040" />
-            <stop offset="100%" stopColor="#061a25" />
+          <radialGradient id="wm-sea" cx="50%" cy="44%" r="75%">
+            <stop offset="0%" stopColor="#15455a" /><stop offset="55%" stopColor="#0c2c3b" /><stop offset="100%" stopColor="#06181f" />
           </radialGradient>
-          <radialGradient id="wm-vignette" cx="50%" cy="48%" r="66%">
-            <stop offset="66%" stopColor="#000" stopOpacity="0" />
-            <stop offset="100%" stopColor="#02080c" stopOpacity="0.55" />
+          <radialGradient id="wm-vignette" cx="50%" cy="48%" r="72%">
+            <stop offset="66%" stopColor="#000" stopOpacity="0" /><stop offset="100%" stopColor="#02080c" stopOpacity="0.5" />
           </radialGradient>
-          {/* Sky glow at top (dusk) */}
-          <linearGradient id="wm-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"  stopColor="#5a3a2a" stopOpacity="0.5" />
-            <stop offset="30%" stopColor="#2a2438" stopOpacity="0.18" />
-            <stop offset="60%" stopColor="#000" stopOpacity="0" />
-          </linearGradient>
-          {/* Top sheen for island volume (shared, objectBoundingBox) */}
-          <linearGradient id="wm-sheen" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"  stopColor="#ffffff" stopOpacity="0.22" />
-            <stop offset="45%" stopColor="#ffffff" stopOpacity="0.03" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0.28" />
-          </linearGradient>
-
-          {/* Water caustics */}
           <filter id="wm-caustics" x="0" y="0" width="100%" height="100%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="n" />
-            <feColorMatrix in="n" type="matrix"
-              values="0 0 0 0 0.30  0 0 0 0 0.72  0 0 0 0 0.78  0 0 0 0.9 0" result="c" />
-            <feComponentTransfer in="c" result="c2"><feFuncA type="discrete" tableValues="0 0 0 0.5 0 0 0.35 0" /></feComponentTransfer>
+            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="5" result="n" />
+            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.30 0 0 0 0 0.72 0 0 0 0 0.78 0 0 0 0.9 0" result="c" />
+            <feComponentTransfer in="c" result="c2"><feFuncA type="discrete" tableValues="0 0 0 0.5 0 0 0.3 0" /></feComponentTransfer>
             <feComposite in="c2" in2="SourceGraphic" operator="in" />
           </filter>
-          {/* Island painterly grain (clipped to island alpha) */}
-          <filter id="wm-grain" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.11 0.13" numOctaves="3" seed="11" result="n" />
-            <feColorMatrix in="n" type="matrix"
-              values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0" result="g" />
+          <filter id="wm-grain" x="-2%" y="-2%" width="104%" height="104%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.09 0.11" numOctaves="3" seed="9" result="n" />
+            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0" result="g" />
             <feComposite in="g" in2="SourceAlpha" operator="in" />
           </filter>
-          {/* Soft bloom for lights */}
-          <filter id="wm-bloom" x="-120%" y="-120%" width="340%" height="340%">
-            <feGaussianBlur stdDeviation="2.4" />
+          <filter id="wm-coast" x="-20%" y="-20%" width="140%" height="150%">
+            <feDropShadow dx="0" dy="7" stdDeviation="10" floodColor="#020a10" floodOpacity="0.6" />
           </filter>
-          {/* Island drop shadow onto sea */}
-          <filter id="wm-drop" x="-30%" y="-30%" width="160%" height="170%">
-            <feDropShadow dx="1.5" dy="5" stdDeviation="6" floodColor="#020a10" floodOpacity="0.7" />
+          <filter id="wm-bloom" x="-140%" y="-140%" width="380%" height="380%">
+            <feGaussianBlur stdDeviation="3" />
           </filter>
-
-          <marker id="wm-arr-dep" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <polygon points="0 0, 8 3, 0 6" fill="#e0a850" opacity="0.8" />
-          </marker>
+          <clipPath id="wm-island-clip"><path d={roundedPath(ISLAND_PTS, 22)} /></clipPath>
         </defs>
 
-        {/* ── Layer 0: Sea ─────────────────────────────────────────────────── */}
+        {/* Sea */}
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#wm-sea)" />
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#wm-caustics)" opacity="0.5" />
-        <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#wm-sky)" pointerEvents="none" />
 
-        {/* ── Sea routes (glowing dashed lanes between district anchors) ────── */}
-        {SEA_ROUTES.map(([a, b]) => {
-          const defA = DISTRICTS[a], defB = DISTRICTS[b]
-          const x1 = defA.anchor.col * TILE_SIZE + TILE_SIZE / 2
-          const y1 = defA.anchor.row * TILE_SIZE + TILE_SIZE / 2
-          const x2 = defB.anchor.col * TILE_SIZE + TILE_SIZE / 2
-          const y2 = defB.anchor.row * TILE_SIZE + TILE_SIZE / 2
-          return (
-            <g key={`route-${a}-${b}`} pointerEvents="none">
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={TIDE} strokeWidth="2.4" strokeOpacity="0.06" />
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#bfeaf2" strokeWidth="0.9"
-                strokeOpacity="0.3" strokeDasharray="2 12" strokeLinecap="round" className="wm-lane" />
-            </g>
-          )
-        })}
+        {/* Island landmass shadow + base */}
+        <path d={roundedPath(ISLAND_PTS, 22)} fill={TIDE} opacity="0.3" filter="url(#wm-bloom)" pointerEvents="none" />
+        <path d={roundedPath(ISLAND_PTS, 22)} fill="#241b12" filter="url(#wm-coast)" pointerEvents="none" />
 
-        {/* ── Migration arrows (faint, alive) ──────────────────────────────── */}
-        {knownEcology.flatMap(eco =>
-          eco.migrationsDeparting.map((m, i) => {
-            if (!districtSet.has(m.toTileId)) return null
-            const fromDef = DISTRICTS[eco.tileId as DistrictId]
-            const toDef   = DISTRICTS[m.toTileId as DistrictId]
-            const fx = fromDef.anchor.col * TILE_SIZE + TILE_SIZE / 2
-            const fy = fromDef.anchor.row * TILE_SIZE + TILE_SIZE / 2
-            const tx = toDef.anchor.col   * TILE_SIZE + TILE_SIZE / 2
-            const ty = toDef.anchor.row   * TILE_SIZE + TILE_SIZE / 2
+        <g clipPath="url(#wm-island-clip)">
+          {/* Ward terrain (naturalistic ground + detail marks) */}
+          {DISTRICT_IDS.map(id => {
+            const cell = CELLS[id]; if (!cell || cell.length < 3) return null
+            const active = isActiveDistrict(id)
+            const meta = WARD[id]
+            const d = roundedPath(cell, 16)
             return (
-              <line key={`mig-${eco.tileId}-${i}`} x1={fx} y1={fy} x2={tx} y2={ty}
-                stroke="#e0a850" strokeWidth="1.2" opacity="0.4"
-                markerEnd="url(#wm-arr-dep)" pointerEvents="none" />
-            )
-          })
-        )}
-
-        {/* ── Layer 1: Islands (lit landmasses with depth) ─────────────────── */}
-        {DISTRICT_IDS.map(id => {
-          const geo = ISLAND_GEO[id]
-          const path = ISLAND_PATHS[id]
-          if (!geo || !path) return null
-          const active = isActiveDistrict(id)
-          const biome = BIOME[id]!
-          const base = DISTRICTS[id].color
-          const hot = hottestDistrict === id
-          const activity = activityByDistrict.get(id) ?? 0
-          const lightCount = Math.max(3, Math.min(10, 3 + activity * 2))
-          const lightGlow = active ? 1 : 0.3
-          const gradId = `wm-isl-${id}`
-
-          return (
-            <g key={`isl-${id}`} opacity={active ? 1 : 0.4} style={{ transition: 'opacity 0.3s' }}>
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0.15" y2="1">
-                  <stop offset="0%"   stopColor={mixNum(base, 0xfff0d0, 0.34)} />
-                  <stop offset="42%"  stopColor={lightenNum(base, 0.05)} />
-                  <stop offset="100%" stopColor={darkenNum(base, 0.52)} />
-                </linearGradient>
-              </defs>
-
-              {/* Hot-district warm aura + pulse (alive) */}
-              {hot && active && (
-                <>
-                  <polygon points={path} fill={EMBER} opacity="0.10" filter="url(#wm-bloom)" pointerEvents="none" />
-                  <polygon points={path} fill="none" stroke={EMBER} strokeWidth="2" className="wm-hot" pointerEvents="none" />
-                </>
-              )}
-
-              {/* Coastal shallows halo */}
-              <polygon points={path} fill="none" stroke={TIDE} strokeWidth="7"
-                strokeOpacity={active ? 0.5 : 0.25} filter="url(#wm-bloom)" pointerEvents="none" />
-
-              {/* Body with drop shadow */}
-              <polygon points={path} fill={`url(#${gradId})`} filter="url(#wm-drop)" pointerEvents="none" />
-              {/* Painterly grain */}
-              <polygon points={path} fill="#000" filter="url(#wm-grain)"
-                opacity={0.5} style={{ mixBlendMode: 'overlay' }} pointerEvents="none" />
-              {/* Top sheen (volume) */}
-              <polygon points={path} fill="url(#wm-sheen)" pointerEvents="none" />
-              {/* Sand coastline */}
-              <polygon points={path} fill="none" stroke={SAND} strokeWidth="1.3"
-                strokeOpacity={active ? 0.55 : 0.3} strokeLinejoin="round" pointerEvents="none" />
-
-              {/* Terrain motifs + town lights */}
-              <TerrainMotifs id={id} biome={biome} geo={geo} />
-              <TownLights id={id} geo={geo} count={lightCount} glow={lightGlow} />
-            </g>
-          )
-        })}
-
-        {/* ── Layer 1b: Hover highlight ────────────────────────────────────── */}
-        {hoveredDistrict && isActiveDistrict(hoveredDistrict) && (() => {
-          const path = ISLAND_PATHS[hoveredDistrict]
-          if (!path) return null
-          return (
-            <polygon points={path} fill="rgba(255,220,150,0.08)" stroke={EMBER}
-              strokeWidth="1.75" strokeOpacity="0.6" pointerEvents="none" />
-          )
-        })()}
-
-        {/* ── Layer 2: Faction / safety overlays (subtle) ──────────────────── */}
-        {areaOverlays.map(o => {
-          const path = ISLAND_PATHS[o.districtId]
-          if (!path) return null
-          const fs = o.dominantFaction ? FACTION_STYLE[o.dominantFaction] : null
-          return (
-            <g key={`ov-${o.districtId}`} pointerEvents="none">
-              {o.safety < 40 && <polygon points={path} fill="rgba(180,30,30,0.10)" />}
-              {fs && (
-                <polygon points={path} fill={fs.fill} stroke={fs.stroke}
-                  strokeWidth="1.25" strokeOpacity="0.5" strokeDasharray={fs.strokeDasharray} />
-              )}
-            </g>
-          )
-        })}
-
-        {/* ── Layer 4: District name labels (parchment pill) ──────────────── */}
-        {DISTRICT_IDS.map(id => {
-          const geo = ISLAND_GEO[id]
-          if (!geo) return null
-          const def    = DISTRICTS[id]
-          const cx     = geo.cx
-          const pillY  = geo.minY + 15
-          const active = isActiveDistrict(id)
-          const label  = locale === 'zh' ? def.nameZh : def.nameEn
-          const pillW  = Math.max(label.length * 11 + 16, 42)
-          return (
-            <g key={`lbl-${id}`} pointerEvents="none">
-              <rect
-                x={cx - pillW / 2} y={pillY - 12}
-                width={pillW} height={17}
-                rx="3" ry="3"
-                fill={active ? 'rgba(20,13,6,0.72)' : 'rgba(15,12,10,0.5)'}
-                stroke={active ? 'rgba(230,211,163,0.4)' : 'rgba(90,80,60,0.3)'}
-                strokeWidth="0.75"
-              />
-              <text
-                x={cx} y={pillY}
-                textAnchor="middle"
-                fill={active ? '#f4e3b4' : '#6a6052'}
-                fontSize="12"
-                fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                fontWeight="800"
-                letterSpacing="0.08em"
-                style={{ paintOrder: 'stroke' }}
-                stroke="rgba(0,0,0,0.55)"
-                strokeWidth="2.4"
-              >
-                {label}
-              </text>
-            </g>
-          )
-        })}
-
-        {/* ── Layer 6: Construction markers (small glowing scaffold) ──────── */}
-        {Array.from(constructionMap.entries()).map(([id, acts]) => {
-          const geo = ISLAND_GEO[id]
-          if (!geo || acts.length === 0) return null
-          const a  = acts[0]!
-          const cx = geo.cx + geo.w * 0.28
-          const by = geo.maxY - 16
-          return (
-            <g key={`ct-${id}`} pointerEvents="none" className="wm-float">
-              <circle cx={cx} cy={by - 4} r="6" fill={EMBER} opacity="0.16" filter="url(#wm-bloom)" />
-              <text x={cx} y={by} textAnchor="middle" fontSize="11">🔨</text>
-              <text x={cx} y={by + 9} textAnchor="middle" fontSize="7"
-                fill="#f4c98a" fontFamily="'JetBrains Mono', monospace">
-                {`${a.progressAfter}/${a.targetProgress}`}
-              </text>
-            </g>
-          )
-        })}
-
-        {/* ── Layer 7: District click zones ────────────────────────────────── */}
-        {DISTRICT_IDS.map(id => {
-          const dr = DISTRICT_RECTS[id]
-          if (!dr) return null
-          const [c0, r0, c1, r1] = dr
-          const active = isActiveDistrict(id)
-          return (
-            <rect
-              key={`zone-${id}`}
-              x={c0 * TILE_SIZE}
-              y={r0 * TILE_SIZE}
-              width={(c1 - c0 + 1) * TILE_SIZE}
-              height={(r1 - r0 + 1) * TILE_SIZE}
-              fill="transparent"
-              style={{ cursor: active && controlsEnabled ? 'pointer' : 'default' }}
-              onMouseEnter={() => setHoveredDistrict(id)}
-              onMouseLeave={() => setHoveredDistrict(prev => (prev === id ? null : prev))}
-              onClick={controlsEnabled ? () => handleDistrictClick(id) : undefined}
-            />
-          )
-        })}
-
-        {/* ── Layer 8: Peer player tokens ──────────────────────────────────── */}
-        {players
-          .filter(p => p.x != null && p.y != null)
-          .map(p => (
-            <g
-              key={`peer-${p.id}`}
-              style={{ transform: `translate(${p.x!}px, ${p.y!}px)`, transition: 'transform 1.8s ease-in-out' }}
-              pointerEvents="none"
-            >
-              <g opacity={0.88} transform="translate(0, 12)">
-                <FigureBody cloak="#3a7a8a" scale={0.85} />
-                <rect x="-9" y="2" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.82)" />
-                <text y="7.5" textAnchor="middle" fontSize="5"
-                  fill={TIDE} fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
-                  {p.shortName}
-                </text>
+              <g key={`terr-${id}`} opacity={active ? 1 : 0.5}>
+                <path d={d} fill={meta.ground} pointerEvents="none" />
+                <path d={d} fill="#000" filter="url(#wm-grain)" opacity={0.4} style={{ mixBlendMode: 'overlay' }} pointerEvents="none" />
+                {active && <TerrainMarks id={id} />}
               </g>
+            )
+          })}
+
+          {/* Tidal river */}
+          <path d={RIVER_PATH} fill="none" stroke={TIDE} strokeWidth="15" strokeLinecap="round" opacity="0.3" filter="url(#wm-bloom)" pointerEvents="none" />
+          <path d={RIVER_PATH} fill="none" stroke="#123c4c" strokeWidth="11" strokeLinecap="round" opacity="0.95" pointerEvents="none" />
+          <path d={RIVER_PATH} fill="none" stroke="#bfeaf2" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.4" strokeDasharray="2 12" className="wm-lane" pointerEvents="none" />
+
+          {/* Streets */}
+          {[...streets.ring, ...streets.spokes].map((s, i) => (
+            <g key={`st-${i}`} pointerEvents="none">
+              <line x1={s.a[0]} y1={s.a[1]} x2={s.b[0]} y2={s.b[1]} stroke={STREET_EDGE} strokeWidth="9" strokeLinecap="round" />
+              <line x1={s.a[0]} y1={s.a[1]} x2={s.b[0]} y2={s.b[1]} stroke={STREET} strokeWidth="6" strokeLinecap="round" />
             </g>
           ))}
 
-        {/* ── Layer 8b: Self player token ──────────────────────────────────── */}
-        {playerPixelPos && controlsEnabled && (
-          <g
-            style={{ transform: `translate(${playerPixelPos.x}px, ${playerPixelPos.y}px)`, transition: 'transform 0.5s ease-in-out' }}
-            pointerEvents="none"
-          >
-            <g opacity={0.95} transform="translate(0, 12)">
-              <circle cy={-11} r="15" fill="none" stroke="rgba(243,156,32,0.4)" strokeWidth="2"
-                style={{ animation: 'wm-player-breathe 2.5s ease-in-out infinite' }} />
-              <FigureBody cloak={EMBER} scale={0.9} />
-              <g transform="translate(0, -10.5) scale(0.5)">
-                <CompassStar tideFill={TIDE} emberFill="#fff5b8" />
+          {/* Faction / safety overlays (subtle) */}
+          {areaOverlays.map(o => {
+            const cell = CELLS[o.districtId]; if (!cell || cell.length < 3) return null
+            const fs = o.dominantFaction ? FACTION_STYLE[o.dominantFaction] : null
+            const d = roundedPath(cell, 16)
+            return (
+              <g key={`ov-${o.districtId}`} pointerEvents="none">
+                {o.safety < 40 && <path d={d} fill="rgba(180,30,30,0.08)" />}
+                {fs && <path d={d} fill="none" stroke={fs.stroke} strokeWidth="1.5" strokeOpacity="0.45" strokeDasharray={fs.dash} />}
               </g>
-              <rect x="-9" y="2" width="18" height="7" rx="1.5" fill="rgba(26,16,8,0.88)" />
-              <text y="7.5" textAnchor="middle" fontSize="5"
-                fill={EMBER} fontFamily="'Big Shoulders Display', system-ui, sans-serif" fontWeight="700">
-                {playerName ? playerName.charAt(0).toUpperCase() : '你'}
-              </text>
+            )
+          })}
+
+          {/* Buildings (depth-sorted) */}
+          {buildings.map((b, i) => (
+            <g key={`b-${i}`} transform={`translate(${b.p[0].toFixed(1)},${b.p[1].toFixed(1)})`} pointerEvents="none">
+              <BuildingFacade type={b.type} state={b.state} w={b.w} constructionProgress={b.prog} />
             </g>
-          </g>
+          ))}
+
+          {/* Character figures (depth-sorted, on top) */}
+          {figures.map((f, i) => (
+            <g key={`f-${i}`} transform={`translate(${f.p[0].toFixed(1)},${f.p[1].toFixed(1)}) scale(0.8)`} pointerEvents="none">
+              <FigureBody cloak={f.color} scale={1} />
+            </g>
+          ))}
+        </g>
+
+        {/* Coastline + hover highlight */}
+        <path d={roundedPath(ISLAND_PTS, 22)} fill="none" stroke={SAND} strokeWidth="2.4" strokeOpacity="0.5" pointerEvents="none" />
+        {hoveredDistrict && isActiveDistrict(hoveredDistrict) && CELLS[hoveredDistrict] && (
+          <path d={roundedPath(CELLS[hoveredDistrict]!, 16)} fill="rgba(255,220,150,0.08)" stroke={EMBER} strokeWidth="2" strokeOpacity="0.6" pointerEvents="none" />
         )}
 
-        {/* ── Layer 9: NPC tokens ──────────────────────────────────────────── */}
-        {npcs.map(npc => {
-          const [baseX, baseY] = npcPixelPos(npc)
-          const drift = idleDrift.get(npc.id) ?? { dx: 0, dy: 0 }
-          const x = baseX + drift.dx
-          const y = baseY + drift.dy
-          const npcColor = numToHex(npc.color ?? DEFAULT_NPC_COLOR)
-          const actEmoji = activityGlyphFor(npc.activity)
-          const raw      = npc.recentUtterance
-          const truncated = raw
-            ? raw.length > 18 ? raw.slice(0, 18) + '…' : raw
-            : null
-          const isTravelling = !!npc.travelRoute
-          const isLowHealth = typeof npc.health === 'number' && npc.health < 30
-
+        {/* Click zones */}
+        {DISTRICT_IDS.map(id => {
+          const cell = CELLS[id]; if (!cell || cell.length < 3) return null
+          const active = isActiveDistrict(id)
           return (
-            <g
-              key={npc.id}
-              className="wm-npc"
-              style={{
-                transform: `translate(${x}px, ${y}px)`,
-                transition: 'transform 4.5s ease-in-out',
-                cursor: 'pointer',
-              }}
-              onClick={() => onNpcInteract(npc.id)}
-              role="button"
-              aria-label={npc.name}
-            >
-              {truncated && (
-                <>
-                  <rect x={-48} y={-42} width="96" height="15" rx="3" ry="3"
-                    fill="rgba(24,15,6,0.9)" stroke="rgba(243,156,32,0.45)" strokeWidth="0.75" />
-                  <text y={-31} textAnchor="middle" fontSize="7.5" fill="#f4c98a"
-                    fontFamily="system-ui, sans-serif" pointerEvents="none">
-                    {truncated}
-                  </text>
-                </>
+            <path key={`hit-${id}`} d={roundedPath(cell, 16)} fill="transparent"
+              style={{ cursor: active && controlsEnabled ? 'pointer' : 'default' }}
+              onMouseEnter={() => setHoveredDistrict(id)}
+              onMouseLeave={() => setHoveredDistrict(p => (p === id ? null : p))}
+              onClick={() => handleDistrictClick(id)}
+              role="button" aria-label={locale === 'zh' ? DISTRICTS[id].nameZh : DISTRICTS[id].nameEn} />
+          )
+        })}
+
+        {/* Labels + badges + markers */}
+        {DISTRICT_IDS.map(id => {
+          const cell = CELLS[id]; if (!cell || cell.length < 3) return null
+          const active = isActiveDistrict(id)
+          const seed = SEED[id]
+          const cen = centroid(cell)
+          const count = npcsByDistrict.get(id)?.length ?? 0
+          const focused = focusDistrictId === id
+          const hot = hottestDistrict === id
+          const cons = constructionByDistrict.get(id) ?? []
+          const label = locale === 'zh' ? DISTRICTS[id].nameZh : DISTRICTS[id].nameEn
+          let topY = cell[0]![1]
+          for (const p of cell) topY = Math.min(topY, p[1])
+          const bannerY = Math.max(topY + 15, seed[1] - 52)
+          return (
+            <g key={`lbl-${id}`} pointerEvents="none">
+              {(hot || focused) && active && (
+                <path d={roundedPath(cell, 16)} fill="none" stroke={focused ? '#8fe3ef' : EMBER}
+                  strokeWidth="2.2" className="wm-hot" />
               )}
-
-              {/* Hit area */}
-              <circle r="14" fill="transparent" />
-
-              <g opacity={isTravelling ? 0.7 : 1}>
-                {/* warm ground-glow so token pops off the lit island */}
-                <ellipse cy="2" rx="10" ry="4" fill="#000" opacity="0.28" />
-                {truncated && (
-                  <circle r="12.5" fill="none" stroke={EMBER} strokeWidth="1.5" className="wm-npc-pulse" />
-                )}
-                <circle r="10" fill="none" stroke={npcColor} strokeWidth="3.5" opacity="0.16" />
-                <circle r="9.5" fill="none"
-                  stroke={isLowHealth ? '#c0532a' : (isTravelling ? '#7a6040' : npcColor)} strokeWidth="1.8" />
-                <circle r="8" fill="#1a130a" />
-                <NpcGlyph activity={npc.activity} initial={npc.shortName} color={npcColor} />
-                <rect x="-11" y="10.5" width="22" height="8.5" rx="1.5" fill="rgba(20,12,5,0.88)" />
-                <text y="16.5" textAnchor="middle" fontSize="5.5"
-                  fill={npcColor} fontFamily="'Big Shoulders Display', system-ui, sans-serif"
-                  fontWeight="700" letterSpacing="0.03em" pointerEvents="none">
-                  {npc.shortName}
-                </text>
-              </g>
-
-              {actEmoji && (
-                <text x="12" y="-10" fontSize="9" pointerEvents="none">{actEmoji}</text>
+              <rect x={seed[0] - label.length * 8.5 - 7} y={bannerY - 13} width={label.length * 17 + 14} height={21} rx={4}
+                fill={active ? 'rgba(16,10,4,0.82)' : 'rgba(15,12,10,0.55)'}
+                stroke={active ? 'rgba(230,211,163,0.45)' : 'rgba(90,80,60,0.3)'} strokeWidth="0.75" />
+              <text x={seed[0]} y={bannerY + 1.5} textAnchor="middle"
+                fill={active ? '#f4e3b4' : '#6a6052'} fontSize="15.5" fontWeight="800"
+                fontFamily="'Big Shoulders Display', system-ui, sans-serif" letterSpacing="0.05em"
+                style={{ paintOrder: 'stroke' }} stroke="rgba(0,0,0,0.65)" strokeWidth="3">
+                {label}
+              </text>
+              {active && count > 0 && (
+                <g transform={`translate(${cen[0] - 18},${cen[1] + 46})`}>
+                  <rect x={-2} y={-10} width={40} height={16} rx={8} fill="rgba(14,9,4,0.9)" stroke="rgba(230,211,163,0.4)" strokeWidth={0.75} />
+                  <circle cx={8} cy={-4.5} r={2.6} fill={SAND} /><path d="M3.5,3 Q8,-2 12.5,3 Z" fill={SAND} />
+                  <text x={18} y={1} fill="#f4e3b4" fontSize={11} fontWeight={800} fontFamily="'Big Shoulders Display', system-ui, sans-serif">×{count}</text>
+                </g>
+              )}
+              {cons.length > 0 && (
+                <g transform={`translate(${cen[0] + 34},${cen[1] + 44})`} className="wm-pin">
+                  <circle r="9" fill={EMBER} opacity="0.18" filter="url(#wm-bloom)" />
+                  <path d="M-4,4 L-4,-3 L4,-3 L4,4 M-4,-3 L0,-7 L4,-3" fill="none" stroke="#f4c98a" strokeWidth="1.4" strokeLinejoin="round" />
+                </g>
+              )}
+              {focused && active && (
+                <g transform={`translate(${seed[0] + label.length * 9 + 6},${bannerY - 6})`} className="wm-pin">
+                  <circle r="10" fill={TIDE} opacity="0.4" filter="url(#wm-bloom)" />
+                  <path d="M0,-11 L2.5,-3.2 L10.6,-3.2 L4,1.9 L6.5,9.8 L0,4.8 L-6.5,9.8 L-4,1.9 L-10.6,-3.2 L-2.5,-3.2 Z" fill="#bff0f7" stroke="#fff" strokeWidth="0.6" />
+                  <circle r="3.2" fill="#0c2c3b" /><circle r="1.3" fill="#eafbff" />
+                </g>
               )}
             </g>
           )
         })}
 
-        {/* ── Vignette (atmosphere, drawn last, non-interactive) ───────────── */}
+        {/* Player marker */}
+        {playerDistrictId && controlsEnabled && SEED[playerDistrictId] && (
+          <g transform={`translate(${SEED[playerDistrictId][0]},${SEED[playerDistrictId][1] - 30})`} pointerEvents="none" className="wm-pin">
+            <path d="M0,0 L0,-24" stroke="#7a5a20" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M0,-24 L18,-20 L0,-13 Z" fill={EMBER} stroke="#fff5b8" strokeWidth="0.8" />
+            <circle cx="0" cy="0" r="3.5" fill={EMBER} stroke="#fff5b8" strokeWidth="1" />
+            <text x="9" y="-16" fontSize="7" fill="#1c1206" fontWeight="800" fontFamily="'Big Shoulders Display', system-ui, sans-serif">
+              {playerName ? playerName.charAt(0).toUpperCase() : '你'}
+            </text>
+          </g>
+        )}
+
         <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="url(#wm-vignette)" pointerEvents="none" />
       </svg>
     </div>
   )
+}
+
+// ── Player district persistence ───────────────────────────────────────────────
+
+const HUB_POS_KEY = 'gi:hubPos:v2'
+function loadHubPlayerDistrict(): DistrictId | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(HUB_POS_KEY)
+    if (raw && isDistrict(raw as DistrictId)) return raw as DistrictId
+  } catch { /* storage unavailable */ }
+  return null
+}
+function saveHubPlayerDistrict(id: DistrictId): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(HUB_POS_KEY, id) } catch { /* quota */ }
 }

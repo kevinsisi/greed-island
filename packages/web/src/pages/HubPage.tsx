@@ -12,6 +12,7 @@ import { WorldMapSvg } from '../components/map/WorldMapSvg'
 import { api, type ServerAreaState, type ServerNearbyPlayer } from '../api/client'
 import {
   DISTRICTS,
+  DISTRICT_IDS,
   type DistrictId,
   isDistrict,
 } from '../game/districts'
@@ -74,9 +75,10 @@ export function HubPage() {
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
   const latestPositionRef = useRef<HubPosition | null>(null)
   const [showCivPanel, setShowCivPanel] = useState(false)
-  // map-visual-language:浮層可收合(地圖是主畫面,面板讓路)
-  const [nowOpen, setNowOpen] = useState(true)
-  const [ctxOpen, setCtxOpen] = useState(true)
+  // map-visual-language:浮層可收合(地圖是主畫面,面板讓路)。
+  // 桌機預設收合,避免蓋住上排街區名;一鍵展開。手機另有底部事件列。
+  const [nowOpen, setNowOpen] = useState(false)
+  const [ctxOpen, setCtxOpen] = useState(false)
 
   // ActionBar eat result — SurvivalHud picks up the change on next tick via polling
 
@@ -123,6 +125,24 @@ export function HubPage() {
   )
 
   const mapNpcs = useMemo<MapNpc[]>(() => hubMapNpcs(npcs, locale), [locale, npcs])
+
+  // Focus/quest layer: the zone of the most recent narrated world event.
+  // Events carry an authoritative location in payload (tileId / tile / to).
+  const focusDistrictId = useMemo<DistrictId | null>(() => {
+    const known = new Set<string>(DISTRICT_IDS)
+    let best: DistrictId | null = null
+    let bestSeq = -1
+    for (const e of events) {
+      if (!e.narration) continue
+      const p = (e.payload ?? {}) as Record<string, unknown>
+      const raw = p['tileId'] ?? p['tile'] ?? p['to']
+      if (typeof raw === 'string' && known.has(raw) && e.sequence > bestSeq) {
+        bestSeq = e.sequence
+        best = raw as DistrictId
+      }
+    }
+    return best
+  }, [events])
 
   useEffect(() => {
     const routed = mapNpcs.filter((n) => n.travelRoute)
@@ -249,6 +269,7 @@ export function HubPage() {
       constructionActivities={constructionActivities}
       ecologyByTile={ecologyByTile}
       controlsEnabled={!!token}
+      focusDistrictId={focusDistrictId}
     />
   ) : (
     <div className="w-full aspect-[4/3] rounded-sharp border border-ground-700 bg-ground-900 flex items-center justify-center text-ground-400 text-sm">

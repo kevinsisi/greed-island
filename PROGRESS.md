@@ -1,3 +1,24 @@
+## 2026-07-13 — Handoff Snapshot @ v0.100.0 (painterly-hub-map: hub 俯視城市地圖 + 子地圖互動修復)
+
+- **背景**:使用者對 hub 地圖多輪不滿——先嫌「暗、雜、像 debug view」,再嫌「九個方塊,不像城市/世界」。最終明確要求:**主地圖做成像子地圖(AreaMapSvg)那樣的真實俯視城市**。
+- **Hub 地圖重寫(WorldMapSvg v4,像子地圖)**:純呈現層,沿用子地圖視覺語言。
+  - 街區改**有機 Voronoi 鄰里**(半平面裁切 + 圓角),彼此相連成一座島,**不再是矩形方塊**。
+  - 沿用子地圖元件:`BuildingFacade`(建築立面+暖窗)、`FigureBody`(人物剪影);地形用自然材質色(草 #37482c / 石 / 沙 / 水)+ 決定論紋理標記。
+  - 街道網(核心↔8 街區 spokes + 環路)、潮汐河(煙嵐山→地脈層→碼頭)、港口/沼澤水域、有機海岸線 + 落海陰影。
+  - 街區名大字級 banner + 真實在場人數 badge(👤×N);最熱鬧街區暖光脈動;最新世界事件(`payload.tileId/tile/to` 可靠對應)藍色任務星標;施工標記。
+  - HubPage 桌機浮層(世界現在/情境)預設收合,不擋地圖;新增 `focusDistrictId`(最新事件街區)。
+- **子地圖 bug 修復(AreaMapSvg)** — 純前端互動 bug:
+  - **建築判定框吃點擊**:`facadeW = 38 + min(5, size-1)*12`(鉗制,原本無上限 → size 22 算出 332px);非可進入建築 `pointer-events:none`。實測建築 overlay 344×319(覆蓋 87%)→ **110×104 / none**,點地移動恢復。
+  - **手機無法捲頁**:地圖容器 `touch-action: none → pan-y`。
+- **驗證(桌機 + 手機都做)**:
+  - `tsc -b && vite build` clean;web vitest **271 pass**;WorldMapSvg 匯出(numToHex/darkenNum/npcPixelPos/DISTRICT_RECTS)不變 ✅
+  - **手機 390px(iPhone 12,Playwright)實測**:子地圖點空地移動成功(player 50%/55%→30%/35%,精準落格)、`touch-action=pan-y` 可捲頁;hub 城市地圖逐區可辨識(建築/人物/街道/水域/河)✅
+  - 本機 dev(proxy 指 hunter 真實資料)桌機 + 手機逐版截圖確認 ✅
+- **OpenSpec**:`painterly-hub-map` delta 更新(hub 俯視城市契約 + 子地圖點地移動/捲頁不變量),`openspec:check` 35/35 過。
+- **版本**:root/web/server → **0.100.0**。
+- **注意(環境)**:本機 vite 需避開 WinNAT 保留埠範圍(本次 5143–5342 被保留 → 5173 EACCES;改用 8137 host 127.0.0.1)。
+- **待辦**:push → Deploy Dev 部署 hunter → 截線上實站換 resume-demo 截圖 + 印 PDF 驗排版。
+
 ## 2026-07-12 — Handoff Snapshot @ v0.99.1 (painterly-hub-map: 俯視插畫風 hub 地圖精修)
 
 - **背景**:使用者回報 v0.99.0 上線後「主要地圖依然不是我要的效果」。重新評估 hub 世界地圖(`WorldMapSvg.tsx`,首頁與履歷截圖的主角):v0.99.0 雖已改有機島嶼,但島嶼仍用 `ISLAND_FILL` 近黑色(亮度 8%–16%)、忽略每區身分色、emoji 生態徽章雜訊 → 履歷縮圖近乎全黑。使用者於視覺方向選 **C 俯視插畫風 + B 演出活的世界**,最終要靜態截圖。
