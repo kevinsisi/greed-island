@@ -1330,14 +1330,16 @@ export class MapScene extends Phaser.Scene {
     // v0.15.40：Hub traveller 視覺除錯。React 端有 routed traveller 卻沒有 sprite
     // 時，把輸入規模 + 實際 sprite 狀態送進 console.debug；console verbose 開啟後
     // 直接看得到「輸入 N 個 routed，sprite 建出 S 個」這條跡象。
-    const routedInput = this.npcs.filter((n) => n.travelRoute)
-    if (routedInput.length > 0) {
-      console.debug('[gi:hub-traveller]', {
-        inputCount: this.npcs.length,
-        routedInputCount: routedInput.length,
-        routedInputIds: routedInput.map((n) => n.id),
-        spriteCount: this.npcSprites.size
-      })
+    if (import.meta.env.DEV) {
+      const routedInput = this.npcs.filter((n) => n.travelRoute)
+      if (routedInput.length > 0) {
+        console.debug('[gi:hub-traveller]', {
+          inputCount: this.npcs.length,
+          routedInputCount: routedInput.length,
+          routedInputIds: routedInput.map((n) => n.id),
+          spriteCount: this.npcSprites.size
+        })
+      }
     }
   }
 

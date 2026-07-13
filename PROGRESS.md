@@ -1,3 +1,15 @@
+## 2026-07-13 — Handoff Snapshot @ v0.100.1 (清除線上每幀 console debug spam)
+
+- **背景**:線上 hunter.sisihome.org 頁面 console 每次 poll 都噴 `[gi:hub-traveller:react]` debug 物件 —— production 雜訊 + 每次序列化物件的無謂開銷(手機尤甚)。
+- **根因**:v0.15.40 為除錯 traveller sprite 加的兩條 `console.debug`:
+  - `packages/web/src/pages/HubPage.tsx`(`[gi:hub-traveller:react]`,依賴 `[mapNpcs, npcs]` → 每次 poll 觸發,就是線上洗版來源)。
+  - `packages/web/src/game/MapScene.ts`(`[gi:hub-traveller]`;hub 現用 WorldMapSvg,MapScene 已不渲染,線上沒觸發,但仍是 shipped code)。
+- **修法**:兩條都用 Vite `import.meta.env.DEV` gate(不刪,dev 仍可用;production build `DEV===false` → 整段 tree-shake)。**驗證 built JS `grep hub-traveller` = 0**。
+- **全面掃描**:`console.(log|debug|info|warn|trace)` 全 web src 只剩 `AreaPage.tsx` 的 `console.warn('[area] hunt failed')`(真正錯誤路徑,非每幀)→ 保留。
+- **feTurbulence(未動)**:`WorldMapSvg` `wm-grain`(feTurbulence)套在各街區地面是**靜態**紋理(seed/freq 不變、無動畫),瀏覽器 raster 一次即快取,非每幀開銷;要改必動視覺,故不動。手機順暢度改善來自拿掉每次 poll 的 console 物件序列化。
+- **部署 + 線上驗證**:`DOCKER_BUILDKIT=0 docker compose ... up -d --build web` → hunter `/healthz` = **0.100.1**,tick 從 15519 續增(世界未重置)。**Playwright 讀線上 console:14s / 12s 兩次皆 0 訊息 0 錯誤**,同時確認頁面完整渲染(八方街區 / 15 SVG / 8 個人數 badge)—— 非空白頁。
+- **版本**:root/web/server → **0.100.1**。
+
 ## 2026-07-13 — Handoff Snapshot @ v0.100.0 (painterly-hub-map: hub 俯視城市地圖 + 子地圖互動修復)
 
 - **背景**:使用者對 hub 地圖多輪不滿——先嫌「暗、雜、像 debug view」,再嫌「九個方塊,不像城市/世界」。最終明確要求:**主地圖做成像子地圖(AreaMapSvg)那樣的真實俯視城市**。

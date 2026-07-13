@@ -145,6 +145,9 @@ export function HubPage() {
   }, [events])
 
   useEffect(() => {
+    // v0.15.40 traveller 視覺除錯;只在 dev 輸出（production build 中
+    // import.meta.env.DEV === false → 整段被 tree-shake，避免每次 poll 洗版 console）。
+    if (!import.meta.env.DEV) return
     const routed = mapNpcs.filter((n) => n.travelRoute)
     if (routed.length === 0) return
     console.debug('[gi:hub-traveller:react]', {
