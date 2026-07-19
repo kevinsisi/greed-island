@@ -94,7 +94,8 @@ Treat the following skill files as active workflow rules for this workspace, eve
 - Treat `skills/plan-before-build/SKILL.md` as mandatory for new projects, major features, and large redesigns before implementation begins
 - Treat `skills/project-stack-standard/SKILL.md` as mandatory when choosing or reviewing app/service stack, backend setup, database choice, or monorepo structure
 - Treat `skills/root-cause-debugging/SKILL.md` as mandatory for bug investigation and regressions
-- Treat `skills/integration-robustness/SKILL.md` as mandatory for AI calls, external APIs, retries, and batched integrations
+- Treat `skills/integration-robustness/SKILL.md` as mandatory for retry, timeout, and partial-failure handling in AI calls, external APIs, and batched integrations
+- Treat `skills/ai-provider-routing/SKILL.md` as mandatory when choosing or reviewing which AI provider/model a request routes to (OpenCode vs Gemini, multi-endpoint settings UI, image-generation routing)
 - Treat `skills/verification-and-evidence/SKILL.md` as mandatory when reporting runtime, CI, CD, or deployment status
 - Treat `skills/agent-design/SKILL.md` as mandatory for multi-agent or tool-enabled agent architecture work
 - Treat `skills/completion-checklist/SKILL.md` as mandatory for any code change before reporting completion
@@ -122,5 +123,5 @@ Mirror locations (`.claude/skills/`, `.gemini/skills/`, `.opencode/skills/`, `.g
 - Remove `skills/frontend-design/` if the project has no frontend.
 - Remove `skills/key-pool-standard/` if the project does not use AI API keys.
 - Remove `skills/agent-design/` if the project is not building AI agents.
-- Keep `skills/execution-style/`, `skills/completion-checklist/`, `skills/plan-before-build/`, `skills/root-cause-debugging/`, `skills/verification-and-evidence/`, and `skills/integration-robustness/` for any project.
+- Keep `skills/execution-style/`, `skills/completion-checklist/`, `skills/plan-before-build/`, `skills/root-cause-debugging/`, `skills/verification-and-evidence/`, `skills/integration-robustness/`, and `skills/ai-provider-routing/` for any project.
 - If you delete a skill, also delete its line in the Skill Activation Rules above.
