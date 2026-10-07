@@ -7,7 +7,8 @@ notepad deploy/l390/.env
 docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml build
 docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d
 ```
-Web is published only at `127.0.0.1:28100` by default.
+Web binds to `GREED_L390_BIND_ADDR` (default `127.0.0.1`); set it to the L390 tailnet IP to bind only to tailnet. Do not use `0.0.0.0` or a LAN address.
+Rollback to loopback by setting `GREED_L390_BIND_ADDR=127.0.0.1` in `.env`, then rerun `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d`.
 Restart containers: `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml restart`
 Recreate after `.env` changes: `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d --force-recreate`
 Before an upgrade, save the current images:

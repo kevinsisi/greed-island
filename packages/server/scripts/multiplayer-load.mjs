@@ -6,7 +6,16 @@ const DEFAULTS = { base: 'http://127.0.0.1:4179', origin: 'http://127.0.0.1:4178
 const args = parseArgs(process.argv.slice(2))
 const base = args.base.replace(/\/$/, '')
 const startedAt = Date.now()
-const counts = { successful: 0, failed: 0, commandLatenciesMs: [], sseChatLatenciesMs: [], sseEvents: 0, disconnects: 0 }
+const counts = {
+  successful: 0,
+  failed: 0,
+  failuresByStatusAndError: {},
+  rateLimitRejections: 0,
+  commandLatenciesMs: [],
+  sseChatLatenciesMs: [],
+  sseEvents: 0,
+  disconnects: 0,
+}
 const chatSentAt = new Map()
 const active = new Set()
 const samples = []
@@ -51,9 +60,33 @@ function positiveNumber(value, name) {
   return parsed
 }
 
-function recordRequest(ok) {
-  if (ok) counts.successful += 1
-  else counts.failed += 1
+function recordFailure(key) {
+  counts.failed += 1
+  counts.failuresByStatusAndError[key] = (counts.failuresByStatusAndError[key] ?? 0) + 1
+}
+
+async function recordResponse(response) {
+  if (response.ok) {
+    counts.successful += 1
+    return
+  }
+
+  if (response.status === 429) counts.rateLimitRejections += 1
+  let errorName = 'NO_BODY'
+  try {
+    const body = await response.json()
+    if (body && typeof body === 'object' && body.error !== undefined && body.error !== null && String(body.error)) {
+      errorName = String(body.error)
+    }
+  } catch {
+    // The status is known, but the response did not contain a readable JSON error.
+  }
+  recordFailure(`${response.status} ${errorName}`)
+}
+
+function networkErrorCode(error) {
+  const code = error?.cause?.code ?? error?.code
+  return typeof code === 'string' && code ? code : 'UNKNOWN'
 }
 
 async function request(path, { method = 'GET', cookie, body, signal } = {}) {
@@ -68,11 +101,11 @@ async function request(path, { method = 'GET', cookie, body, signal } = {}) {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
-    recordRequest(response.ok)
+    await recordResponse(response)
     return response
   } catch (error) {
     if (signal?.aborted) return null
-    recordRequest(false)
+    recordFailure(`NETWORK:${networkErrorCode(error)}`)
     throw error
   }
 }
@@ -114,7 +147,11 @@ async function login(clientNo, waitForRateWindow) {
 async function openStream(client, cookie) {
   const abort = new AbortController()
   const response = await request('stream', { cookie, signal: abort.signal })
-  if (!response?.ok || !response.body) throw new Error(`SSE connection failed: HTTP ${response?.status ?? 'network error'}`)
+  if (!response?.ok) throw new Error(`SSE connection failed: HTTP ${response?.status ?? 'network error'}`)
+  if (!response.body) {
+    recordFailure(`${response.status} NO_BODY`)
+    throw new Error(`SSE connection returned no body: HTTP ${response.status}`)
+  }
   return { abort, reader: response.body.getReader(), buffer: '', seen: new Set() }
 }
 
@@ -151,7 +188,6 @@ async function readStream(client) {
         client.stream.abort.abort()
         client.stream = await openStream(client, client.cookie)
       } catch {
-        recordRequest(false)
         await delay(500)
       }
     }
@@ -273,6 +309,9 @@ async function main() {
       total,
       errorRate: total ? counts.failed / total : 0,
     },
+    failuresByStatusAndError: counts.failuresByStatusAndError,
+    rateLimitRejections: counts.rateLimitRejections,
+    errorRateExcludingRateLimits: total ? (counts.failed - counts.rateLimitRejections) / total : 0,
     commandLatencyMs: {
       samples: counts.commandLatenciesMs.length,
       p50: percentile(counts.commandLatenciesMs, 0.50),

@@ -1,3 +1,13 @@
+## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
+
+- 做了什麼：多人版 host/port/資料目錄/Origin 改 env 可設（`packages/server/src/multiplayer/config.ts`、`fixtureStorage.ts`、`http.ts`、`server.ts`）；帳號與 DB 持久化於 volume；新增 `deploy/l390/`（只含 multiplayer＋web，`/api/*`、`/card-images/*` 回 404，不部署主 server）。
+- 測試（Node 22.23.2）：server 182 files／1541 tests、web 41 files／382 tests 通過；新增 `http.file-sqlite.test.ts`（檔案型 SQLite＋50 人 HTTP/SSE＋第 51 人拒絕＋重連＋共同事件防重領＋重開 DB），1/1 通過。全套偶發 `npc.test.ts` 20ms 逾時 1 項（單檔連跑 3 次全過）。
+- 負載（模擬連線，非真人手機渲染）：Mac 本機 50 連線 5 分鐘 31550 請求 0 失敗，指令 p95 38ms、聊天送達 p95 126ms。L390 容器內（經 Caddy）30868 請求，失敗 742 全為 429 MOVE_RATE_LIMIT（同玩家同 tick 只能移動一次），其他錯誤 0，斷線 0；指令 p50/p95/p99=35/544/741ms，聊天 130/317/706ms。腳本 `packages/server/scripts/multiplayer-load.mjs`。
+- L390：`greed-island-l390-multiplayer-1`、`greed-island-l390-web-1` healthy；web 只綁 `127.0.0.1:28100`。`/healthz` 200、`/api/*` 404、`/mp-api/snapshot` 401。
+- 未做：GB10 Caddy 的 `greed.sisihome.org` 路由未改（仍 404）；L390 對外綁定（tailnet IP 或 tailscale serve）待 Kevin 決定；雙瀏覽器（手機＋桌機）實測；acceptor 驗收。
+- 已知風險：登入限流 20 次/IP/分鐘，經 Caddy 後全站共用；主 server 的 `forgot-password` 無登入回 reset token（`http/auth.ts:126-165`）仍在，公開入口不得代理 `/api/*`；npm audit 23 項未處理；舊站 hunter.sisihome.org（kevinhome）502，舊資料位置未確認。
+- L390 ssh 下 docker 拉映像會報 credsStore 'logon session does not exist'；建映像需在 L390 console 互動工作階段。
+
 ## 2026-10-07 — 50 人房間規則與同步 @ v0.104.0（實作 checkpoint，承載待驗）
 
 - 使用者目標為同場景 50 人，且每個完成階段持續 commit/push。本轮以既有工具完成程式與純邏輯驗證；依賴安裝授權仍待回覆，沒有重試、換來源或繞過。

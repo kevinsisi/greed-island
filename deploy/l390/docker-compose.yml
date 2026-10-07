@@ -36,7 +36,7 @@ services:
       multiplayer:
         condition: service_healthy
     ports:
-      - "127.0.0.1:${GREED_L390_HOST_PORT:-28100}:80"
+      - "${GREED_L390_BIND_ADDR:-127.0.0.1}:${GREED_L390_HOST_PORT:-28100}:80"
     volumes:
       - ./Caddyfile.l390:/etc/caddy/Caddyfile:ro
     networks:
