@@ -9,6 +9,11 @@ const SESSION_MS = 12 * 60 * 60 * 1000
 const COOKIE_OPTIONS = { httpOnly: true, sameSite: 'strict' as const, path: '/mp-api', maxAge: SESSION_MS }
 export const LOCAL_ORIGINS = ['http://localhost:4178', 'http://127.0.0.1:4178'] as const
 
+export function parseAllowedOrigins(raw: string | undefined): readonly string[] {
+  if (raw === undefined || raw.trim() === '') return LOCAL_ORIGINS
+  return raw.split(',').map(origin => origin.trim()).filter(Boolean)
+}
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex')
   return `${salt}:${scryptSync(password, salt, 32).toString('hex')}`

@@ -1,18 +1,12 @@
 /** Dedicated disposable local fixture server. Never imported by production startup. */
-import Database from 'better-sqlite3'
-import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import { generateRoster } from './domain.js'
-import { createMultiplayerApp, hashPassword } from './http.js'
-import { MultiplayerRuntime } from './runtime.js'
-import type { FixtureIdentity } from './types.js'
+import { createMultiplayerApp, parseAllowedOrigins } from './http.js'
 import { acquireFixtureLock } from './fixtureLock.js'
-import { parseFixtureArgs, validateCredentials, type FixtureArguments, type FixtureCredentials } from './fixtures.js'
-
-const HOST = '127.0.0.1'
-const PORT = 4179
+import { parseFixtureArgs, type FixtureArguments } from './fixtures.js'
+import { readMultiplayerConfig } from './config.js'
+import { openFixtureStore, preparePersistentDataDirectory } from './fixtureStorage.js'
 
 function fixtureDirectory(args: FixtureArguments): string {
   const base = realpathSync(tmpdir())
@@ -26,39 +20,30 @@ function fixtureDirectory(args: FixtureArguments): string {
 }
 
 function main(): void {
+  const config = readMultiplayerConfig()
   const args = parseFixtureArgs(process.argv.slice(2))
-  const dataDir = fixtureDirectory(args)
+  if (config.dataDir && args.dataDir !== null) {
+    throw new Error('Use MULTIPLAYER_DATA_DIR instead of --data-dir when the environment variable is set.')
+  }
+  const storage = config.dataDir
+    ? preparePersistentDataDirectory(config.dataDir)
+    : { dataDir: fixtureDirectory(args), existing: args.dataDir !== null }
+  const { dataDir, existing } = storage
   chmodSync(dataDir, 0o700)
   const lockPath = join(dataDir, 'running.lock')
   // Exclusive process ownership prevents two runtimes racing on one projection.
   const releaseLock = acquireFixtureLock(lockPath)
   try {
+    const { db, runtime, credentials, fixtures } = openFixtureStore(dataDir, args.fixtureCount, existing)
     const credentialsPath = join(dataDir, 'credentials.json')
-    if (args.dataDir !== null && !existsSync(credentialsPath)) throw new Error('Existing fixture credentials are missing; refusing to replace identities.')
-    const db = new Database(join(dataDir, 'room.sqlite'), { fileMustExist: args.dataDir !== null })
-    db.pragma('journal_mode = WAL')
-    db.pragma('foreign_keys = ON')
-    const newRoster = args.dataDir === null ? generateRoster(args.fixtureCount) : undefined
-    const runtime = new MultiplayerRuntime(db, newRoster ? { roster: newRoster } : { requireExisting: true })
-    let credentials: FixtureCredentials[]
-    if (args.dataDir !== null) {
-      const existing: unknown = JSON.parse(readFileSync(credentialsPath, 'utf8'))
-      // The replayed event roster, rather than today's fixture-count default, is authoritative.
-      const firstId = Array.isArray(existing) && typeof existing[0]?.id === 'string' ? existing[0].id as string : ''
-      credentials = validateCredentials(existing, runtime.snapshot(firstId).players)
-    } else {
-      credentials = newRoster!.map((p, index) => ({ id: p.id, name: p.name, username: `traveler-${index + 1}`, password: randomBytes(18).toString('base64url') }))
-      writeFileSync(credentialsPath, JSON.stringify(credentials, null, 2), { mode: 0o600, flag: 'wx' })
-      writeFileSync(join(dataDir, 'local-fixture.json'), JSON.stringify({ kind: 'local-multiplayer', version: 1 }), { mode: 0o600, flag: 'wx' })
-    }
-    chmodSync(credentialsPath, 0o600)
-    const fixtures: FixtureIdentity[] = credentials.map(({ password, ...identity }) => ({ ...identity, passwordHash: hashPassword(password) }))
-    const app = createMultiplayerApp({ runtime, fixtures })
-    const server = app.listen(PORT, HOST, () => {
+    const app = createMultiplayerApp({ runtime, fixtures, allowedOrigins: parseAllowedOrigins(process.env.MULTIPLAYER_ALLOWED_ORIGINS) })
+    const server = app.listen(config.port, config.host, () => {
       runtime.start()
-      console.log(`[local-multiplayer] listening http://${HOST}:${PORT}`)
+      console.log(`[local-multiplayer] listening http://${config.host}:${config.port}`)
       console.log(`[local-multiplayer] private fixture credentials: ${credentialsPath}`)
-      console.log(`[local-multiplayer] reopen with --data-dir ${dataDir}`)
+      console.log(config.dataDir
+        ? `[local-multiplayer] reopen with MULTIPLAYER_DATA_DIR=${dataDir}`
+        : `[local-multiplayer] reopen with --data-dir ${dataDir}`)
     })
     let stopped = false
     const shutdown = () => {

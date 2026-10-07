@@ -48,7 +48,7 @@ COPY --from=builder /workspace/packages/server/dist ./dist
 COPY --from=builder /workspace/packages/server/package.json ./package.json
 COPY --from=builder /workspace/node_modules ./node_modules
 
-RUN mkdir -p /app/data && chown -R app:app /app
+RUN mkdir -p /app/data /app/mp-data && chown -R app:app /app
 USER app
 
 ENV NODE_ENV=production \

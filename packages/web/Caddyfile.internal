@@ -29,6 +29,19 @@
 		}
 	}
 
+	handle /mp-api/* {
+		header Cache-Control "no-store"
+		reverse_proxy multiplayer:4179 {
+			flush_interval -1
+			header_up Accept-Encoding identity
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+				dial_timeout 5s
+			}
+		}
+	}
+
 	handle /healthz {
 		reverse_proxy server:3000
 	}

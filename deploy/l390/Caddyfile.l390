@@ -1,0 +1,53 @@
+# L390 serves only the web app and the isolated multiplayer API.
+{
+	auto_https off
+}
+
+:80 {
+	root * /srv/greed-island-web
+
+	handle /mp-api/* {
+		header Cache-Control "no-store"
+		reverse_proxy multiplayer:4179 {
+			flush_interval -1
+			header_up Accept-Encoding identity
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+				dial_timeout 5s
+			}
+		}
+	}
+
+	@api path /api /api/*
+	handle @api {
+		respond 404
+	}
+
+	@cardImages path /card-images /card-images/*
+	handle @cardImages {
+		respond 404
+	}
+
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle /assets/* {
+		encode zstd gzip
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		encode zstd gzip
+		header Cache-Control "no-store"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

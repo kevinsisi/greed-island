@@ -1,0 +1,51 @@
+name: greed-island-l390
+
+services:
+  multiplayer:
+    build:
+      context: ../..
+      dockerfile: packages/server/Dockerfile
+    image: greed-island-l390-multiplayer:local
+    command: ["node", "dist/multiplayer/server.js"]
+    restart: unless-stopped
+    environment:
+      MULTIPLAYER_HOST: 0.0.0.0
+      MULTIPLAYER_PORT: "4179"
+      MULTIPLAYER_DATA_DIR: /app/mp-data
+      MULTIPLAYER_ALLOWED_ORIGINS: ${MULTIPLAYER_ALLOWED_ORIGINS:?必填}
+    volumes:
+      - greed-l390-mp-data:/app/mp-data
+    expose:
+      - "4179"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4179/mp-api/snapshot').then(r => process.exit(r.status === 401 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - l390
+
+  web:
+    build:
+      context: ../..
+      dockerfile: packages/web/Dockerfile
+    image: greed-island-l390-web:local
+    restart: unless-stopped
+    depends_on:
+      multiplayer:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${GREED_L390_HOST_PORT:-28100}:80"
+    volumes:
+      - ./Caddyfile.l390:/etc/caddy/Caddyfile:ro
+    networks:
+      - l390
+
+networks:
+  l390:
+    driver: bridge
+
+volumes:
+  greed-l390-mp-data:
+    name: greed-l390-mp-data
