@@ -1,4 +1,4 @@
-import { WORLD, type DemoState, type NpcGoal, type NpcId, type NpcMemory, type NpcSkill, type NpcState, type Position } from './types'
+import { WORLD, type DemoState, type EncounterChoice, type EncounterId, type NpcGoal, type NpcId, type NpcMemory, type NpcSkill, type NpcState, type Position } from './types'
 
 export const NPC_IDS: NpcId[] = ['guide', 'herbalist', 'scout', 'sentinel']
 export const NPC_MEMORY_LIMIT = 8
@@ -207,6 +207,31 @@ export function reactNpcs(state: DemoState, event: NpcWorldEvent): DemoState {
     npcs[id] = npc
   }
   return { ...state, worldTime: time, npcs }
+}
+
+export function rememberEncounterChoice(state: DemoState, encounterId: EncounterId, choice: EncounterChoice, won = false): DemoState {
+  const number = state.expedition.number
+  const localId: NpcId = encounterId === 'forestCache' ? 'herbalist' : 'scout'
+  const name = encounterId === 'forestCache' ? '林間藥草箱' : '遺跡哨衛'
+  const text = choice === 'safe' ? `第 ${number} 趟：旅人以紋卡安全處理${name}，米拉將為下一趟多備一枚刻印。`
+    : won ? `第 ${number} 趟：旅人戰勝${name}，把物資帶回營地作下趟護盾。`
+      : `第 ${number} 趟：旅人選擇迎戰${name}，勝利前還不能領取物資。`
+  const npcs = { ...createNpcs(), ...state.npcs }
+  for (const id of ['guide', localId] as const) {
+    const npc = getNpc(state, id)
+    npcs[id] = remember({ ...npc, trust: cap(npc.trust + (choice === 'safe' || won ? 2 : 0)) }, state.worldTime ?? 0, 'world', text)
+  }
+  return { ...state, npcs }
+}
+
+/** A new trip retains learned capabilities but puts every actor back at its own starting place. */
+export function prepareNpcsForExpedition(state: DemoState): DemoState['npcs'] {
+  const npcs = createNpcs()
+  for (const id of NPC_IDS) {
+    const npc = getNpc(state, id)
+    npcs[id] = { ...npc, position: { ...NPC_CONFIG[id].home }, target: { ...NPC_CONFIG[id].home }, goal: id === 'sentinel' ? 'guard' : 'gather', actionProgress: 0 }
+  }
+  return npcs
 }
 
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }

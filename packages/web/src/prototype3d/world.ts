@@ -14,8 +14,9 @@ import { CreateIcoSphere } from '@babylonjs/core/Meshes/Builders/icoSphereBuilde
 import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder'
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder'
 import { Scene } from '@babylonjs/core/scene'
+import { EXPEDITION_ENCOUNTERS, getEncounter } from './model'
 import { getNpc } from './npc'
-import { WORLD, type DemoState } from './types'
+import { WORLD, type DemoState, type Position } from './types'
 
 export interface WorldVisuals {
   blockers: AbstractMesh[]
@@ -454,19 +455,76 @@ export function createWorld(scene: Scene): WorldVisuals {
   }
   for (const npcId of personIds) actorCollider(`${npcId}-collision`, people[npcId].root, 0.65, 1.85)
 
-  const enemy = new TransformNode(id('stone-sentinel'), scene)
-  enemy.position.set(WORLD.enemy.x, 0, WORLD.enemy.z)
-  const enemyCollider = actorCollider('sentinel-collision', enemy, 1.35, 2.6)
-  const sentinelTorso = castShadow(stone('sentinel-torso', [0.85, 0.92, 0.54], colors.darkStone, 0, 1.42, 0, enemy))
-  castShadow(stone('sentinel-head', [0.47, 0.44, 0.42], colors.stone, 0, 2.52, 0, enemy))
-  const sentinelEye = box('sentinel-eye', [0.56, 0.13, 0.09], colors.red, 0, 2.57, -0.43, enemy)
-  for (const side of [-1, 1]) {
-    castShadow(stone('sentinel-shoulder', [0.4, 0.43, 0.4], colors.stone, side * 0.88, 2, 0, enemy))
-    castShadow(stone('sentinel-arm', [0.29, 0.72, 0.3], colors.darkStone, side * 1.02, 1.12, 0, enemy))
-    castShadow(box('sentinel-leg', [0.49, 0.65, 0.6], colors.stone, side * 0.4, 0.34, 0, enemy))
+  const createSentinel = (name: string, position: Position, hp: number) => {
+    const root = new TransformNode(id(name), scene)
+    root.position.set(position.x, 0, position.z)
+    const collider = actorCollider(`${name}-collision`, root, 1.35, 2.6)
+    const torso = castShadow(stone('sentinel-torso', [0.85, 0.92, 0.54], colors.darkStone, 0, 1.42, 0, root))
+    castShadow(stone('sentinel-head', [0.47, 0.44, 0.42], colors.stone, 0, 2.52, 0, root))
+    const eye = box('sentinel-eye', [0.56, 0.13, 0.09], colors.red, 0, 2.57, -0.43, root)
+    for (const side of [-1, 1]) {
+      castShadow(stone('sentinel-shoulder', [0.4, 0.43, 0.4], colors.stone, side * 0.88, 2, 0, root))
+      castShadow(stone('sentinel-arm', [0.29, 0.72, 0.3], colors.darkStone, side * 1.02, 1.12, 0, root))
+      castShadow(box('sentinel-leg', [0.49, 0.65, 0.6], colors.stone, side * 0.4, 0.34, 0, root))
+    }
+    box('sentinel-chest-rune', [0.18, 0.62, 0.08], colors.red, 0, 1.55, -0.53, root)
+    const ring = finish(CreateTorus(id(`${name}-ring`), { diameter: 4.1, thickness: 0.06, tessellation: 32 }, scene), colors.roof, 0, 0.05, 0, root)
+    return { root, collider, torso, eye, ring, lastHp: hp, hitUntil: -1 }
   }
-  box('sentinel-chest-rune', [0.18, 0.62, 0.08], colors.red, 0, 1.55, -0.53, enemy)
-  const enemyRing = finish(CreateTorus(id('encounter-ring'), { diameter: 4.1, thickness: 0.06, tessellation: 32 }, scene), colors.roof, WORLD.enemy.x, 0.05, WORLD.enemy.z)
+  const animateSentinel = (visual: ReturnType<typeof createSentinel>, hp: number, active: boolean, time: number) => {
+    if (hp < visual.lastHp) visual.hitUntil = time + 0.24
+    visual.lastHp = hp
+    visual.root.setEnabled(active)
+    visual.collider.checkCollisions = active
+    visual.torso.position.y = 1.42 + Math.sin(time * 2.4) * 0.06
+    visual.eye.scaling.x = time < visual.hitUntil ? 1.45 : 1 + Math.sin(time * 3) * 0.08
+    visual.torso.rotation.z = time < visual.hitUntil ? Math.sin(time * 50) * 0.14 : 0
+  }
+  const mainSentinel = createSentinel('stone-sentinel', WORLD.enemy, 100)
+  const enemy = mainSentinel.root
+
+  const encounterVisuals = Object.values(EXPEDITION_ENCOUNTERS).map(config => {
+    const root = new TransformNode(id(`${config.id}-landmark`), scene)
+    root.position.set(config.position.x, 0, config.position.z)
+    const prop = new TransformNode(id(`${config.id}-prop`), scene)
+    prop.parent = root
+    const indicator = cylinder(`${config.id}-available`, 0.35, 0.55, colors.gold, 0, 2.3, 0, prop, 0, 4)
+    indicator.rotation.x = Math.PI
+    const halo = finish(CreateTorus(id(`${config.id}-halo`), { diameter: 2.2, thickness: 0.045, tessellation: 24 }, scene), colors.gold, 0, 0.08, 0, prop)
+    const completed = new TransformNode(id(`${config.id}-completed`), scene)
+    completed.parent = prop
+    completed.position.set(0, 1.55, -0.1)
+    const checkShort = box('completed-check-short', [0.11, 0.38, 0.09], colors.teal, -0.17, -0.09, 0, completed)
+    checkShort.rotation.z = 0.75
+    const checkLong = box('completed-check-long', [0.11, 0.7, 0.09], colors.teal, 0.13, 0.045, 0, completed)
+    checkLong.rotation.z = -0.58
+    completed.setEnabled(false)
+    let lid: TransformNode | null = null
+    if (config.id === 'forestCache') {
+      // The decorative chest leaves the interaction approach clear on every side.
+      castShadow(box('herb-chest', [1.5, 0.78, 1.08], colors.wood, 0, 0.43, 0, prop))
+      for (const x of [-0.57, 0.57]) box('chest-brass-band', [0.09, 0.81, 1.13], colors.brass, x, 0.44, 0, prop)
+      lid = new TransformNode(id('herb-chest-lid-pivot'), scene)
+      lid.parent = prop
+      lid.position.set(0, 0.87, 0.53)
+      castShadow(box('herb-chest-lid', [1.6, 0.14, 1.16], colors.darkWood, 0, 0, -0.53, lid))
+      box('chest-latch', [0.17, 0.27, 0.06], colors.brass, 0, 0.79, -0.57, prop)
+      for (const x of [-0.36, 0, 0.36]) {
+        const herb = stone('cache-herbs', [0.17, 0.28, 0.14], colors.leafLight, x, 0.92, 0, prop)
+        herb.rotation.z = x
+      }
+    } else {
+      cylinder('sentinel-offering-base', 1.7, 0.2, colors.darkStone, 0, 0.1, 0, prop, 1.5, 6)
+      cylinder('sentinel-offering-altar', 0.95, 0.82, colors.stone, 0, 0.61, 0, prop, 1.12, 6)
+      const rune = stone('sentinel-offering-rune', [0.23, 0.4, 0.2], colors.teal, 0, 1.32, 0, prop)
+      rune.rotation.z = Math.PI / 4
+      for (const side of [-1, 1]) box('offering-side-inlay', [0.09, 0.5, 0.08], colors.brass, side * 0.42, 0.68, -0.37, prop)
+    }
+    const guardian = createSentinel(`${config.id}-sentinel`, config.position, config.maxHp)
+    guardian.root.setEnabled(false)
+    guardian.collider.checkCollisions = false
+    return { config, root, prop, indicator, halo, completed, lid, guardian }
+  })
 
   const seedMeshes: Mesh[] = []
   const seeds = WORLD.seeds.map((position, index) => {
@@ -525,8 +583,6 @@ export function createWorld(scene: Scene): WorldVisuals {
     merged.receiveShadows = false
   }
 
-  let lastEnemyHp = 100
-  let hitUntil = -1
   let lastTime = 0
   let npcPositionsInitialized = false
   let npcRunId = ''
@@ -544,6 +600,12 @@ export function createWorld(scene: Scene): WorldVisuals {
       if (npcRunId !== state.runId) {
         npcPositionsInitialized = false
         npcRunId = state.runId
+        mainSentinel.lastHp = state.enemyHp
+        mainSentinel.hitUntil = -1
+        for (const visual of encounterVisuals) {
+          visual.guardian.lastHp = getEncounter(state, visual.config.id).enemyHp
+          visual.guardian.hitUntil = -1
+        }
       }
       const step = moving ? Math.sin(time * 11) * 0.62 : 0
       explorer.limbs.forEach((limb, index) => { limb.rotation.x = step * ([1, -0.7, -1, 0.7][index] ?? 0) })
@@ -578,16 +640,19 @@ export function createWorld(scene: Scene): WorldVisuals {
       const sentinel = getNpc(state, 'sentinel')
       enemy.position.x = sentinel.position.x
       enemy.position.z = sentinel.position.z
-      enemyRing.position.x = sentinel.position.x
-      enemyRing.position.z = sentinel.position.z
-      if (state.enemyHp < lastEnemyHp) hitUntil = time + 0.24
-      lastEnemyHp = state.enemyHp
-      enemy.setEnabled(state.enemyHp > 0)
-      enemyCollider.checkCollisions = state.enemyHp > 0
-      enemyRing.setEnabled(state.enemyHp > 0)
-      sentinelTorso.position.y = 1.42 + Math.sin(time * 2.4) * 0.06
-      sentinelEye.scaling.x = time < hitUntil ? 1.45 : 1 + Math.sin(time * 3) * 0.08
-      sentinelTorso.rotation.z = time < hitUntil ? Math.sin(time * 50) * 0.14 : 0
+      animateSentinel(mainSentinel, state.enemyHp, state.enemyHp > 0, time)
+      for (const visual of encounterVisuals) {
+        const encounter = getEncounter(state, visual.config.id)
+        const fighting = encounter.phase === 'fighting' && encounter.enemyHp > 0
+        animateSentinel(visual.guardian, encounter.enemyHp, fighting, time)
+        visual.prop.setEnabled(!fighting)
+        visual.indicator.setEnabled(encounter.phase === 'available')
+        visual.indicator.position.y = 2.3 + Math.sin(time * 2.2) * 0.13
+        visual.completed.setEnabled(encounter.phase === 'resolved')
+        visual.halo.material = encounter.phase === 'resolved' ? colors.teal : colors.gold
+        visual.halo.scaling.setAll(encounter.phase === 'available' ? 1 + Math.sin(time * 2.2) * 0.045 : 1)
+        if (visual.lid) visual.lid.rotation.x = encounter.phase === 'resolved' ? 1.1 : 0
+      }
       seeds.forEach((seed, index) => {
         seed.setEnabled(!state.seeds.includes(index))
         const crystal = seedMeshes[index]

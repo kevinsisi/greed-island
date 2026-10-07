@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cardInfo, createNewGame, distance, getInteraction, getObjective, loadDemo, reduceDemo, saveDemo } from './model'
+import { getNpc } from './npc'
 import { SAVE_KEY, WORLD, type DemoAction, type DemoState, type Position } from './types'
 
 const move = (state: DemoState, position: Position) => reduceDemo(state, { type: 'move', position })
@@ -13,7 +14,10 @@ function collectSeeds(state: DemoState): DemoState {
 
 function defeatEnemy(state: DemoState): DemoState {
   state = move(state, WORLD.enemy)
-  for (let hit = 0; hit < 4; hit++) state = reduceDemo(state, { type: 'cast', card: 'ember' })
+  for (let hit = 0; hit < 4; hit++) {
+    state = reduceDemo(state, { type: 'tick', delta: 1 })
+    state = reduceDemo(state, { type: 'cast', card: 'ember' })
+  }
   return state
 }
 
@@ -63,8 +67,8 @@ describe('isolated adventure rules', () => {
     expect(getInteraction(state)?.kind).toBe('relic')
     state = interact(state)
     expect(state).toMatchObject({ stage: 'return', relic: true })
-    expect(getObjective(state).position).toEqual(WORLD.guide)
-    state = move(state, WORLD.guide)
+    expect(getObjective(state).position).toEqual(getNpc(state, 'guide').position)
+    state = move(state, getNpc(state, 'guide').position)
     expect(getInteraction(state)?.kind).toBe('camp')
     state = interact(state)
     expect(state.stage).toBe('complete')

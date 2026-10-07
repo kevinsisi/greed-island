@@ -1,7 +1,7 @@
 import { useId } from 'react'
-import { distance, getObjective } from './model'
+import { cardInfo, distance, EXPEDITION_ENCOUNTERS, getEncounter, getObjective } from './model'
 import { getNpcs, NPC_CONFIG } from './npc'
-import { WORLD, type DemoState, type Position } from './types'
+import { WORLD, type DemoState, type EncounterId, type Position } from './types'
 import './map-ui.css'
 
 const SCALE = 5.5
@@ -9,6 +9,7 @@ const point = ({ x, z }: Position) => ({ x: 150 + x * SCALE, y: 55 + (WORLD.boun
 const trail = ([[0, -27], [0, -19], [-1.4, -12], [-1.8, -5], [0.7, 3], [0.8, 11], [0, 19], [0, 30]] as const)
   .map(([x, z]) => { const p = point({ x, z }); return `${p.x},${p.y}` }).join(' ')
 const trees: [number, number][] = [[-10, -10], [-7.8, -8], [9.5, -7], [7.8, -3], [-10.8, -1], [-8, 3], [10.5, 4], [8, 8], [-10, 10], [-7.6, 13], [10.5, 14], [12, -13], [-12, -16], [12, 23], [-12, 25]]
+const encounterIds: EncounterId[] = ['forestCache', 'ruinSentinel']
 
 /** A north-up chart. All moving and quest markers use the same coordinates as the 3D world. */
 export function IslandMap({ state, compact = false }: { state: DemoState; compact?: boolean }) {
@@ -19,10 +20,17 @@ export function IslandMap({ state, compact = false }: { state: DemoState; compac
   const gate = point(WORLD.gate)
   const relic = point(WORLD.relic)
   const npcs = getNpcs(state)
+  const encounters = encounterIds.map(id => {
+    const config = EXPEDITION_ENCOUNTERS[id]
+    const encounter = getEncounter(state, id)
+    const unlocked = config.eligibleStages.includes(state.stage) && (id !== 'ruinSentinel' || state.bridgeOpen)
+    const status = encounter.phase === 'resolved' ? encounter.choice === 'safe' ? '已安全處理' : '已戰勝' : encounter.phase === 'fighting' ? '交戰中' : unlocked ? '可探索' : state.stage === 'complete' ? '本趟未處理' : '尚未開放'
+    return { config, encounter, unlocked, status }
+  })
   return <div className={`p3d-island-map${compact ? ' is-compact' : ''}`}>
     <svg viewBox="0 0 300 440" role="img" aria-labelledby={`${uid}-title ${uid}-desc`}>
       <title id={`${uid}-title`}>潮鳴島地圖 · 北方朝上</title>
-      <desc id={`${uid}-desc`}>你位於地圖白色圓點。{objective.destination}距離 {Math.round(distance(state.position, objective.position))} 公尺。遺跡封印{state.bridgeOpen ? '已開啟' : '尚未開啟'}，剩餘光種 {WORLD.seeds.length - state.seeds.length} 枚。圓點為島民，紅色菱形為石衛。</desc>
+      <desc id={`${uid}-desc`}>你位於地圖白色圓點。{objective.destination}距離 {Math.round(distance(state.position, objective.position))} 公尺。遺跡封印{state.bridgeOpen ? '已開啟' : '尚未開啟'}，剩餘光種 {WORLD.seeds.length - state.seeds.length} 枚。圓點為島民，紅色菱形為石衛。{encounters.map(({ config, status }) => `${config.name}：${status}。`).join('')}</desc>
       <defs>
         <pattern id={`${uid}-sea`} width="31" height="28" patternUnits="userSpaceOnUse"><path d="M3 15Q9 11 15 15T27 15" fill="none" stroke="#aac2ae" strokeWidth=".55" opacity=".24"/></pattern>
         <linearGradient id={`${uid}-land`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#acb7a0"/><stop offset=".43" stopColor="#697f64"/><stop offset=".71" stopColor="#7c8a67"/><stop offset="1" stopColor="#b8ae82"/></linearGradient>
@@ -54,6 +62,17 @@ export function IslandMap({ state, compact = false }: { state: DemoState; compac
       </g>
       {!state.relic && <g transform={`translate(${relic.x} ${relic.y})`}><path d="M0-7L5 0L0 7L-5 0Z" fill="#a7e4d2" stroke="#2f5b50" strokeWidth="1.5"/></g>}
       {WORLD.seeds.map((position, index) => { const p = point(position); return state.seeds.includes(index) ? null : <g key={index} transform={`translate(${p.x} ${p.y})`}><circle r="6" fill="#405635" stroke="#e2d49a"/><path d="M0-4L1-1L4 0L1 1L0 4L-1 1L-4 0L-1-1Z" fill="#ffdf80"/></g> })}
+      {encounters.map(({ config, encounter, unlocked, status }) => {
+        const p = point(config.position)
+        const resolved = encounter.phase === 'resolved'
+        const fighting = encounter.phase === 'fighting'
+        return <g key={config.id} transform={`translate(${p.x} ${p.y})`} opacity={resolved ? '.62' : unlocked || fighting ? 1 : '.42'}>
+          <title>{config.name} · {status}</title>
+          <rect x="-9" y="-9" width="18" height="18" rx="2" fill={fighting ? '#7c3930' : '#263c2e'} stroke={fighting ? '#f3a482' : '#f2d298'} strokeWidth="1.3"/>
+          {resolved ? <path d="M-5 0L-1 4L5-4" fill="none" stroke="#efd4a0" strokeWidth="2"/> : config.id === 'forestCache' ? <g fill="none" stroke="#edd09a" strokeWidth="1.2"><path d="M-6-3H6V5H-6ZM-6-3L-4-6H4L6-3M-6 0H6M0-3V5"/><path d="M-1-1H1V2H-1Z" fill="#d5b46c"/></g> : <g fill="none" stroke="#edd09a" strokeWidth="1.2"><path d="M-5-5L0-7L5-5V1L0 6L-5 1Z"/><path d="M-3-2H3M0-5V3"/></g>}
+          {fighting && <path d="M-11-11L-7-7M11-11L7-7M-11 11L-7 7M11 11L7 7" stroke="#f3a482" strokeWidth="1.5"/>}
+        </g>
+      })}
       <g transform={`translate(${target.x} ${target.y})`}><circle r="12" fill="none" stroke="#f7d899" strokeWidth="1.5"/><path d="M0-16V-12M0 12V16M-16 0H-12M12 0H16" stroke="#f7d899" strokeWidth="1.5"/></g>
       {npcs.map(npc => { const p = point(npc.position); const config = NPC_CONFIG[npc.id]; return <g key={npc.id} transform={`translate(${p.x} ${p.y})`} opacity={npc.id === 'sentinel' && state.enemyHp <= 0 ? '.4' : 1}><title>{config.name} · {npc.id === 'sentinel' && state.enemyHp <= 0 ? '沉眠' : config.role}</title>{npc.id === 'sentinel' ? <path d="M0-7L7 0L0 7L-7 0Z" fill="#a85a46" stroke="#f3d4af" strokeWidth="1.5"/> : <><circle r={compact ? '5.5' : '6'} fill={config.color} stroke="#f2e2b8" strokeWidth="1.5"/><circle r="1.5" fill="#f9edcc"/></>}</g> })}
       <g transform={`translate(${player.x} ${player.y})`}><circle r="9" fill="#183c36" stroke="#fff1cd" strokeWidth=".8" opacity=".75"/><circle r="4.5" fill="#fff4cf" stroke="#233d34" strokeWidth=".8"/></g>
@@ -63,6 +82,12 @@ export function IslandMap({ state, compact = false }: { state: DemoState; compac
     {!compact && <>
       <div className="p3d-map-destination"><span>前往 {objective.destination}</span><strong>{Math.round(distance(state.position, objective.position))}<small> 公尺</small></strong></div>
       <ul className="p3d-map-legend" aria-label="地圖圖例"><li><i className="is-player"/>你的位置</li><li><i className="is-objective"/>當前目標</li><li><i className="is-npc"/>島民</li><li><i className="is-enemy"/>石衛</li><li><i className="is-seed"/>光種</li><li><i className={state.bridgeOpen ? 'is-open' : 'is-closed'}/>{state.bridgeOpen ? '古道已開啟' : '封印尚未開啟'}</li></ul>
+      <div className="p3d-map-encounters" aria-label="本趟遭遇">
+        {encounters.map(({ config, encounter, unlocked, status }) => <div key={config.id} className={`p3d-map-encounter is-${encounter.phase}${!unlocked && encounter.phase === 'available' ? ' is-locked' : ''}`}>
+          <div><strong>{config.name}</strong><span>{status}</span></div>
+          {encounter.phase === 'resolved' ? <p>{encounter.choice === 'safe' ? `使用${cardInfo[config.safeCard].name} · 獲得 ${config.safeReward} 份營地物資` : `戰勝守衛 · 獲得 ${config.fightReward} 份營地物資`}</p> : encounter.phase === 'fighting' ? <p>守衛生命 {encounter.enemyHp} / {config.maxHp} · 戰勝可得 {config.fightReward} 份營地物資</p> : <p>{unlocked ? <>{cardInfo[config.safeCard].name} {config.energyCost} 能量＋1 刻印 → {config.safeReward} 物資<span className="p3d-map-choice-separator">／</span>戰勝 → {config.fightReward} 物資</> : state.stage === 'complete' ? '啟程下一趟後，可重新探索這個遭遇。' : config.id === 'forestCache' ? '接下港口委託後開放' : '開啟古道並進入遺跡後開放'}</p>}
+        </div>)}
+      </div>
       <p className="p3d-map-note">地圖北方朝上，標記隨實際位置更新。開啟面板時，島上的時間暫停。</p>
     </>}
   </div>

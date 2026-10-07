@@ -19,6 +19,69 @@ export interface NpcState {
   actionProgress: number
   memories: NpcMemory[]
 }
+export type EncounterId = 'forestCache' | 'ruinSentinel'
+export type EncounterChoice = 'safe' | 'fight'
+export type EncounterResult = 'safe' | 'won' | 'skipped' | 'abandoned'
+export interface EncounterState {
+  phase: 'available' | 'fighting' | 'resolved'
+  choice: EncounterChoice | null
+  enemyHp: number
+}
+export interface EncounterDefinition {
+  id: EncounterId
+  name: string
+  position: Position
+  safeCard: CardId
+  energyCost: number
+  safeReward: number
+  fightReward: number
+  maxHp: number
+  damage: number
+  range: number
+  eligibleStages: QuestStage[]
+}
+export interface ExpeditionState {
+  number: number
+  seals: number
+  shield: number
+  campSupplies: number
+  emberCooldown: number
+  encounters: Record<EncounterId, EncounterState>
+  history: Record<EncounterId, { safe: number; fights: number; wins: number }>
+  pendingSealBonus: 0 | 1
+  previousTrip: {
+    number: number
+    results: Record<EncounterId, EncounterResult>
+    shieldGranted: number
+    extraSealGranted: 0 | 1
+  } | null
+}
+export interface CombatTarget {
+  id: 'main' | EncounterId
+  name: string
+  position: Position
+  hp: number
+  maxHp: number
+  damage: number
+  range: number
+}
+export interface EncounterChoiceView {
+  choice: EncounterChoice
+  label: string
+  detail: string
+  enabled: boolean
+  reason: string | null
+  reward: number
+}
+export interface NextExpeditionPreview {
+  number: number
+  spentSupplies: number
+  shieldGranted: number
+  extraSealGranted: 0 | 1
+  seals: number
+  canStart: boolean
+  reason: string | null
+}
 export interface DemoState {
   version: 1
   runId: string
@@ -33,6 +96,7 @@ export interface DemoState {
   selectedCard: CardId
   worldTime: number
   npcs: Record<NpcId, NpcState>
+  expedition: ExpeditionState
 }
 export type DemoAction =
   | { type: 'move'; position: Position }
@@ -44,8 +108,11 @@ export type DemoAction =
   | { type: 'respawn' }
   | { type: 'tick'; delta: number }
   | { type: 'npc-talk'; id: NpcId }
+  | { type: 'choose-encounter'; runId: string; id: EncounterId; choice: EncounterChoice }
+  | { type: 'encounter-hit'; runId: string; id: EncounterId }
+  | { type: 'next-expedition'; runId: string; nextRunId: string }
 export interface Objective { title: string; detail: string; destination: string; position: Position }
-export interface Interaction { label: string; kind: 'guide' | 'seed' | 'gate' | 'relic' | 'camp' | 'npc'; npcId?: NpcId }
+export interface Interaction { label: string; kind: 'guide' | 'seed' | 'gate' | 'relic' | 'camp' | 'npc' | 'encounter'; npcId?: NpcId; encounterId?: EncounterId }
 export interface SceneTelemetry {
   zone: string
   distance: number
@@ -72,5 +139,5 @@ export const WORLD = {
   relic: { x: 0, z: 29 },
   bounds: { minX: -13, maxX: 13, minZ: -28, maxZ: 34 },
 } as const
-export const PROTOTYPE_VERSION = '0.2.2'
+export const PROTOTYPE_VERSION = '0.3.0'
 export const SAVE_KEY = 'greed-island.prototype3d.v1'

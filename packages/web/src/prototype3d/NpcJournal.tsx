@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { distance } from './model'
+import { distance, getNpcExpeditionSummary } from './model'
 import { getNpc, NPC_CONFIG, NPC_GOAL_LABELS, NPC_IDS, NPC_SKILL_LABELS, NPC_TALK_COOLDOWN, NPC_TALK_RANGE, npcDialogue, npcEfficiency } from './npc'
 import type { DemoState, NpcId } from './types'
 import './map-ui.css'
@@ -33,6 +33,7 @@ export function NpcJournal({ state, onTalk, initialId = 'guide' }: { state: Demo
   const moving = distance(npc.position, npc.target) > .4
   const recentMemories = npc.memories.slice(-4).reverse()
   const gain = Math.round((npcEfficiency(npc) - 1) * 100)
+  const expeditionSummary = getNpcExpeditionSummary(state, selected)
 
   function talk() {
     if (!canTalk) return
@@ -49,6 +50,10 @@ export function NpcJournal({ state, onTalk, initialId = 'guide' }: { state: Demo
       <Portrait id={selected} color={config.color}/>
       <div><small>{config.role}</small><h3>{config.name}</h3><span>{Math.round(metres)} 公尺外 <b>·</b> {selected === 'sentinel' ? '守護者' : `信任 ${Math.round(npc.trust)}`}</span></div>
     </div>
+    <section className="p3d-npc-inheritance" aria-label={`${config.name}的跨趟記憶`}>
+      <h4>跨趟記憶 <span>隨存檔保留</span></h4>
+      {expeditionSummary.length ? <ul>{expeditionSummary.map((summary, index) => <li key={index}>{summary}</li>)}</ul> : <p>這段旅程還沒有留下跨趟的選擇。</p>}
+    </section>
     <div className="p3d-npc-intent"><span>此刻的打算</span><strong>{moving ? '正在前往 · ' : ''}{NPC_GOAL_LABELS[npc.goal]}</strong><p>{npc.goal === 'sleep' ? '石衛保留這次相遇的記憶，安靜地休眠。' : npc.goal === 'rest' ? '先恢復體力，再決定下一件要做的事。' : npc.goal === 'gather' ? '收集物資，熟練後能採得更多。' : npc.goal === 'study' ? '研究島上的事物，逐步累積知識。' : npc.goal === 'guard' ? '留意周遭動靜，在守望中磨練本領。' : '觀察旅人的行動，更新自己的見聞。'}</p></div>
     <div className="p3d-npc-needs">
       <label>體力 <span>{Math.round(npc.energy)} / 100</span><meter min="0" max="100" value={npc.energy}/></label>

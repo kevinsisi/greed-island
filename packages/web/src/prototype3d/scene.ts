@@ -8,8 +8,8 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { Ray } from '@babylonjs/core/Culling/ray'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 import '@babylonjs/core/Collisions/collisionCoordinator'
-import { distance, getInteraction, getObjective } from './model'
-import { WORLD, type CardId, type DemoAction, type DemoControls, type DemoState, type SceneTelemetry } from './types'
+import { distance, EXPEDITION_ENCOUNTERS, getCombatTarget, getEncounter, getExpedition, getInteraction, getObjective } from './model'
+import { WORLD, type CardId, type CombatTarget, type DemoAction, type DemoControls, type DemoState, type SceneTelemetry } from './types'
 import { createWorld } from './world'
 
 interface SceneOptions {
@@ -30,11 +30,11 @@ const DEFAULT_CAMERA_PITCH = 0.52
 const CAMERA_TARGET_HEIGHT = 1.35
 const CAMERA_MARGIN = 0.35
 const CAMERA_NEAR_PADDING = 0.02
-const PLAYER_FADE_START = 1.2
-const PLAYER_FADE_END = 0.45
-const ATTACK_RANGE = 4
+const PLAYER_FADE_START = 3.5
+const PLAYER_FADE_END = 2
 const ATTACK_WARNING_SECONDS = 1
 const ATTACK_CYCLE_SECONDS = 2
+const ENCOUNTER_OPENING_WARNING_SECONDS = 2.5
 const STATE_INTERVAL = 0.1
 const TELEMETRY_INTERVAL = 0.2
 const SIMULATION_INTERVAL = 0.5
@@ -95,11 +95,19 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
   warningMaterial.emissiveColor = Color3.FromHexString('#c54220')
   warningMaterial.disableLighting = true
   warningMaterial.alpha = 0.85
-  const warningRing = MeshBuilder.CreateTorus('enemy-attack-warning', { diameter: ATTACK_RANGE * 2, thickness: 0.11, tessellation: 48 }, scene)
-  warningRing.position.set(WORLD.enemy.x, 0.08, WORLD.enemy.z)
+  const warningRing = MeshBuilder.CreateTorus('enemy-attack-warning', { diameter: 2, thickness: 0.02, tessellation: 64 }, scene)
+  warningRing.position.y = 0.08
   warningRing.material = warningMaterial
   warningRing.isPickable = false
   warningRing.setEnabled(false)
+  // An unfilled outline shows the full danger area while the inner ring counts down.
+  const dangerBoundary = MeshBuilder.CreateTorus('enemy-danger-boundary', { diameter: 2, thickness: 0.013, tessellation: 64 }, scene)
+  const boundaryMaterial = warningMaterial.clone('enemy-danger-boundary-material')
+  boundaryMaterial.alpha = 0.32
+  dangerBoundary.material = boundaryMaterial
+  dangerBoundary.position.y = 0.06
+  dangerBoundary.isPickable = false
+  dangerBoundary.setEnabled(false)
 
   type Effect = { mesh: Mesh; material: StandardMaterial; age: number; duration: number; start: Vector3; end: Vector3; projectile: boolean }
   const effects: Effect[] = []
@@ -128,6 +136,9 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
   let actualCameraDistance = cameraDistance
   let attackElapsed = 0
   let attackHit = false
+  let attackWarningDuration = ATTACK_WARNING_SECONDS
+  let lastAttackTarget: CombatTarget['id'] | null = null
+  const openedEncounters = new Set<CombatTarget['id']>()
   let stateElapsed = 0
   let simulationElapsed = 0
   let telemetryElapsed = TELEMETRY_INTERVAL
@@ -179,6 +190,15 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     pressed.delete(event.code)
   }
 
+  function resetAttack(): void {
+    attackElapsed = 0
+    attackHit = false
+    attackWarningDuration = ATTACK_WARNING_SECONDS
+    lastAttackTarget = null
+    warningRing.setEnabled(false)
+    dangerBoundary.setEnabled(false)
+  }
+
   function clearInput(): void {
     pressed.clear()
     pendingDirections.clear()
@@ -189,6 +209,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     controls.sprint = false
     if (pointer && canvas.hasPointerCapture(pointer.id)) canvas.releasePointerCapture(pointer.id)
     pointer = null
+    resetAttack()
     previousFrame = performance.now()
     publishPosition()
   }
@@ -282,11 +303,11 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     if (newRun || teleported) {
       body.position.set(state.position.x, BODY_HEIGHT, state.position.z)
       lastPublishedPosition = { ...state.position }
-      attackElapsed = 0
-      attackHit = false
+      resetAttack()
       simulationElapsed = 0
       stateElapsed = 0
       if (newRun) {
+        openedEncounters.clear()
         yaw = 0
         pitch = DEFAULT_CAMERA_PITCH
         cameraDistance = DEFAULT_CAMERA_DISTANCE
@@ -298,10 +319,15 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     }
     lastRunId = state.runId
     if (!newRun) {
-      if (state.enemyHp < lastState.enemyHp) effect('#ffad4e', new Vector3(body.position.x, 1.05, body.position.z), new Vector3(WORLD.enemy.x, 0.8, WORLD.enemy.z))
+      if (state.enemyHp < lastState.enemyHp) effect('#ffad4e', new Vector3(body.position.x, 1.05, body.position.z), new Vector3(world.enemy.position.x, 1.4, world.enemy.position.z))
+      for (const encounter of Object.values(EXPEDITION_ENCOUNTERS)) {
+        if (getEncounter(state, encounter.id).enemyHp < getEncounter(lastState, encounter.id).enemyHp) {
+          effect('#ffad4e', new Vector3(body.position.x, 1.05, body.position.z), new Vector3(encounter.position.x, 1.4, encounter.position.z))
+        }
+      }
       if (state.hp > lastState.hp && state.energy < lastState.energy) effect('#7ce4d2', new Vector3(body.position.x, 0.12, body.position.z))
       if (state.bridgeOpen && !lastState.bridgeOpen) effect('#d7f08a', new Vector3(WORLD.gate.x, 0.18, WORLD.gate.z))
-      if (state.hp < lastState.hp) effect('#f96a43', new Vector3(body.position.x, 0.11, body.position.z))
+      if (state.hp < lastState.hp || getExpedition(state).shield < getExpedition(lastState).shield) effect('#f96a43', new Vector3(body.position.x, 0.11, body.position.z))
     }
     lastState = state
     world.gate.checkCollisions = !state.bridgeOpen
@@ -359,24 +385,41 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
 
     world.player.position.set(body.position.x, 0, body.position.z)
     const frameState = { ...state, position: { x: body.position.x, z: body.position.z } }
-    const enemyNearby = state.stage === 'forest' && state.enemyHp > 0 && distance(frameState.position, WORLD.enemy) < ATTACK_RANGE
-    if (!paused && enemyNearby) {
+    const combatTarget = getCombatTarget(frameState)
+    const enemyNearby = !!combatTarget && combatTarget.hp > 0 && distance(frameState.position, combatTarget.position) <= combatTarget.range
+    if (combatTarget?.id !== lastAttackTarget) resetAttack()
+    if (!paused && enemyNearby && combatTarget) {
+      if (combatTarget.id !== 'main' && !openedEncounters.has(combatTarget.id)) {
+        openedEncounters.add(combatTarget.id)
+        attackWarningDuration = ENCOUNTER_OPENING_WARNING_SECONDS
+      }
+      lastAttackTarget = combatTarget.id
       attackElapsed += delta
-      if (attackElapsed >= ATTACK_CYCLE_SECONDS) { attackElapsed = 0; attackHit = false }
-      const windingUp = attackElapsed < ATTACK_WARNING_SECONDS
+      if (attackElapsed >= attackWarningDuration + ATTACK_CYCLE_SECONDS - ATTACK_WARNING_SECONDS) {
+        attackElapsed = 0
+        attackHit = false
+        attackWarningDuration = ATTACK_WARNING_SECONDS
+      }
+      const windingUp = attackElapsed < attackWarningDuration
       warningRing.setEnabled(windingUp)
-      const warningScale = 0.3 + 0.7 * Math.min(1, attackElapsed / ATTACK_WARNING_SECONDS)
-      warningRing.scaling.set(warningScale, 1, warningScale)
+      warningRing.position.x = combatTarget.position.x
+      warningRing.position.z = combatTarget.position.z
+      dangerBoundary.position.x = combatTarget.position.x
+      dangerBoundary.position.z = combatTarget.position.z
+      dangerBoundary.scaling.set(combatTarget.range, 1, combatTarget.range)
+      dangerBoundary.setEnabled(windingUp)
+      const warningScale = 0.3 + 0.7 * Math.min(1, attackElapsed / attackWarningDuration)
+      warningRing.scaling.set(combatTarget.range * warningScale, 1, combatTarget.range * warningScale)
       warningMaterial.alpha = 0.5 + 0.35 * Math.sin(attackElapsed * 15) ** 2
       if (!windingUp && !attackHit) {
         publishPosition()
-        options.dispatch({ type: 'enemy-hit', amount: 8 })
+        options.dispatch(combatTarget.id === 'main'
+          ? { type: 'enemy-hit', amount: combatTarget.damage }
+          : { type: 'encounter-hit', runId: state.runId, id: combatTarget.id })
         attackHit = true
       }
     } else {
-      attackElapsed = 0
-      attackHit = false
-      warningRing.setEnabled(false)
+      resetAttack()
     }
 
     const objective = getObjective(frameState)
