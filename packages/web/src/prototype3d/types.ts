@@ -72,5 +72,5 @@ export const WORLD = {
   relic: { x: 0, z: 29 },
   bounds: { minX: -13, maxX: 13, minZ: -28, maxZ: 34 },
 } as const
-export const PROTOTYPE_VERSION = '0.2.0'
+export const PROTOTYPE_VERSION = '0.2.1'
 export const SAVE_KEY = 'greed-island.prototype3d.v1'

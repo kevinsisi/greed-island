@@ -1,3 +1,14 @@
+## 2026-10-07 — 3D 原型瀏覽器驗收 @ v0.101.1（未部署）
+
+- 第一 checkpoint `b8bf41e` 已成功 push 至 `origin/feat/tideborn-3d-preview`；原含 OpenSpec 的本機提交 `b37bf2f` 保留，規格僅留本機，沒有跳過／修改 hook 或 force push。
+- 實際瀏覽器：localhost:4178 獨立 origin，390×844 手機視窗，以觸控搖桿與可見按鈕完成「接委託→三光種→石衛→渡風開封印→晶核→回米拉交付」。沒有注入座標或改存檔。星火傷害與渡風開路均在畫面核對；中途倒下回港後，已取得光種與石衛剩餘 HP 保留。
+- 刷新→繼續遠征，仍顯示委託完成／3光種／石衛已擊退／晶核已取得／封印已開。之後在測試 origin 確認重開，恢復港口委託／0光種／未開封印。未操作使用者 127.0.0.1 origin 的重開或存檔。
+- 三張完整插畫在桌機圖鑑實際載入；手機完整地圖實測顯示正確狀態。NPC 見聞實測看到行動、技能、需求、記憶演進及米拉信任15。手機 DOM 實測：面板底544px、搖桿頂566px，未重疊，body scrollWidth=viewport=390。
+- 完成畫面：`docs/evidence/tideborn-3d-mobile-complete.jpg`；Library `libfile_c2bfcc4912808191811988894775b710` / file `file_000000006ff081f7bcaac23289a2da95`。此畫面為v0.2.0；v0.2.1僅修正開卡冊focus導致自動捲到下方。
+- 測試：前端38檔334 tests通過（含本原型63項），`npm run build:web`通過。此輪一行focus修正後再跑 `npm run build:web`，735 modules、12.90s，exit 0。瀏覽器圖鑑開啟位置已複驗；當時 console error log 為空。未跑本機server tests，server僅同步版本metadata。
+- 未逐項實测：回潮的真實瀏覽器治療、鍵盤完整遠征、所有鏡頭遮擋組合；回潮／資源限制由模型tests驗證，鏡頭ray/collision由NullEngine驗證。不能將手機完整loop等同這些項目全覆蓋。
+- CI未觸發：現有workflow只監聽main push/PR，這次只push功能分支，無PR、合併或部署。
+
 ## 2026-10-07 — 3D 原型 checkpoint @ v0.101.0（功能分支，未部署）
 
 - 使用者先授權獨立 Babylon.js 可玩原型，再追加場景精修、地圖、NPC 自主發展與每張卡片美術；最新要求每個完成階段 commit/push。分支 `feat/tideborn-3d-preview`，不合併 main、不觸發正式部署。

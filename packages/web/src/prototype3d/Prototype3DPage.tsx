@@ -118,7 +118,7 @@ export default function Prototype3DPage() {
   useEffect(() => {
     if (!modal || !ready) return
     const dialog = dialogRef.current
-    dialog?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    dialog?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || !dialog) return
       const items = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]'))
