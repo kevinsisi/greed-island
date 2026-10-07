@@ -1,3 +1,17 @@
+## 2026-10-07 — 50 人房間規則與同步 @ v0.104.0（實作 checkpoint，承載待驗）
+
+- 使用者目標為同場景 50 人，且每個完成階段持續 commit/push。本轮以既有工具完成程式與純邏輯驗證；依賴安裝授權仍待回覆，沒有重試、換來源或繞過。
+- 事件持久化房間設定與名單，容量預設50、事件最低2人、收集300tick；新暫存房間可用 `--fixture-count 2..1000`，名單數不等於在線容量。重開依原事件與憑證名單，不補人／補資源，舊兩人事件可重播。
+- RoomPresence以不同身份計50席、每人最多2條stream、最後斷線保留10秒；本人返回不另佔席位，登出／session到期立即釋放。HTTP在SSEheaders前准入，滿房回409；cookie-only且無有效房間連線不能送遊戲指令。
+- 達最低人數開參與窗口，截止systemtick產生完成與所有參與者獎勵事件，含離線者；穩定領獎身份／projection去重。runtime保留transaction receipt與commit後投影；SQLite原子性本輪未執行驗證。
+- 指令只回ACK；普通狀態／presence通知每100ms tick至多一次，新stream直接收到完整初始快照。前端以SSE更新狀態，顯示滿房／本人保留席位、最低人數與截止倒數；名單限高捲動。NPC共享智能仍未接入。
+- 已通過：前端41 files／382 tests；後端純邏輯5 files／135 tests（domain59、fixtures38、presence18、sync8、fixtureLock12）。50/51席位、50貢獻者與50listener測試皆為記憶體測試，不能當成50網路客戶端負載證據。
+- `npm run build:web` 通過741 modules／11.65s，保留既有bundle／Browserslist提示；選定後端domain/runtime/fixtures/presence/sync與相關測試嚴格TypeScript通過。HTTP／entrypoint只做transpile語法檢查，未以此宣稱完整server typecheck。`openspec:check`通過、`git diff --check`通過。
+- 獨立唯讀review修正兩項P2：失敗准入恰好清除過期保留席位時仍需標記同步，以及自訂 `__proto__` 身份的移動限速記錄。皆有純邏輯回歸；最終review未留高信心重大問題。
+- **未驗：**完整server build、HTTP／SQLite transaction／重啟、兩個真瀏覽器多人流程與50session負載。HTTP/runtime tests已按新契約更新但未執行。本輪未啟動4179、未產生測試credentials、未重跑瀏覽器；先前離線登入圖僅屬v0.103.0證據。
+- 登入20次／IP／分鐘限制、scrypt、Origin與cookie政策維持；50人可分批登入後量測同時在線，集中登入容量另行決策。全量快照、持續tick事件及未壓縮歷史需量測傳輸／DB增長後再優化，不能預先承諾承載。
+- 版本root/server/web/lock同步0.104.0；僅功能分支 `feat/tideborn-3d-preview` 的實作checkpoint。未合併main、部署、操作正式帳號或世界；OpenSpec依hook保留本機。啟動與待驗契約見 `docs/MULTIPLAYER_LOCAL.md`。
+
 ## 2026-10-07 — 本機多人切片 @ v0.103.0（實作 checkpoint，整合驗收受阻）
 
 - 使用者澄清要線上多玩家互動；停止擴充單人遭遇，先保留已推送的 v0.102.0。該版新手機反向分支驗收暫停，不宣稱已完成。

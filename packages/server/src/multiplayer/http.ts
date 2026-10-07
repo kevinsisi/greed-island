@@ -25,7 +25,7 @@ function tokenFrom(req: Request): string | null {
   return raw && /^[a-f0-9]{64}$/.test(raw) ? raw : null
 }
 function tokenKey(token: string): string { return createHash('sha256').update(token).digest('hex') }
-type Session = { playerId: string; expiresAt: number; streams: Set<Response> }
+type Session = { playerId: string; expiresAt: number; closed: boolean; streams: Map<Response, () => void> }
 
 export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtures: readonly FixtureIdentity[]; allowedOrigins?: readonly string[] }): express.Express {
   const app = express()
@@ -62,7 +62,7 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
     const prior = tokenFrom(req)
     if (prior) closeSession(tokenKey(prior))
     const token = randomBytes(32).toString('hex')
-    sessions.set(tokenKey(token), { playerId: fixture.id, expiresAt: now + SESSION_MS, streams: new Set() })
+    sessions.set(tokenKey(token), { playerId: fixture.id, expiresAt: now + SESSION_MS, closed: false, streams: new Map() })
     res.cookie(COOKIE, token, COOKIE_OPTIONS)
     res.json({ snapshot: input.runtime.snapshot(fixture.id) })
   })
@@ -85,32 +85,49 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
     res.json({ ok: true })
   })
   app.get('/mp-api/snapshot', (_req, res) => { res.json(input.runtime.snapshot((res.locals.mpSession as Session).playerId)) })
-  app.post('/mp-api/command', (req, res) => { res.json(input.runtime.execute((res.locals.mpSession as Session).playerId, req.body)) })
+  app.post('/mp-api/command', (req, res) => {
+    const session = res.locals.mpSession as Session
+    if (!input.runtime.hasConnection(session.playerId)) throw new DomainError(409, 'ROOM_CONNECTION_REQUIRED', '請先連入房間再操作。')
+    res.json(input.runtime.execute(session.playerId, req.body))
+  })
   app.get('/mp-api/stream', (req, res) => {
     const session = res.locals.mpSession as Session
+    // Admission must happen before SSE headers so capacity errors remain ordinary JSON responses.
+    const disconnect = input.runtime.connect(session.playerId)
+    let closed = false
+    let keepalive: ReturnType<typeof setInterval> | undefined
+    let unsubscribe: () => void = () => undefined
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      if (keepalive) clearInterval(keepalive)
+      session.streams.delete(res)
+      unsubscribe()
+      disconnect(!session.closed)
+    }
+    session.streams.set(res, cleanup)
+    req.on('close', cleanup)
+    res.on('close', cleanup)
+    res.on('error', cleanup)
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Connection', 'keep-alive')
     res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders()
     res.write('retry: 1000\n\n')
     const send = () => {
-      if (res.destroyed || res.writableEnded) return
+      if (closed || session.closed || res.destroyed || res.writableEnded) return
       // Slow clients reconnect to a full snapshot rather than accumulating an unbounded queue.
       if (res.writableLength > 256 * 1024) { res.destroy(); return }
       res.write(`event: snapshot\ndata: ${JSON.stringify(input.runtime.snapshot(session.playerId))}\n\n`)
     }
-    session.streams.add(res)
-    // Synchronous subscribe publishes the first snapshot after registration: no gap between snapshot and stream.
-    const unsubscribe = input.runtime.subscribe(send, session.playerId)
-    const keepalive = setInterval(() => {
+    // Register first, then send only this stream's initial state. Ordinary room fanout waits for a tick.
+    unsubscribe = input.runtime.subscribe(send)
+    keepalive = setInterval(() => {
       if (session.expiresAt <= Date.now()) { closeSession(res.locals.mpSessionKey as string); return }
+      if (closed || res.destroyed || res.writableEnded) { cleanup(); return }
       res.write(': keepalive\n\n')
     }, 15_000)
-    let closed = false
-    const cleanup = () => { if (closed) return; closed = true; clearInterval(keepalive); session.streams.delete(res); unsubscribe() }
-    req.on('close', cleanup)
-    res.on('close', cleanup)
-    res.on('error', cleanup)
+    send()
   })
   app.use('/mp-api', (_req, res) => { res.status(404).json({ error: 'NOT_FOUND', message: '找不到此本機操作。' }) })
   const errors: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
@@ -124,7 +141,9 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
     const session = sessions.get(key)
     if (!session) return
     sessions.delete(key)
-    for (const stream of session.streams) stream.end()
+    session.closed = true
+    for (const [stream, cleanup] of session.streams) { cleanup(); stream.end() }
+    input.runtime.releaseReservation(session.playerId)
   }
   return app
 }

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRoomClient, isRoomSnapshot } from './client'
+import { createRoomClient, isCommandAcknowledgement, isRoomSnapshot, participationSeconds, roomIsFull } from './client'
 import type { RoomSnapshot } from './types'
 
 const fixture = (revision = 1, presenceRevision = 1): RoomSnapshot => ({
   roomId: 'harbor', revision, presenceRevision, tick: 10, selfId: 'player-a', npcIntegrated: false,
+  capacity: { maxOnlinePlayers: 50, onlinePlayers: 1, reservedPlayers: 0, selfHasSlot: true },
   players: [{ id: 'player-a', name: '旅人甲', x: -2, z: -6, supplies: 1, rewards: 0, online: true }, { id: 'player-b', name: '旅人乙', x: 2, z: -6, supplies: 1, rewards: 0, online: false }],
-  messages: [], beacon: { id: 'beacon', x: 0, z: 6, radius: 2.5, required: 2, contributors: [], completed: false },
+  messages: [], beacon: { id: 'beacon', x: 0, z: 6, radius: 2.5, required: 2, contributors: [], completed: false, phase: 'gathering', closesAtTick: null },
   world: { minX: -12, maxX: 12, minZ: -10, maxZ: 18, obstacles: [] }
 })
 class FakeStream {
@@ -119,9 +120,80 @@ describe('multiplayer room client', () => {
     await s.client.move(0, 1)
     expect(s.fetcher).toHaveBeenCalledTimes(2)
     expect(JSON.parse(String(s.fetcher.mock.calls[1]?.[1]?.body))).toEqual({ commandId: 'test-command-id', type: 'move', payload: { dx: 1, dz: 0 } })
-    resolveCommand(response({ snapshot: fixture(2) }))
+    resolveCommand(response({ accepted: true, commandId: 'test-command-id', revision: 2 }))
     await first
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture())
+    s.streams[0]!.emit('snapshot', fixture(2))
     expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture(2))
+  })
+
+  it('validates acknowledgement identity without applying it as state', async () => {
+    expect(isCommandAcknowledgement({ accepted: true, commandId: 'a', revision: 9 }, 'a')).toBe(true)
+    expect(isCommandAcknowledgement({ accepted: true, commandId: 'b', revision: 9 }, 'a')).toBe(false)
+    expect(isCommandAcknowledgement({ accepted: false, commandId: 'a', revision: 9 }, 'a')).toBe(false)
+    expect(isCommandAcknowledgement({ accepted: true, commandId: 'a', revision: -1 }, 'a')).toBe(false)
+    const s = setup()
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture())
+    s.fetcher.mockResolvedValueOnce(response({ accepted: true, commandId: 'other-player-command', revision: 100 }))
+    await expect(s.client.send({ type: 'contribute', payload: {} })).rejects.toThrow('指令確認不符')
+    expect(s.onStatus).toHaveBeenLastCalledWith('offline')
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture())
+  })
+
+  it('does not roll the streamed state back when a delayed acknowledgement arrives', async () => {
+    const s = setup()
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture(8))
+    s.fetcher.mockResolvedValueOnce(response({ accepted: true, commandId: 'test-command-id', revision: 2, duplicate: true }))
+    await s.client.send({ type: 'contribute', payload: {} })
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture(8))
+    expect(s.onStatus).toHaveBeenLastCalledWith('online')
+  })
+
+  it('accepts fifty distinct roster identities without inventing online membership', () => {
+    const large: RoomSnapshot = { ...fixture(), selfId: 'player-0', capacity: { maxOnlinePlayers: 50, onlinePlayers: 48, reservedPlayers: 2, selfHasSlot: true }, players: Array.from({ length: 50 }, (_, index) => ({ id: `player-${index}`, name: `旅人${index}`, x: index % 10, z: Math.floor(index / 10), supplies: 1, rewards: 0, online: index < 48 })) }
+    expect(isRoomSnapshot(large)).toBe(true)
+    expect(large.players.filter(player => player.online)).toHaveLength(48)
+    expect(roomIsFull(large)).toBe(false)
+    expect(roomIsFull({ ...large, capacity: { ...large.capacity, selfHasSlot: false } })).toBe(true)
+    expect(isRoomSnapshot({ ...large, capacity: { ...large.capacity, onlinePlayers: 50, reservedPlayers: 1 } })).toBe(false)
+  })
+
+  it('updates countdown from server ticks even without a new gameplay revision', async () => {
+    const s = setup()
+    const first: RoomSnapshot = { ...fixture(), beacon: { ...fixture().beacon, phase: 'collecting', closesAtTick: 310 } }
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', first)
+    expect(participationSeconds(first)).toBe(30)
+    const later = { ...first, tick: 111 }
+    s.streams[0]!.emit('snapshot', later)
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(later)
+    expect(participationSeconds(later)).toBe(20)
+    s.streams[0]!.emit('snapshot', { ...first, tick: 100 })
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(later)
+    expect(participationSeconds({ ...first, tick: 999 })).toBe(0)
+  })
+
+  it('waits for room admission when capacity is full, while reserved reconnects can proceed', async () => {
+    const full = { ...fixture(), capacity: { maxOnlinePlayers: 50, onlinePlayers: 48, reservedPlayers: 2, selfHasSlot: false } }
+    const s = setup(vi.fn<typeof fetch>(async () => response(full)))
+    await s.client.start()
+    expect(s.onStatus).toHaveBeenLastCalledWith('offline')
+    expect(s.onError).toHaveBeenLastCalledWith('房間席位已滿，等待空位中；操作暫停。')
+    expect(s.createStream).not.toHaveBeenCalled()
+    s.fetcher.mockResolvedValueOnce(response({ ...full, capacity: { ...full.capacity, selfHasSlot: true } }))
+    await s.client.reconnect()
+    expect(s.onStatus).toHaveBeenLastCalledWith('connecting')
+    expect(s.createStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('never marks an unadmitted player online from a stream snapshot', async () => {
+    const s = setup()
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', { ...fixture(), players: fixture().players.map(player => ({ ...player, online: false })) })
+    expect(s.onStatus).toHaveBeenLastCalledWith('offline')
+    expect(s.onStatus).not.toHaveBeenCalledWith('online')
   })
 
   it('returns to the login form on expired authentication without retrying credentials', async () => {

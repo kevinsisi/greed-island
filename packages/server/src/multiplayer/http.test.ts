@@ -5,15 +5,18 @@ import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMultiplayerApp, hashPassword } from './http.js'
 import { MultiplayerRuntime } from './runtime.js'
+import { generateRoster } from './domain.js'
 
 type Snapshot = ReturnType<MultiplayerRuntime['snapshot']>
 const ORIGIN = 'http://localhost:4178'
 const A = 'player-a'
 const B = 'player-b'
+const C = 'player-3'
 // Isolated test-only fixture passwords. Never load environment credentials or production accounts.
 const fixtures = [
   { id: A, username: 'alice-test', passwordHash: hashPassword('test-only-password-a'), name: 'Alice' },
   { id: B, username: 'bob-test', passwordHash: hashPassword('test-only-password-b'), name: 'Bob' },
+  { id: C, username: 'charlie-test', passwordHash: hashPassword('test-only-password-c'), name: 'Charlie' },
 ]
 
 let db: Database.Database
@@ -105,7 +108,7 @@ async function connect(cookie: string) {
 
 beforeEach(async () => {
   db = new Database(':memory:')
-  runtime = new MultiplayerRuntime(db)
+  runtime = new MultiplayerRuntime(db, { roster: generateRoster(3), config: { maxOnlinePlayers: 2, minParticipants: 2, participationWindowTicks: 3 } })
   const app = createMultiplayerApp({ runtime, fixtures, allowedOrigins: [ORIGIN, 'http://127.0.0.1:4178'] })
   server = await new Promise<Server>((resolve, reject) => {
     const candidate = app.listen(0, '127.0.0.1', () => resolve(candidate))
@@ -165,6 +168,7 @@ describe('isolated multiplayer HTTP sessions', () => {
 
   it('fixes the command actor to the session and refuses spoofed identities or resource results', async () => {
     const a = await login(fixtures[0]!.username, 'test-only-password-a')
+    await connect(a.cookie)
     const before = runtime.snapshot(A)
     for (const input of [
       { ...command('move', { dx: 0, dz: 1 }), actorId: B },
@@ -192,14 +196,18 @@ describe('isolated multiplayer HTTP sessions', () => {
 
     const move = await post('command', command('move', { dx: 0, dz: 1 }), a.cookie)
     expect(move.status).toBe(200)
-    const result = await move.json() as { snapshot: Snapshot }
-    const observedA = await streamA.until((value) => value.revision === result.snapshot.revision)
-    const observedB = await streamB.until((value) => value.revision === result.snapshot.revision)
+    const result = await move.json() as { accepted: boolean; revision: number }
+    expect(result.accepted).toBe(true)
+    expect(result).not.toHaveProperty('snapshot')
+    runtime.advanceTick()
+    const observedA = await streamA.until((value) => value.revision >= result.revision)
+    const observedB = await streamB.until((value) => value.revision >= result.revision)
     expect(observedA.players).toEqual(observedB.players)
     expect(observedB.players.find((entry) => entry.id === A)!.z).toBeGreaterThan(-6)
 
     const chat = await post('command', command('chat', { text: '一起修好信標。' }), b.cookie)
     expect(chat.status).toBe(200)
+    runtime.advanceTick()
     const chatA = await streamA.until((value) => value.messages.some((entry) => entry.text === '一起修好信標。'))
     const chatB = await streamB.until((value) => value.messages.some((entry) => entry.text === '一起修好信標。'))
     expect(chatA.messages).toEqual(chatB.messages)
@@ -216,9 +224,11 @@ describe('isolated multiplayer HTTP sessions', () => {
     expect(restored.messages).toEqual(chatA.messages)
   })
 
-  it('atomically completes one shared event under simultaneous duplicate and fresh request IDs', async () => {
+  it('atomically completes the collection window under simultaneous duplicate and fresh request IDs', async () => {
     const a = await login(fixtures[0]!.username, 'test-only-password-a')
     const b = await login(fixtures[1]!.username, 'test-only-password-b')
+    await connect(a.cookie)
+    await connect(b.cookie)
     for (let step = 0; step < 30; step += 1) {
       runtime.advanceTick()
       const responses = await Promise.all([
@@ -241,14 +251,22 @@ describe('isolated multiplayer HTTP sessions', () => {
       post('command', command('contribute'), b.cookie),
     ])
     expect(freshRequests.map((entry) => entry.status)).toEqual([409, 409])
+    const collecting = await snapshot(a.cookie)
+    expect(collecting.beacon).toMatchObject({ phase: 'collecting', completed: false, closesAtTick: collecting.tick + 3 })
+    expect(collecting.players.every((player) => player.rewards === 0)).toBe(true)
+    runtime.advanceTick()
+    runtime.advanceTick()
+    expect(runtime.snapshot(A).beacon.completed).toBe(false)
+    runtime.advanceTick()
     const doneA = await snapshot(a.cookie)
     const doneB = await snapshot(b.cookie)
     expect(doneA.beacon).toEqual(doneB.beacon)
     expect(doneA.beacon.completed).toBe(true)
     expect(new Set(doneA.beacon.contributors)).toEqual(new Set([A, B]))
-    expect(doneA.players.map(({ supplies, rewards }) => ({ supplies, rewards }))).toEqual([
+    expect(doneA.players.filter((player) => [A, B].includes(player.id)).map(({ supplies, rewards }) => ({ supplies, rewards }))).toEqual([
       { supplies: 0, rewards: 1 }, { supplies: 0, rewards: 1 },
     ])
+    expect(doneA.players.find((player) => player.id === C)).toMatchObject({ supplies: 1, rewards: 0 })
     const repeated = await post('command', bContribution, b.cookie)
     expect(repeated.status).toBe(200)
     expect((await repeated.json() as { duplicate: boolean }).duplicate).toBe(true)
@@ -258,11 +276,54 @@ describe('isolated multiplayer HTTP sessions', () => {
   it('invalidates the logged-out cookie while leaving the other identity usable', async () => {
     const a = await login(fixtures[0]!.username, 'test-only-password-a')
     const b = await login(fixtures[1]!.username, 'test-only-password-b')
+    await connect(a.cookie)
+    await connect(b.cookie)
     const response = await post('logout', {}, a.cookie)
     expect(response.status).toBeGreaterThanOrEqual(200)
     expect(response.status).toBeLessThan(300)
     expect((await fetch(`${base}/mp-api/snapshot`, { headers: { cookie: a.cookie } })).status).toBe(401)
     expect((await post('command', command('chat', { text: 'logged out' }), a.cookie)).status).toBe(401)
     expect((await snapshot(b.cookie)).selfId).toBe(B)
+    expect((await snapshot(b.cookie)).capacity).toMatchObject({ onlinePlayers: 1, reservedPlayers: 0 })
+    expect(runtime.hasConnection(A)).toBe(false)
+    expect((await post('command', command('chat', { text: 'still online' }), b.cookie)).status).toBe(200)
+  })
+
+  it('requires a room connection even with a valid session cookie', async () => {
+    const a = await login(fixtures[0]!.username, 'test-only-password-a')
+    const response = await post('command', command('chat', { text: 'not admitted' }), a.cookie)
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: 'ROOM_CONNECTION_REQUIRED' })
+    expect((await snapshot(a.cookie)).capacity.selfHasSlot).toBe(false)
+    expect(runtime.snapshot(A).messages).toHaveLength(0)
+  })
+
+  it('returns JSON before SSE headers when full and releases logout slots immediately', async () => {
+    const a = await login(fixtures[0]!.username, 'test-only-password-a')
+    const b = await login(fixtures[1]!.username, 'test-only-password-b')
+    const c = await login(fixtures[2]!.username, 'test-only-password-c')
+    await connect(a.cookie)
+    await connect(b.cookie)
+    const denied = await fetch(`${base}/mp-api/stream`, { headers: { cookie: c.cookie } })
+    expect(denied.status).toBe(409)
+    expect(denied.headers.get('content-type')).toContain('application/json')
+    expect(await denied.json()).toMatchObject({ error: 'ROOM_FULL' })
+    expect((await snapshot(c.cookie)).capacity).toMatchObject({ onlinePlayers: 2, selfHasSlot: false })
+    expect((await post('command', command('chat', { text: 'full' }), c.cookie)).status).toBe(409)
+    await post('logout', {}, a.cookie)
+    const admitted = await connect(c.cookie)
+    expect((await admitted.nextSnapshot()).capacity).toMatchObject({ onlinePlayers: 2, reservedPlayers: 0, selfHasSlot: true })
+  })
+
+  it('counts duplicate streams once and rejects a third without evicting existing streams', async () => {
+    const a = await login(fixtures[0]!.username, 'test-only-password-a')
+    await connect(a.cookie)
+    await connect(a.cookie)
+    const denied = await fetch(`${base}/mp-api/stream`, { headers: { cookie: a.cookie } })
+    expect(denied.status).toBe(409)
+    expect(await denied.json()).toMatchObject({ error: 'TOO_MANY_CONNECTIONS' })
+    expect((await snapshot(a.cookie)).capacity).toMatchObject({ onlinePlayers: 1, reservedPlayers: 0, selfHasSlot: true })
+    await post('logout', {}, a.cookie)
+    expect(runtime.snapshot(A).capacity).toMatchObject({ onlinePlayers: 0, reservedPlayers: 0 })
   })
 })

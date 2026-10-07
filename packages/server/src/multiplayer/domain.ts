@@ -1,19 +1,37 @@
 import { createHash } from 'node:crypto'
 import type { Event, EventDraft } from '../kernel/types.js'
-import type { RoomCommand, RoomPlayer, RoomState } from './types.js'
+import type { RoomCommand, RoomConfig, RoomPlayer, RoomState, RosterPlayer } from './types.js'
 
 export const ROOM_ID = 'local-harbor'
 export const TICK_MS = 100
 export const MOVE_PER_TICK = 0.4
 export const PLAYER_RADIUS = 0.35
-export const BEACON = { id: 'harbor-beacon-1', x: 0, z: 6, radius: 2.5, required: 2 }
+export const BEACON = { id: 'harbor-beacon-1', x: 0, z: 6, radius: 2.5 }
+export const DEFAULT_ROOM_CONFIG: Readonly<RoomConfig> = { maxOnlinePlayers: 50, minParticipants: 2, participationWindowTicks: 300 }
+export const MAX_FIXTURE_COUNT = 1000
 export const WORLD = { minX: -12, maxX: 12, minZ: -10, maxZ: 18, obstacles: [
   { x: -7, z: 5, width: 4, depth: 5 }, { x: 7, z: 8, width: 4, depth: 5 },
 ] }
-export const INITIAL_PLAYERS: readonly RoomPlayer[] = [
-  { id: 'player-a', name: '晨光旅人', x: -2, z: -6, supplies: 1, rewards: 0 },
-  { id: 'player-b', name: '潮汐旅人', x: 2, z: -6, supplies: 1, rewards: 0 },
-]
+/** Deterministic temporary roster; none of these identities imply online users. */
+export function generateRoster(count = DEFAULT_ROOM_CONFIG.maxOnlinePlayers): RosterPlayer[] {
+  if (!Number.isSafeInteger(count) || count < 2 || count > MAX_FIXTURE_COUNT) reject('INVALID_ROSTER', `測試身份數必須介於 2 到 ${MAX_FIXTURE_COUNT}。`)
+  const columns = Math.ceil(Math.sqrt(count))
+  const rows = Math.ceil(count / columns)
+  return Array.from({ length: count }, (_, index) => {
+    if (index === 0) return { id: 'player-a', name: '晨光旅人', x: -2, z: -6 }
+    if (index === 1) return { id: 'player-b', name: '潮汐旅人', x: 2, z: -6 }
+    return { id: `player-${index + 1}`, name: `港灣旅人 ${index + 1}`, x: -10 + (index % columns) * 20 / (columns - 1), z: -9 + Math.floor(index / columns) * 8 / Math.max(1, rows - 1) }
+  })
+}
+export function validateRoomSetup(roster: readonly RosterPlayer[], config: RoomConfig): void {
+  if (!record(config) || !exactKeys(config, ['maxOnlinePlayers', 'minParticipants', 'participationWindowTicks']) || !Number.isSafeInteger(config.maxOnlinePlayers) || config.maxOnlinePlayers < 2 || config.maxOnlinePlayers > MAX_FIXTURE_COUNT || !Number.isSafeInteger(config.minParticipants) || config.minParticipants < 2 || config.minParticipants > config.maxOnlinePlayers || !Number.isSafeInteger(config.participationWindowTicks) || config.participationWindowTicks < 1 || config.participationWindowTicks > 36_000) reject('INVALID_CONFIG', '房間容量、最低人數或參與期間不正確。')
+  if (!Array.isArray(roster) || roster.length < config.minParticipants || roster.length > MAX_FIXTURE_COUNT) reject('INVALID_ROSTER', '測試身份名單不符合事件需求。')
+  const ids = new Set<string>(), names = new Set<string>()
+  for (const player of roster) {
+    if (!record(player) || !exactKeys(player, ['id', 'name', 'x', 'z']) || typeof player.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(player.id) || ids.has(player.id) || typeof player.name !== 'string' || player.name.trim().length < 1 || player.name.length > 80 || names.has(player.name.trim()) || typeof player.x !== 'number' || !Number.isFinite(player.x) || typeof player.z !== 'number' || !Number.isFinite(player.z) || !canStand(player.x, player.z)) reject('INVALID_ROSTER', '玩家身份、名稱或出生位置不正確。')
+    ids.add(player.id); names.add(player.name.trim())
+  }
+}
 
 export class DomainError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string) { super(message) }
@@ -36,18 +54,30 @@ export function eventDraft(type: string, identity: string, actor: string, tick: 
   const digest = createHash('sha256').update(`${ROOM_ID}:${type}:${identity}`).digest('hex')
   return { eventId: `mp_${digest}`, eventType: type, actorId: actor, tick, occurredAt: 0, payload, commandId, deterministicKey: digest, version: 1, rulesetVersion: 'local-multiplayer@1' }
 }
-export function initialEvent(): EventDraft { return eventDraft('MP_INITIALIZED', 'initial', 'system', 0, { players: INITIAL_PLAYERS }) }
+function initialEvent(roster: readonly RosterPlayer[], config: RoomConfig): EventDraft {
+  return eventDraft('MP_INITIALIZED', 'initial', 'system', 0, { config: structuredClone(config), players: roster.map(p => ({ ...p, supplies: 1, rewards: 0 })) })
+}
 export function tickEvent(tick: number): EventDraft { return eventDraft('MP_TICK', String(tick), 'system', tick, {}) }
 
-export type SystemCommand = { type: 'initialize' } | { type: 'tick'; tick: number }
+export type SystemCommand = { type: 'initialize'; roster?: readonly RosterPlayer[]; config?: RoomConfig } | { type: 'tick'; tick: number }
 /** System actors pass the same command/rule/event boundary as player intents. */
 export function evaluateSystemCommand(state: RoomState, command: SystemCommand): EventDraft[] {
   if (command.type === 'initialize') {
     if (state.sequence !== 0 || state.players.length !== 0) reject('ALREADY_INITIALIZED', '房間已初始化。', 409)
-    return [initialEvent()]
+    const config = command.config ?? { ...DEFAULT_ROOM_CONFIG }
+    const roster = command.roster ?? generateRoster()
+    validateRoomSetup(roster, config)
+    return [initialEvent(roster, config)]
   }
-  if (state.players.length !== INITIAL_PLAYERS.length || !Number.isSafeInteger(command.tick) || command.tick !== state.tick + 1) reject('INVALID_TICK', '伺服器 tick 必須依序前進。', 409)
-  return [tickEvent(command.tick)]
+  if (state.players.length === 0 || !Number.isSafeInteger(command.tick) || command.tick !== state.tick + 1) reject('INVALID_TICK', '伺服器 tick 必須依序前進。', 409)
+  const events = [tickEvent(command.tick)]
+  if (!state.completed && state.closesAtTick !== null && command.tick >= state.closesAtTick && state.contributors.length >= state.config.minParticipants) {
+    events.push(eventDraft('MP_BEACON_COMPLETED', BEACON.id, 'system', command.tick, { beaconId: BEACON.id }))
+    for (const playerId of state.contributors) {
+      if (!state.awardedPlayerIds.includes(playerId)) events.push(eventDraft('MP_REWARDED', `${BEACON.id}:${playerId}`, 'system', command.tick, { playerId, beaconId: BEACON.id }))
+    }
+  }
+  return events
 }
 
 function canStand(x: number, z: number): boolean {
@@ -64,7 +94,7 @@ export function evaluateCommand(state: RoomState, actor: string, command: RoomCo
   if (command.type === 'move') {
     const { dx, dz } = command.payload
     if (typeof dx !== 'number' || typeof dz !== 'number' || !Number.isFinite(dx) || !Number.isFinite(dz) || Math.abs(dx) > 1 || Math.abs(dz) > 1) reject('INVALID_DIRECTION', '方向必須介於 -1 到 1。')
-    if (state.movedAt[actor] === state.tick) reject('MOVE_RATE_LIMIT', '每個伺服器 tick 只能移動一次。', 429)
+    if (Object.hasOwn(state.movedAt, actor) && state.movedAt[actor] === state.tick) reject('MOVE_RATE_LIMIT', '每個伺服器 tick 只能移動一次。', 429)
     const scale = MOVE_PER_TICK / Math.max(1, Math.hypot(dx, dz))
     // Axis sliding avoids getting stuck on corners; a step is smaller than any obstacle.
     let x = player.x, z = player.z
@@ -82,18 +112,18 @@ export function evaluateCommand(state: RoomState, actor: string, command: RoomCo
     return [draft('MP_CHAT', { id: identity, playerId: actor, name: player.name, text: raw.trim(), tick: state.tick })]
   }
   if (state.completed || state.contributors.includes(actor)) reject('ALREADY_CONTRIBUTED', '此角色已完成本次貢獻，不能重複領獎。', 409)
+  if (state.closesAtTick !== null && state.tick >= state.closesAtTick) reject('PARTICIPATION_CLOSED', '本次信標收集已截止。', 409)
   if (Math.hypot(player.x - BEACON.x, player.z - BEACON.z) > BEACON.radius) reject('OUT_OF_RANGE', '請靠近信標再投入物資。', 409)
   if (player.supplies < 1) reject('NO_SUPPLIES', '沒有可投入的物資。', 409)
   const contributors = [...state.contributors, actor]
   const events = [eventDraft('MP_CONTRIBUTED', `${BEACON.id}:${actor}`, actor, state.tick, { playerId: actor, beaconId: BEACON.id }, command.commandId)]
-  if (contributors.length === BEACON.required) {
-    events.push(eventDraft('MP_BEACON_COMPLETED', BEACON.id, 'system', state.tick, { beaconId: BEACON.id }, command.commandId))
-    for (const playerId of contributors) events.push(eventDraft('MP_REWARDED', `${BEACON.id}:${playerId}`, 'system', state.tick, { playerId, beaconId: BEACON.id }, command.commandId))
+  if (state.closesAtTick === null && contributors.length >= state.config.minParticipants) {
+    events.push(eventDraft('MP_COLLECTION_OPENED', BEACON.id, 'system', state.tick, { beaconId: BEACON.id, closesAtTick: state.tick + state.config.participationWindowTicks }, command.commandId))
   }
   return events
 }
 
-export function emptyState(): RoomState { return { sequence: 0, tick: 0, players: [], messages: [], contributors: [], completed: false, movedAt: {} } }
+export function emptyState(): RoomState { return { sequence: 0, tick: 0, config: { ...DEFAULT_ROOM_CONFIG }, players: [], messages: [], contributors: [], completed: false, closesAtTick: null, awardedPlayerIds: [], movedAt: {} } }
 /** Sequence gating makes duplicate delivery safe independently of receipt lookup. */
 export function applyEvents(state: RoomState, events: readonly Event[]): RoomState {
   const next = structuredClone(state)
@@ -102,13 +132,22 @@ export function applyEvents(state: RoomState, events: readonly Event[]): RoomSta
     const p = event.payload as Record<string, unknown>
     const player = next.players.find(item => item.id === p.playerId)
     switch (event.eventType) {
-      case 'MP_INITIALIZED': next.players = structuredClone(p.players as RoomPlayer[]); break
+      case 'MP_INITIALIZED':
+        next.players = structuredClone(p.players as RoomPlayer[])
+        // Old two-player logs have no config. Preserve their recorded roster/resources exactly.
+        next.config = structuredClone((p.config as RoomConfig | undefined) ?? DEFAULT_ROOM_CONFIG)
+        break
       case 'MP_TICK': next.tick = event.tick!; break
-      case 'MP_MOVED': if (player) { player.x = p.x as number; player.z = p.z as number; next.movedAt[player.id] = event.tick! }; break
+      case 'MP_MOVED': if (player) {
+        player.x = p.x as number; player.z = p.z as number
+        // Treat arbitrary roster IDs as data, including names such as __proto__.
+        Object.defineProperty(next.movedAt, player.id, { value: event.tick!, enumerable: true, writable: true, configurable: true })
+      }; break
       case 'MP_CHAT': next.messages.push(p as unknown as RoomState['messages'][number]); next.messages = next.messages.slice(-100); break
       case 'MP_CONTRIBUTED': if (player && !next.contributors.includes(player.id)) { player.supplies -= 1; next.contributors.push(player.id) }; break
+      case 'MP_COLLECTION_OPENED': next.closesAtTick = p.closesAtTick as number; break
       case 'MP_BEACON_COMPLETED': next.completed = true; break
-      case 'MP_REWARDED': if (player) player.rewards += 1; break
+      case 'MP_REWARDED': if (player && !next.awardedPlayerIds.includes(player.id)) { player.rewards += 1; next.awardedPlayerIds.push(player.id) }; break
       default: throw new Error(`Unexpected multiplayer event: ${event.eventType}`)
     }
     next.tick = Math.max(next.tick, event.tick ?? 0)

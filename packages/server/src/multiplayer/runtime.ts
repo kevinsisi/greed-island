@@ -3,32 +3,48 @@ import { createHash } from 'node:crypto'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { toCanonicalJson } from '../kernel/canonicalJson.js'
 import { applyEvents, BEACON, DomainError, emptyState, evaluateCommand, evaluateSystemCommand, parseCommand, projectEvents, ROOM_ID, TICK_MS, WORLD } from './domain.js'
-import type { RoomSnapshot, RoomState } from './types.js'
+import type { CommandAcknowledgement, RoomConfig, RoomSnapshot, RoomState, RosterPlayer } from './types.js'
+import { RoomPresence } from './presence.js'
+import { TickFanout } from './sync.js'
+
+export type RuntimeOptions = { roster?: readonly RosterPlayer[]; config?: RoomConfig; now?: () => number; requireExisting?: boolean }
 
 export class MultiplayerRuntime {
   private readonly store: SqliteEventStore
   private state: RoomState
-  private readonly listeners = new Set<() => void>()
-  private readonly connected = new Map<string, number>()
-  private presenceRevision = 0
+  private readonly presence: RoomPresence
+  private readonly fanout = new TickFanout()
   private timer: ReturnType<typeof setInterval> | undefined
 
-  constructor(private readonly db: Database.Database) {
+  constructor(private readonly db: Database.Database, options: RuntimeOptions = {}) {
     this.store = new SqliteEventStore(db)
     db.exec('CREATE TABLE IF NOT EXISTS mp_command_receipts (player_id TEXT NOT NULL, command_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(player_id, command_id))')
-    this.store.runInTransaction(() => { if (this.store.readEvents().length === 0) this.store.appendEvents(evaluateSystemCommand(emptyState(), { type: 'initialize' })) })
+    this.store.runInTransaction(() => {
+      if (this.store.readEvents().length === 0) {
+        if (options.requireExisting) throw new Error('Existing fixture room has no event history; refusing to initialize or refill resources.')
+        this.store.appendEvents(evaluateSystemCommand(emptyState(), {
+          type: 'initialize', ...(options.roster ? { roster: options.roster } : {}), ...(options.config ? { config: options.config } : {}),
+        }))
+      }
+    })
     this.state = projectEvents(this.store.readEvents())
+    this.presence = new RoomPresence(this.state.config.maxOnlinePlayers, options.now ? { now: options.now } : {})
   }
 
   snapshot(selfId: string): RoomSnapshot {
     if (!this.state.players.some(p => p.id === selfId)) throw new DomainError(401, 'UNAUTHORIZED', '找不到本機玩家。')
-    return { roomId: ROOM_ID, revision: this.state.sequence, presenceRevision: this.presenceRevision, tick: this.state.tick, selfId,
-      players: this.state.players.map(p => ({ ...p, online: (this.connected.get(p.id) ?? 0) > 0 })),
-      messages: structuredClone(this.state.messages), beacon: { ...BEACON, contributors: [...this.state.contributors], completed: this.state.completed }, world: structuredClone(WORLD), npcIntegrated: false }
+    return { roomId: ROOM_ID, revision: this.state.sequence, presenceRevision: this.presence.revision, tick: this.state.tick, selfId,
+      capacity: { maxOnlinePlayers: this.state.config.maxOnlinePlayers, ...this.presence.counts(), selfHasSlot: this.presence.hasConnection(selfId) || this.presence.isReserved(selfId) },
+      players: this.state.players.map(p => ({ ...p, online: this.presence.hasConnection(p.id) })),
+      messages: structuredClone(this.state.messages),
+      beacon: { ...BEACON, required: this.state.config.minParticipants, contributors: [...this.state.contributors], completed: this.state.completed,
+        phase: this.state.completed ? 'completed' : this.state.closesAtTick === null ? 'gathering' : 'collecting', closesAtTick: this.state.closesAtTick },
+      world: structuredClone(WORLD), npcIntegrated: false }
   }
 
-  execute(selfId: string, body: unknown): { snapshot: RoomSnapshot; duplicate?: boolean } {
-    this.snapshot(selfId)
+  execute(selfId: string, body: unknown): CommandAcknowledgement {
+    if (!this.state.players.some(p => p.id === selfId)) throw new DomainError(401, 'UNAUTHORIZED', '找不到本機玩家。')
+    if (!this.presence.hasConnection(selfId)) throw new DomainError(409, 'ROOM_CONNECTION_REQUIRED', '請先連入房間再操作。')
     const command = parseCommand(body)
     let digest: string
     try { digest = createHash('sha256').update(toCanonicalJson(command)).digest('hex') }
@@ -45,27 +61,38 @@ export class MultiplayerRuntime {
       return { duplicate: false, events }
     })
     // Do not mutate in-memory projections until the enclosing transaction commits.
-    if (!result.duplicate) { this.state = applyEvents(this.state, result.events); this.publish() }
-    return { snapshot: this.snapshot(selfId), ...(result.duplicate ? { duplicate: true } : {}) }
+    if (!result.duplicate) { this.state = applyEvents(this.state, result.events); this.fanout.markDirty() }
+    return { accepted: true, commandId: command.commandId, revision: this.state.sequence, ...(result.duplicate ? { duplicate: true } : {}) }
   }
 
   advanceTick(): void {
+    const wasCollecting = !this.state.completed && this.state.closesAtTick !== null
     const events = this.store.runInTransaction(() => this.store.appendEvents(evaluateSystemCommand(this.state, { type: 'tick', tick: this.state.tick + 1 })))
     this.state = applyEvents(this.state, events)
-    // Ticks alone need no network fanout. Next command / connection includes latest tick.
+    const previousPresence = this.presence.revision
+    this.presence.sweep()
+    if (wasCollecting || events.length > 1 || this.presence.revision !== previousPresence) this.fanout.markDirty()
+    this.fanout.flush(this.state.tick)
   }
   start(): void { if (!this.timer) this.timer = setInterval(() => this.advanceTick(), TICK_MS) }
   stop(): void { if (this.timer) clearInterval(this.timer); this.timer = undefined }
-  subscribe(listener: () => void, playerId?: string): () => void {
-    this.listeners.add(listener)
-    if (playerId) { this.connected.set(playerId, (this.connected.get(playerId) ?? 0) + 1); this.presenceRevision++; this.publish() }
-    let active = true
-    return () => {
-      if (!active) return
-      active = false
-      this.listeners.delete(listener)
-      if (playerId) { this.connected.set(playerId, Math.max(0, (this.connected.get(playerId) ?? 1) - 1)); this.presenceRevision++; this.publish() }
+  connect(playerId: string): (reserve?: boolean) => void {
+    if (!this.state.players.some(p => p.id === playerId)) throw new DomainError(401, 'UNAUTHORIZED', '找不到本機玩家。')
+    const before = this.presence.revision
+    let disconnect: (reserve?: boolean) => void
+    try { disconnect = this.presence.open(playerId) }
+    finally { if (this.presence.revision !== before) this.fanout.markDirty() }
+    return (reserve = true) => {
+      const previous = this.presence.revision
+      disconnect(reserve)
+      if (this.presence.revision !== previous) this.fanout.markDirty()
     }
   }
-  private publish(): void { for (const listener of this.listeners) { try { listener() } catch { /* closed transport is removed by HTTP cleanup */ } } }
+  hasConnection(playerId: string): boolean { return this.presence.hasConnection(playerId) }
+  releaseReservation(playerId: string): void {
+    const before = this.presence.revision
+    this.presence.releaseReservation(playerId)
+    if (this.presence.revision !== before) this.fanout.markDirty()
+  }
+  subscribe(listener: () => void): () => void { return this.fanout.subscribe(listener) }
 }
