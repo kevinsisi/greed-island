@@ -29,6 +29,9 @@ const DEFAULT_CAMERA_DISTANCE = 8
 const DEFAULT_CAMERA_PITCH = 0.52
 const CAMERA_TARGET_HEIGHT = 1.35
 const CAMERA_MARGIN = 0.35
+const CAMERA_NEAR_PADDING = 0.02
+const PLAYER_FADE_START = 1.2
+const PLAYER_FADE_END = 0.45
 const ATTACK_RANGE = 4
 const ATTACK_WARNING_SECONDS = 1
 const ATTACK_CYCLE_SECONDS = 2
@@ -38,6 +41,7 @@ const SIMULATION_INTERVAL = 0.5
 const FULL_TURN = Math.PI * 2
 const MAX_FRAME_DELTA = 0.05
 const LOOK_SENSITIVITY = 0.005
+const DIRECTION_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'])
 const CONTROL_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'KeyE', 'Space', 'Digit1', 'Digit2', 'Digit3'])
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -84,6 +88,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
   body.isVisible = false
   body.isPickable = false
   const blockers = new Set([...world.blockers, world.gate])
+  const playerMeshes = world.player.getChildMeshes().map(mesh => ({ mesh, visibility: mesh.visibility }))
 
   const warningMaterial = new StandardMaterial('enemy-warning-material', scene)
   warningMaterial.diffuseColor = Color3.FromHexString('#ff813b')
@@ -132,6 +137,8 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
   let previousFrame = performance.now()
   let pointer: { id: number; x: number; y: number } | null = null
   const pressed = new Set<string>()
+  const pendingDirections = new Set<string>()
+  const directionActive = (code: string): boolean => pressed.has(code) || pendingDirections.has(code)
   const controls = options.controls
   const originalTouchAction = canvas.style.touchAction
   canvas.style.touchAction = 'none'
@@ -157,6 +164,8 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     event.preventDefault()
     pressed.add(event.code)
     if (event.repeat) return
+    // Preserve a press/release pair arriving between two animation frames.
+    if (DIRECTION_KEYS.has(event.code)) pendingDirections.add(event.code)
     if (event.code === 'KeyE') {
       publishPosition()
       options.dispatch({ type: 'interact' })
@@ -172,6 +181,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
 
   function clearInput(): void {
     pressed.clear()
+    pendingDirections.clear()
     controls.x = 0
     controls.y = 0
     controls.lookX = 0
@@ -227,7 +237,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     const cameraDirection = new Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch))
     const ray = new Ray(target, cameraDirection, cameraDistance)
     const hit = scene.pickWithRay(ray, mesh => blockers.has(mesh) && mesh.isEnabled())
-    const safeDistance = hit?.hit ? Math.max(0.75, hit.distance - CAMERA_MARGIN) : cameraDistance
+    const safeDistance = hit?.hit ? Math.max(camera.minZ + CAMERA_NEAR_PADDING, hit.distance - CAMERA_MARGIN) : cameraDistance
     // Retract immediately to keep the view outside walls; ease back out into the open.
     actualCameraDistance = instant || safeDistance < actualCameraDistance
       ? safeDistance
@@ -235,6 +245,9 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
     camera.position.copyFrom(target.add(cameraDirection.scale(actualCameraDistance)))
     camera.position.y = Math.max(0.6, camera.position.y)
     camera.setTarget(target)
+    // A wall can push the camera into the character; fade only this player's meshes.
+    const playerVisibility = clamp((actualCameraDistance - PLAYER_FADE_END) / (PLAYER_FADE_START - PLAYER_FADE_END), 0, 1)
+    for (const item of playerMeshes) item.mesh.visibility = item.visibility * playerVisibility
     return safeDistance < cameraDistance - 0.1
   }
 
@@ -306,8 +319,8 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
       }
       yaw += controls.lookX * delta * 2
       pitch = clamp(pitch + controls.lookY * delta * 1.5, 0.22, 1.05)
-      let horizontal = controls.x + Number(pressed.has('KeyD') || pressed.has('ArrowRight')) - Number(pressed.has('KeyA') || pressed.has('ArrowLeft'))
-      let forward = controls.y + Number(pressed.has('KeyW') || pressed.has('ArrowUp')) - Number(pressed.has('KeyS') || pressed.has('ArrowDown'))
+      let horizontal = controls.x + Number(directionActive('KeyD') || directionActive('ArrowRight')) - Number(directionActive('KeyA') || directionActive('ArrowLeft'))
+      let forward = controls.y + Number(directionActive('KeyW') || directionActive('ArrowUp')) - Number(directionActive('KeyS') || directionActive('ArrowDown'))
       const length = Math.hypot(horizontal, forward)
       if (length > 0.06) {
         if (length > 1) { horizontal /= length; forward /= length }
@@ -325,6 +338,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
         const turn = Math.atan2(Math.sin(heading - world.player.rotation.y), Math.cos(heading - world.player.rotation.y))
         world.player.rotation.y += turn * Math.min(1, delta * 15)
       }
+      pendingDirections.clear()
 
       stateElapsed += delta
       if (stateElapsed >= STATE_INTERVAL) { publishPosition(); stateElapsed = 0 }
@@ -338,6 +352,7 @@ export function createDemoScene(canvas: HTMLCanvasElement, options: SceneOptions
       }
     } else {
       pressed.clear()
+      pendingDirections.clear()
       publishPosition()
       simulationElapsed = 0
     }

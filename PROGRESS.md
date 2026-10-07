@@ -1,3 +1,10 @@
+## 2026-10-07 — 鍵盤與鏡頭修正 @ v0.101.2（原型 v0.2.2）
+
+- 短按方向鍵加入單幀緩衝，避免 keydown/keyup 都落在兩幀間而漏讀；暫停、失焦、新局清除。鏡頭貼牆按射線命中距離退讓，近身時只淡出玩家模型。
+- 實際桌機 1280×720、localhost:4178，以原生鍵盤 W/A/S/D、E、1/2 和 Enter 完成接任務→三光種→石衛→渡風→晶核→回港交付；未注入座標或修改存檔。回潮實測生命 28→68。畫面 docs/evidence/tideborn-3d-keyboard-complete.jpg。
+- 前端38檔334 tests全通過；npm run build:web通過（735 modules，12.63s，既有chunk與Browserslist提示）。/tmp聚焦真實scene/world NullEngine驗證：8ms短按0.075m、長按250ms1.125m；pause/blur/newrun清除、閉門碰撞及開門通行；貼牆hit0.475m/camera0.125m不穿牆，離牆恢復8m及玩家可見。
+- 真實瀏覽器的典型貼牆視覺驗收將併入接續遭遇玩法驗收；不能把NullEngine當成瀏覽器畫面驗證。使用者127.0.0.1存檔、正式站與其他服務未操作。
+
 ## 2026-10-07 — 3D 原型瀏覽器驗收 @ v0.101.1（未部署）
 
 - 第一 checkpoint `b8bf41e` 已成功 push 至 `origin/feat/tideborn-3d-preview`；原含 OpenSpec 的本機提交 `b37bf2f` 保留，規格僅留本機，沒有跳過／修改 hook 或 force push。
