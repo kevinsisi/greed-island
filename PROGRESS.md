@@ -1,3 +1,16 @@
+## 2026-10-07 — 本機多人切片 @ v0.103.0（實作 checkpoint，整合驗收受阻）
+
+- 使用者澄清要線上多玩家互動；停止擴充單人遭遇，先保留已推送的 v0.102.0。該版新手機反向分支驗收暫停，不宣稱已完成。
+- 新增 `/multiplayer-3d` 與獨立 `/mp-api` loopback 4179 服務。兩個隨機暫存帳號、HttpOnly session、真實 SSE snapshot；前端不掛原版 Auth/World，也不以 localStorage 或假玩家同步。啟動方式見 `docs/MULTIPLAYER_LOCAL.md`。
+- 已寫入：100ms server tick 移動限速／邊界／碰撞、房間聊天、兩個不同玩家在信標附近各投一物資、同一 transaction 完成並各發一獎勵。game command 與 init/tick system intent 均由純規則產生 Event；receipt與事件同交易，commit後才投影，sequence防重投影。相同和不同commandId防重領測試已寫。
+- UI：Babylon 獨立港口、snapshot 插值與在線角色、共享小地圖、桌機聊天／手機抽屜、斷線停操作。NPC 自主模擬明示尚未整合多人。
+- 已通過：全前端 41 files / 376 tests；後端 domain 26 + fixtureLock 12 = 38 tests；`npm run build:web` 741 modules、11.64s（既有 bundle/Browserslist 提示）；真實 scene 的 NullEngine 聚焦檢查包含無本機權威位移、短按／100ms節流、presence、快照插值、信標、pause/blur/hidden/dispose。獨立靜態 review 修復 crash 殘留鎖、聊天240字限制、手機面板遮搖桿。
+- 實際 Chrome 只驗證桌機／390×844 登入與離線畫面，scrollWidth=390。證據 `docs/evidence/multiplayer-offline-mobile.jpg`；Library `libfile_ad211f316f948191ab6d54fba35b13c7`。此圖不是多人連線成功證據。已確認可用 IAB 與 Chrome 獨立 browser，但尚未登入兩名玩家。
+- **尚未執行 HTTP／SQLite 整合與雙瀏覽器移動／聊天／合作／重連驗收。** 本機只有前端依賴；baseline server tests 因缺 better-sqlite3 無法收集。`npm run build:server` exit 2，缺 Express/bcrypt/JWT 等既有依賴／型別；完整診斷 `/tmp/greed-multiplayer-server-build.log`。新 HTTP/runtime tests 已寫，涵蓋雙session/SSE、concurrent、receipt rollback、重送與DB reopen，不能記成已通過。
+- 依賴安裝：離線補齊失敗（快取不足）；從 npm registry 補 lockfile 依賴的請求被 auto-review 拒絕，理由為原始評估要求不安裝套件、尚缺新授權。已提出明確許可問題，等待使用者回答；沒有改用其他 storage 或繞過安裝限制。
+- 正式站 auth reset token 暴露與 goods/replay 缺口仍待另行修復；本輪未掛這些入口，未讀正式秘密、建立正式帳號、操作正式 API／資料或部署，未新增交易／公會／PvP。4178 原預覽保留，未啟動4179，未干擾其他服務。
+- 分支 `feat/tideborn-3d-preview`；本輪以實作 checkpoint 推送，並非可交付的雙人驗收完成。CI只監聽main push／PR，功能分支push不觸發CI/CD。兩份OpenSpec保留本機，遵循既有保護hook不推送。
+
 ## 2026-10-07 — 可重玩遭遇 @ v0.102.0（原型 v0.3.0）
 
 - 兩個可略過、每趟只結算一次的遭遇：林間藥草箱（回潮30能量+1刻印得1物資，或75HP守衛得3）；遺跡哨衛（渡風25能量+1刻印得2，或125HP守衛得5）。遭遇戰有12m震擊、2.5秒首輪預警；星火1秒備戰／冷卻，無瞬間連發。

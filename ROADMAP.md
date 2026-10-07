@@ -5,6 +5,13 @@
 > 架構準則見 `ARCHITECTURE.md` 與 `COMBAT_ARCHITECTURE.md`。
 > 程式總計畫（含 phase 順序與成功標準）見 `docs/WORLD_CAPABILITIES.md`。
 
+## v0.103.0 — 本機多人切片，整合驗收待依賴授權 — 2026-10-07
+
+- 新增隔離多人房間：伺服器裁決移動、聊天、雙人信標與一次性獎勵；共享地圖與手機介面。
+- 前端376 tests與build、後端純規則／鎖檔38 tests通過；HTTP／SQLite與真正雙瀏覽器流程尚未執行。
+- 本機缺後端依賴，安裝許可待使用者確認；沒有部署，也未整合正式帳號、共享NPC、交易或其他世界系統。
+- 規格 `local-authoritative-multiplayer` 留本機；詳見 `PROGRESS.md` 與 `docs/MULTIPLAYER_LOCAL.md`。
+
 ## v0.98.37 ✅ local-ready — 2026-06-30
 
 **主題：Nearby Shout Timeout Fix（附近發話不要因辱罵等 AI 超時）**
