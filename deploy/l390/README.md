@@ -32,3 +32,7 @@ Retrieve fixture credentials (the output is secret; do not paste it into logs or
 ```powershell
 docker run --rm -v greed-l390-mp-data:/data alpine:3.20 cat /data/credentials.json
 ```
+
+Known limits:
+- Login is limited to 20 attempts per source IP per 60 s (`http.ts:52-59`). Behind Caddy every player shares one source IP, so many logins within a minute get 429; retry after a minute.
+- Move commands are limited to one per player per 100 ms tick (429 `MOVE_RATE_LIMIT`); this is a game rule, not an error.
