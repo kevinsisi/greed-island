@@ -1,3 +1,15 @@
+## 2026-10-07 — 3D 原型 checkpoint @ v0.101.0（功能分支，未部署）
+
+- 使用者先授權獨立 Babylon.js 可玩原型，再追加場景精修、地圖、NPC 自主發展與每張卡片美術；最新要求每個完成階段 commit/push。分支 `feat/tideborn-3d-preview`，不合併 main、不觸發正式部署。
+- `/prototype-3d` 獨立 lazy route；原 App 移到 `OriginalApp.tsx`，原路由/providers 保留。原型不載入 Auth/World provider，不呼叫正式 API。Vite 本機 `127.0.0.1:4178` 保留運行，未改其他服務。
+- 港口接任務→三枚光種/石衛→渡風開封印→晶核→回港交付；三張卡效果、鏡頭、碰撞、手機搖桿、死亡恢復、獨立存檔/確認新局。
+- 加入實際座標迷你地圖/全圖、四名 NPC 的本地目標/需求/技能/記憶/物資模擬、即時見聞側欄。記憶上限八筆、暫停與背景不補算；舊 v1 存檔保留進度。不是外部 LLM、自我訓練或持久背景 agent。
+- 三張原創生成卡圖已在瀏覽器圖鑑實際顯示；JPG 大小圖位於 public/prototype3d/cards，原圖在 artwork/source；Babylon 9.29.0 精確鎖版。
+- 已驗：`npm run build:web` 通過（735 modules，Vite 35.00s；chunk size warning）；前端 38 files / 334 tests 全通過（含模型/NPC 63 tests）；`npm run openspec:check` 通過（本 change 為 tracker-only，未跑 formal delta schema）。NullEngine 的碰撞/ray/render 與前景 tick/暫停/hidden/no-catch-up 由子代理聚焦驗證通過。
+- 瀏覽器已確認桌機場景、三張完整卡圖和地圖標記。工具曾有約 10 分鐘卡頓及 reset；已接回。完整遠征、最新手機面板修正、刷新/重開仍待瀏覽器驗收，不能以模型測試代替。使用者 127.0.0.1 存檔保留，測試使用 localhost 不同 origin。
+- 獨立 review 已修：人物碰撞代理、卡片操作後焦點回 canvas、封印互動施放渡風、手機見聞底緣讓出搖桿、sticky 關閉、地圖位置改圓點避免假朝向。
+- CI/CD：現有 CI 僅 main push 或 PR 觸發；Deploy Dev 限 main CI 成功。原始完整本機 checkpoint 為 b37bf2f；其 push 被 OpenSpec protection hook 拒絕。此分支从原基底另建，程式與美術相同、排除 openspec/ 變更，規格留在原本機分支。未改 hook、未 force push、未改寫原提交。
+
 ## 2026-07-13 — Handoff Snapshot @ v0.100.1 (清除線上每幀 console debug spam)
 
 - **背景**:線上 hunter.sisihome.org 頁面 console 每次 poll 都噴 `[gi:hub-traveller:react]` debug 物件 —— production 雜訊 + 每次序列化物件的無謂開銷(手機尤甚)。
