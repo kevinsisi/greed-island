@@ -114,7 +114,10 @@ describe('local autonomous NPCs', () => {
     expect(state.npcs.sentinel.skills.guarding).toBe(3)
     expect(state.npcs.sentinel.memories.at(-1)).toMatchObject({ kind: 'card', text: expect.stringContaining('星火') })
     expect(advance(state, 1).npcs.sentinel.goal).toBe('observe')
-    for (let hits = 0; hits < 3; hits++) state = reduceDemo(state, { type: 'cast', card: 'ember' })
+    for (let hits = 0; hits < 3; hits++) {
+      state = reduceDemo(state, { type: 'tick', delta: 1 })
+      state = reduceDemo(state, { type: 'cast', card: 'ember' })
+    }
     const asleep = state.npcs.sentinel
     expect(asleep.goal).toBe('sleep')
     expect(asleep.skills.guarding).toBe(12)
