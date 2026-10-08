@@ -68,7 +68,7 @@ async function waitUntil(predicate: () => Promise<boolean>, timeoutMs = 8_000): 
 async function register(page: Page, account: ReturnType<typeof credentials>): Promise<void> {
   await page.goto('/multiplayer-3d')
   await page.getByRole('button', { name: '申請帳號', exact: true }).click()
-  await page.getByLabel('帳號').fill(account.username)
+  await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
   await fillPassword(page, '密碼', account.password)
   await fillPassword(page, '再次輸入密碼', account.password)
   await page.getByRole('button', { name: '建立帳號並進入 →', exact: true }).click()
@@ -91,7 +91,7 @@ async function login(page: Page, account: ReturnType<typeof credentials>): Promi
   await page.locator('.mp-logout').click()
   await expect(page.locator('.mp-login-backdrop')).toBeVisible()
   await page.getByRole('button', { name: '登入', exact: true }).click()
-  await page.getByLabel('帳號').fill(account.username)
+  await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
   await fillPassword(page, '密碼', account.password)
   await page.getByRole('button', { name: '進入共同港口 →', exact: true }).click()
   await expect(page.locator('.mp-connection')).toHaveText('房間已連線')
