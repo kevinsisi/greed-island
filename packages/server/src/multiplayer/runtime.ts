@@ -42,6 +42,10 @@ export class MultiplayerRuntime {
       world: structuredClone(WORLD), npcIntegrated: false }
   }
 
+  listRoster(): RosterPlayer[] {
+    return this.state.players.map(({ id, name, x, z }) => ({ id, name, x, z }))
+  }
+
   execute(selfId: string, body: unknown): CommandAcknowledgement {
     if (!this.state.players.some(p => p.id === selfId)) throw new DomainError(401, 'UNAUTHORIZED', '找不到本機玩家。')
     if (!this.presence.hasConnection(selfId)) throw new DomainError(409, 'ROOM_CONNECTION_REQUIRED', '請先連入房間再操作。')

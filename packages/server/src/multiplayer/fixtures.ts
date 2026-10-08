@@ -16,9 +16,14 @@ export function parseFixtureArgs(args: readonly string[]): FixtureArguments {
 }
 
 /** Match persisted credentials to the replayed roster; never add or promote accounts. */
-export function validateCredentials(value: unknown, roster: readonly Pick<RosterPlayer, 'id' | 'name'>[]): FixtureCredentials[] {
-  if (!Array.isArray(value) || value.length !== roster.length || roster.length < 2) throw new Error('Fixture credentials do not match the persisted room roster.')
-  const expected = new Map(roster.map(p => [p.id, p.name]))
+export function validateCredentials(
+  value: unknown,
+  roster: readonly Pick<RosterPlayer, 'id' | 'name'>[],
+  registeredAccountIds: ReadonlySet<string> = new Set(),
+): FixtureCredentials[] {
+  const fixtureRoster = roster.filter(player => !registeredAccountIds.has(player.id))
+  if (!Array.isArray(value) || value.length !== fixtureRoster.length || fixtureRoster.length < 2) throw new Error('Fixture credentials do not match the persisted fixture roster.')
+  const expected = new Map(fixtureRoster.map(p => [p.id, p.name]))
   const ids = new Set<string>(), usernames = new Set<string>()
   return value.map((item: unknown) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('Invalid local fixture credentials.')

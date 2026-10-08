@@ -13,7 +13,7 @@ describe('multiplayer account store', () => {
     directories.push(directory)
     const path = join(directory, 'accounts.json')
     const store = new AccountStore(path)
-    const account = { id: 'player-test', name: 'TestUser', username: 'TestUser', passwordHash: 'salt:hash-value', role: 'player' as const }
+    const account = { id: 'player-test', name: 'TestUser', username: 'TestUser', passwordHash: `${'a'.repeat(32)}:${'b'.repeat(64)}`, role: 'player' as const }
     store.write([account])
     expect(store.find('testuser')).toEqual(account)
     expect(readFileSync(path, 'utf8')).not.toContain('plaintext')

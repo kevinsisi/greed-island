@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { AccountStore } from './accounts.js'
 import { generateRoster } from './domain.js'
 import { hashPassword } from './http.js'
 import { MultiplayerRuntime } from './runtime.js'
@@ -44,6 +45,7 @@ export function preparePersistentDataDirectory(configuredPath: string): Prepared
 
 export function openFixtureStore(dataDir: string, fixtureCount: number, existing: boolean): FixtureStore {
   const credentialsPath = join(dataDir, 'credentials.json')
+  const accountStore = new AccountStore(join(dataDir, 'accounts.json'))
   const databasePath = join(dataDir, 'room.sqlite')
   if (existing && !existsSync(credentialsPath)) {
     throw new Error('Existing fixture credentials are missing; refusing to replace identities.')
@@ -60,8 +62,22 @@ export function openFixtureStore(dataDir: string, fixtureCount: number, existing
     let credentials: FixtureCredentials[]
     if (existing) {
       const stored: unknown = JSON.parse(readFileSync(credentialsPath, 'utf8'))
-      const firstId = Array.isArray(stored) && typeof stored[0]?.id === 'string' ? stored[0].id as string : ''
-      credentials = validateCredentials(stored, runtime.snapshot(firstId).players)
+      const registeredAccounts = accountStore.list()
+      let roomPlayers = runtime.listRoster()
+      const roomPlayersById = new Map(roomPlayers.map(player => [player.id, player]))
+      for (const account of registeredAccounts) {
+        const roomPlayer = roomPlayersById.get(account.id)
+        if (!roomPlayer) {
+          // Account JSON is committed before MP_PLAYER_JOINED. Recover that narrow crash window by replaying the missing fact.
+          try { runtime.addPlayer({ id: account.id, name: account.name, x: 0, z: -6 }) }
+          catch { throw new Error('Registered multiplayer account could not be restored to the room event log.') }
+          roomPlayersById.set(account.id, { id: account.id, name: account.name, x: 0, z: -6 })
+        } else if (roomPlayer.name !== account.name) {
+          throw new Error('Registered multiplayer account does not match its room player identity.')
+        }
+      }
+      roomPlayers = [...roomPlayersById.values()]
+      credentials = validateCredentials(stored, roomPlayers, new Set(registeredAccounts.map(account => account.id)))
     } else {
       credentials = roster!.map((player, index) => ({
         id: player.id,
