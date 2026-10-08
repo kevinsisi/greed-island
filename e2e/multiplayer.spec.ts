@@ -21,6 +21,20 @@ type Point = { x: number; z: number }
 
 const SCENE_ERROR = 'Default sandboxed Chromium could not start the WebGL scene; this test intentionally uses no unsafe browser flags.'
 
+async function withDeadline<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms.`)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function credentials() {
   return {
     username: `e2e-${randomBytes(8).toString('hex')}`,
@@ -39,7 +53,7 @@ async function blockNonLoopback(context: BrowserContext): Promise<void> {
 }
 
 async function readSnapshot(page: Page): Promise<Snapshot> {
-  return page.evaluate(async () => {
+  return withDeadline(page.evaluate(async () => {
     try {
       const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
       if (!response.ok) throw new Error()
@@ -47,7 +61,17 @@ async function readSnapshot(page: Page): Promise<Snapshot> {
     } catch {
       throw new Error('The local multiplayer snapshot request failed or timed out.')
     }
-  }) as Promise<Snapshot>
+  }) as Promise<Snapshot>, 7_000, 'Snapshot page evaluation')
+}
+
+async function probeSnapshotFromNode(page: Page): Promise<string> {
+  const startedAt = Date.now()
+  return withDeadline(
+    page.context().request.get(new URL('/mp-api/snapshot', page.url()).toString(), { timeout: 1_500 }),
+    2_000,
+    'Node-side snapshot probe',
+  ).then(response => `status=${response.status()},elapsedMs=${Date.now() - startedAt}`)
+    .catch(() => `unavailable,elapsedMs=${Date.now() - startedAt}`)
 }
 
 async function fillPassword(page: Page, label: string, password: string): Promise<void> {
@@ -69,21 +93,29 @@ async function waitUntil(predicate: () => Promise<boolean>, timeoutMs = 8_000): 
   await expect.poll(predicate, { timeout: timeoutMs, intervals: [50, 100, 200] }).toBe(true)
 }
 
-async function register(page: Page, account: ReturnType<typeof credentials>): Promise<void> {
+async function register(page: Page, account: ReturnType<typeof credentials>, markPhase: (phase: string) => void, label: string): Promise<void> {
+  markPhase(`${label}-registration-navigation-started`)
   await page.goto('/multiplayer-3d')
+  markPhase(`${label}-registration-page-loaded`)
   await page.getByRole('button', { name: '申請帳號', exact: true }).click()
+  markPhase(`${label}-signup-form-opened`)
   await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
   await fillPassword(page, '密碼', account.password)
   await fillPassword(page, '再次輸入密碼', account.password)
+  markPhase(`${label}-signup-form-filled`)
   await page.getByRole('button', { name: '建立帳號並進入 →', exact: true }).click()
+  markPhase(`${label}-signup-submitted`)
   await expect(page.locator('.mp-connection')).toHaveText('房間已連線')
   await expect(page.locator('.mp-login-backdrop')).toHaveCount(0)
+  markPhase(`${label}-signup-authenticated`)
   await waitUntil(async () => {
     const errorCount = await page.locator('.mp-scene-error').count()
     const hasContext = await page.locator('canvas').evaluate(canvas => !!(canvas.getContext('webgl2') || canvas.getContext('webgl')))
     return errorCount > 0 || hasContext
   }, 20_000)
+  markPhase(`${label}-scene-context-ready`)
   await expect(page.locator('.mp-scene-loading')).toHaveCount(0, { timeout: 20_000 })
+  markPhase(`${label}-scene-render-ready`)
   const sceneError = page.locator('.mp-scene-error')
   if (await sceneError.count() > 0) {
     const detail = await sceneError.innerText()
@@ -91,15 +123,20 @@ async function register(page: Page, account: ReturnType<typeof credentials>): Pr
   }
 }
 
-async function login(page: Page, account: ReturnType<typeof credentials>): Promise<void> {
+async function login(page: Page, account: ReturnType<typeof credentials>, markPhase: (phase: string) => void, label: string): Promise<void> {
+  markPhase(`${label}-logout-started`)
   await page.locator('.mp-logout').click()
   await expect(page.locator('.mp-login-backdrop')).toBeVisible()
+  markPhase(`${label}-login-panel-visible`)
   await page.getByRole('button', { name: '登入', exact: true }).click()
   await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
   await fillPassword(page, '密碼', account.password)
+  markPhase(`${label}-login-form-filled`)
   await page.getByRole('button', { name: '進入共同港口 →', exact: true }).click()
+  markPhase(`${label}-login-submitted`)
   await expect(page.locator('.mp-connection')).toHaveText('房間已連線')
   await expect(page.locator('.mp-login-backdrop')).toHaveCount(0)
+  markPhase(`${label}-login-authenticated`)
 }
 
 function assertSafePosition(snapshot: Snapshot): void {
@@ -128,7 +165,7 @@ function assertBoundedStep(before: Snapshot, after: Snapshot): void {
 
 /** Project a ground point through the untouched default camera, away from its occlusion ray. */
 async function projectGroundPoint(page: Page, point: Point): Promise<{ x: number; y: number }> {
-  return page.evaluate(async ({ x, z }) => {
+  return withDeadline(page.evaluate(async ({ x, z }) => {
     const canvas = document.querySelector('canvas')
     if (!canvas) throw new Error('The multiplayer scene canvas was missing.')
     const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
@@ -161,7 +198,7 @@ async function projectGroundPoint(page: Page, point: Point): Promise<{ x: number
     const element = document.elementFromPoint(result.x, result.y)
     if (element !== canvas) throw new Error('The projected ground target is covered by a UI element.')
     return result
-  }, point)
+  }, point), 7_000, 'Ground projection')
 }
 
 async function clickGroundPoint(page: Page, point: Point): Promise<void> {
@@ -171,10 +208,10 @@ async function clickGroundPoint(page: Page, point: Point): Promise<void> {
   // This is a real Chromium pointer action on the canvas, not dispatchEvent or scene injection.
   await page.mouse.click(screenPoint.x, screenPoint.y)
   assertBoundedStep(before, await readSnapshot(page))
-  await expect(page.locator('.mp-feedback')).toContainText('正在前往目的地。')
+  await expect(page.locator('.mp-feedback')).toContainText('正在前往目的地。', { timeout: 8_000 })
 }
 
-async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000): Promise<void> {
+async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000, markPhase?: (phase: string) => void): Promise<void> {
   let previous = await readSnapshot(page)
   const start = selfPlayer(previous)
   const startTick = previous.tick
@@ -186,8 +223,11 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
   while (Date.now() < deadline) {
     await page.waitForTimeout(50)
     let current: Snapshot
+    const snapshotStartedAt = Date.now()
     try { current = await readSnapshot(page) }
-    catch { snapshotFailure = 'A bounded room-snapshot request failed.'; break }
+    catch (error) { snapshotFailure = error instanceof Error ? error.message : 'A bounded room-snapshot request failed.'; break }
+    const snapshotElapsedMs = Date.now() - snapshotStartedAt
+    if (snapshotElapsedMs >= 500) markPhase?.(`route-snapshot-roundtrip-ms=${snapshotElapsedMs}`)
     const after = selfPlayer(current)
     // The observed authoritative position may advance only by bounded server move intents.
     assertBoundedStep(previous, current)
@@ -196,15 +236,18 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
     previous = current
   }
   const finalPlayer = selfPlayer(previous)
-  const navigation = await page.locator('.mp-feedback').innerText().catch(() => '')
-  const sceneError = await page.locator('.mp-scene-error').innerText().catch(() => '')
-  const pageState = await page.evaluate(() => ({
+  const navigation = await withDeadline(page.locator('.mp-feedback').innerText(), 1_000, 'Navigation diagnostic').catch(() => '<unavailable>')
+  const sceneError = await withDeadline(page.locator('.mp-scene-error').innerText(), 1_000, 'Scene diagnostic').catch(() => '<unavailable>')
+  const pageState = await withDeadline(page.evaluate(() => ({
     visibility: document.visibilityState,
     activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
     canvasMatches: document.activeElement === document.querySelector('canvas'),
+  })), 1_000, 'Page-state diagnostic').catch(() => ({
+    visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false,
   }))
-  const connectionStatus = await page.locator('.mp-connection').innerText().catch(() => '')
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+  const connectionStatus = await withDeadline(page.locator('.mp-connection').innerText(), 1_000, 'Connection diagnostic').catch(() => '<unavailable>')
+  const nodeProbe = await probeSnapshotFromNode(page)
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
@@ -219,16 +262,18 @@ test('two synthetic accounts share the local room and use server-authoritative g
   const pageB = await contextB.newPage()
 
   try {
-    await register(pageA, accountA)
+    await register(pageA, accountA, markPhase, 'account-a')
     markPhase('registered-account-a')
+    markPhase('starting-ground-route')
     await clickGroundPoint(pageA, { x: 10, z: 13 })
-    await waitForArrival(pageA, { x: 10, z: 13 })
+    markPhase('ground-route-clicked')
+    await waitForArrival(pageA, { x: 10, z: 13 }, 35_000, markPhase)
     await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
     markPhase('ground-route-arrived')
 
-    await login(pageA, accountA)
+    await login(pageA, accountA, markPhase, 'account-a')
     markPhase('logged-in-account-a')
-    await register(pageB, accountB)
+    await register(pageB, accountB, markPhase, 'account-b')
     markPhase('registered-account-b')
 
     await expect(pageA.locator('.mp-players')).toContainText(accountB.username)
@@ -256,17 +301,18 @@ test('two synthetic accounts share the local room and use server-authoritative g
     try {
       await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.1)
     } catch {
-      const finalSnapshot = await readSnapshot(pageB).catch(() => null)
+      const finalSnapshot = await withDeadline(readSnapshot(pageB), 2_000, 'B timeout snapshot').catch(() => null)
       const final = finalSnapshot ?? beforeMoveBSnapshot
       const finalPlayer = selfPlayer(final)
-      const pageState = await pageB.evaluate(() => ({
+      const pageState = await withDeadline(pageB.evaluate(() => ({
         visibility: document.visibilityState,
         activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
         canvasMatches: document.activeElement === document.querySelector('canvas'),
-      }))
-      const connectionStatus = await pageB.locator('.mp-connection').innerText().catch(() => '')
-      const sceneError = await pageB.locator('.mp-scene-error').innerText().catch(() => '')
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      })), 1_000, 'B timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
+      const connectionStatus = await withDeadline(pageB.locator('.mp-connection').innerText(), 1_000, 'B timeout connection').catch(() => '')
+      const sceneError = await withDeadline(pageB.locator('.mp-scene-error').innerText(), 1_000, 'B timeout scene error').catch(() => '')
+      const nodeProbe = await probeSnapshotFromNode(pageB)
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}).`)
     }
     markPhase('player-b-moved-one-step')
 
@@ -281,16 +327,16 @@ test('two synthetic accounts share the local room and use server-authoritative g
         return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
       })
     } catch {
-      const finalSnapshot = await readSnapshot(pageA).catch(() => null)
+      const finalSnapshot = await withDeadline(readSnapshot(pageA), 2_000, 'Route timeout snapshot').catch(() => null)
       const final = finalSnapshot ?? beforeCancelSnapshot
       const finalPlayer = selfPlayer(final)
-      const pageState = await pageA.evaluate(() => ({
+      const pageState = await withDeadline(pageA.evaluate(() => ({
         visibility: document.visibilityState,
         activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
         canvasMatches: document.activeElement === document.querySelector('canvas'),
-      }))
-      const connectionStatus = await pageA.locator('.mp-connection').innerText().catch(() => '')
-      const sceneError = await pageA.locator('.mp-scene-error').innerText().catch(() => '')
+      })), 1_000, 'Route timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
+      const connectionStatus = await withDeadline(pageA.locator('.mp-connection').innerText(), 1_000, 'Route timeout connection').catch(() => '')
+      const sceneError = await withDeadline(pageA.locator('.mp-scene-error').innerText(), 1_000, 'Route timeout scene error').catch(() => '')
       throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
     await pageA.bringToFront()
@@ -318,7 +364,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     await pageA.mouse.click(latestScreenPoint.x, latestScreenPoint.y)
     assertBoundedStep(beforeRapidClicks, await readSnapshot(pageA))
     await expect(pageA.locator('.mp-feedback')).toContainText('正在前往目的地。')
-    await waitForArrival(pageA, latestRapidTarget)
+    await waitForArrival(pageA, latestRapidTarget, 35_000, markPhase)
     await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
     markPhase('rapid-retarget-arrived')
   } finally {
