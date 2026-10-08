@@ -171,8 +171,11 @@ async function clickGroundPoint(page: Page, point: Point): Promise<void> {
 
 async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000): Promise<void> {
   let previous = await readSnapshot(page)
+  const start = selfPlayer(previous)
+  const startTick = previous.tick
   assertSafePosition(previous)
   const deadline = Date.now() + timeoutMs
+  let observedSteps = 0
 
   while (Date.now() < deadline) {
     await page.waitForTimeout(50)
@@ -180,10 +183,14 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
     const after = selfPlayer(current)
     // The observed authoritative position may advance only by bounded server move intents.
     assertBoundedStep(previous, current)
+    if (Math.hypot(after.x - selfPlayer(previous).x, after.z - selfPlayer(previous).z) > 0.001) observedSteps += 1
     if (Math.hypot(after.x - destination.x, after.z - destination.z) <= 0.65) return
     previous = current
   }
-  throw new Error('The server-authoritative player did not reach the requested ground destination in time.')
+  const finalPlayer = selfPlayer(previous)
+  const navigation = await page.locator('.mp-feedback').innerText().catch(() => '')
+  const sceneError = await page.locator('.mp-scene-error').innerText().catch(() => '')
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
