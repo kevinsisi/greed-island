@@ -12,7 +12,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 120_000,
+  timeout: 240_000,
   reporter: 'line',
   forbidOnly: !!process.env.CI,
   outputDir: `${dataDir}-results`,

@@ -161,6 +161,7 @@ async function projectGroundPoint(page: Page, point: Point): Promise<{ x: number
 }
 
 async function clickGroundPoint(page: Page, point: Point): Promise<void> {
+  await page.bringToFront()
   const before = await readSnapshot(page)
   const screenPoint = await projectGroundPoint(page, point)
   // This is a real Chromium pointer action on the canvas, not dispatchEvent or scene injection.
@@ -193,8 +194,10 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
   const pageState = await page.evaluate(() => ({
     visibility: document.visibilityState,
     activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
+    canvasMatches: document.activeElement === document.querySelector('canvas'),
   }))
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}).`)
+  const connectionStatus = await page.locator('.mp-connection').innerText().catch(() => '')
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
@@ -238,8 +241,11 @@ test('two synthetic accounts share the local room and use server-authoritative g
       const pageState = await pageB.evaluate(() => ({
         visibility: document.visibilityState,
         activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
+        canvasMatches: document.activeElement === document.querySelector('canvas'),
       }))
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveB.tick}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}).`)
+      const connectionStatus = await pageB.locator('.mp-connection').innerText().catch(() => '')
+      const sceneError = await pageB.locator('.mp-scene-error').innerText().catch(() => '')
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveB.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
 
     await clickGroundPoint(pageA, { x: 10, z: 13 })
@@ -250,10 +256,23 @@ test('two synthetic accounts share the local room and use server-authoritative g
     const cancellationTarget = { x: 10, z: 16 }
     await clickGroundPoint(pageA, cancellationTarget)
     const beforeCancel = selfPlayer(await readSnapshot(pageA))
-    await waitUntil(async () => {
-      const current = selfPlayer(await readSnapshot(pageA))
-      return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
-    })
+    try {
+      await waitUntil(async () => {
+        const current = selfPlayer(await readSnapshot(pageA))
+        return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
+      })
+    } catch {
+      const final = await readSnapshot(pageA)
+      const finalPlayer = selfPlayer(final)
+      const pageState = await pageA.evaluate(() => ({
+        visibility: document.visibilityState,
+        activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
+        canvasMatches: document.activeElement === document.querySelector('canvas'),
+      }))
+      const connectionStatus = await pageA.locator('.mp-connection').innerText().catch(() => '')
+      const sceneError = await pageA.locator('.mp-scene-error').innerText().catch(() => '')
+      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancel.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+    }
     await pageA.bringToFront()
     await pageA.locator('canvas').focus()
     await pageA.keyboard.down('ArrowRight')
@@ -270,6 +289,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     // Two rapid real pointer clicks should leave the newer destination as the active route.
     const firstRapidTarget = { x: 10.2, z: 16 }
     const latestRapidTarget = { x: 11, z: 16 }
+    await pageA.bringToFront()
     const beforeRapidClicks = await readSnapshot(pageA)
     const firstScreenPoint = await projectGroundPoint(pageA, firstRapidTarget)
     const latestScreenPoint = await projectGroundPoint(pageA, latestRapidTarget)

@@ -1,7 +1,7 @@
 import { scryptSync } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { passwordScheme, verifyStoredPassword } from './passwordVerifier.js'
+import { hashStoredPassword, passwordScheme, verifyStoredPassword } from './passwordVerifier.js'
 
 const SALT = '0123456789abcdef0123456789abcdef'
 function legacyHash(password: string): string { return `${SALT}:${scryptSync(password, SALT, 32).toString('hex')}` }
@@ -9,6 +9,19 @@ function legacyHash(password: string): string { return `${SALT}:${scryptSync(pas
 describe('one side-effect-free password verifier', () => {
   let bcryptHash: string
   beforeAll(async () => { bcryptHash = await bcrypt.hash('synthetic-password', 4) })
+  it('writes explicitly versioned full-input credentials with fresh salts', async () => {
+    const password = '潮'.repeat(100)
+    const first = await hashStoredPassword(password), second = await hashStoredPassword(password)
+    expect(passwordScheme(first)).toBe('scrypt-v1')
+    expect(first).not.toBe(second)
+    expect(await verifyStoredPassword(password, first)).toBe(true)
+    expect(await verifyStoredPassword(password.slice(0, -1), first)).toBe(false)
+  })
+  it('rejects weak or oversized new credentials without changing legacy verification limits', async () => {
+    await expect(hashStoredPassword('short')).rejects.toThrow('12 to 200')
+    await expect(hashStoredPassword('x'.repeat(201))).rejects.toThrow('12 to 200')
+    expect(await verifyStoredPassword('x'.repeat(200), legacyHash('x'.repeat(200)))).toBe(true)
+  })
   it('identifies and verifies existing bcrypt credentials unchanged', async () => {
     expect(passwordScheme(bcryptHash)).toBe('bcrypt-v1')
     expect(await verifyStoredPassword('synthetic-password', bcryptHash)).toBe(true)
