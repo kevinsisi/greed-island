@@ -40,9 +40,13 @@ async function blockNonLoopback(context: BrowserContext): Promise<void> {
 
 async function readSnapshot(page: Page): Promise<Snapshot> {
   return page.evaluate(async () => {
-    const response = await fetch('/mp-api/snapshot', { cache: 'no-store' })
-    if (!response.ok) throw new Error('The local multiplayer snapshot was unavailable.')
-    return response.json()
+    try {
+      const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
+      if (!response.ok) throw new Error()
+      return await response.json()
+    } catch {
+      throw new Error('The local multiplayer snapshot request failed or timed out.')
+    }
   }) as Promise<Snapshot>
 }
 
@@ -127,7 +131,7 @@ async function projectGroundPoint(page: Page, point: Point): Promise<{ x: number
   return page.evaluate(async ({ x, z }) => {
     const canvas = document.querySelector('canvas')
     if (!canvas) throw new Error('The multiplayer scene canvas was missing.')
-    const response = await fetch('/mp-api/snapshot', { cache: 'no-store' })
+    const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
     if (!response.ok) throw new Error('The local multiplayer snapshot was unavailable.')
     const snapshot = await response.json()
     const self = snapshot.players.find((player: { id: string }) => player.id === snapshot.selfId)
@@ -177,10 +181,13 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
   assertSafePosition(previous)
   const deadline = Date.now() + timeoutMs
   let observedSteps = 0
+  let snapshotFailure = ''
 
   while (Date.now() < deadline) {
     await page.waitForTimeout(50)
-    const current = await readSnapshot(page)
+    let current: Snapshot
+    try { current = await readSnapshot(page) }
+    catch { snapshotFailure = 'A bounded room-snapshot request failed.'; break }
     const after = selfPlayer(current)
     // The observed authoritative position may advance only by bounded server move intents.
     assertBoundedStep(previous, current)
@@ -197,7 +204,7 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
     canvasMatches: document.activeElement === document.querySelector('canvas'),
   }))
   const connectionStatus = await page.locator('.mp-connection').innerText().catch(() => '')
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
@@ -237,7 +244,8 @@ test('two synthetic accounts share the local room and use server-authoritative g
     try {
       await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.1)
     } catch {
-      const final = await readSnapshot(pageB)
+      const finalSnapshot = await readSnapshot(pageB).catch(() => null)
+      const final = finalSnapshot ?? beforeMoveBSnapshot
       const finalPlayer = selfPlayer(final)
       const pageState = await pageB.evaluate(() => ({
         visibility: document.visibilityState,
@@ -246,7 +254,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       }))
       const connectionStatus = await pageB.locator('.mp-connection').innerText().catch(() => '')
       const sceneError = await pageB.locator('.mp-scene-error').innerText().catch(() => '')
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
 
     await clickGroundPoint(pageA, { x: 10, z: 13 })
@@ -264,7 +272,8 @@ test('two synthetic accounts share the local room and use server-authoritative g
         return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
       })
     } catch {
-      const final = await readSnapshot(pageA)
+      const finalSnapshot = await readSnapshot(pageA).catch(() => null)
+      const final = finalSnapshot ?? beforeCancelSnapshot
       const finalPlayer = selfPlayer(final)
       const pageState = await pageA.evaluate(() => ({
         visibility: document.visibilityState,
@@ -273,7 +282,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       }))
       const connectionStatus = await pageA.locator('.mp-connection').innerText().catch(() => '')
       const sceneError = await pageA.locator('.mp-scene-error').innerText().catch(() => '')
-      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
     await pageA.bringToFront()
     await pageA.locator('canvas').focus()
