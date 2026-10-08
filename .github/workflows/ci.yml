@@ -81,3 +81,54 @@ jobs:
           done
           exit $fail
 
+  multiplayer-browser-e2e:
+    name: Multiplayer real-browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      - name: Build disposable multiplayer server
+        run: npm run build:server
+
+      - name: Prepare private job-local fixture directory
+        run: |
+          MULTIPLAYER_DATA_DIR="$RUNNER_TEMP/greed-mp-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 700 -p "$MULTIPLAYER_DATA_DIR"
+          chmod 700 "$MULTIPLAYER_DATA_DIR"
+          echo "MULTIPLAYER_DATA_DIR=$MULTIPLAYER_DATA_DIR" >> "$GITHUB_ENV"
+
+      - name: Install pinned Playwright for this job only
+        run: npm install --no-save --package-lock=false --no-audit --no-fund @playwright/test@1.63.0
+
+      - name: Install bundled Chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Run multiplayer browser verification
+        run: ./node_modules/.bin/playwright test --config=playwright.config.mjs
+
+      - name: Remove job-local test data and Playwright output
+        if: always()
+        run: |
+          if [ -z "${MULTIPLAYER_DATA_DIR:-}" ]; then exit 0; fi
+          case "$MULTIPLAYER_DATA_DIR" in
+            "$RUNNER_TEMP"/greed-mp-e2e-*) rm -rf -- "$MULTIPLAYER_DATA_DIR" "${MULTIPLAYER_DATA_DIR}-results" ;;
+            *) echo 'Refusing to remove a path outside RUNNER_TEMP.'; exit 1 ;;
+          esac
+
