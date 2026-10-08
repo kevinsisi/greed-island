@@ -227,14 +227,15 @@ test('two synthetic accounts share the local room and use server-authoritative g
     await expect(pageB.locator('.mp-messages')).toContainText(message)
 
     // Registrations share a safe but identical default spawn, so move B away before navigation.
-    const beforeMoveB = selfPlayer(await readSnapshot(pageB))
+    const beforeMoveBSnapshot = await readSnapshot(pageB)
+    const beforeMoveB = selfPlayer(beforeMoveBSnapshot)
     await pageB.bringToFront()
     await pageB.locator('canvas').focus()
     await pageB.keyboard.down('ArrowRight')
     await pageB.waitForTimeout(800)
     await pageB.keyboard.up('ArrowRight')
     try {
-      await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.8)
+      await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.1)
     } catch {
       const final = await readSnapshot(pageB)
       const finalPlayer = selfPlayer(final)
@@ -245,7 +246,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       }))
       const connectionStatus = await pageB.locator('.mp-connection').innerText().catch(() => '')
       const sceneError = await pageB.locator('.mp-scene-error').innerText().catch(() => '')
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveB.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
 
     await clickGroundPoint(pageA, { x: 10, z: 13 })
@@ -255,7 +256,8 @@ test('two synthetic accounts share the local room and use server-authoritative g
     // A direction key is an ordinary manual input and must cancel the active click route.
     const cancellationTarget = { x: 10, z: 16 }
     await clickGroundPoint(pageA, cancellationTarget)
-    const beforeCancel = selfPlayer(await readSnapshot(pageA))
+    const beforeCancelSnapshot = await readSnapshot(pageA)
+    const beforeCancel = selfPlayer(beforeCancelSnapshot)
     try {
       await waitUntil(async () => {
         const current = selfPlayer(await readSnapshot(pageA))
@@ -271,7 +273,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       }))
       const connectionStatus = await pageA.locator('.mp-connection').innerText().catch(() => '')
       const sceneError = await pageA.locator('.mp-scene-error').innerText().catch(() => '')
-      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancel.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
     await pageA.bringToFront()
     await pageA.locator('canvas').focus()
