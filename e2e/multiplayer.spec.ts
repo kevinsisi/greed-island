@@ -214,6 +214,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
 
     // Registrations share a safe but identical default spawn, so move B away before navigation.
     const beforeMoveB = selfPlayer(await readSnapshot(pageB))
+    await pageB.locator('canvas').focus()
     await pageB.keyboard.down('ArrowRight')
     await pageB.waitForTimeout(800)
     await pageB.keyboard.up('ArrowRight')
@@ -231,6 +232,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       const current = selfPlayer(await readSnapshot(pageA))
       return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
     })
+    await pageA.locator('canvas').focus()
     await pageA.keyboard.down('ArrowRight')
     await expect(pageA.locator('.mp-feedback')).toContainText('已切換手動移動，自動導航已取消。')
     await pageA.keyboard.up('ArrowRight')
