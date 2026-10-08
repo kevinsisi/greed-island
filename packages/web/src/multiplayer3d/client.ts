@@ -38,6 +38,13 @@ export function participationSeconds(snapshot: RoomSnapshot): number | null {
     ? Math.max(0, Math.ceil((snapshot.beacon.closesAtTick - snapshot.tick) / 10)) : null
 }
 
+export function registrationError(username: string, password: string, confirmation: string): string | null {
+  if (!/^[A-Za-z0-9_-]{3,32}$/.test(username.trim())) return '帳號須為 3–32 個英數、底線或連字號。'
+  if (password.length < 12 || password.length > 200) return '密碼須為 12–200 字元。'
+  if (password !== confirmation) return '兩次輸入的密碼不一致。'
+  return null
+}
+
 /** Validate the server contract before any authoritative state reaches the scene. */
 export function isRoomSnapshot(value: unknown): value is RoomSnapshot {
   if (!record(value) || !text(value.roomId) || !text(value.selfId) || !integer(value.revision) || !integer(value.presenceRevision) || !integer(value.tick) || value.npcIntegrated !== false) return false
@@ -181,6 +188,25 @@ export function createRoomClient(options: ClientOptions) {
       throw error
     }
   }
+  async function register(username: string, password: string, claimCode?: string) {
+    closeStream()
+    const ownGeneration = ++generation
+    setStatus('connecting')
+    try {
+      const result = await json('/register', { username, password, ...(claimCode ? { claimCode } : {}) })
+      if (disposed || generation !== ownGeneration) return
+      if (!record(result) || !isRoomSnapshot(result.snapshot)) throw new RoomApiError('申請回應格式不符，請確認本機多人服務。')
+      snapshot = null
+      accept(result.snapshot)
+      stream(ownGeneration)
+    } catch (error) {
+      if (!disposed && generation === ownGeneration) {
+        snapshot = null; options.onSnapshot(null); setStatus('unauthenticated')
+        options.onError(error instanceof Error ? error.message : '申請失敗。')
+      }
+      throw error
+    }
+  }
   async function send(command: RoomCommand): Promise<void> {
     if (disposed || status !== 'online') throw new RoomApiError('請等待房間重新連線後再操作。')
     const ownGeneration = generation
@@ -200,6 +226,7 @@ export function createRoomClient(options: ClientOptions) {
     start: connect,
     reconnect: connect,
     login,
+    register,
     send,
     async move(dx: number, dz: number) {
       if (movePending || status !== 'online' || disposed) return

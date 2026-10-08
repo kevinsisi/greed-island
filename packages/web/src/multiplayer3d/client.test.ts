@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createRoomClient, isCommandAcknowledgement, isRoomSnapshot, participationSeconds, roomIsFull } from './client'
+import { createRoomClient, isCommandAcknowledgement, isRoomSnapshot, participationSeconds, registrationError, roomIsFull } from './client'
 import type { RoomSnapshot } from './types'
 
 const fixture = (revision = 1, presenceRevision = 1): RoomSnapshot => ({
@@ -34,6 +34,12 @@ function setup(fetcher = vi.fn<typeof fetch>(async () => response(fixture()))) {
 afterEach(() => { clients.splice(0).forEach(client => client.dispose()); vi.useRealTimers() })
 
 describe('multiplayer room client', () => {
+  it('validates account format, password bounds, and password confirmation', () => {
+    expect(registrationError('abc_1', '123456789012', '123456789012')).toBeNull()
+    expect(registrationError('ab', '123456789012', '123456789012')).toContain('帳號')
+    expect(registrationError('valid-name', 'short', 'short')).toContain('密碼')
+    expect(registrationError('valid-name', '123456789012', 'different-password')).toContain('不一致')
+  })
   it('validates the complete snapshot contract before rendering', () => {
     expect(isRoomSnapshot(fixture())).toBe(true)
     expect(isRoomSnapshot({ ...fixture(), presenceRevision: undefined })).toBe(false)
@@ -100,6 +106,16 @@ describe('multiplayer room client', () => {
     await s.client.login('local-player', 'temporary-password')
     expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ username: 'local-player', password: 'temporary-password' })
     expect(fetcher.mock.calls[0]?.[1]?.headers).not.toHaveProperty('Authorization')
+    expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture())
+  })
+
+  it('registers through the same cookie session and accepts the snapshot envelope', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => response({ snapshot: fixture() }, 201))
+    const s = setup(fetcher)
+    await s.client.register('new-player', 'a-long-test-password')
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe('/mp-api/register')
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ username: 'new-player', password: 'a-long-test-password' })
+    expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('same-origin')
     expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture())
   })
 

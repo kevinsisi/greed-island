@@ -9,3 +9,4 @@
 /* A full fixture roster stays inside its own scroll region. */
 .mp-capacity{flex-shrink:0;font-size:9px;color:#a8c0ac;margin:7px 14px 2px}.mp-players{max-height:120px;min-height:40px;flex:0 1 120px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}.mp-panel{overflow:hidden}
 @media(max-width:767px){.mp-capacity{font-size:8px;margin:5px 12px 2px}.mp-players{display:block;max-height:92px;min-height:36px;flex:0 1 92px}.mp-players li{padding:6px 0}.mp-players li>span{display:block;font-size:9px}.mp-players li>div{display:flex;align-items:baseline;gap:10px}.mp-players small{margin:0}}
+.mp-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}.mp-auth-tabs button{min-height:44px}.mp-auth-tabs button[aria-pressed=true]{border-color:#e5c478;color:#f5d995;background:#795a2b66}.mp-login input{min-height:44px;min-width:0}.mp-login{min-width:0;overflow-wrap:anywhere}.mp-login-backdrop{overflow-x:hidden}

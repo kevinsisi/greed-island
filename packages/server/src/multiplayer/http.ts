@@ -1,5 +1,8 @@
 import express, { type ErrorRequestHandler, type Request, type Response } from 'express'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { existsSync, readFileSync, renameSync } from 'node:fs'
+import { join } from 'node:path'
+import { AccountStore, type AccountRole, type StoredAccount } from './accounts.js'
 import { DomainError } from './domain.js'
 import type { MultiplayerRuntime } from './runtime.js'
 import type { FixtureIdentity } from './types.js'
@@ -30,13 +33,28 @@ function tokenFrom(req: Request): string | null {
   return raw && /^[a-f0-9]{64}$/.test(raw) ? raw : null
 }
 function tokenKey(token: string): string { return createHash('sha256').update(token).digest('hex') }
-type Session = { playerId: string; expiresAt: number; closed: boolean; streams: Map<Response, () => void> }
+function claimMatches(provided: unknown, path: string | undefined): boolean {
+  if (typeof provided !== 'string' || !path) return false
+  try {
+    const expected = readFileSync(path, 'utf8').trim()
+    const actualBytes = Buffer.from(provided)
+    const expectedBytes = Buffer.from(expected)
+    return expectedBytes.length > 0 && actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes)
+  } catch { return false }
+}
+type Session = { playerId: string; role: AccountRole; expiresAt: number; closed: boolean; streams: Map<Response, () => void> }
+const RESERVED_ADMIN = 'kevin950805'
+const ACCOUNT_NAME = /^[A-Za-z0-9_-]{3,32}$/
+const LOGIN_ERROR = '登入或申請失敗，請檢查資料後再試。'
 
-export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtures: readonly FixtureIdentity[]; allowedOrigins?: readonly string[] }): express.Express {
+export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtures: readonly FixtureIdentity[]; accountsPath?: string; adminClaimFilePath?: string; allowedOrigins?: readonly string[] }): express.Express {
   const app = express()
   const sessions = new Map<string, Session>()
   const allowedOrigins = new Set(input.allowedOrigins ?? LOCAL_ORIGINS)
   const loginAttempts = new Map<string, { window: number; attempts: number }>()
+  const accounts = new AccountStore(input.accountsPath ?? join(process.env.MULTIPLAYER_DATA_DIR ?? '/app/mp-data', 'accounts.json'))
+  const adminClaimFilePath = input.adminClaimFilePath ?? process.env.MP_ADMIN_CLAIM_FILE
+  let registrationQueue: Promise<void> = Promise.resolve()
   const dummyHash = hashPassword(randomBytes(32).toString('hex'))
   app.disable('x-powered-by')
   app.use('/mp-api', (req, res, next) => {
@@ -49,27 +67,71 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
   })
   app.use(express.json({ limit: '4kb' }))
 
-  app.post('/mp-api/login', (req, res) => {
+  function consumeLoginAttempt(req: Request): boolean {
     const key = req.socket.remoteAddress ?? 'local'
     const now = Date.now()
     const attempts = loginAttempts.get(key) ?? { window: now, attempts: 0 }
     if (now - attempts.window >= 60_000) { attempts.window = now; attempts.attempts = 0 }
     attempts.attempts++
     loginAttempts.set(key, attempts)
-    if (attempts.attempts > 20) { res.status(429).json({ error: 'LOGIN_RATE_LIMIT', message: '登入嘗試過於頻繁，請稍候。' }); return }
+    return attempts.attempts <= 20
+  }
+  function setSession(req: Request, res: Response, playerId: string, role: AccountRole, now = Date.now()): Session {
+    const prior = tokenFrom(req)
+    if (prior) closeSession(tokenKey(prior))
+    const token = randomBytes(32).toString('hex')
+    const session: Session = { playerId, role, expiresAt: now + SESSION_MS, closed: false, streams: new Map() }
+    sessions.set(tokenKey(token), session)
+    res.cookie(COOKIE, token, COOKIE_OPTIONS)
+    return session
+  }
+  function snapshotWithRole(session: Session) {
+    return { ...input.runtime.snapshot(session.playerId), selfRole: session.role }
+  }
+  app.post('/mp-api/login', (req, res) => {
+    const now = Date.now()
+    if (!consumeLoginAttempt(req)) { res.status(429).json({ error: 'LOGIN_RATE_LIMIT', message: '登入嘗試過於頻繁，請稍候。' }); return }
     const body = req.body as Record<string, unknown> | undefined
     if (!body || Array.isArray(body) || Object.keys(body).some(k => k !== 'username' && k !== 'password') || typeof body.username !== 'string' || typeof body.password !== 'string' || body.username.length > 100 || body.password.length > 200) {
       res.status(400).json({ error: 'INVALID_LOGIN', message: '請輸入本機測試帳號與密碼。' }); return
     }
-    const fixture = input.fixtures.find(f => f.username === body.username)
-    const matches = passwordMatches(body.password, fixture?.passwordHash ?? dummyHash)
-    if (!fixture || !matches) { res.status(401).json({ error: 'INVALID_CREDENTIALS', message: '本機測試帳號或密碼不正確。' }); return }
-    const prior = tokenFrom(req)
-    if (prior) closeSession(tokenKey(prior))
-    const token = randomBytes(32).toString('hex')
-    sessions.set(tokenKey(token), { playerId: fixture.id, expiresAt: now + SESSION_MS, closed: false, streams: new Map() })
-    res.cookie(COOKIE, token, COOKIE_OPTIONS)
-    res.json({ snapshot: input.runtime.snapshot(fixture.id) })
+    const username = body.username as string
+    const password = body.password as string
+    const fixture = input.fixtures.find(f => f.username.toLowerCase() === username.toLowerCase())
+    const account = fixture ? undefined : accounts.find(username)
+    const encoded = fixture?.passwordHash ?? account?.passwordHash ?? dummyHash
+    const matches = passwordMatches(password, encoded)
+    if ((!fixture && !account) || !matches) { res.status(401).json({ error: 'INVALID_CREDENTIALS', message: '本機測試帳號或密碼不正確。' }); return }
+    const playerId = fixture?.id ?? account!.id
+    const role = account?.role ?? 'player'
+    res.json({ snapshot: snapshotWithRole(setSession(req, res, playerId, role, now)) })
+  })
+
+  app.post('/mp-api/register', (req, res, next) => {
+    if (!consumeLoginAttempt(req)) { res.status(429).json({ error: 'LOGIN_RATE_LIMIT', message: '登入嘗試過於頻繁，請稍候。' }); return }
+    const body = req.body as Record<string, unknown> | undefined
+    if (!body || Array.isArray(body) || Object.keys(body).some(key => key !== 'username' && key !== 'password' && !(key === 'claimCode' && typeof body.username === 'string' && body.username.toLowerCase() === RESERVED_ADMIN)) || typeof body.username !== 'string' || typeof body.password !== 'string' || !ACCOUNT_NAME.test(body.username) || body.password.length < 12 || body.password.length > 200) {
+      res.status(400).json({ error: 'INVALID_REGISTRATION', message: '帳號或密碼格式不正確。' }); return
+    }
+    const username = body.username as string
+    const password = body.password as string
+    const claimCode = body.claimCode
+    const isAdmin = username.toLowerCase() === RESERVED_ADMIN
+    const queued = registrationQueue.then(() => {
+      if (isAdmin && !claimMatches(claimCode, adminClaimFilePath)) { res.status(403).json({ error: 'REGISTRATION_FAILED', message: LOGIN_ERROR }); return }
+      if (isAdmin && adminClaimFilePath && existsSync(`${adminClaimFilePath}.used`)) { res.status(403).json({ error: 'REGISTRATION_FAILED', message: LOGIN_ERROR }); return }
+      const existingFixture = input.fixtures.some(fixture => fixture.username.toLowerCase() === username.toLowerCase())
+      if (existingFixture || accounts.find(username)) { res.status(409).json({ error: 'ACCOUNT_EXISTS', message: '此帳號無法申請。' }); return }
+      const account: StoredAccount = { id: `player-${randomBytes(16).toString('hex')}`, name: username, username, passwordHash: hashPassword(password), role: isAdmin ? 'admin' : 'player' }
+      const current = accounts.list()
+      accounts.write([...current, account])
+      try { input.runtime.addPlayer({ id: account.id, name: account.name, x: 0, z: -6 }) }
+      catch (error) { accounts.write(current); throw error }
+      if (isAdmin && adminClaimFilePath) renameSync(adminClaimFilePath, `${adminClaimFilePath}.used`)
+      res.status(201).json({ snapshot: snapshotWithRole(setSession(req, res, account.id, account.role)) })
+    })
+    registrationQueue = queued.then(() => undefined, () => undefined)
+    void queued.catch(next)
   })
 
   app.use('/mp-api', (req, res, next) => {
@@ -89,7 +151,9 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
     res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'strict', path: '/mp-api' })
     res.json({ ok: true })
   })
-  app.get('/mp-api/snapshot', (_req, res) => { res.json(input.runtime.snapshot((res.locals.mpSession as Session).playerId)) })
+  app.get('/mp-api/snapshot', (_req, res) => { res.json(snapshotWithRole(res.locals.mpSession as Session)) })
+  app.get('/mp-api/me', (_req, res) => { const session = res.locals.mpSession as Session; res.json({ id: session.playerId, role: session.role }) })
+  app.get('/mp-api/admin/ping', (_req, res) => { const session = res.locals.mpSession as Session; if (session.role !== 'admin') { res.status(403).json({ error: 'FORBIDDEN', message: '需要管理員權限。' }); return }; res.json({ ok: true }) })
   app.post('/mp-api/command', (req, res) => {
     const session = res.locals.mpSession as Session
     if (!input.runtime.hasConnection(session.playerId)) throw new DomainError(409, 'ROOM_CONNECTION_REQUIRED', '請先連入房間再操作。')
@@ -123,7 +187,7 @@ export function createMultiplayerApp(input: { runtime: MultiplayerRuntime; fixtu
       if (closed || session.closed || res.destroyed || res.writableEnded) return
       // Slow clients reconnect to a full snapshot rather than accumulating an unbounded queue.
       if (res.writableLength > 256 * 1024) { res.destroy(); return }
-      res.write(`event: snapshot\ndata: ${JSON.stringify(input.runtime.snapshot(session.playerId))}\n\n`)
+      res.write(`event: snapshot\ndata: ${JSON.stringify(snapshotWithRole(session))}\n\n`)
     }
     // Register first, then send only this stream's initial state. Ordinary room fanout waits for a tick.
     unsubscribe = input.runtime.subscribe(send)

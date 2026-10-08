@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { createRoomClient, participationSeconds, roomIsFull } from './client'
+import { createRoomClient, participationSeconds, registrationError, roomIsFull } from './client'
 import { createMultiplayerScene } from './scene'
 import { APP_VERSION } from '../version'
 import type { ConnectionStatus, MultiplayerControls, RoomSnapshot } from './types'
@@ -35,6 +35,9 @@ export default function Multiplayer3DPage() {
   const [ready, setReady] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [claimCode, setClaimCode] = useState('')
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [loginBusy, setLoginBusy] = useState(false)
   const [draft, setDraft] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
@@ -96,8 +99,18 @@ export default function Multiplayer3DPage() {
   async function login(event: FormEvent) {
     event.preventDefault()
     if (loginBusy) return
+    const cleanUsername = username.trim()
+    const validationError = authMode === 'register' ? registrationError(cleanUsername, password, confirmPassword) : null
+    if (validationError) {
+      setNetworkError(validationError)
+      return
+    }
     setLoginBusy(true); setNetworkError('')
-    try { await clientRef.current?.login(username.trim(), password); setPassword(''); canvasRef.current?.focus({ preventScroll: true }) }
+    try {
+      if (authMode === 'register') await clientRef.current?.register(cleanUsername, password, cleanUsername.toLowerCase() === 'kevin950805' ? claimCode : undefined)
+      else await clientRef.current?.login(cleanUsername, password)
+      setPassword(''); setConfirmPassword(''); setClaimCode(''); canvasRef.current?.focus({ preventScroll: true })
+    }
     catch { /* The client surfaces the server error without retaining credentials. */ }
     finally { setLoginBusy(false) }
   }
@@ -163,7 +176,7 @@ export default function Multiplayer3DPage() {
     {snapshot && <div className="mp-feedback" role="status" aria-live="polite">{networkError || notice}</div>}
     {snapshot && !online && <div className="mp-offline"><strong>{waitingForSlot ? '房間席位已滿' : '房間正在重新連線'}</strong><span>{waitingForSlot ? `${snapshot.capacity.maxOnlinePlayers} 個席位使用或保留中，正在等待空位。` : '移動與交付已暫停，先前進度保留。'}</span><button onClick={() => { void clientRef.current?.reconnect() }}>立即重連</button></div>}
 
-    {!snapshot && <div className="mp-login-backdrop"><section className="mp-login" aria-labelledby="mp-login-title"><span className="mp-eyebrow">TIDEBORN · LOCAL MULTIPLAYER</span><h2 id="mp-login-title">這一次，<br />和旅人們一起同行。</h2><p>不同旅人、同一座港口。一起行走、交談，點亮歸航的燈塔。</p><form onSubmit={login}><label htmlFor="mp-username">測試玩家帳號</label><input id="mp-username" name="username" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required maxLength={80} /><label htmlFor="mp-password">測試玩家密碼</label><input id="mp-password" name="password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required maxLength={200} />{networkError && <p className="mp-login-error" role="alert">{networkError}</p>}<button className="mp-primary" type="submit" disabled={loginBusy}>{loginBusy ? '進入港口中…' : '進入共同港口 →'}</button></form><small>僅使用這次本機測試的帳號。正式站帳號與單人存檔不會帶入。</small><a href="/prototype-3d">返回單人遠征</a></section></div>}
+    {!snapshot && <div className="mp-login-backdrop"><section className="mp-login" aria-labelledby="mp-login-title"><span className="mp-eyebrow">TIDEBORN · LOCAL MULTIPLAYER</span><h2 id="mp-login-title">這一次，<br />和旅人們一起同行。</h2><p>不同旅人、同一座港口。一起行走、交談，點亮歸航的燈塔。</p><div className="mp-auth-tabs" role="group" aria-label="登入或申請帳號"><button type="button" aria-pressed={authMode === 'login'} onClick={() => { setAuthMode('login'); setNetworkError('') }}>登入</button><button type="button" aria-pressed={authMode === 'register'} onClick={() => { setAuthMode('register'); setNetworkError('') }}>申請帳號</button></div><form onSubmit={login}><label htmlFor="mp-username">帳號</label><input id="mp-username" name="username" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required maxLength={authMode === 'register' ? 32 : 100} /><label htmlFor="mp-password">密碼</label><input id="mp-password" name="password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} required maxLength={200} />{authMode === 'register' && <><label htmlFor="mp-confirm-password">再次輸入密碼</label><input id="mp-confirm-password" name="confirmPassword" type="password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" required maxLength={200} />{username.trim().toLowerCase() === 'kevin950805' && <><label htmlFor="mp-claim-code">一次性認領碼</label><input id="mp-claim-code" name="claimCode" type="password" value={claimCode} onChange={event => setClaimCode(event.target.value)} autoComplete="off" required /></>}</>}{networkError && <p className="mp-login-error" role="alert">{networkError}</p>}<button className="mp-primary" type="submit" disabled={loginBusy}>{loginBusy ? '處理中…' : authMode === 'register' ? '建立帳號並進入 →' : '進入共同港口 →'}</button></form><small>僅使用多人測試帳號。正式站帳號與單人存檔不會帶入。</small><a href="/prototype-3d">返回單人遠征</a></section></div>}
     {snapshot && !ready && !sceneError && <div className="mp-scene-loading" role="status">正在點亮港口…</div>}
     {sceneError && <div className="mp-scene-error" role="alert"><strong>3D 畫面暫時無法啟動</strong><p>{sceneError}</p><button onClick={() => window.location.reload()}>重新載入</button></div>}
   </main>

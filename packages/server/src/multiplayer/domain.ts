@@ -59,9 +59,14 @@ function initialEvent(roster: readonly RosterPlayer[], config: RoomConfig): Even
 }
 export function tickEvent(tick: number): EventDraft { return eventDraft('MP_TICK', String(tick), 'system', tick, {}) }
 
-export type SystemCommand = { type: 'initialize'; roster?: readonly RosterPlayer[]; config?: RoomConfig } | { type: 'tick'; tick: number }
+export type SystemCommand = { type: 'initialize'; roster?: readonly RosterPlayer[]; config?: RoomConfig } | { type: 'tick'; tick: number } | { type: 'player-joined'; player: RosterPlayer }
 /** System actors pass the same command/rule/event boundary as player intents. */
 export function evaluateSystemCommand(state: RoomState, command: SystemCommand): EventDraft[] {
+  if (command.type === 'player-joined') {
+    const { player } = command
+    if (state.players.length >= MAX_FIXTURE_COUNT || state.players.some(existing => existing.id === player.id) || !/^[a-zA-Z0-9_-]{1,100}$/.test(player.id) || typeof player.name !== 'string' || player.name.trim().length < 1 || player.name.length > 80 || !canStand(player.x, player.z)) reject('INVALID_PLAYER', '玩家資料不正確。', 409)
+    return [eventDraft('MP_PLAYER_JOINED', player.id, 'system', state.tick, { player: { ...player, supplies: 1, rewards: 0 } })]
+  }
   if (command.type === 'initialize') {
     if (state.sequence !== 0 || state.players.length !== 0) reject('ALREADY_INITIALIZED', '房間已初始化。', 409)
     const config = command.config ?? { ...DEFAULT_ROOM_CONFIG }
@@ -136,6 +141,9 @@ export function applyEvents(state: RoomState, events: readonly Event[]): RoomSta
         next.players = structuredClone(p.players as RoomPlayer[])
         // Old two-player logs have no config. Preserve their recorded roster/resources exactly.
         next.config = structuredClone((p.config as RoomConfig | undefined) ?? DEFAULT_ROOM_CONFIG)
+        break
+      case 'MP_PLAYER_JOINED':
+        if (!next.players.some(item => item.id === (p.player as RoomPlayer).id)) next.players.push(structuredClone(p.player as RoomPlayer))
         break
       case 'MP_TICK': next.tick = event.tick!; break
       case 'MP_MOVED': if (player) {

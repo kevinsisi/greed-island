@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createMultiplayerApp, hashPassword } from './http.js'
 import { MultiplayerRuntime } from './runtime.js'
 import { generateRoster } from './domain.js'
@@ -24,6 +27,8 @@ let runtime: MultiplayerRuntime
 let server: Server
 let base: string
 const streams: Array<{ abort: AbortController; reader: ReadableStreamDefaultReader<Uint8Array> }> = []
+let accountDirectory: string
+let accountsPath: string
 
 function command(type: string, payload: unknown = {}, commandId = randomUUID()) {
   return { commandId, type, payload }
@@ -107,9 +112,11 @@ async function connect(cookie: string) {
 }
 
 beforeEach(async () => {
+  accountDirectory = mkdtempSync(join(tmpdir(), 'greed-mp-accounts-'))
+  accountsPath = join(accountDirectory, 'accounts.json')
   db = new Database(':memory:')
   runtime = new MultiplayerRuntime(db, { roster: generateRoster(3), config: { maxOnlinePlayers: 2, minParticipants: 2, participationWindowTicks: 3 } })
-  const app = createMultiplayerApp({ runtime, fixtures, allowedOrigins: [ORIGIN, 'http://127.0.0.1:4178'] })
+  const app = createMultiplayerApp({ runtime, fixtures, accountsPath, allowedOrigins: [ORIGIN, 'http://127.0.0.1:4178'] })
   server = await new Promise<Server>((resolve, reject) => {
     const candidate = app.listen(0, '127.0.0.1', () => resolve(candidate))
     candidate.once('error', reject)
@@ -128,9 +135,81 @@ afterEach(async () => {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   }
   if (db?.open) db.close()
+  rmSync(accountDirectory, { recursive: true, force: true })
 })
 
 describe('isolated multiplayer HTTP sessions', () => {
+  it('registers a persistent player, logs them in immediately, rejects invalid and duplicate accounts, and never stores plaintext', async () => {
+    const registered = await post('register', { username: 'New_Player-1', password: 'long-test-password' })
+    expect(registered.status).toBe(201)
+    expect(registered.headers.get('set-cookie')).toMatch(/HttpOnly/i)
+    const payload = await registered.json() as { snapshot: Snapshot }
+    const playerId = payload.snapshot.selfId
+    expect(payload.snapshot.players.some(player => player.id === playerId)).toBe(true)
+    expect((await post('login', { username: 'new_player-1', password: 'long-test-password' })).status).toBe(200)
+    expect((await fetch(`${base}/mp-api/snapshot`, { headers: { cookie: registered.headers.get('set-cookie')!.split(';')[0]! } })).status).toBe(200)
+    expect((await post('register', { username: 'new_player-1', password: 'long-test-password' })).status).toBe(409)
+    for (const body of [
+      { username: 'ab', password: 'long-test-password' },
+      { username: 'bad name', password: 'long-test-password' },
+      { username: 'valid-name', password: 'short' },
+      { username: 'valid-name', password: 'long-test-password', extra: true },
+    ]) expect((await post('register', body)).status).toBe(400)
+    const stored = readFileSync(accountsPath, 'utf8')
+    expect(stored).not.toContain('long-test-password')
+    expect(stored).toContain(':')
+    const first = await login(fixtures[0]!.username, 'test-only-password-a')
+    const second = await login(fixtures[1]!.username, 'test-only-password-b')
+    await connect(first.cookie)
+    await connect(second.cookie)
+    const full = await fetch(`${base}/mp-api/stream`, { headers: { cookie: registered.headers.get('set-cookie')!.split(';')[0]! } })
+    expect(full.status).toBe(409)
+    expect(await full.json()).toMatchObject({ error: 'ROOM_FULL' })
+  })
+
+  it('serializes concurrent case-insensitive registrations and shares the IP budget between login and register', async () => {
+    const results = await Promise.all([
+      post('register', { username: 'parallel-account', password: 'a-long-test-password' }),
+      post('register', { username: 'PARALLEL-ACCOUNT', password: 'another-long-password' }),
+    ])
+    expect(results.map(result => result.status).sort()).toEqual([201, 409])
+    for (let attempt = 0; attempt < 18; attempt += 1) await post('login', { username: 'missing', password: 'wrong-password' })
+    expect((await post('register', { username: 'budget-account', password: 'a-long-test-password' })).status).toBe(429)
+  })
+
+  it('allows only a valid one-time claim code to register the reserved admin and exposes role only to self', async () => {
+    const { writeFileSync } = await import('node:fs')
+    const claimPath = join(accountDirectory, 'claim')
+    writeFileSync(claimPath, 'one-time-test-claim-code', { mode: 0o600 })
+    const app = createMultiplayerApp({ runtime, fixtures, accountsPath, adminClaimFilePath: claimPath, allowedOrigins: [ORIGIN] })
+    const candidate = await new Promise<Server>((resolve, reject) => { const server = app.listen(0, '127.0.0.1', () => resolve(server)); server.once('error', reject) })
+    const claimBase = `http://127.0.0.1:${(candidate.address() as AddressInfo).port}`
+    try {
+      const blocked = await fetch(`${claimBase}/mp-api/register`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'kevin950805', password: 'long-test-password' }) })
+      expect(blocked.status).toBe(403)
+      const blockedBody = await blocked.json() as { error: string; message: string }
+      const wrongClaim = await fetch(`${claimBase}/mp-api/register`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'kevin950805', password: 'long-test-password', claimCode: 'wrong-code' }) })
+      expect(wrongClaim.status).toBe(403)
+      const wrongClaimBody = await wrongClaim.json() as { error: string; message: string }
+      expect(wrongClaimBody).toEqual(blockedBody)
+      expect(JSON.stringify(wrongClaimBody)).not.toContain('wrong-code')
+      const claimed = await fetch(`${claimBase}/mp-api/register`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'kevin950805', password: 'long-test-password', claimCode: 'one-time-test-claim-code' }) })
+      expect(claimed.status).toBe(201)
+      expect(readFileSync(accountsPath, 'utf8')).not.toContain('one-time-test-claim-code')
+      expect(existsSync(`${claimPath}.used`)).toBe(true)
+      expect((await fetch(`${claimBase}/mp-api/admin/ping`, { headers: { cookie: claimed.headers.get('set-cookie')!.split(';')[0]! } })).status).toBe(200)
+      expect((await claimed.clone().json() as { snapshot: Snapshot }).snapshot.players.every(player => !('role' in player))).toBe(true)
+      expect(await claimed.clone().text()).not.toContain('one-time-test-claim-code')
+      expect(await claimed.clone().text()).not.toContain('long-test-password')
+      const ordinary = await fetch(`${claimBase}/mp-api/login`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ username: fixtures[0]!.username, password: 'test-only-password-a' }) })
+      const ordinaryCookie = ordinary.headers.get('set-cookie')!.split(';')[0]!
+      expect((await fetch(`${claimBase}/mp-api/admin/ping`, { headers: { cookie: ordinaryCookie } })).status).toBe(403)
+      expect(await (await fetch(`${claimBase}/mp-api/me`, { headers: { cookie: ordinaryCookie } })).json()).toMatchObject({ role: 'player' })
+      const reusedClaim = await fetch(`${claimBase}/mp-api/register`, { method: 'POST', headers: { origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'kevin950805', password: 'long-test-password', claimCode: 'one-time-test-claim-code' }) })
+      expect(reusedClaim.status).toBe(403)
+      expect(await reusedClaim.json()).toEqual(blockedBody)
+    } finally { candidate.closeAllConnections(); await new Promise<void>(resolve => candidate.close(() => resolve())) }
+  })
   it('requires authentication and issues separate opaque, scoped, HttpOnly cookies', async () => {
     for (const route of ['snapshot', 'stream']) {
       const response = await fetch(`${base}/mp-api/${route}`)

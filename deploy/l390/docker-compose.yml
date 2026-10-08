@@ -12,6 +12,7 @@ services:
       MULTIPLAYER_HOST: 0.0.0.0
       MULTIPLAYER_PORT: "4179"
       MULTIPLAYER_DATA_DIR: /app/mp-data
+      MP_ADMIN_CLAIM_FILE: ${MP_ADMIN_CLAIM_FILE:-/app/mp-data/admin-claim-code}
       MULTIPLAYER_ALLOWED_ORIGINS: ${MULTIPLAYER_ALLOWED_ORIGINS:?必填}
     volumes:
       - greed-l390-mp-data:/app/mp-data

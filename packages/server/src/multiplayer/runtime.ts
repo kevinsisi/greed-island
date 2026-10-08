@@ -65,6 +65,13 @@ export class MultiplayerRuntime {
     return { accepted: true, commandId: command.commandId, revision: this.state.sequence, ...(result.duplicate ? { duplicate: true } : {}) }
   }
 
+  /** Persist a newly registered player through the same append-only event projection. */
+  addPlayer(player: RosterPlayer): void {
+    const events = this.store.runInTransaction(() => this.store.appendEvents(evaluateSystemCommand(this.state, { type: 'player-joined', player })))
+    this.state = applyEvents(this.state, events)
+    this.fanout.markDirty()
+  }
+
   advanceTick(): void {
     const wasCollecting = !this.state.completed && this.state.closesAtTick !== null
     const events = this.store.runInTransaction(() => this.store.appendEvents(evaluateSystemCommand(this.state, { type: 'tick', tick: this.state.tick + 1 })))

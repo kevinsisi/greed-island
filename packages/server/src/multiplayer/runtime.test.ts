@@ -66,6 +66,25 @@ afterEach(() => {
 })
 
 describe('authoritative multiplayer room', () => {
+  it('persists registered players as append-only events and rebuilds them after reopening', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'greed-mp-joined-'))
+    const path = join(directory, 'room.sqlite')
+    let first: ReturnType<typeof room> | undefined
+    let reopened: ReturnType<typeof room> | undefined
+    try {
+      first = room(path, { roster: [{ id: A, name: 'A', x: -2, z: -6 }, { id: B, name: 'B', x: 2, z: -6 }] }, false)
+      first.runtime.addPlayer({ id: 'player-registered-1', name: 'traveler', x: 0, z: -6 })
+      expect(first.runtime.snapshot(A).players.map(member => member.id)).toContain('player-registered-1')
+      expect(new SqliteEventStore(first.db).readEvents().map(event => event.eventType)).toContain('MP_PLAYER_JOINED')
+      first.runtime.stop(); first.db.close()
+      openRooms.splice(openRooms.indexOf(first), 1)
+      reopened = room(path, {}, false)
+      expect(reopened.runtime.snapshot(A).players.map(member => member.id)).toContain('player-registered-1')
+    } finally {
+      for (const entry of [first, reopened]) if (entry) { entry.runtime.stop(); if (entry.db.open) entry.db.close(); const index = openRooms.indexOf(entry); if (index >= 0) openRooms.splice(index, 1) }
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
   it('shares one room while identifying each authenticated player separately', () => {
     const { runtime } = room()
     const a = runtime.snapshot(A)

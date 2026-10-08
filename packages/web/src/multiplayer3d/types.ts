@@ -22,6 +22,7 @@ export interface RoomSnapshot {
   presenceRevision: number
   tick: number
   selfId: string
+  selfRole?: 'player' | 'admin'
   capacity: { maxOnlinePlayers: number; onlinePlayers: number; reservedPlayers: number; selfHasSlot: boolean }
   players: RoomPlayer[]
   messages: RoomMessage[]

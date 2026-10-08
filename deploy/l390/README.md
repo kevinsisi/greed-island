@@ -35,6 +35,8 @@ docker run --rm -v greed-l390-mp-data:/data alpine:3.20 cat /data/credentials.js
 
 Known limits:
 - Login is limited to 20 attempts per source IP per 60 s (`http.ts:52-59`). Behind Caddy every player shares one source IP, so many logins within a minute get 429; retry after a minute.
+- Self-service accounts are stored as scrypt hashes in `/app/mp-data/accounts.json` (mode `0600`); the persistent `greed-l390-mp-data` volume keeps them and registered player events across container recreation. Existing `credentials.json` fixture identities remain separate.
+- Admin claiming is optional. To authorize Kevin's reserved `kevin950805` account, deploy a one-time random claim code in `/app/mp-data/admin-claim-code` (mode `0600`) without putting the code in this repository or logs. `MP_ADMIN_CLAIM_FILE` defaults to that container path. The claim file is atomically renamed with `.used` after successful claim; never put the password in deployment configuration—the account owner sets it on the registration page.
 - Move commands are limited to one per player per 100 ms tick (429 `MOVE_RATE_LIMIT`); this is a game rule, not an error.
 
 Public path (active since 2026-10-08; reachable inside the tailnet only, the GB10 Caddy name resolves to its tailnet IP):

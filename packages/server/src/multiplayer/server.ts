@@ -36,7 +36,7 @@ function main(): void {
   try {
     const { db, runtime, credentials, fixtures } = openFixtureStore(dataDir, args.fixtureCount, existing)
     const credentialsPath = join(dataDir, 'credentials.json')
-    const app = createMultiplayerApp({ runtime, fixtures, allowedOrigins: parseAllowedOrigins(process.env.MULTIPLAYER_ALLOWED_ORIGINS) })
+    const app = createMultiplayerApp({ runtime, fixtures, accountsPath: join(dataDir, 'accounts.json'), allowedOrigins: parseAllowedOrigins(process.env.MULTIPLAYER_ALLOWED_ORIGINS) })
     const server = app.listen(config.port, config.host, () => {
       runtime.start()
       console.log(`[local-multiplayer] listening http://${config.host}:${config.port}`)
