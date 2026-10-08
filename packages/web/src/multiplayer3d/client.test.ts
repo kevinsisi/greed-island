@@ -177,7 +177,7 @@ describe('multiplayer room client', () => {
     expect(commandCount).toBe(1)
 
     resolveFirst(response({ accepted: true, commandId: 'command-1', revision: 2 }))
-    await vi.advanceTimersByTimeAsync(100)
+    await vi.advanceTimersByTimeAsync(0)
     expect(commandCount).toBe(2)
     expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({ commandId: 'command-2', type: 'move', payload: { dx: -1, dz: 0 } })
 
