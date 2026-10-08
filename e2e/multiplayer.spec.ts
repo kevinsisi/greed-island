@@ -208,6 +208,8 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
+  const testStartedAt = Date.now()
+  const markPhase = (phase: string) => console.log(`[multiplayer-e2e] ${phase} elapsedMs=${Date.now() - testStartedAt}`)
   const accountA = credentials()
   const accountB = credentials()
   const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } })
@@ -218,8 +220,16 @@ test('two synthetic accounts share the local room and use server-authoritative g
 
   try {
     await register(pageA, accountA)
+    markPhase('registered-account-a')
+    await clickGroundPoint(pageA, { x: 10, z: 13 })
+    await waitForArrival(pageA, { x: 10, z: 13 })
+    await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
+    markPhase('ground-route-arrived')
+
     await login(pageA, accountA)
+    markPhase('logged-in-account-a')
     await register(pageB, accountB)
+    markPhase('registered-account-b')
 
     await expect(pageA.locator('.mp-players')).toContainText(accountB.username)
     await expect(pageB.locator('.mp-players')).toContainText(accountA.username)
@@ -227,11 +237,13 @@ test('two synthetic accounts share the local room and use server-authoritative g
       const snapshot = await readSnapshot(pageA)
       return snapshot.players.some(player => player.name === accountB.username && player.online)
     })
+    markPhase('both-players-online')
 
     const message = `ci-shared-${randomBytes(8).toString('hex')}`
     await pageA.getByRole('textbox', { name: '聊天訊息', exact: true }).fill(message)
     await pageA.getByRole('button', { name: '傳送', exact: true }).click()
     await expect(pageB.locator('.mp-messages')).toContainText(message)
+    markPhase('shared-chat-delivered')
 
     // Registrations share a safe but identical default spawn, so move B away before navigation.
     const beforeMoveBSnapshot = await readSnapshot(pageB)
@@ -256,10 +268,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       const sceneError = await pageB.locator('.mp-scene-error').innerText().catch(() => '')
       throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
     }
-
-    await clickGroundPoint(pageA, { x: 10, z: 13 })
-    await waitForArrival(pageA, { x: 10, z: 13 })
-    await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
+    markPhase('player-b-moved-one-step')
 
     // A direction key is an ordinary manual input and must cancel the active click route.
     const cancellationTarget = { x: 10, z: 16 }
@@ -289,6 +298,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     await pageA.keyboard.down('ArrowRight')
     await expect(pageA.locator('.mp-feedback')).toContainText('已切換手動移動，自動導航已取消。')
     await pageA.keyboard.up('ArrowRight')
+    markPhase('route-cancelled-by-manual-input')
     const afterManualRelease = selfPlayer(await readSnapshot(pageA))
     await pageA.waitForTimeout(250)
     const afterCancel = await readSnapshot(pageA)
@@ -310,6 +320,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     await expect(pageA.locator('.mp-feedback')).toContainText('正在前往目的地。')
     await waitForArrival(pageA, latestRapidTarget)
     await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
+    markPhase('rapid-retarget-arrived')
   } finally {
     await Promise.all([contextA.close(), contextB.close()])
   }
