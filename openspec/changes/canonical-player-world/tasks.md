@@ -1,14 +1,22 @@
-# Tasks
+## 1. Canonical player world
 
-- [x] Add typed player-world events, event-only projection, and indexed EventLog reads.
-- [x] Add server geometry, graph-gated crossing, strict intents, deterministic rules, and atomic/idempotent service.
-- [x] Integrate the service and read-only snapshot into the canonical SimulationRuntime.
-- [ ] Verify forged inputs, movement/collision/portal rules, dynamic graph, transaction rollback, concurrent retries, same-region peers/NPCs, and file-backed restart.
-- [ ] Record small synthetic persistence benchmark and honest verification/deployment limits.
+- [x] 1.1 Add typed player-world events, an event-only position projection, and indexed EventLog reads.
+- [x] 1.2 Add server geometry, graph-gated crossings, strict intents, deterministic rules, and an atomic idempotent service.
+- [x] 1.3 Integrate the service and read-only snapshots with SimulationRuntime.
+- [x] 1.4 Add the authenticated HTTP/SSE adapter with flush-time authorization and bounded transport cleanup.
+- [x] 1.5 Add terrain-source parity and supported-region crossing tests.
 
-Local pure coverage is complete (126 focused pure/protocol tests). Native SQLite/runtime/benchmark tests are written but cannot pass locally without the missing native binding; exact Node22 feature CI and browser transport acceptance are outstanding. Supplemental SQL-only benchmark was recorded separately.
+## 2. Admission and public chat
 
-- [x] Add ONE-session canonical HTTP/SSE adapter, flush-time authorization, safe optional display names, presence revision, and bounded transport cleanup/tests.
+- [x] 2.1 Enforce live admission at enqueue and commit; count multiple tabs as one admitted account.
+- [x] 2.2 Declare a 50-account online cap and add a file-backed 50-account batch, fanout, and reopen test.
+- [x] 2.3 Add one durable public chat stream with server-derived identity, a bounded history, rate limit, and retry handling.
+- [x] 2.4 Keep private NPC dialogue out of public chat and verify chat/position rollback together.
 
-- [x] Extend one converter across all 8 existing base regions plus 1 unlock-gated Salt Marsh, preserve exact authored water masks, and test walkable spawn/reachable reciprocal graph crossings.
-- [x] Enforce expected-account context before enqueue and at flush, with stale tab A/current cookie B no-mutation coverage.
+## 3. Verification and integration
+
+- [x] 3.1 Run focused pure/protocol tests locally.
+- [ ] 3.2 Pass the exact Node 22 feature CI, including native SQLite, web build, browser E2E, and OpenSpec validation.
+- [ ] 3.3 Integrate one account provider and preserve existing gameplay routes before main merge.
+- [ ] 3.4 Verify the complete browser flow against the disposable unified fixture.
+- [ ] 3.5 Complete owner-reviewed data preservation and actual L390 acceptance before any production cutover.
