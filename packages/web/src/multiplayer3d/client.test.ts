@@ -217,10 +217,11 @@ describe('multiplayer room client', () => {
   it('stops sustained movement after a rate-limit response until a fresh scene sample', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
-    const s = setup(async input => {
+    const fetcher = vi.fn<typeof fetch>(async input => {
       if (String(input) === '/mp-api/snapshot') return response(fixture())
       return response({ error: 'MOVE_RATE_LIMIT', message: 'wait for next tick' }, 429)
     })
+    const s = setup(fetcher)
     await s.client.start()
     s.streams[0]!.emit('snapshot', fixture())
 
