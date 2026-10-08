@@ -199,3 +199,24 @@ export function getMapEdgeCrossingType(
   if (fromTile?.biome === 'water' || toTile?.biome === 'water') return 'water-crossing'
   return 'land'
 }
+
+/** Known canonical topology, including explicitly locked or ungenerated endpoints. */
+export function getKnownMapRegions(unlockedTileIds: readonly string[] = [], generatedTileIds: readonly string[] = []) {
+  const available = new Set(listMapTiles(unlockedTileIds, generatedTileIds).map(tile => tile.id))
+  const generated = new Set(generatedTileIds)
+  return [...ALL_KNOWN_TILES, ...FRONTIER_ZONES].map(tile => ({
+    id: tile.id, name: tile.name, x: tile.x, y: tile.y, biome: tile.biome,
+    available: available.has(tile.id), generated: generated.has(tile.id),
+  }))
+}
+export function getKnownMapEdges(unlockedTileIds: readonly string[] = [], generatedTileIds: readonly string[] = []) {
+  const known = getKnownMapRegions(unlockedTileIds, generatedTileIds), active = new Set(known.filter(tile => tile.available).map(tile => tile.id))
+  const adjacency = getMapAdjacency(unlockedTileIds, generatedTileIds), edges = [...MAP_EDGE_DEFINITIONS]
+  for (const zone of FRONTIER_ZONES) for (const adjacent of zone.adjacentTo) {
+    edges.push({ fromTileId: adjacent, toTileId: zone.id,
+      crossingType: zone.biome === 'water' || known.find(tile => tile.id === adjacent)?.biome === 'water' ? 'water-crossing' : 'land' })
+  }
+  return edges.map(edge => ({ ...edge, available: active.has(edge.fromTileId) && active.has(edge.toTileId)
+    && (adjacency[edge.fromTileId] ?? []).includes(edge.toTileId)
+    && (adjacency[edge.toTileId] ?? []).includes(edge.fromTileId) }))
+}

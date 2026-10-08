@@ -178,6 +178,46 @@ export class SqliteEventStore {
     return rows.reverse().map(rowToEvent)
   }
 
+  readRecentEventsByTypes(limit: number, eventTypes: readonly string[]): Event[] {
+    const types = [...new Set(eventTypes)]
+    if (types.length === 0) return []
+    const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)))
+    const rows = this.db.prepare(`SELECT * FROM event_log WHERE event_type IN (${types.map(() => '?').join(',')})
+      ORDER BY sequence DESC LIMIT ?`).all(...types, safeLimit) as EventRow[]
+    return rows.reverse().map(rowToEvent)
+  }
+
+  /** Preserve bounded world-history windows when high-frequency sub-runtime facts share EventLog. */
+  readRecentEventsExcludingTypes(limit: number, excludedTypes: readonly string[]): Event[] {
+    const types = [...new Set(excludedTypes)]
+    if (types.length === 0) return this.readRecentEvents(limit)
+    const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)))
+    const rows = this.db.prepare(`SELECT * FROM event_log
+      WHERE event_type NOT IN (${types.map(() => '?').join(',')})
+      ORDER BY sequence DESC LIMIT ?`).all(...types, safeLimit) as EventRow[]
+    return rows.reverse().map(rowToEvent)
+  }
+
+  /** Indexed command retry lookup. EventLog itself is the durable receipt. */
+  readEventsByActorCommand(actorId: string, commandId: string, eventTypes: readonly string[]): Event[] {
+    const types = [...new Set(eventTypes)]
+    if (types.length === 0) return []
+    const rows = this.db.prepare(`SELECT * FROM event_log WHERE actor_id = ? AND command_id = ?
+      AND event_type IN (${types.map(() => '?').join(',')}) ORDER BY sequence`).all(actorId, commandId, ...types) as EventRow[]
+    return rows.map(rowToEvent)
+  }
+
+  /** Complete typed snapshots: one newest event per actor, without replaying the entire log. */
+  readLatestEventsPerActor(eventTypes: readonly string[]): Event[] {
+    const types = [...new Set(eventTypes)]
+    if (types.length === 0) return []
+    const rows = this.db.prepare(`SELECT e.* FROM event_log e JOIN (
+      SELECT actor_id, MAX(sequence) AS sequence FROM event_log
+      WHERE event_type IN (${types.map(() => '?').join(',')}) GROUP BY actor_id
+    ) latest ON e.sequence = latest.sequence ORDER BY e.sequence`).all(...types) as EventRow[]
+    return rows.map(rowToEvent)
+  }
+
   readEventsByTypes(eventTypes: readonly string[]): Event[] {
     const types = [...new Set(eventTypes.filter((type) => type.length > 0))]
     if (types.length === 0) return []
@@ -409,6 +449,12 @@ export function initializeKernelSchema(db: DatabaseConnection): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_rejected_command_actor ON rejected_command_log(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_event_actor_command ON event_log(actor_id, command_id);
+    CREATE INDEX IF NOT EXISTS idx_event_type_actor_sequence ON event_log(event_type, actor_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_player_world_command ON event_log(actor_id, command_id)
+      WHERE event_type IN ('PLAYER_WORLD_ENTERED', 'PLAYER_WORLD_MOVED', 'PLAYER_REGION_TRANSITIONED');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_player_world_intent_command ON event_log(actor_id, command_id)
+      WHERE event_type IN ('PLAYER_WORLD_ENTERED', 'PLAYER_WORLD_MOVED', 'PLAYER_REGION_TRANSITIONED', 'PLAYER_WORLD_CHAT_POSTED');
     CREATE INDEX IF NOT EXISTS idx_rejected_command_command ON rejected_command_log(command_id);
   `)
 }

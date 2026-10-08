@@ -17,6 +17,9 @@ import {
   type RuleRejection,
   type RuleResult
 } from './types.js'
+import { validateWorldChatEventData, type WorldChatEventData } from '../playerWorld/chat.js'
+import type { PlayerWorldEventData } from '../playerWorld/types.js'
+import { validatePlayerWorldEventData } from '../playerWorld/eventData.js'
 import type { Animal } from '../ecosystem/species.js'
 import { SKILL_IDS } from '../config/world.js'
 import {
@@ -85,6 +88,10 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_OPEN',
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
+  'PLAYER_WORLD_CHAT_POSTED',
+  'PLAYER_WORLD_ENTERED',
+  'PLAYER_WORLD_MOVED',
+  'PLAYER_REGION_TRANSITIONED',
   'PLAYER_INTERVENE',
   'PLAYER_NPC_DIALOGUE',
   'PLAYER_ENERGY_SET',
@@ -1876,6 +1883,8 @@ export type PlayerPlayedCardCmd = Readonly<{
 }>
 
 export type LivingWorldCommandPayload =
+  | PlayerWorldEventData
+  | WorldChatEventData
   | NpcMoveCmd
   | NpcActivityChangeCmd
   | NpcStateRecordedCmd
@@ -2071,6 +2080,10 @@ export type LivingWorldEventDraft = EventDraft<LivingWorldEventPayload> &
 const VALIDATORS: Readonly<
   Record<LivingWorldCommandType, (payload: unknown) => string | null>
 > = {
+  PLAYER_WORLD_CHAT_POSTED: validateWorldChatEventData,
+  PLAYER_WORLD_ENTERED: validatePlayerWorldEventData,
+  PLAYER_WORLD_MOVED: validatePlayerWorldEventData,
+  PLAYER_REGION_TRANSITIONED: validatePlayerWorldEventData,
   NPC_MOVE: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
@@ -4133,3 +4146,4 @@ function isIntentOutcome(value: unknown): value is 'success' | 'failure' {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+
