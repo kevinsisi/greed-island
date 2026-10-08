@@ -39,11 +39,30 @@
 		file_server
 	}
 
-	handle {
+	@multiplayer path /multiplayer-3d /multiplayer-3d/*
+	handle @multiplayer {
 		encode zstd gzip
 		header Cache-Control "no-store"
 		try_files {path} /index.html
 		file_server
+	}
+
+	# Only existing, non-hidden root files may bypass the page redirect.
+	# Keep reserved endpoints out even if a same-named file is introduced.
+	@rootStatic {
+		path_regexp rootStatic ^/[^/.][^/]*$
+		not path /api /card-images /account /assets /mp-api /healthz /multiplayer-3d
+		file {path}
+	}
+	handle @rootStatic {
+		encode zstd gzip
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	handle {
+		header Cache-Control "no-store"
+		redir /multiplayer-3d 302
 	}
 
 	log {
