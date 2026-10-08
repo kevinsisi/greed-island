@@ -5,6 +5,7 @@ only. Actual auth/Origin rejection needs separate Node 22.23.2 application tests
 Uses Python standard library and existing Docker; run on a Linux GitHub runner.
 """
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -81,16 +82,19 @@ def main():
     respond 404
 }
 ''')
-            # Internal network blocks outbound traffic; only frontend is published on loopback.
+            # Internal network blocks outbound traffic; no container port is published.
+            # The Linux runner can reach its own internal bridge's container address.
             docker('network', 'create', '--internal', network)
             docker('run', '-d', '--name', backend, '--network', network, '--network-alias', 'multiplayer',
                    '-v', f'{stub}:/etc/caddy/Caddyfile:ro', run_image)
-            docker('run', '-d', '--name', frontend, '--network', network, '-p', '127.0.0.1::80',
+            docker('run', '-d', '--name', frontend, '--network', network,
                    '-v', f'{config}:/etc/caddy/Caddyfile:ro',
                    '-v', f'{static}:/srv/greed-island-web:ro', run_image)
-            binding = json.loads(docker('inspect', frontend).stdout)[0]['NetworkSettings']['Ports']['80/tcp'][0]
-            assert binding['HostIp'] == '127.0.0.1'
-            base = f"http://127.0.0.1:{binding['HostPort']}"
+            inspection = json.loads(docker('inspect', frontend).stdout)[0]
+            address = inspection['NetworkSettings']['Networks'][network]['IPAddress']
+            assert ipaddress.ip_address(address).is_private
+            assert not inspection['HostConfig']['PortBindings']
+            base = f'http://{address}:80'
             client = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
             def request(path, headers=None):
@@ -149,6 +153,7 @@ def main():
         for container in [frontend, backend]:
             logs = docker('logs', container, check=False)
             (OUT / f'{container.split("-")[1]}.log').write_text(logs.stdout + logs.stderr)
+            print(f'Container {container} logs:\n{logs.stdout}{logs.stderr}')
             docker('rm', '-f', container, check=False)
         docker('network', 'rm', network, check=False)
         (OUT / 'results.json').write_text(json.dumps({'passed': passed, 'checks': results,
