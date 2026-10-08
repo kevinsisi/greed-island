@@ -208,7 +208,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     })
 
     const message = `ci-shared-${randomBytes(8).toString('hex')}`
-    await pageA.getByLabel('聊天訊息').fill(message)
+    await pageA.getByRole('textbox', { name: '聊天訊息', exact: true }).fill(message)
     await pageA.getByRole('button', { name: '傳送', exact: true }).click()
     await expect(pageB.locator('.mp-messages')).toContainText(message)
 
