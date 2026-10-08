@@ -1,4 +1,5 @@
 import type { CommandAcknowledgement, ConnectionStatus, RoomCommand, RoomSnapshot } from './types'
+import { createLatestMoveIntentQueue } from './moveIntentQueue'
 
 const API_ROOT = '/mp-api'
 const RETRY_MS = 1500
@@ -62,6 +63,8 @@ export function isRoomSnapshot(value: unknown): value is RoomSnapshot {
   const w = value.world
   return finite(w.minX) && finite(w.maxX) && w.minX < w.maxX && finite(w.minZ) && finite(w.maxZ) && w.minZ < w.maxZ && Array.isArray(w.obstacles)
     && w.obstacles.every(o => record(o) && finite(o.x) && finite(o.z) && finite(o.width) && o.width > 0 && finite(o.depth) && o.depth > 0)
+    && (w.playerRadius === undefined || (finite(w.playerRadius) && w.playerRadius >= 0))
+    && (w.movePerTick === undefined || (finite(w.movePerTick) && w.movePerTick > 0))
 }
 
 /** Cookie-only connection to the dedicated local room. There is no production fallback. */
@@ -75,10 +78,14 @@ export function createRoomClient(options: ClientOptions) {
   let retry: ReturnType<typeof setTimeout> | null = null
   let generation = 0
   let disposed = false
-  let movePending = false
+  let clearQueuedMovement = () => {}
   const requests = new Set<AbortController>()
 
-  function setStatus(next: ConnectionStatus) { status = next; if (!disposed) options.onStatus(next) }
+  function setStatus(next: ConnectionStatus) {
+    status = next
+    if (next !== 'online') clearQueuedMovement()
+    if (!disposed) options.onStatus(next)
+  }
   function closeStream() { source?.close(); source = null; if (retry !== null) clearTimeout(retry); retry = null }
   function accept(next: unknown, firstAfterConnect = false): boolean {
     if (!isRoomSnapshot(next)) throw new RoomApiError('多人房間資料格式不符，已暫停操作。')
@@ -222,6 +229,15 @@ export function createRoomClient(options: ClientOptions) {
       throw error
     }
   }
+  const movementQueue = createLatestMoveIntentQueue(async ({ dx, dz }) => {
+    try { await send({ type: 'move', payload: { dx, dz } }) }
+    catch (error) {
+      if (!disposed && status === 'online' && !(error instanceof RoomApiError && error.status === 429)) {
+        options.onError(error instanceof Error ? error.message : '無法移動。')
+      }
+    }
+  })
+  clearQueuedMovement = movementQueue.clear
   return {
     start: connect,
     reconnect: connect,
@@ -229,15 +245,8 @@ export function createRoomClient(options: ClientOptions) {
     register,
     send,
     async move(dx: number, dz: number) {
-      if (movePending || status !== 'online' || disposed) return
-      movePending = true
-      try { await send({ type: 'move', payload: { dx, dz } }) }
-      catch (error) {
-        // A 100ms browser interval can straddle the same server tick. Dropping that
-        // intent is expected; no local movement is applied or queued for catch-up.
-        if (!disposed && status === 'online' && !(error instanceof RoomApiError && error.status === 429)) options.onError(error instanceof Error ? error.message : '無法移動。')
-      }
-      finally { movePending = false }
+      if (status !== 'online' || disposed) return
+      movementQueue.offer(dx, dz)
     },
     async logout() {
       const ownGeneration = ++generation
@@ -248,6 +257,7 @@ export function createRoomClient(options: ClientOptions) {
         snapshot = null; options.onSnapshot(null); options.onError(''); setStatus('unauthenticated')
       } catch (error) { failed(error, ownGeneration); throw error }
     },
-    dispose() { disposed = true; generation += 1; closeStream(); requests.forEach(controller => controller.abort()); requests.clear() }
+    dispose() { disposed = true; movementQueue.dispose(); generation += 1; closeStream(); requests.forEach(controller => controller.abort()); requests.clear() }
   }
 }
+

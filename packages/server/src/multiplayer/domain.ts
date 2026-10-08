@@ -12,6 +12,10 @@ export const MAX_FIXTURE_COUNT = 1000
 export const WORLD = { minX: -12, maxX: 12, minZ: -10, maxZ: 18, obstacles: [
   { x: -7, z: 5, width: 4, depth: 5 }, { x: 7, z: 8, width: 4, depth: 5 },
 ] }
+/** Public collision and movement metadata used by clients for safe intent planning. */
+export function createWorldSnapshot() {
+  return { ...structuredClone(WORLD), playerRadius: PLAYER_RADIUS, movePerTick: MOVE_PER_TICK }
+}
 /** Deterministic temporary roster; none of these identities imply online users. */
 export function generateRoster(count = DEFAULT_ROOM_CONFIG.maxOnlinePlayers): RosterPlayer[] {
   if (!Number.isSafeInteger(count) || count < 2 || count > MAX_FIXTURE_COUNT) reject('INVALID_ROSTER', `測試身份數必須介於 2 到 ${MAX_FIXTURE_COUNT}。`)

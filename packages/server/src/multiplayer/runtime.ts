@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { toCanonicalJson } from '../kernel/canonicalJson.js'
-import { applyEvents, BEACON, DomainError, emptyState, evaluateCommand, evaluateSystemCommand, parseCommand, projectEvents, ROOM_ID, TICK_MS, WORLD } from './domain.js'
+import { applyEvents, BEACON, DomainError, emptyState, evaluateCommand, evaluateSystemCommand, parseCommand, projectEvents, createWorldSnapshot, ROOM_ID, TICK_MS } from './domain.js'
 import type { CommandAcknowledgement, RoomConfig, RoomSnapshot, RoomState, RosterPlayer } from './types.js'
 import { RoomPresence } from './presence.js'
 import { TickFanout } from './sync.js'
@@ -39,7 +39,7 @@ export class MultiplayerRuntime {
       messages: structuredClone(this.state.messages),
       beacon: { ...BEACON, required: this.state.config.minParticipants, contributors: [...this.state.contributors], completed: this.state.completed,
         phase: this.state.completed ? 'completed' : this.state.closesAtTick === null ? 'gathering' : 'collecting', closesAtTick: this.state.closesAtTick },
-      world: structuredClone(WORLD), npcIntegrated: false }
+      world: createWorldSnapshot(), npcIntegrated: false }
   }
 
   listRoster(): RosterPlayer[] {

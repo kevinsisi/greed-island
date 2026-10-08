@@ -23,11 +23,11 @@ class FakeStream {
 }
 const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 const clients: ReturnType<typeof createRoomClient>[] = []
-function setup(fetcher = vi.fn<typeof fetch>(async () => response(fixture()))) {
+function setup(fetcher = vi.fn<typeof fetch>(async () => response(fixture())), commandId = () => 'test-command-id') {
   const onSnapshot = vi.fn(), onStatus = vi.fn(), onError = vi.fn()
   const streams: FakeStream[] = []
   const createStream = vi.fn(() => { const stream = new FakeStream(); streams.push(stream); return stream })
-  const client = createRoomClient({ fetch: fetcher, createStream, commandId: () => 'test-command-id', onSnapshot, onStatus, onError })
+  const client = createRoomClient({ fetch: fetcher, createStream, commandId, onSnapshot, onStatus, onError })
   clients.push(client)
   return { client, fetcher, streams, createStream, onSnapshot, onStatus, onError }
 }
@@ -46,6 +46,16 @@ describe('multiplayer room client', () => {
     expect(isRoomSnapshot({ ...fixture(), selfId: 'unknown' })).toBe(false)
     expect(isRoomSnapshot({ ...fixture(), players: [{ ...fixture().players[0], x: Infinity }] })).toBe(false)
     expect(isRoomSnapshot({ ...fixture(), npcIntegrated: true })).toBe(false)
+  })
+
+  it('accepts legacy snapshots and validates optional server-owned movement metadata', () => {
+    expect(isRoomSnapshot(fixture())).toBe(true)
+    const world = { ...fixture().world, playerRadius: 0.35, movePerTick: 0.4 }
+    expect(isRoomSnapshot({ ...fixture(), world })).toBe(true)
+    expect(isRoomSnapshot({ ...fixture(), world: { ...world, playerRadius: -0.1 } })).toBe(false)
+    expect(isRoomSnapshot({ ...fixture(), world: { ...world, playerRadius: Infinity } })).toBe(false)
+    expect(isRoomSnapshot({ ...fixture(), world: { ...world, movePerTick: 0 } })).toBe(false)
+    expect(isRoomSnapshot({ ...fixture(), world: { ...world, movePerTick: NaN } })).toBe(false)
   })
 
   it('waits for a valid stream snapshot before enabling commands', async () => {
@@ -143,6 +153,97 @@ describe('multiplayer room client', () => {
     expect(s.onSnapshot).toHaveBeenLastCalledWith(fixture(2))
   })
 
+  it('sends only the newest queued direction and treats release as a local cancellation', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    let resolveFirst!: (result: Response) => void
+    let nextId = 0
+    let commandCount = 0
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/mp-api/snapshot') return response(fixture())
+      commandCount += 1
+      const body = JSON.parse(String(init?.body)) as { commandId: string }
+      if (commandCount === 1) return await new Promise<Response>(resolve => { resolveFirst = resolve })
+      return response({ accepted: true, commandId: body.commandId, revision: commandCount + 1 })
+    })
+    const s = setup(fetcher, () => `command-${++nextId}`)
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture())
+    await s.client.move(1, 0)
+    vi.setSystemTime(100)
+    await s.client.move(0, 1)
+    vi.setSystemTime(200)
+    await s.client.move(-1, 0)
+    expect(commandCount).toBe(1)
+
+    resolveFirst(response({ accepted: true, commandId: 'command-1', revision: 2 }))
+    await vi.advanceTimersByTimeAsync(100)
+    expect(commandCount).toBe(2)
+    expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({ commandId: 'command-2', type: 'move', payload: { dx: -1, dz: 0 } })
+
+    await s.client.move(0, 0)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(commandCount).toBe(2)
+    expect(fetcher.mock.calls.filter(([url]) => String(url) === '/mp-api/command')).toHaveLength(2)
+  })
+
+  it('does not send a stale queued step when the scene cancels before the first ACK', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    let resolveFirst!: (result: Response) => void
+    let commandCount = 0
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/mp-api/snapshot') return response(fixture())
+      commandCount += 1
+      const body = JSON.parse(String(init?.body)) as { commandId: string }
+      if (commandCount === 1) return await new Promise<Response>(resolve => { resolveFirst = resolve })
+      return response({ accepted: true, commandId: body.commandId, revision: commandCount + 1 })
+    })
+    const s = setup(fetcher, () => 'cancel-test')
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture())
+
+    await s.client.move(1, 0)
+    vi.setSystemTime(100)
+    await s.client.move(0, 1)
+    await s.client.move(0, 0)
+    resolveFirst(response({ accepted: true, commandId: 'cancel-test', revision: 2 }))
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(commandCount).toBe(1)
+    expect(fetcher.mock.calls.filter(([url]) => String(url) === '/mp-api/command')).toHaveLength(1)
+  })
+
+  it('clears queued movement while reconnecting and accepts fresh movement afterward', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    let resolveFirst!: (result: Response) => void
+    let nextId = 0
+    let commandCount = 0
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/mp-api/snapshot') return response(fixture())
+      commandCount += 1
+      const body = JSON.parse(String(init?.body)) as { commandId: string }
+      if (commandCount === 1) return await new Promise<Response>(resolve => { resolveFirst = resolve })
+      return response({ accepted: true, commandId: body.commandId, revision: commandCount + 1 })
+    })
+    const s = setup(fetcher, () => `reconnect-${++nextId}`)
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture())
+    await s.client.move(1, 0)
+    await s.client.move(0, 1)
+
+    await s.client.reconnect()
+    s.streams[1]!.emit('snapshot', fixture())
+    resolveFirst(response({ accepted: true, commandId: 'reconnect-1', revision: 2 }))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(commandCount).toBe(1)
+
+    await s.client.move(-1, 0)
+    expect(commandCount).toBe(2)
+    expect(JSON.parse(String(fetcher.mock.calls[3]?.[1]?.body))).toEqual({ commandId: 'reconnect-2', type: 'move', payload: { dx: -1, dz: 0 } })
+  })
+
   it('validates acknowledgement identity without applying it as state', async () => {
     expect(isCommandAcknowledgement({ accepted: true, commandId: 'a', revision: 9 }, 'a')).toBe(true)
     expect(isCommandAcknowledgement({ accepted: true, commandId: 'b', revision: 9 }, 'a')).toBe(false)
@@ -229,3 +330,4 @@ describe('multiplayer room client', () => {
     expect(s.onError).toHaveBeenLastCalledWith('多人房間資料格式不符，已暫停操作。')
   })
 })
+

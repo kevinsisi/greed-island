@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SqliteEventStore } from '../kernel/eventStore.js'
-import { applyEvents, DomainError, projectEvents } from './domain.js'
+import { applyEvents, DomainError, MOVE_PER_TICK, PLAYER_RADIUS, projectEvents } from './domain.js'
 import { MultiplayerRuntime } from './runtime.js'
 import type { RosterPlayer } from './types.js'
 
@@ -66,6 +66,11 @@ afterEach(() => {
 })
 
 describe('authoritative multiplayer room', () => {
+  it('publishes the authoritative collision radius with world geometry for client navigation', () => {
+    const { runtime } = room()
+    expect(runtime.snapshot(A).world).toMatchObject({ playerRadius: PLAYER_RADIUS, movePerTick: MOVE_PER_TICK })
+  })
+
   it('persists registered players as append-only events and rebuilds them after reopening', () => {
     const directory = mkdtempSync(join(tmpdir(), 'greed-mp-joined-'))
     const path = join(directory, 'room.sqlite')

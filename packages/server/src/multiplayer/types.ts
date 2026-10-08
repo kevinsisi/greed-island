@@ -24,7 +24,7 @@ export type RoomSnapshot = {
   players: Array<RoomPlayer & { online: boolean }>
   messages: RoomMessage[]
   beacon: { id: string; x: number; z: number; radius: number; required: number; contributors: string[]; completed: boolean; phase: 'gathering' | 'collecting' | 'completed'; closesAtTick: number | null }
-  world: { minX: number; maxX: number; minZ: number; maxZ: number; obstacles: Array<{ x: number; z: number; width: number; depth: number }> }
+  world: { minX: number; maxX: number; minZ: number; maxZ: number; playerRadius: number; movePerTick: number; obstacles: Array<{ x: number; z: number; width: number; depth: number }> }
   npcIntegrated: false
 }
 export type RoomCommand = { commandId: string; type: 'move' | 'chat' | 'contribute'; payload: Record<string, unknown> }

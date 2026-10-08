@@ -22,7 +22,7 @@ function SharedMap({ snapshot }: { snapshot: RoomSnapshot | null }) {
       {snapshot && <g transform={`translate(${x(snapshot.beacon.x)} ${z(snapshot.beacon.z)})`}><circle r="11" fill={snapshot.beacon.completed ? '#e5ba4d44' : '#e5ba4d15'} stroke="#e5ba4d" strokeDasharray="2 2" /><path d="M0 -5 L4 0 L0 5 L-4 0 Z" fill="#f4d586" /></g>}
       {snapshot?.players.filter(p => p.online || p.id === snapshot.selfId).map(player => <g key={player.id} transform={`translate(${x(player.x)} ${z(player.z)})`}><title>{player.name}{player.id === snapshot.selfId ? '（自己）' : ''}</title><circle r="3.8" fill={player.id === snapshot.selfId ? '#ffe6a3' : '#76dfc7'} stroke="#142f2e" strokeWidth="1.5" /></g>)}
     </svg>
-    <small>金色・自己　綠色・旅人</small>
+    <small>金色・自己　綠色・旅人</small><small>菱形・北方信標燈塔</small>
   </section>
 }
 
@@ -32,6 +32,7 @@ export default function Multiplayer3DPage() {
   const [status, setStatus] = useState<ConnectionStatus>('checking')
   const [networkError, setNetworkError] = useState('')
   const [sceneError, setSceneError] = useState('')
+  const [navigationStatus, setNavigationStatus] = useState('')
   const [ready, setReady] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -84,6 +85,7 @@ export default function Multiplayer3DPage() {
         getSelfId: () => snapshotRef.current?.selfId ?? null,
         controls: controls.current,
         onMove: (dx, dz) => { void clientRef.current?.move(dx, dz) },
+        onNavigationStatus: setNavigationStatus,
         onReady: () => setReady(true),
         onError: setSceneError
       })
@@ -129,9 +131,10 @@ export default function Multiplayer3DPage() {
     catch (error) { setNotice(error instanceof Error ? error.message : '物資尚未交付。') }
     finally { setContributeBusy(false) }
   }
-  function releaseStick() { controls.current.x = 0; controls.current.y = 0; setStick({ x: 0, y: 0 }) }
+  function releaseStick() { controls.current.x = 0; controls.current.y = 0; setStick({ x: 0, y: 0 }); void clientRef.current?.move(0, 0) }
   function moveStick(event: ReactPointerEvent<HTMLDivElement>) {
     if (!online || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    controls.current.cancelNavigation?.()
     const bounds = event.currentTarget.getBoundingClientRect()
     const dx = event.clientX - bounds.left - bounds.width / 2
     const dy = event.clientY - bounds.top - bounds.height / 2
@@ -141,7 +144,7 @@ export default function Multiplayer3DPage() {
   }
 
   return <main className="mp3d" aria-label="潮鳴港多人房間">
-    <canvas ref={canvasRef} className="mp-canvas" tabIndex={0} aria-label="多人 3D 港口；WASD 或方向鍵移動，拖曳轉動鏡頭" />
+    <canvas ref={canvasRef} className="mp-canvas" tabIndex={0} aria-label="多人 3D 港口；點擊地面設定目的地，WASD 或方向鍵移動，拖曳轉動鏡頭" />
     <div className="mp-vignette" />
     <header className="mp-header">
       <div className="mp-brand"><span>◈</span><div><strong>TIDEBORN</strong><small>潮鳴港 · 共同世界</small></div></div>
@@ -171,9 +174,9 @@ export default function Multiplayer3DPage() {
 
     {snapshot && <footer className="mp-bottom"><section className="mp-self" aria-label="自己的伺服器物資"><span className="mp-avatar">旅</span><div><strong>{self?.name ?? '旅人'}</strong><p>物資 <b>{self?.supplies ?? 0}</b><span />潮汐徽記 <b>{self?.rewards ?? 0}</b></p></div></section><small className="mp-authority">本機多人房間 · 進度由伺服器保存 · v{APP_VERSION}</small></footer>}
     {snapshot && <div className="mp-actions"><small>{completed ? '燈火由所有人共同看見' : contributed ? remainingSeconds !== null ? '已交付，等待共同點燈結算' : '已交付，等待更多旅人加入' : !online ? '連線後即可繼續' : distance !== null && distance > snapshot.beacon.radius ? `走近燈塔 ${snapshot.beacon.radius} m 內` : '交付後消耗 1 份物資'}</small><button className="mp-primary" disabled={!canContribute || contributeBusy} onClick={() => { void contribute() }}>{contributeBusy ? '正在交付…' : completed ? '共同事件已完成' : contributed ? '物資已交付' : '交付物資 · 點亮燈塔'}</button><button className="mp-camera-reset" onClick={() => { controls.current.recenter = true; canvasRef.current?.focus({ preventScroll: true }) }}>重置鏡頭</button></div>}
-    {snapshot && <div className="mp-touch"><div className="mp-stick" role="group" aria-label="觸控移動搖桿" onPointerDown={event => { if (!online) return; event.currentTarget.setPointerCapture(event.pointerId); moveStick(event) }} onPointerMove={moveStick} onPointerUp={releaseStick} onPointerCancel={releaseStick} onLostPointerCapture={releaseStick}><span style={{ transform: `translate(${stick.x}px, ${stick.y}px)` }} /><small>移動</small></div></div>}
-    <div className="mp-controls-hint">W A S D ／ 方向鍵移動 · 拖曳轉動鏡頭</div>
-    {snapshot && <div className="mp-feedback" role="status" aria-live="polite">{networkError || notice}</div>}
+    {snapshot && <div className="mp-touch"><div className="mp-stick" role="group" aria-label="觸控移動搖桿；也可點擊港口地面前往目的地" onPointerDown={event => { if (!online) return; event.currentTarget.setPointerCapture(event.pointerId); moveStick(event) }} onPointerMove={moveStick} onPointerUp={releaseStick} onPointerCancel={releaseStick} onLostPointerCapture={releaseStick}><span style={{ transform: `translate(${stick.x}px, ${stick.y}px)` }} /><small>移動 · 點地前往</small></div></div>}
+    <div className="mp-controls-hint">點擊地面前往目的地 · WASD／方向鍵或搖桿可取消 · 拖曳轉動鏡頭</div>
+    {snapshot && <div className="mp-feedback" role="status" aria-live="polite">{networkError || notice || navigationStatus}</div>}
     {snapshot && !online && <div className="mp-offline"><strong>{waitingForSlot ? '房間席位已滿' : '房間正在重新連線'}</strong><span>{waitingForSlot ? `${snapshot.capacity.maxOnlinePlayers} 個席位使用或保留中，正在等待空位。` : '移動與交付已暫停，先前進度保留。'}</span><button onClick={() => { void clientRef.current?.reconnect() }}>立即重連</button></div>}
 
     {!snapshot && <div className="mp-login-backdrop"><section className="mp-login" aria-labelledby="mp-login-title"><span className="mp-eyebrow">TIDEBORN · LOCAL MULTIPLAYER</span><h2 id="mp-login-title">這一次，<br />和旅人們一起同行。</h2><p>不同旅人、同一座港口。一起行走、交談，點亮歸航的燈塔。</p><div className="mp-auth-tabs" role="group" aria-label="登入或申請帳號"><button type="button" aria-pressed={authMode === 'login'} onClick={() => { setAuthMode('login'); setNetworkError('') }}>登入</button><button type="button" aria-pressed={authMode === 'register'} onClick={() => { setAuthMode('register'); setNetworkError('') }}>申請帳號</button></div><form onSubmit={login}><label htmlFor="mp-username">帳號</label><input id="mp-username" name="username" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required maxLength={authMode === 'register' ? 32 : 100} /><label htmlFor="mp-password">密碼</label><input id="mp-password" name="password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} required maxLength={200} />{authMode === 'register' && <><label htmlFor="mp-confirm-password">再次輸入密碼</label><input id="mp-confirm-password" name="confirmPassword" type="password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" required maxLength={200} />{username.trim().toLowerCase() === 'kevin950805' && <><label htmlFor="mp-claim-code">一次性認領碼</label><input id="mp-claim-code" name="claimCode" type="password" value={claimCode} onChange={event => setClaimCode(event.target.value)} autoComplete="off" required /></>}</>}{networkError && <p className="mp-login-error" role="alert">{networkError}</p>}<button className="mp-primary" type="submit" disabled={loginBusy}>{loginBusy ? '處理中…' : authMode === 'register' ? '建立帳號並進入 →' : '進入共同港口 →'}</button></form><small>僅使用多人測試帳號。正式站帳號與單人存檔不會帶入。</small><a href="/prototype-3d">返回單人遠征</a></section></div>}
@@ -181,3 +184,4 @@ export default function Multiplayer3DPage() {
     {sceneError && <div className="mp-scene-error" role="alert"><strong>3D 畫面暫時無法啟動</strong><p>{sceneError}</p><button onClick={() => window.location.reload()}>重新載入</button></div>}
   </main>
 }
+

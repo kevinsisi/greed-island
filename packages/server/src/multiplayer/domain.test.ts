@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Event, EventDraft } from '../kernel/types.js'
 import {
   applyEvents, BEACON, DomainError, emptyState, evaluateCommand, evaluateSystemCommand,
-  parseCommand, PLAYER_RADIUS, projectEvents, WORLD,
+  createWorldSnapshot, MOVE_PER_TICK, parseCommand, PLAYER_RADIUS, projectEvents, WORLD,
 } from './domain.js'
 import type { RoomConfig, RoomState, RosterPlayer } from './types.js'
 
@@ -62,6 +62,10 @@ function walk(sim: ReturnType<typeof simulation>, id: string, dx: number, dz: nu
 }
 
 describe('multiplayer pure Command → Rule → Event → Projection', () => {
+  it('publishes the authoritative collision radius and movement step with world geometry', () => {
+    expect(createWorldSnapshot()).toEqual({ ...WORLD, playerRadius: PLAYER_RADIUS, movePerTick: MOVE_PER_TICK })
+  })
+
   it('initializes the default 50-player roster with finite server-owned resources', () => {
     const sim = simulation()
     expect(sim.state.players).toHaveLength(50)
