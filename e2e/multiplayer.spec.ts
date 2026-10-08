@@ -190,7 +190,11 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
   const finalPlayer = selfPlayer(previous)
   const navigation = await page.locator('.mp-feedback').innerText().catch(() => '')
   const sceneError = await page.locator('.mp-scene-error').innerText().catch(() => '')
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}).`)
+  const pageState = await page.evaluate(() => ({
+    visibility: document.visibilityState,
+    activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
+  }))
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; navigation=${navigation}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
@@ -221,11 +225,22 @@ test('two synthetic accounts share the local room and use server-authoritative g
 
     // Registrations share a safe but identical default spawn, so move B away before navigation.
     const beforeMoveB = selfPlayer(await readSnapshot(pageB))
+    await pageB.bringToFront()
     await pageB.locator('canvas').focus()
     await pageB.keyboard.down('ArrowRight')
     await pageB.waitForTimeout(800)
     await pageB.keyboard.up('ArrowRight')
-    await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.8)
+    try {
+      await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.8)
+    } catch {
+      const final = await readSnapshot(pageB)
+      const finalPlayer = selfPlayer(final)
+      const pageState = await pageB.evaluate(() => ({
+        visibility: document.visibilityState,
+        activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
+      }))
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveB.tick}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}).`)
+    }
 
     await clickGroundPoint(pageA, { x: 10, z: 13 })
     await waitForArrival(pageA, { x: 10, z: 13 })
@@ -239,6 +254,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
       const current = selfPlayer(await readSnapshot(pageA))
       return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
     })
+    await pageA.bringToFront()
     await pageA.locator('canvas').focus()
     await pageA.keyboard.down('ArrowRight')
     await expect(pageA.locator('.mp-feedback')).toContainText('已切換手動移動，自動導航已取消。')
