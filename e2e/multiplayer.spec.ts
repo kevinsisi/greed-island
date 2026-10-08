@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
 
 type Player = { id: string; name: string; x: number; z: number; online: boolean }
 type Obstacle = { x: number; z: number; width: number; depth: number }
@@ -33,6 +33,71 @@ async function withDeadline<T>(operation: Promise<T>, timeoutMs: number, label: 
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+type MovementRecord = { startedAt: number; dispatchGapMs: number | null; responseMs: number | null; status: number | null }
+
+function percentile(values: readonly number[], ratio: number): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  return Math.round(sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)]!)
+}
+
+/** Node-side timing for real movement dispatch/HTTP acknowledgements; never records bodies, cookies, or names. */
+function trackMovementCommands(page: Page, markPhase: (phase: string) => void) {
+  const records: MovementRecord[] = []
+  const pending = new Map<Request, MovementRecord>()
+  const onRequest = (request: Request) => {
+    if (request.method() !== 'POST') return
+    try { if (new URL(request.url()).pathname !== '/mp-api/command') return } catch { return }
+    const startedAt = Date.now()
+    const previous = records.at(-1)
+    const record: MovementRecord = { startedAt, dispatchGapMs: previous ? startedAt - previous.startedAt : null, responseMs: null, status: null }
+    records.push(record)
+    pending.set(request, record)
+  }
+  const onResponse = (response: { request(): Request; status(): number }) => {
+    const record = pending.get(response.request())
+    if (!record) return
+    record.responseMs = Date.now() - record.startedAt
+    record.status = response.status()
+    pending.delete(response.request())
+    const completed = records.filter(item => item.responseMs !== null).length
+    if (completed === 1 || completed % 10 === 0) markPhase(`movement-acks=${completed};latestAckMs=${record.responseMs};status=${record.status}`)
+  }
+  page.on('request', onRequest)
+  page.on('response', onResponse)
+  return {
+    summary(): string {
+      const gaps = records.flatMap(item => item.dispatchGapMs === null ? [] : [item.dispatchGapMs])
+      const acks = records.flatMap(item => item.responseMs === null ? [] : [item.responseMs])
+      const statuses = new Map<number, number>()
+      for (const item of records) if (item.status !== null) statuses.set(item.status, (statuses.get(item.status) ?? 0) + 1)
+      const stat = (values: readonly number[], ratio: number) => percentile(values, ratio)?.toString() ?? 'none'
+      return `dispatches=${records.length},acks=${acks.length},pending=${pending.size},dispatchP50Ms=${stat(gaps, 0.5)},dispatchP95Ms=${stat(gaps, 0.95)},ackP50Ms=${stat(acks, 0.5)},ackP95Ms=${stat(acks, 0.95)},ackMaxMs=${acks.length ? Math.max(...acks) : 'none'},statuses=${[...statuses].map(([status, count]) => `${status}:${count}`).join(',') || 'none'}`
+    },
+    dispose(): void { page.off('request', onRequest); page.off('response', onResponse) },
+  }
+}
+
+async function measureRenderCadence(page: Page): Promise<string> {
+  return withDeadline(page.evaluate(async () => {
+    const frames: number[] = []
+    const start = performance.now()
+    await new Promise<void>(resolve => {
+      const sample = (timestamp: number) => {
+        frames.push(timestamp)
+        if (timestamp - start >= 1_200) resolve()
+        else requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    })
+    const intervals = frames.slice(1).map((timestamp, index) => timestamp - frames[index]!)
+    const sorted = [...intervals].sort((a, b) => a - b)
+    const at = (ratio: number) => sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)]!) : 'none'
+    return { frames: frames.length, intervalP50Ms: at(0.5), intervalP95Ms: at(0.95) }
+  }), 2_500, 'Render cadence sample').then(value => `frames=${value.frames},intervalP50Ms=${value.intervalP50Ms},intervalP95Ms=${value.intervalP95Ms}`)
+    .catch(() => 'unavailable')
 }
 
 function credentials() {
@@ -211,7 +276,7 @@ async function clickGroundPoint(page: Page, point: Point): Promise<void> {
   await expect(page.locator('.mp-feedback')).toContainText('正在前往目的地。', { timeout: 8_000 })
 }
 
-async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000, markPhase?: (phase: string) => void): Promise<void> {
+async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000, markPhase?: (phase: string) => void, movementSummary?: () => string): Promise<void> {
   let previous = await readSnapshot(page)
   const start = selfPlayer(previous)
   const startTick = previous.tick
@@ -246,8 +311,9 @@ async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000
     visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false,
   }))
   const connectionStatus = await withDeadline(page.locator('.mp-connection').innerText(), 1_000, 'Connection diagnostic').catch(() => '<unavailable>')
-  const nodeProbe = await probeSnapshotFromNode(page)
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}).`)
+  const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(page), measureRenderCadence(page)])
+  const movement = movementSummary?.() ?? '<unavailable>'
+  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
 }
 
 test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
@@ -260,6 +326,8 @@ test('two synthetic accounts share the local room and use server-authoritative g
   await Promise.all([blockNonLoopback(contextA), blockNonLoopback(contextB)])
   const pageA = await contextA.newPage()
   const pageB = await contextB.newPage()
+  const movementTelemetryA = trackMovementCommands(pageA, markPhase)
+  const movementTelemetryB = trackMovementCommands(pageB, markPhase)
 
   try {
     await register(pageA, accountA, markPhase, 'account-a')
@@ -267,7 +335,7 @@ test('two synthetic accounts share the local room and use server-authoritative g
     markPhase('starting-ground-route')
     await clickGroundPoint(pageA, { x: 10, z: 13 })
     markPhase('ground-route-clicked')
-    await waitForArrival(pageA, { x: 10, z: 13 }, 35_000, markPhase)
+    await waitForArrival(pageA, { x: 10, z: 13 }, 35_000, markPhase, () => movementTelemetryA.summary())
     await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
     markPhase('ground-route-arrived')
 
@@ -311,8 +379,9 @@ test('two synthetic accounts share the local room and use server-authoritative g
       })), 1_000, 'B timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
       const connectionStatus = await withDeadline(pageB.locator('.mp-connection').innerText(), 1_000, 'B timeout connection').catch(() => '')
       const sceneError = await withDeadline(pageB.locator('.mp-scene-error').innerText(), 1_000, 'B timeout scene error').catch(() => '')
-      const nodeProbe = await probeSnapshotFromNode(pageB)
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}).`)
+      const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(pageB), measureRenderCadence(pageB)])
+      const movement = movementTelemetryB.summary()
+      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
     }
     markPhase('player-b-moved-one-step')
 
@@ -337,7 +406,9 @@ test('two synthetic accounts share the local room and use server-authoritative g
       })), 1_000, 'Route timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
       const connectionStatus = await withDeadline(pageA.locator('.mp-connection').innerText(), 1_000, 'Route timeout connection').catch(() => '')
       const sceneError = await withDeadline(pageA.locator('.mp-scene-error').innerText(), 1_000, 'Route timeout scene error').catch(() => '')
-      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}).`)
+      const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(pageA), measureRenderCadence(pageA)])
+      const movement = movementTelemetryA.summary()
+      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
     }
     await pageA.bringToFront()
     await pageA.locator('canvas').focus()
@@ -364,10 +435,11 @@ test('two synthetic accounts share the local room and use server-authoritative g
     await pageA.mouse.click(latestScreenPoint.x, latestScreenPoint.y)
     assertBoundedStep(beforeRapidClicks, await readSnapshot(pageA))
     await expect(pageA.locator('.mp-feedback')).toContainText('正在前往目的地。')
-    await waitForArrival(pageA, latestRapidTarget, 35_000, markPhase)
+    await waitForArrival(pageA, latestRapidTarget, 35_000, markPhase, () => movementTelemetryA.summary())
     await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
     markPhase('rapid-retarget-arrived')
   } finally {
+    movementTelemetryA.dispose(); movementTelemetryB.dispose()
     await Promise.all([contextA.close(), contextB.close()])
   }
 })
