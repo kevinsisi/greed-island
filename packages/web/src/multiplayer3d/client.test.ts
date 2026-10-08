@@ -214,6 +214,31 @@ describe('multiplayer room client', () => {
     expect(fetcher.mock.calls.filter(([url]) => String(url) === '/mp-api/command')).toHaveLength(1)
   })
 
+  it('stops sustained movement after a rate-limit response until a fresh scene sample', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const s = setup(async input => {
+      if (String(input) === '/mp-api/snapshot') return response(fixture())
+      return response({ error: 'MOVE_RATE_LIMIT', message: 'wait for next tick' }, 429)
+    })
+    await s.client.start()
+    s.streams[0]!.emit('snapshot', fixture())
+
+    await s.client.move(1, 0)
+    await vi.advanceTimersByTimeAsync(0)
+    const commandCount = () => s.fetcher.mock.calls.filter(([url]) => String(url) === '/mp-api/command').length
+    expect(commandCount()).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(commandCount()).toBe(1)
+
+    await s.client.move(0, 1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(commandCount()).toBe(2)
+    await s.client.move(0, 0)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(commandCount()).toBe(2)
+  })
   it('clears queued movement while reconnecting and accepts fresh movement afterward', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)

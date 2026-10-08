@@ -230,11 +230,12 @@ export function createRoomClient(options: ClientOptions) {
     }
   }
   const movementQueue = createLatestMoveIntentQueue(async ({ dx, dz }) => {
-    try { await send({ type: 'move', payload: { dx, dz } }) }
+    try { await send({ type: 'move', payload: { dx, dz } }); return true }
     catch (error) {
       if (!disposed && status === 'online' && !(error instanceof RoomApiError && error.status === 429)) {
         options.onError(error instanceof Error ? error.message : '無法移動。')
       }
+      return false
     }
   })
   clearQueuedMovement = movementQueue.clear

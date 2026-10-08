@@ -3,10 +3,9 @@ type MoveSender = (intent: MoveIntent) => Promise<unknown>
 type QueueOptions = { minimumIntervalMs?: number; now?: () => number }
 
 /**
- * Serializes movement impulses and retains only the latest pending direction.
- * A zero vector is a local cancellation, never a server command. After an
- * acknowledgement, wait one input interval so the scene can publish a fresh
- * direction or cancel before a queued impulse is sent.
+ * Serializes movement impulses while retaining the latest active direction.
+ * A zero vector is a synchronous local cancellation, never a server command.
+ * Active directions continue at the server cadence between render samples.
  */
 export function createLatestMoveIntentQueue(
   send: MoveSender,
@@ -15,7 +14,8 @@ export function createLatestMoveIntentQueue(
   const minimumIntervalMs = options.minimumIntervalMs ?? 100
   const now = options.now ?? Date.now
   let inFlight = false
-  let queued: MoveIntent | null = null
+  let active: { intent: MoveIntent; generation: number } | null = null
+  let generation = 0
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
   let lastSentAt = Number.NEGATIVE_INFINITY
@@ -25,57 +25,67 @@ export function createLatestMoveIntentQueue(
     timer = null
   }
 
-  function scheduleFlush(delayMs: number) {
+  function scheduleFlush(delayMs: number, ownerGeneration: number) {
     cancelTimer()
     timer = setTimeout(() => {
       timer = null
+      if (active?.generation !== ownerGeneration) return
       flush()
     }, Math.max(0, delayMs))
   }
 
-  function sendIntent(intent: MoveIntent) {
+  function finishSend(ownerGeneration: number, accepted: boolean) {
+    inFlight = false
+    if (!accepted && active?.generation === ownerGeneration) {
+      active = null
+      generation += 1
+      cancelTimer()
+    }
+    if (active && !disposed) flush()
+  }
+
+  function sendIntent(current: { intent: MoveIntent; generation: number }) {
     if (disposed) return
     inFlight = true
     lastSentAt = now()
     let result: Promise<unknown>
-    try { result = Promise.resolve(send(intent)) }
+    try { result = Promise.resolve(send(current.intent)) }
     catch (error) { result = Promise.reject(error) }
-    void result.catch(() => undefined).finally(() => {
-      inFlight = false
-      if (queued && !disposed) scheduleFlush(minimumIntervalMs)
-    })
+    void result.then(
+      accepted => finishSend(current.generation, accepted !== false),
+      () => finishSend(current.generation, false),
+    )
   }
 
   function flush() {
-    if (disposed || inFlight || !queued) return
+    if (disposed || inFlight || !active) return
     const remaining = minimumIntervalMs - (now() - lastSentAt)
     if (remaining > 0) {
-      scheduleFlush(remaining)
+      scheduleFlush(remaining, active.generation)
       return
     }
-    const next = queued
-    queued = null
-    sendIntent(next)
+    cancelTimer()
+    sendIntent(active)
   }
 
   function offer(dx: number, dz: number) {
     if (disposed) return
     if (!Number.isFinite(dx) || !Number.isFinite(dz)) return
     if (dx === 0 && dz === 0) {
-      queued = null
+      active = null
+      generation += 1
       cancelTimer()
       return
     }
-    queued = { dx, dz }
+    active = { intent: { dx, dz }, generation: ++generation }
     if (inFlight) return
-    // A fresh scene sample supersedes the grace timer; the interval guard
-    // still preserves the existing 10 Hz browser movement cadence.
     cancelTimer()
     flush()
   }
 
   function clear() {
-    queued = null
+    active = null
+    generation += 1
     cancelTimer()
   }
 

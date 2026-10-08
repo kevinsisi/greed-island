@@ -11,46 +11,103 @@ function deferred<T>() {
 afterEach(() => vi.useRealTimers())
 
 describe('latest movement intent queue', () => {
-  it('serializes impulses, coalesces to the latest direction, and keeps the 100ms cap', async () => {
+  it('keeps only the newest direction across a delayed acknowledgement', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
-    const first = deferred<void>()
+    const first = deferred<boolean>()
     const sent: Array<{ at: number; dx: number; dz: number }> = []
     const queue = createLatestMoveIntentQueue(intent => {
       sent.push({ at: Date.now(), ...intent })
-      return sent.length === 1 ? first.promise : Promise.resolve()
+      return sent.length === 1 ? first.promise : Promise.resolve(true)
     })
 
     queue.offer(1, 0)
-    vi.setSystemTime(100)
+    await vi.advanceTimersByTimeAsync(217)
     queue.offer(0, 1)
-    vi.setSystemTime(200)
+    await vi.advanceTimersByTimeAsync(100)
     queue.offer(-1, 0)
     expect(sent).toEqual([{ at: 0, dx: 1, dz: 0 }])
 
-    vi.setSystemTime(350)
-    first.resolve()
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(49)
-    expect(sent).toHaveLength(1)
-
-    // The next fresh scene sample replaces the queued direction before its
-    // grace timer, so only the current direction is sent.
-    vi.setSystemTime(400)
-    queue.offer(-1, 0)
+    first.resolve(true)
+    await vi.advanceTimersByTimeAsync(0)
     expect(sent).toEqual([
       { at: 0, dx: 1, dz: 0 },
-      { at: 400, dx: -1, dz: 0 },
+      { at: 317, dx: -1, dz: 0 },
     ])
-    await vi.advanceTimersByTimeAsync(1000)
+
+    queue.offer(0, 0)
+    await vi.advanceTimersByTimeAsync(1_000)
     expect(sent).toHaveLength(2)
     queue.dispose()
   })
 
-  it('a release cancels queued impulses locally without posting a zero command', async () => {
+  it('sends sustained intent at the 100ms authority cadence without another render sample', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
-    const first = deferred<void>()
+    const sent: Array<{ at: number; dx: number; dz: number }> = []
+    let inFlight = 0
+    let maximumInFlight = 0
+    const queue = createLatestMoveIntentQueue(intent => {
+      sent.push({ at: Date.now(), ...intent })
+      inFlight += 1
+      maximumInFlight = Math.max(maximumInFlight, inFlight)
+      return new Promise<boolean>(resolve => setTimeout(() => { inFlight -= 1; resolve(true) }, 20))
+    })
+
+    queue.offer(1, 0)
+    await vi.advanceTimersByTimeAsync(350)
+    expect(sent).toEqual([
+      { at: 0, dx: 1, dz: 0 },
+      { at: 100, dx: 1, dz: 0 },
+      { at: 200, dx: 1, dz: 0 },
+      { at: 300, dx: 1, dz: 0 },
+    ])
+    expect(maximumInFlight).toBe(1)
+
+    queue.offer(0, 0)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(sent).toHaveLength(4)
+    expect(inFlight).toBe(0)
+    queue.dispose()
+  })
+
+  it('continues after a 269ms acknowledgement at its completion using the newest sampled vector', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const sent: Array<{ at: number; dx: number; dz: number }> = []
+    let inFlight = 0
+    let maximumInFlight = 0
+    const queue = createLatestMoveIntentQueue(intent => {
+      sent.push({ at: Date.now(), ...intent })
+      inFlight += 1
+      maximumInFlight = Math.max(maximumInFlight, inFlight)
+      return new Promise<boolean>(resolve => setTimeout(() => { inFlight -= 1; resolve(true) }, 269))
+    })
+
+    queue.offer(1, 0)
+    await vi.advanceTimersByTimeAsync(217)
+    queue.offer(1, 0) // Simulated Babylon sample at a 217ms frame interval.
+    await vi.advanceTimersByTimeAsync(217)
+    queue.offer(0, 1)
+    await vi.advanceTimersByTimeAsync(104) // First ACK at269; second ACK at538.
+
+    expect(sent).toEqual([
+      { at: 0, dx: 1, dz: 0 },
+      { at: 269, dx: 1, dz: 0 },
+      { at: 538, dx: 0, dz: 1 },
+    ])
+    expect(maximumInFlight).toBe(1)
+
+    queue.offer(0, 0)
+    await vi.advanceTimersByTimeAsync(269)
+    expect(sent).toHaveLength(3)
+    queue.dispose()
+  })
+
+  it('a release cancels an in-flight direction and its pending replacement locally', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const first = deferred<boolean>()
     const sent: Array<{ dx: number; dz: number }> = []
     const queue = createLatestMoveIntentQueue(intent => {
       sent.push(intent)
@@ -58,71 +115,54 @@ describe('latest movement intent queue', () => {
     })
 
     queue.offer(1, 0)
-    vi.setSystemTime(100)
-    queue.offer(-1, 0)
-    vi.setSystemTime(150)
-    queue.offer(0, 0)
-    first.resolve()
-    await vi.advanceTimersByTimeAsync(1000)
-
-    expect(sent).toEqual([{ dx: 1, dz: 0 }])
-    queue.dispose()
-  })
-
-  it('clearing on disconnect cancels a pending direction', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(0)
-    const first = deferred<void>()
-    const sent: Array<{ dx: number; dz: number }> = []
-    const queue = createLatestMoveIntentQueue(intent => {
-      sent.push(intent)
-      return sent.length === 1 ? first.promise : Promise.resolve()
-    })
-
-    queue.offer(1, 0)
-    queue.offer(0, 1)
-    queue.clear()
-    first.resolve()
-    await vi.advanceTimersByTimeAsync(200)
-    expect(sent).toEqual([{ dx: 1, dz: 0 }])
-
-    expect(sent).toHaveLength(1)
-    queue.dispose()
-  })
-
-  it('a failed request releases the queue and can send the newest later direction', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(0)
-    const first = deferred<void>()
-    const sent: Array<{ dx: number; dz: number }> = []
-    const queue = createLatestMoveIntentQueue(intent => {
-      sent.push(intent)
-      return sent.length === 1 ? first.promise : Promise.resolve()
-    })
-
-    queue.offer(1, 0)
-    vi.setSystemTime(100)
-    queue.offer(0, -1)
-    first.reject(new Error('test transport failure'))
     await vi.advanceTimersByTimeAsync(100)
-    expect(sent).toEqual([{ dx: 1, dz: 0 }, { dx: 0, dz: -1 }])
-    await vi.advanceTimersByTimeAsync(1000)
+    queue.offer(0, 1)
+    queue.offer(0, 0)
+    first.resolve(true)
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(sent).toEqual([{ dx: 1, dz: 0 }])
+    queue.dispose()
+  })
+
+  it('a failed old request cannot clear a newer direction, while clear stops repeats', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const first = deferred<boolean>()
+    const sent: Array<{ at: number; dx: number; dz: number }> = []
+    const queue = createLatestMoveIntentQueue(intent => {
+      sent.push({ at: Date.now(), ...intent })
+      return sent.length === 1 ? first.promise : Promise.resolve(true)
+    })
+
+    queue.offer(1, 0)
+    await vi.advanceTimersByTimeAsync(217)
+    queue.offer(0, 1)
+    first.resolve(false)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sent).toEqual([{ at: 0, dx: 1, dz: 0 }, { at: 217, dx: 0, dz: 1 }])
+
+    queue.clear()
+    await vi.advanceTimersByTimeAsync(1_000)
     expect(sent).toHaveLength(2)
     queue.dispose()
   })
 
-  it('does not emit repeated stale intents when the input stream stops', async () => {
+  it('disconnect clear cancels the held direction and late acknowledgement cannot revive it', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
+    const first = deferred<boolean>()
     const sent: Array<{ dx: number; dz: number }> = []
-    const queue = createLatestMoveIntentQueue(intent => { sent.push(intent); return Promise.resolve() })
+    const queue = createLatestMoveIntentQueue(intent => {
+      sent.push(intent)
+      return first.promise
+    })
+
     queue.offer(1, 0)
-    await vi.advanceTimersByTimeAsync(0)
-    vi.setSystemTime(100)
-    queue.offer(1, 0)
-    await vi.advanceTimersByTimeAsync(0)
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(sent).toEqual([{ dx: 1, dz: 0 }, { dx: 1, dz: 0 }])
+    queue.clear()
+    first.resolve(true)
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(sent).toEqual([{ dx: 1, dz: 0 }])
     queue.dispose()
   })
 })
