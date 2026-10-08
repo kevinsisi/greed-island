@@ -132,26 +132,41 @@ export function findNavigationPath(start: NavigationPoint, destination: Navigati
   for (let step = 0; step < nodes.length; step += 1) {
     let current = -1
     for (let index = 0; index < nodes.length; index += 1) {
-      if (!visited[index] && (current < 0 || distances[index] < distances[current])) current = index
+      const candidateDistance = distances[index]
+      if (visited[index] || candidateDistance === undefined || !Number.isFinite(candidateDistance)) continue
+      if (current < 0) { current = index; continue }
+      const currentDistance = distances[current]
+      if (currentDistance === undefined || candidateDistance < currentDistance) current = index
     }
-    if (current < 0 || !Number.isFinite(distances[current])) break
+    if (current < 0) break
+    const currentDistance = distances[current]
+    const currentPoint = nodes[current]
+    if (currentDistance === undefined || !Number.isFinite(currentDistance) || !currentPoint) break
     if (current === 1) break
     visited[current] = true
     for (let next = 0; next < nodes.length; next += 1) {
-      if (next === current || visited[next] || !segmentIsClear(nodes[current], nodes[next], world, obstacles)) continue
-      const candidate = distances[current] + distance(nodes[current], nodes[next])
-      if (candidate < distances[next]) {
+      const nextPoint = nodes[next]
+      const nextDistance = distances[next]
+      if (next === current || visited[next] || !nextPoint || nextDistance === undefined
+        || !segmentIsClear(currentPoint, nextPoint, world, obstacles)) continue
+      const candidate = currentDistance + distance(currentPoint, nextPoint)
+      if (candidate < nextDistance) {
         distances[next] = candidate
         previous[next] = current
       }
     }
   }
 
-  if (!Number.isFinite(distances[1])) return null
+  const destinationDistance = distances[1]
+  if (destinationDistance === undefined || !Number.isFinite(destinationDistance)) return null
   const path: NavigationPoint[] = []
-  for (let cursor = 1; cursor !== 0; cursor = previous[cursor]) {
+  for (let cursor = 1; cursor !== 0;) {
     if (cursor < 0) return null
-    path.push(nodes[cursor])
+    const point = nodes[cursor]
+    const parent = previous[cursor]
+    if (!point || parent === undefined) return null
+    path.push(point)
+    cursor = parent
   }
   return path.reverse()
 }

@@ -14,6 +14,7 @@ import { CreateIcoSphere } from '@babylonjs/core/Meshes/Builders/icoSphereBuilde
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder'
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder'
 import type { Mesh } from '@babylonjs/core/Meshes/mesh'
+import type { LinesMesh } from '@babylonjs/core/Meshes/linesMesh'
 import type { MultiplayerSceneOptions, RoomPlayer, RoomSnapshot } from './types'
 import { findNavigationPath, moveIntentToward, type NavigationPoint } from './navigation'
 
@@ -229,7 +230,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   let wasPaused = true
   let navigationPath: NavigationPoint[] = []
   let navigationIndex = 0
-  let navigationLine: Mesh | null = null
+  let navigationLine: LinesMesh | null = null
   let hasNavigationMarker = false
   let currentNavigationStatus = ''
   const navigationMarker = CreateTorus('player-navigation-target', { diameter: 1.3, thickness: 0.08, tessellation: 40 }, scene)
@@ -498,6 +499,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
       if (manualMagnitude <= 0.06 && navigationPath.length > 0 && self) {
         while (navigationIndex < navigationPath.length) {
           const waypoint = navigationPath[navigationIndex]
+          if (!waypoint) { navigationIndex = navigationPath.length; break }
           if (Math.hypot(waypoint.x - self.x, waypoint.z - self.z) > 0.015) break
           navigationIndex += 1
         }
@@ -507,12 +509,17 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
         } else {
           const waypoint = navigationPath[navigationIndex]
           const speed = snapshot.world.movePerTick
-          const worldIntent = typeof speed === 'number' ? moveIntentToward(self, waypoint, speed) : null
-          if (worldIntent) {
-            // Movement controls are camera-relative; invert yaw to preserve the world-space route.
-            x = Math.cos(yaw) * worldIntent.x - Math.sin(yaw) * worldIntent.z
-            z = Math.sin(yaw) * worldIntent.x + Math.cos(yaw) * worldIntent.z
-            autoMoving = true
+          if (!waypoint || typeof speed !== 'number') {
+            clearNavigation('導航資料已變更，請重新設定目的地。')
+            stopIntent()
+          } else {
+            const worldIntent = moveIntentToward(self, waypoint, speed)
+            if (worldIntent) {
+              // Movement controls are camera-relative; invert yaw to preserve the world-space route.
+              x = Math.cos(yaw) * worldIntent.x - Math.sin(yaw) * worldIntent.z
+              z = Math.sin(yaw) * worldIntent.x + Math.cos(yaw) * worldIntent.z
+              autoMoving = true
+            }
           }
         }
       }
