@@ -37,6 +37,7 @@ Known limits:
 - Login is limited to 20 attempts per source IP per 60 s (`http.ts:52-59`). Behind Caddy every player shares one source IP, so many logins within a minute get 429; retry after a minute.
 - Move commands are limited to one per player per 100 ms tick (429 `MOVE_RATE_LIMIT`); this is a game rule, not an error.
 
-Public path (planned, not active until the exposure step is approved and done):
+Public path (active since 2026-10-08; reachable inside the tailnet only, the GB10 Caddy name resolves to its tailnet IP):
 - Browser -> `https://greed.sisihome.org` -> GB10 Caddy (`/opt/caddy/routes.caddyfile`, `@greed host greed.sisihome.org`) -> `https://nb-l390.bunny-salmon.ts.net:8100` (L390 `tailscale serve`) -> `127.0.0.1:28100` (web container) -> `/mp-api/*` -> multiplayer:4179.
+- Backups made before the switch: GB10 `/opt/caddy/.deploy-backups/20261008T005604Z-greed/`; L390 serve state before: `_ProjectControl/work/greed-l390-serve-before-1008.txt`.
 - Undo: remove the `@greed` block from `/opt/caddy/routes.caddyfile` (backups sit next to it as `routes.caddyfile.bak-before-greed-<time>`), reload Caddy; on L390 run `tailscale serve --https=8100 off`.
