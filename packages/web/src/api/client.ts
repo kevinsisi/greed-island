@@ -394,10 +394,7 @@ export type ServerAdminResetIssue = {
 
 export type ServerForgotPasswordResponse = {
   ok: true
-  issued: boolean
-  token?: string
-  expiresAt?: string
-  message?: string
+  message: string
 }
 
 export type ServerProfile = {

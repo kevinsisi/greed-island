@@ -5,7 +5,7 @@
 //   POST /api/auth/register
 //   POST /api/auth/login
 //   GET  /api/auth/me
-//   POST /api/auth/forgot-password   issues single-use reset token
+//   POST /api/auth/forgot-password   returns generic recovery guidance
 //   POST /api/auth/reset-password    consumes token + rotates password
 
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express'
@@ -129,9 +129,8 @@ export function createAuthRouter(
       res.status(400).json({ error: 'INVALID_BODY', message: 'email is required.' })
       return
     }
-    let normalized: string
     try {
-      normalized = normalizeEmail(body.email)
+      normalizeEmail(body.email)
     } catch (err) {
       if (err instanceof AccountError) {
         res.status(400).json({ error: err.code, message: err.message })
@@ -139,28 +138,13 @@ export function createAuthRouter(
       }
       throw err
     }
-    const account = store.findByEmail(normalized)
-    if (!account) {
-      // Do not leak whether the email exists, but we still need to
-      // tell the GM something. Return a stable message and no token.
-      res.status(200).json({
-        ok: true,
-        issued: false,
-        message: 'If the email is registered, a reset link has been generated.',
-      })
-      return
-    }
-    const reset = resets.create(account.id)
-    console.log(
-      `[auth] password reset issued for ${account.email} — expires ${new Date(reset.expiresAt).toISOString()}`
-    )
+    // Keep this anonymous endpoint independent of whether an account exists.
+    // No email delivery is configured, so recovery instructions go through an
+    // administrator using the protected admin reset route.
     res.status(200).json({
       ok: true,
-      issued: true,
-      token: reset.token,
-      expiresAt: new Date(reset.expiresAt).toISOString(),
       message:
-        'Password reset link generated. Visit /reset-password?token=<token> to set a new password.',
+        'If an account exists for this email, contact a game administrator directly to reset your password. This request does not send email or notify the administrator.',
     })
   })
 

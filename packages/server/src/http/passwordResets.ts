@@ -1,19 +1,12 @@
 // Password reset token store.
 //
-// We do not have an outgoing email service in this deployment, so the
-// reset flow is intentionally simple:
-//   1. Player or admin requests a reset for an email.
-//   2. Server generates a single-use token (32 random hex chars), stored
-//      in `password_resets` with an expiry timestamp.
-//   3. The token is returned in the API response. For self-service the
-//      player copies the link from the screen / console; for admin
-//      resets the GM hands the link to the player out-of-band.
-//   4. POST /api/auth/reset-password consumes the token and rotates
-//      the password hash.
+// No outgoing email service is configured. Tokens are created only through
+// the protected admin reset route, which returns a single-use token to an
+// authenticated administrator to hand to the player out-of-band. The
+// anonymous forgot-password endpoint never creates or discloses a token.
 //
-// The store also exposes a cleanup hook so expired/used tokens are not
-// retained forever in the SQLite file.
-
+// POST /api/auth/reset-password consumes a token and rotates the password
+// hash. Expired/used tokens are pruned so they are not retained forever.
 import { randomBytes } from 'node:crypto'
 import type Database from 'better-sqlite3'
 

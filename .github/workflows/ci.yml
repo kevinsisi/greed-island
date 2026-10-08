@@ -83,7 +83,7 @@ jobs:
 
   multiplayer-browser-e2e:
     name: Multiplayer real-browser E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -117,8 +117,8 @@ jobs:
       - name: Install pinned Playwright for this job only
         run: npm install --no-save --package-lock=false --no-audit --no-fund @playwright/test@1.63.0
 
-      - name: Install bundled Chromium
-        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify runner-provided Chrome
+        run: google-chrome --version
 
       - name: Run multiplayer browser verification
         run: ./node_modules/.bin/playwright test --config=playwright.config.mjs

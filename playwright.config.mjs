@@ -19,9 +19,15 @@ export default defineConfig({
   use: {
     baseURL: appUrl,
     browserName: 'chromium',
+    channel: 'chrome',
     headless: true,
     viewport: { width: 1440, height: 900 },
-    launchOptions: { chromiumSandbox: true },
+    launchOptions: {
+      chromiumSandbox: true,
+      // Playwright adds this unsafe software-WebGL flag by default. Keep it out;
+      // if the runner cannot render WebGL without it, the E2E should fail clearly.
+      ignoreDefaultArgs: ['--enable-unsafe-swiftshader'],
+    },
     screenshot: 'off',
     video: 'off',
     trace: 'off',

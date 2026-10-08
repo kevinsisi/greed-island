@@ -280,10 +280,6 @@ export type TranslationKey =
   | 'forgot.submitting'
   | 'forgot.backToLogin'
   | 'forgot.successGeneric'
-  | 'forgot.successWithToken'
-  | 'forgot.linkLabel'
-  | 'forgot.copyLink'
-  | 'forgot.copied'
   | 'forgot.errorGeneric'
   // reset password
   | 'reset.eyebrow'
