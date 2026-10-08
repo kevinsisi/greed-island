@@ -62,7 +62,7 @@
 
 	handle {
 		header Cache-Control "no-store"
-		redir /multiplayer-3d 302
+		redir * /multiplayer-3d 302
 	}
 
 	log {
