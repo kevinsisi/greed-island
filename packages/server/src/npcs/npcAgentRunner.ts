@@ -7,6 +7,7 @@
 // 失敗策略（integration-robustness）：AI 不可用 / 超時 / 解析失敗 → 本輪
 // 靜默放棄，確定性 intent planner 照常運作；不重試（下個週期自然再來）。
 
+import { boundedSettlement, cancellableDelay, ProviderCancelled, withAbortSignal } from './providerCancellation.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { NpcProfile } from './types.js'
 import { generateWithProviders } from './aiProvider.js'
@@ -70,7 +71,12 @@ export type NpcAgentAttempt = Readonly<{
 }>
 
 export class NpcAgentRunner {
-  private readonly inFlight = new Set<string>()
+  private readonly inFlight = new Map<string, symbol>()
+  private readonly operations = new Set<Promise<void>>()
+  private active = true
+  private lastConfigured = false
+  private generation = 0
+  private controller = new AbortController()
   /** 每個 NPC 上次「被出題」的 tick（出題當下即記，非等成功）；staleness 排程用。 */
   private readonly lastDeliberatedTick = new Map<string, number>()
   private dueCount = 0
@@ -88,6 +94,19 @@ export class NpcAgentRunner {
     private readonly settings: SettingsStore,
     private readonly deps: NpcAgentDeps
   ) {}
+
+  /** Reusable pause. Abort old attempts/retries without erasing durable world state. */
+  stop(): void {
+    if (!this.active) return
+    this.active = false; this.generation += 1; this.controller.abort()
+    for (const id of this.inFlight.keys()) this.lastDeliberatedTick.delete(id)
+    this.inFlight.clear()
+  }
+  start(): void {
+    if (this.active) return
+    this.active = true; this.controller = new AbortController()
+  }
+  waitForIdle(timeoutMs = 1000): Promise<boolean> { return boundedSettlement([...this.operations], timeoutMs) }
 
   /**
    * 每 tick 呼叫；以 staleness（最久沒思考者先）挑選合格 NPC 非阻塞出題，
@@ -143,7 +162,7 @@ export class NpcAgentRunner {
   getDiagnostics(): NpcAgentDiagnostics {
     return {
       enabled: this.isEnabled(),
-      configured: isOpenCodeConfigured(this.settings) || this.settings.countActive() > 0,
+      configured: this.active ? this.readConfigured() : this.lastConfigured,
       inFlight: this.inFlight.size,
       dueCount: this.dueCount,
       skippedNoTile: this.skippedNoTile,
@@ -159,13 +178,28 @@ export class NpcAgentRunner {
   }
 
   private isEnabled(): boolean {
+    if (!this.active) return false
     if (this.settings.getSetting('npc_agent_enabled') === 'false') return false
-    return isOpenCodeConfigured(this.settings) || this.settings.countActive() > 0
+    return this.readConfigured()
+  }
+  private readConfigured(): boolean {
+    this.lastConfigured = isOpenCodeConfigured(this.settings) || this.settings.countActive() > 0
+    return this.lastConfigured
   }
 
-  private async deliberate(profile: NpcProfile, decidedAtTick: number): Promise<void> {
-    this.inFlight.add(profile.id)
+  private deliberate(profile: NpcProfile, decidedAtTick: number): Promise<void> {
+    if (!this.active || this.inFlight.has(profile.id)) return Promise.resolve()
+    const ticket = Symbol(), generation = this.generation, signal = this.controller.signal
+    this.inFlight.set(profile.id, ticket)
+    const operation = this.runDeliberation(profile, decidedAtTick, generation, signal, ticket)
+    this.operations.add(operation)
+    void operation.finally(() => this.operations.delete(operation))
+    return operation
+  }
+  private async runDeliberation(profile: NpcProfile, decidedAtTick: number, generation: number, signal: AbortSignal, ticket: symbol): Promise<void> {
+    const authorize = () => { if (!this.active || signal.aborted || generation !== this.generation) throw new ProviderCancelled() }
     try {
+      authorize()
       const tile = this.deps.getNpcTile(profile.id)
       if (!tile) {
         this.skippedNoTile += 1
@@ -189,22 +223,26 @@ export class NpcAgentRunner {
 
       // 暫時性失敗（provider throw / 回傳無法解析的 JSON）指數退避重試；
       // 任一次嘗試成功即送出，全敗才表面化（不 throw 給 tick 路徑）。
-      const maxRetries = this.maxRetries()
+      const maxRetries = this.maxRetries(), retryBaseDelayMs = this.retryBaseDelayMs()
       let proposal: ReturnType<typeof parseFreeformAgentProposal> = null
       let lastProvider: string | undefined
       const parseFailReason = 'provider returned non-conforming freeform JSON'
       let lastErrorMessage: string | null = null
       for (let attemptNo = 0; attemptNo <= maxRetries; attemptNo += 1) {
-        if (attemptNo > 0) await sleep(this.retryBaseDelayMs() * 2 ** (attemptNo - 1))
+        authorize()
+        if (attemptNo > 0) await cancellableDelay(retryBaseDelayMs * 2 ** (attemptNo - 1), signal)
+        authorize()
         try {
-          const result = await generateWithProviders(this.settings, {
+          const result = await withAbortSignal(generateWithProviders(this.settings, {
+            signal,
             systemPrompt,
             userPrompt,
             temperature: 0.8,
             maxOutputTokens: 512,
             responseMimeType: 'application/json',
             thinkingBudget: 0,
-          })
+          }), signal)
+          authorize()
           this.providerSuccessCount += 1
           lastProvider = result.provider
           lastErrorMessage = null
@@ -215,6 +253,7 @@ export class NpcAgentRunner {
           }
           // provider 有回應但格式不合 → 視為暫時性，退避重試
         } catch (err) {
+          authorize()
           lastErrorMessage = err instanceof Error ? err.message : String(err)
           // 暫時性 provider 失敗 → 退避重試
         }
@@ -236,6 +275,7 @@ export class NpcAgentRunner {
         this.lastError = attempt
         return
       }
+      authorize()
       const livingNpcIds = new Set(this.deps.listAgentNpcs().map((p) => p.id))
       const resolution = resolveFreeformAgentProposal(proposal, {
         currentTile: tile,
@@ -243,6 +283,7 @@ export class NpcAgentRunner {
         livingNpcIds,
         getNpcTile: this.deps.getNpcTile,
       })
+      authorize()
       this.deps.submitDecision({
         profile,
         tile,
@@ -261,6 +302,7 @@ export class NpcAgentRunner {
       this.lastAttempt = attempt
       this.lastSuccess = attempt
     } catch (err) {
+      if (signal.aborted || generation !== this.generation || !this.active) return
       // AI 不可用：本輪靜默放棄，確定性 planner 接手。
       this.errorCount += 1
       const attempt: NpcAgentAttempt = {
@@ -272,7 +314,7 @@ export class NpcAgentRunner {
       this.lastAttempt = attempt
       this.lastError = attempt
     } finally {
-      this.inFlight.delete(profile.id)
+      if (this.inFlight.get(profile.id) === ticket) this.inFlight.delete(profile.id)
     }
   }
 }
@@ -317,11 +359,6 @@ function hashId(id: string): number {
 /** 距上次出題的 tick 數；從未出題 → +∞（最優先輪轉）。 */
 function staleness(lastTick: number | undefined, currentTick: number): number {
   return lastTick === undefined ? Number.POSITIVE_INFINITY : currentTick - lastTick
-}
-
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) return Promise.resolve()
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function readPositiveIntSetting(store: SettingsStore, key: string, fallback: number): number {

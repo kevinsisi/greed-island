@@ -137,6 +137,8 @@ export function createUnifiedServer(config: UnifiedServerConfig): UnifiedServer 
         // A genuine replay failure is reported by the boot callback. Cleanup
         // still has to close SQLite after the failed run has settled.
         canonicalRuntime.waitForDeferredHydration().catch(() => {}),
+        // Cancelled provider continuations drain promptly even when the provider ignores abort.
+        canonicalRuntime.waitForBackgroundWork(1000),
       ]).then(() => { if (db.open) db.close() })
       return closePromise
     }

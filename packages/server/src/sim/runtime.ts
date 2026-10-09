@@ -701,6 +701,8 @@ export class SimulationRuntime {
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
   private npcAgentRunner: NpcAgentRunner | null = null
+  private backgroundPaused = false
+  private backgroundGeneration = 0
   private readonly combatResolvedListeners = new Set<(info: CombatResolvedInfo) => void>()
   /** Most recent accepted AI utterance per NPC — populated by applyFreeformAgentActionEvent. */
   private readonly npcUtteranceMap = new Map<string, { text: string; tick: number }>()
@@ -850,6 +852,7 @@ export class SimulationRuntime {
     if (this.ambientNarrator) return this.ambientNarrator
     const narrator = new AmbientNarrator(settings)
     this.ambientNarrator = narrator
+    if (this.backgroundPaused) narrator.stop()
     // v0.15.1：每 tick 主動推「最近被玩家請求過、cache 已過期」的 tile 進下一輪
     // refresh，這樣下次 polling 拿到的 ambient 文字真的會變動，而不是靜止 30 tick。
     // autonomous-world-narration：背景輪轉的全 world tile 來源 —— 與
@@ -911,6 +914,7 @@ export class SimulationRuntime {
       getBeliefContext: (npcId) => this.getFormattedBeliefContext(npcId),
       getReflectionContext: (npcId) => this.getFormattedReflectionContext(npcId),
       submitDecision: ({ profile, tile, resolution, decidedAtTick }) => {
+        if (this.backgroundPaused) return
         const actionLabel = resolution.resolved.kind
         const narration = narrateFreeformAgentDecision(profile.name.zh, resolution)
         const command = makeLivingWorldCommand(
@@ -940,6 +944,7 @@ export class SimulationRuntime {
       },
     })
     this.npcAgentRunner = runner
+    if (this.backgroundPaused) runner.stop()
     this.subscribeTick((tick) => runner.tick(tick))
     return runner
   }
@@ -974,6 +979,8 @@ export class SimulationRuntime {
 
   start(): void {
     if (this.tickLoopActive) return
+    this.backgroundPaused = false
+    this.npcAgentRunner?.start(); this.ambientNarrator?.start()
     this.tickLoopActive = true
     this.playerMovementTimer = setInterval(() => this.playerWorld.advanceMovementStep(), PLAYER_MOVEMENT_STEP_MS)
     this.nextTickDueAtMs = Date.now() + this.tickDurationMs
@@ -981,6 +988,8 @@ export class SimulationRuntime {
   }
 
   stop(): void {
+    this.backgroundPaused = true; this.backgroundGeneration += 1
+    this.npcAgentRunner?.stop(); this.ambientNarrator?.stop()
     // stop() remains a reusable pause. Only work captured before this stop is
     // cancelled; a later start/hydration may use the next generation.
     this.deferredHydrationGeneration += 1
@@ -998,6 +1007,12 @@ export class SimulationRuntime {
     // shutdown both leave no orphaned timers behind.
     this.combatRuntime.shutdownAll()
     this.combatCardAuthorizers.clear()
+  }
+
+  /** Drain existing cancelled NPC/narration continuations only; never starts background work. */
+  async waitForBackgroundWork(timeoutMs = 1000): Promise<boolean> {
+    const settled = await Promise.all([this.npcAgentRunner?.waitForIdle(timeoutMs) ?? true, this.ambientNarrator?.waitForIdle(timeoutMs) ?? true])
+    return settled.every(Boolean)
   }
 
   private scheduleNextTick(delayMs = this.tickDurationMs): void {
@@ -5250,10 +5265,11 @@ export class SimulationRuntime {
         // 非阻塞：AI 增強敘事仍走 in-memory NarrativeEvent，不寫 EventLog
         const ambient = this.ambientNarrator
         if (ambient) {
+          const generation = this.backgroundGeneration
           void ambient
             .narrateWorldEvent(event)
             .then((res) => {
-              if (res.source !== 'ai') return
+              if (res.source !== 'ai' || this.backgroundPaused || generation !== this.backgroundGeneration) return
               const enhanced: NarrativeEvent = {
                 sequence: this.lastSequence + 0.5,
                 tick: nextTick,

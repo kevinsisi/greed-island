@@ -12,6 +12,7 @@
 // (aiDialog / ambientNarrator / chronicleRenderer) then fall back to their
 // static-content path.
 
+import { throwIfProviderCancelled, withAbortSignal } from './providerCancellation.js'
 import type { SettingsStore } from '../http/settings.js'
 import { generateWithKeyPool, GeminiUnavailableError, type GeminiGenerationOptions } from './geminiClient.js'
 import {
@@ -54,10 +55,14 @@ export function getProviderPriority(store: SettingsStore): readonly AiProviderId
  */
 export async function generateWithProviders(
   store: SettingsStore,
-  options: ProviderGenerationOptions,
+  inputOptions: ProviderGenerationOptions,
 ): Promise<{ text: string; provider: AiProviderId }> {
+  const { signal, ...values } = inputOptions
+  const options = Object.freeze({ ...values, ...(signal ? { signal } : {}) })
+  throwIfProviderCancelled(signal)
   const errors: string[] = []
   for (const provider of getProviderPriority(store)) {
+    throwIfProviderCancelled(signal)
     try {
       if (provider === 'opencode') {
         const servers = getOpenCodeServers(store)
@@ -68,18 +73,22 @@ export async function generateWithProviders(
         const model = getOpenCodeModel(store)
         let lastErr: string | null = null
         for (const serverUrl of servers) {
+          throwIfProviderCancelled(signal)
           try {
             const openCodeOptions = {
               systemPrompt: options.systemPrompt,
               userPrompt: options.userPrompt,
               model,
+              ...(signal ? { signal: signal } : {}),
               ...(typeof options.openCodeTimeoutMs === 'number'
                 ? { timeoutMs: options.openCodeTimeoutMs }
                 : {}),
             }
-            const text = await generateWithOpenCode(serverUrl, openCodeOptions)
+            const text = await withAbortSignal(generateWithOpenCode(serverUrl, openCodeOptions), signal)
+            throwIfProviderCancelled(signal)
             return { text, provider }
           } catch (err) {
+            throwIfProviderCancelled(signal)
             lastErr =
               err instanceof OpenCodeUnavailableError ? err.message : String(err)
           }
@@ -92,10 +101,12 @@ export async function generateWithProviders(
           errors.push('gemini: no active keys')
           continue
         }
-        const text = await generateWithKeyPool(store, options)
+        const text = await withAbortSignal(generateWithKeyPool(store, options), signal)
+        throwIfProviderCancelled(signal)
         return { text, provider }
       }
     } catch (err) {
+      throwIfProviderCancelled(signal)
       const reason =
         err instanceof OpenCodeUnavailableError
           ? `opencode: ${err.message}`

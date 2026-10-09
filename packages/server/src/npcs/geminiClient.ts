@@ -13,6 +13,7 @@
 // throws GeminiUnavailableError and the caller falls back to the
 // static dialog library.
 
+import { providerDeadline, throwIfProviderCancelled, withAbortSignal } from './providerCancellation.js'
 import { QUOTA_COOLDOWN_MS, type SettingsStore } from '../http/settings.js'
 
 export const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash'
@@ -20,6 +21,7 @@ export const GEMINI_REQUEST_TIMEOUT_MS = 15_000
 
 export type GeminiGenerationOptions = Readonly<{
   model?: string
+  signal?: AbortSignal
   systemPrompt: string
   userPrompt: string
   temperature?: number
@@ -63,8 +65,11 @@ type RawGeminiResponse = {
  */
 export async function generateWithKeyPool(
   store: SettingsStore,
-  options: GeminiGenerationOptions
+  inputOptions: GeminiGenerationOptions
 ): Promise<string> {
+  const { signal, ...values } = inputOptions
+  const options = Object.freeze({ ...values, ...(signal ? { signal } : {}) })
+  throwIfProviderCancelled(signal)
   const model = options.model ?? GEMINI_DEFAULT_MODEL
   const keys = store.listActiveKeys()
   if (keys.length === 0) {
@@ -73,11 +78,14 @@ export async function generateWithKeyPool(
 
   const errors: string[] = []
   for (const record of keys) {
+    throwIfProviderCancelled(signal)
     try {
       const text = await callGemini(record.key, model, options)
+      throwIfProviderCancelled(signal)
       store.markUsed(record.id)
       return text
     } catch (err) {
+      throwIfProviderCancelled(signal)
       const detail = err instanceof Error ? err.message : String(err)
       const disable = err instanceof KeyAuthError || err instanceof KeyQuotaError
       // v0.42.0 — quota errors (429) get a finite cooldown so the key auto-
@@ -100,8 +108,10 @@ class KeyQuotaError extends Error {}
 async function callGemini(
   key: string,
   model: string,
-  options: GeminiGenerationOptions
+  inputOptions: GeminiGenerationOptions
 ): Promise<string> {
+  const { signal, ...values } = inputOptions
+  const options = Object.freeze({ ...values, ...(signal ? { signal } : {}) })
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`
   const generationConfig: Record<string, unknown> = {
     temperature: options.temperature ?? 0.85,
@@ -126,39 +136,28 @@ async function callGemini(
     generationConfig,
   }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS)
-  let response: Response
+  const deadline = providerDeadline(GEMINI_REQUEST_TIMEOUT_MS, signal)
+  let json: RawGeminiResponse & { candidates?: Array<RawGeminiCandidate & { finishReason?: string }> }
   try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
+    const response = await withAbortSignal(fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: deadline.signal,
+    }), deadline.signal)
+    throwIfProviderCancelled(signal)
+    if (!response.ok) {
+      const text = await withAbortSignal(response.text().catch(() => ''), deadline.signal)
+      throwIfProviderCancelled(signal)
+      if (response.status === 401 || response.status === 403) throw new KeyAuthError(`HTTP ${response.status}: ${text.slice(0, 200)}`)
+      if (response.status === 429) throw new KeyQuotaError(`HTTP 429 quota: ${text.slice(0, 200)}`)
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`)
+    }
+    json = await withAbortSignal(response.json(), deadline.signal) as typeof json
+    throwIfProviderCancelled(signal)
   } catch (err) {
-    if ((err as { name?: string }).name === 'AbortError') {
-      throw new Error(`Gemini request timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`)
-    }
+    throwIfProviderCancelled(signal)
+    if ((err as { name?: string }).name === 'AbortError') throw new Error(`Gemini request timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`)
     throw err
-  } finally {
-    clearTimeout(timer)
-  }
+  } finally { deadline.close() }
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    if (response.status === 401 || response.status === 403) {
-      throw new KeyAuthError(`HTTP ${response.status}: ${text.slice(0, 200)}`)
-    }
-    if (response.status === 429) {
-      throw new KeyQuotaError(`HTTP 429 quota: ${text.slice(0, 200)}`)
-    }
-    throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`)
-  }
-
-  const json = (await response.json()) as RawGeminiResponse & {
-    candidates?: Array<RawGeminiCandidate & { finishReason?: string }>
-  }
   if (json.error?.message) {
     throw new Error(`Gemini error: ${json.error.message}`)
   }
