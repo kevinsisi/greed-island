@@ -135,7 +135,7 @@ export function applyLegacyWorldStage(input: { db: Database.Database; source: Le
 }
 
 /** A retry succeeds only after the exact private bytes and immutable EventLog archive are verified. */
-function verifyRecordedArchive(db: Database.Database, source: LegacyWorldSource, mappings: LegacyWorldStagePlan['identities'], planDigest: string, ids: readonly string[]): void {
+export function verifyRecordedArchive(db: Database.Database, source: LegacyWorldSource, mappings: LegacyWorldStagePlan['identities'], planDigest: string, ids: readonly string[]): void {
   if (!Array.isArray(ids) || ids.length !== Math.ceil(source.manifest.eventCount / ARCHIVE_BATCH_ROWS) + 1 || new Set(ids).size !== ids.length) throw new Error('STAGED_ARCHIVE_INCOMPLETE')
   const hash = createHash('sha256'); let count = 0
   for (let index = 0; index < ids.length; index += 1) {
