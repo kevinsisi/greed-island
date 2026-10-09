@@ -2922,6 +2922,8 @@ export class SimulationRuntime {
       ? new Set([...npcPartition.active].filter(id => !incapacitatedNpcIds.has(id)))
       : npcPartition.active
     const npcResult = this.npcEngine.tick(nextTick, {
+      unlockedTileIds: this.lifeExpansion.unlockedTileIds,
+      generatedTileIds: this.dynamicTileProjection.listTileIds(),
       areaSafety,
       areaEconomy,
       weather: this.weather,

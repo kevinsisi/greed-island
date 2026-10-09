@@ -18,6 +18,9 @@ export type DistrictId =
   | 't_ruin'     // 鏽灣區
   | 't_dock'     // 碼頭區
   | 't_salt_marsh' // 鹽沼外環
+  | 't_frontier_badlands'
+  | 't_frontier_highland'
+  | 't_frontier_cove'
   | 't_road'     // 中性連通帶 (不是「街區」，純粹給玩家走的路)
 
 export interface DistrictDef {
@@ -128,6 +131,9 @@ export const DISTRICTS: Readonly<Record<DistrictId, DistrictDef>> = {
     anchor: { col: 17, row: 14 },
     walkable: true
   },
+  t_frontier_badlands: { id: 't_frontier_badlands', nameZh: '荒土地帶', nameEn: 'Badlands', color: 0x99714d, shade: 0x715039, border: 0x49372c, anchor: { col: 19, row: 9 }, walkable: true },
+  t_frontier_highland: { id: 't_frontier_highland', nameZh: '高地山脊', nameEn: 'Highland Ridge', color: 0x738271, shade: 0x525e51, border: 0x344233, anchor: { col: 5, row: 0 }, walkable: true },
+  t_frontier_cove: { id: 't_frontier_cove', nameZh: '隱蔽海灣', nameEn: 'Hidden Cove', color: 0x539eae, shade: 0x3c7889, border: 0x285561, anchor: { col: 1, row: 14 }, walkable: true },
   t_road: {
     id: 't_road',
     nameZh: '街道',
@@ -200,7 +206,10 @@ export const DISTRICT_IDS: DistrictId[] = [
   't_central',
   't_ruin',
   't_dock',
-  't_salt_marsh'
+  't_salt_marsh',
+  't_frontier_badlands',
+  't_frontier_highland',
+  't_frontier_cove'
 ]
 
 export function isDistrict(id: DistrictId): boolean {

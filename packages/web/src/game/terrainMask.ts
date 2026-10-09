@@ -19,9 +19,10 @@
 import { AREA_GRID_COLS, AREA_GRID_ROWS } from './areaGrid'
 import type { DistrictId } from './districts'
 
-export type SubcellTerrain = 'land' | 'pier' | 'shore' | 'shallow_water' | 'open_water'
+export type SubcellTerrain = 'blocked' | 'land' | 'pier' | 'shore' | 'shallow_water' | 'open_water'
 
 const GLYPH_TO_TERRAIN: Readonly<Record<string, SubcellTerrain>> = {
+  X: 'blocked',
   L: 'land',
   P: 'pier',
   S: 'shore',
@@ -31,6 +32,7 @@ const GLYPH_TO_TERRAIN: Readonly<Record<string, SubcellTerrain>> = {
 
 /** Display color for each terrain. AreaScene paints these per sub-cell. */
 export const COLOR_FOR_TERRAIN: Readonly<Record<SubcellTerrain, number>> = {
+  blocked: 0x2a2a2a,
   land: 0x6b8a4b, // muted moss for shore-side ground
   // v0.24.2 — pier toned down from 0xc6a06b. Original was too bright
   // and the user reported large "wood" patches dominating water
@@ -43,7 +45,7 @@ export const COLOR_FOR_TERRAIN: Readonly<Record<SubcellTerrain, number>> = {
 }
 
 export function isWalkableTerrain(terrain: SubcellTerrain): boolean {
-  return terrain !== 'open_water'
+  return terrain !== 'open_water' && terrain !== 'blocked'
 }
 
 // Land terrain types (non-water biomes)
@@ -81,6 +83,31 @@ export function isWalkableLand(t: LandTerrain): boolean {
 
 // Each row: exactly 15 chars. o=open r=rough p=path X=blocked
 export const LAND_MASKS: Readonly<Record<string, readonly string[]>> = {
+  t_frontier_badlands: [
+    'XXooooopoooooXX',
+    'XoorroopoorrooX',
+    'ooorrXopooXrroo',
+    'ooooXXopooXXooo',
+    'ppppppppppppppp',
+    'ooooooopooooooo',
+    'ooXXooopooXXooo',
+    'oorrooopooorroo',
+    'XoooooopooooooX',
+    'XXooooopoooooXX',
+  ],
+  t_frontier_highland: [
+    'XXXXXXpppXXXXXX',
+    'XXXXooopoooXXXX',
+    'XXXooroporroXXX',
+    'XXooXXopooXXooX',
+    'ooooooopooooooo',
+    'ppppppppppppppp',
+    'XXoooroporrooXX',
+    'XXXoooopooooXXX',
+    'XXXXooopoooXXXX',
+    'XXXXXXpppXXXXXX',
+  ],
+
 
   // t_forest — dense forest edges, central clearing, winding path
   // buildings: (1,3), (13,3)
@@ -234,6 +261,18 @@ export function walkableCellsForTile(
 //                  b_temple_pier_cafe (5,3)
 //   t_salt_marsh:  b_salt_marsh_field_station (7,4)
 const RAW_MASKS: Readonly<Partial<Record<DistrictId, readonly string[]>>> = {
+  t_frontier_cove: [
+    'LLLLLLLSSsss...',
+    'LLLLLLLSSsss...',
+    'LLXXLLLSSsss...',
+    'LLXXLLLSSsss...',
+    'LLLLLLLPPPPPPss',
+    'LLLLLLLPPPPPPss',
+    'LLLLLLLSSsss...',
+    'LLXXLLLSSsss...',
+    'LLLLLLLSSsss...',
+    'LLLLLLLSSsss...',
+  ],
   t_dock: [
     'LLLLLLLLSSssss.',
     'LLLLLLLLSSssss.',

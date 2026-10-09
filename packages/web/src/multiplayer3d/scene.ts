@@ -74,6 +74,8 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   }
   const mats = {
     sea: material('harbor-sea', '#477f85', 0.15),
+    shallow: material('region-shallow-water', '#73a8ae'),
+    shore: material('region-shore', '#a79b73'),
     land: material('harbor-land', '#aeb39b'),
     stone: material('harbor-stone', '#8c9892'),
     darkStone: material('harbor-dark-stone', '#536967'),
@@ -132,10 +134,17 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     box('region-edge', width + 2, 0.7, depth + 2, mats.darkStone, centerX, -0.48, centerZ, root)
     const floor = box('region-floor', width, 0.2, depth, mats.land, centerX, -0.1, centerZ, root)
     floor.isPickable = true
+    world.terrain?.forEach((row, z) => [...row].forEach((glyph, x) => {
+      if (glyph === 'X') return // obstacle below supplies rock volume
+      const mat = glyph === '.' ? mats.sea : glyph === 's' ? mats.shallow : glyph === 'S' ? mats.shore
+        : glyph === 'P' ? mats.wood : glyph === 'p' ? mats.darkStone : glyph === 'r' ? mats.shore : mats.land
+      box(`region-terrain-${x}-${z}`, 1, .025, 1, mat, x, .015, z, root)
+    }))
     // No authored road or building is invented. Footprints come from server geometry.
     world.obstacles.forEach((obstacle, index) => {
+      if (world.terrain?.[obstacle.z]?.[obstacle.x] === '.') return // authoritative water collision remains server-side
       const wall = box(`region-obstacle-${obstacle.id ?? index}`, obstacle.width, world.presentation === 'harbor-3d' ? 3 : 1.2, obstacle.depth,
-        mats.wall, obstacle.x, world.presentation === 'harbor-3d' ? 1.5 : 0.6, obstacle.z, root)
+        world.terrain?.[obstacle.z]?.[obstacle.x] === 'X' ? mats.stone : mats.wall, obstacle.x, world.presentation === 'harbor-3d' ? 1.5 : 0.6, obstacle.z, root)
       blockers.add(wall)
     })
     world.portals.forEach((portal, index) => {

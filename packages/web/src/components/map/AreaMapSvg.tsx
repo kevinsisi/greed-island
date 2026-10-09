@@ -47,6 +47,7 @@ const BUILDING_ENTER_CELLS = 1.5
 //   3. ember 光只給「活的東西」(窗、燈、玩家光環),不進地形
 
 const SUBCELL_CSS: Readonly<Record<SubcellTerrain, string>> = {
+  blocked:       '#2e333b',
   land:          '#3c4a2e',
   pier:          '#63482e',
   shore:         '#5e5138',

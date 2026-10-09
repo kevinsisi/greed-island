@@ -44,6 +44,10 @@ const STREET_EDGE = '#5f4e34'
 
 type DR = readonly [c0: number, r0: number, c1: number, r1: number]
 export const DISTRICT_RECTS: Readonly<Partial<Record<DistrictId, DR>>> = {
+  // Legacy coordinate envelopes only; rendered districts use the Voronoi seeds below.
+  t_frontier_badlands: [18, 8, 19, 10],
+  t_frontier_highland: [4, 0, 6, 1],
+  t_frontier_cove: [0, 13, 2, 14],
   t_forest:     [0,   0,  4,  4],
   t_mountain:   [5,   0, 13,  3],
   t_temple:     [14,  0, 19,  4],
@@ -75,6 +79,9 @@ interface WardMeta {
 }
 
 const WARD: Readonly<Record<DistrictId, WardMeta>> = {
+  t_frontier_badlands: { biome: 'ruin', ground: '#544631', buildType: 'workshop', density: 0 },
+  t_frontier_highland: { biome: 'mountain', ground: '#42392c', buildType: 'workshop', density: 0 },
+  t_frontier_cove: { biome: 'port', ground: '#33454f', buildType: 'warehouse', density: 0 },
   t_forest:     { biome: 'forest',   ground: '#37482c', buildType: 'residential', density: 8 },
   t_mountain:   { biome: 'mountain', ground: '#42392c', buildType: 'workshop',    density: 6 },
   t_temple:     { biome: 'port',     ground: '#37442f', buildType: 'warehouse',   density: 12 },
@@ -90,6 +97,9 @@ const WARD: Readonly<Record<DistrictId, WardMeta>> = {
 type Pt = [number, number]
 
 const SEED: Readonly<Record<DistrictId, Pt>> = {
+  t_frontier_badlands: [710, 300],
+  t_frontier_highland: [295, 110],
+  t_frontier_cove: [165, 495],
   t_dimai:      [402, 300],
   t_forest:     [196, 196],
   t_mountain:   [406, 138],

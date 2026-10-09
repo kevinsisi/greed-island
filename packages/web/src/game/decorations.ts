@@ -91,6 +91,9 @@ export const CITY_DECORATIONS: Readonly<Record<DistrictId, readonly CellDecorati
     { col: 18, row: 13, glyph: '🛖', size: 22 },
     { col: 17, row: 14, glyph: '🪵', size: 20 },
   ],
+  t_frontier_badlands: [],
+  t_frontier_highland: [],
+  t_frontier_cove: [],
   t_road: [],
 }
 
@@ -312,6 +315,9 @@ export const AREA_DECORATIONS: Readonly<Record<DistrictId, AreaDecorationSet>> =
       ...lineCells(7, 0, 7, 9),
     ],
   },
+  t_frontier_badlands: { props: [], roadCells: [] },
+  t_frontier_highland: { props: [], roadCells: [] },
+  t_frontier_cove: { props: [], roadCells: [] },
   t_road: { props: [], roadCells: [] },
 }
 

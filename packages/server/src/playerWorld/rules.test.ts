@@ -113,7 +113,7 @@ describe('canonical player-world pure rules and projection', () => {
 
 
 describe('all existing canonical authored-region geometry', () => {
-  it.each([...MAP_TILES, ...EXPANSION_TILES].map(tile => [tile.id]))('has a walkable spawn and reachable reciprocal crossings for %s', tileId => {
+  it.each([...MAP_TILES, ...EXPANSION_TILES, ...FRONTIER_ZONES].map(tile => [tile.id]))('has a walkable spawn and reachable reciprocal crossings for %s', tileId => {
     const world = getRegionGeometry(tileId!)!, component = reachableCells(world)
     expect(world).not.toBeNull(); expect(canStand(world.spawn, world)).toBe(true)
     expect(Object.isFrozen(world)).toBe(true)
@@ -126,10 +126,10 @@ describe('all existing canonical authored-region geometry', () => {
       expect(portal.arrival).toEqual({ x: reciprocal!.x, z: reciprocal!.z })
     }
   })
-  it('provides8base and1locked geometry without fabricating frontier terrain', () => {
+  it('provides 8 base, 1 locked and 3 authored frontier geometries', () => {
     expect(MAP_TILES.filter(tile => getRegionGeometry(tile.id))).toHaveLength(8)
     expect(EXPANSION_TILES.filter(tile => getRegionGeometry(tile.id))).toHaveLength(1)
-    for (const frontier of FRONTIER_ZONES) expect(getRegionGeometry(frontier.id)).toBeNull()
+    for (const frontier of FRONTIER_ZONES) expect(getRegionGeometry(frontier.id)).not.toBeNull()
   })
   it('keeps unopened expansion buildings out of collision facts and adds only explicitly unlocked catalog definitions', () => {
     expect(getRegionGeometry('t_salt_marsh')!.obstacles.some(obstacle => obstacle.id === 'b_salt_marsh_field_station')).toBe(false)
@@ -138,13 +138,26 @@ describe('all existing canonical authored-region geometry', () => {
     expect(world.obstacles.some(obstacle => obstacle.id === 'b_salt_marsh_ranch')).toBe(false)
   })
   it('allows every authored available graph crossing only at its canonical marker', () => {
-    for (const tile of [...MAP_TILES, ...EXPANSION_TILES]) for (const portal of getRegionGeometry(tile.id)!.portals) {
+    for (const tile of [...MAP_TILES, ...EXPANSION_TILES, ...FRONTIER_ZONES]) for (const portal of getRegionGeometry(tile.id)!.portals) {
       const at = position({ tileId: tile.id, x: portal.x, z: portal.z })
-      const command = evaluate(intent('transition', { toTileId: portal.toTileId }), at, map(['t_salt_marsh']))
+      const command = evaluate(intent('transition', { toTileId: portal.toTileId }), at, map(['t_salt_marsh'], FRONTIER_ZONES.map(tile => tile.id)))
       expect(command.payload).toMatchObject({ tileId: portal.toTileId, ...portal.arrival })
     }
   })
-  it('still fails closed for generated frontier regions with no authored geometry', () => {
-    expect(() => evaluate(intent('transition', { toTileId: 't_frontier_cove' }), position(), map([], ['t_frontier_cove']))).toThrow('not supported yet')
+  it('rejects ungenerated frontiers even at a valid portal and admits generated round trips', () => {
+    for (const tile of FRONTIER_ZONES) {
+      const world = getRegionGeometry(tile.id)!, back = world.portals[0]!, origin = getRegionGeometry(back.toTileId)!
+      const portal = origin.portals.find(p => p.toTileId === tile.id)!
+      const at = position({ tileId: origin.tileId, x: portal.x, z: portal.z })
+      expect(() => evaluate(intent('transition', { toTileId: tile.id }), at, map(['t_salt_marsh']))).toThrow('available adjacent')
+      const generated = map(['t_salt_marsh'], FRONTIER_ZONES.map(t => t.id))
+      const enter = evaluate(intent('transition', { toTileId: tile.id }), at, generated)
+      expect(enter.payload).toMatchObject({ tileId: tile.id, ...portal.arrival })
+      const leave = evaluate(intent('transition', { toTileId: origin.tileId }), position({ tileId: tile.id, ...portal.arrival }), generated)
+      expect(leave.payload).toMatchObject({ tileId: origin.tileId, x: portal.x, z: portal.z })
+      const events = [commit(enter, 1), commit(leave, 2)], restored = new PlayerWorldProjection()
+      restored.rebuildFromEvents(events)
+      expect(restored.get(alice)).toMatchObject({ tileId: origin.tileId, x: portal.x, z: portal.z })
+    }
   })
 })
