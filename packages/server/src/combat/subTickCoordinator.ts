@@ -44,6 +44,8 @@ export type CombatSubTickProcessInput = Readonly<{
   rulesetVersion?: string
   commit: CombatSubTickCommit
   afterCommit?: CombatSubTickAfterCommit
+  authorizeCommand?: (command: QueuedCombatCardPlayCommand) => boolean
+  runInTransaction?: <T>(operation: () => T) => T
 }>
 
 type CombatProjectionEvent = Pick<Event, 'eventType' | 'payload'> &
@@ -90,6 +92,9 @@ export class CombatSubTickCoordinator {
     return true
   }
 
+  ownsPendingCommand(actorId: string, combatId: string, commandId: string): boolean {
+    return this.pendingCardPlays.some(command => command.actorId === actorId && command.payload.combatId === combatId && command.commandId === commandId)
+  }
   pendingCount(combatId?: string): number {
     if (!combatId) return this.pendingCardPlays.length
     return this.pendingCardPlays.filter((command) => command.payload.combatId === combatId).length
@@ -171,63 +176,72 @@ export class CombatSubTickCoordinator {
     const combat = this.combats.get(input.combatId)
     if (!combat || combat.resolved) return []
 
-    const staleCommands = this.pendingCardPlays
-      .filter((command) => command.payload.combatId === input.combatId)
-      .filter((command) => command.payload.combatTick < input.combatTick)
+    const prepareAndCommit = () => {
+      const staleCommands = this.pendingCardPlays
+        .filter((command) => command.payload.combatId === input.combatId)
+        .filter((command) => command.payload.combatTick < input.combatTick)
 
-    const pendingCommands = this.pendingCardPlays
-      .filter((command) => command.payload.combatId === input.combatId)
-      .filter((command) => command.payload.combatTick === input.combatTick)
+      const pendingCommands = this.pendingCardPlays
+        .filter((command) => command.payload.combatId === input.combatId)
+        .filter((command) => command.payload.combatTick === input.combatTick)
 
-    const result = evaluateCombatSubTick({
-      combatId: input.combatId,
-      combatTick: input.combatTick,
-      tick: input.tick,
-      playerActorId: combat.playerActorId,
-      npcActorId: combat.npcActorId,
-      actors: actorSnapshot(combat),
-      statuses: combat.statuses,
-      targetLocks: combat.targetLocks,
-      pendingCommands,
-    })
-
-    const events = [
-      ...staleCommands.map((command) => staleCardPlayRejected(input, command)),
-      ...result.events,
-    ]
-
-    if (events.length === 0) {
-      return []
-    }
-
-    const rulesetVersion = input.rulesetVersion ?? DEFAULT_RULESET_VERSION
-    const drafts = events.map((event) => {
-      const seed = {
-        eventType: event.eventType,
-        actorId: event.actorId,
-        commandId: event.commandId ?? null,
-        tick: input.tick,
+      const unauthorized = input.authorizeCommand ? pendingCommands.filter(command => !input.authorizeCommand!(command)) : []
+      const denied = new Set(unauthorized.map(command => command.commandId))
+      const result = evaluateCombatSubTick({
+        combatId: input.combatId,
         combatTick: input.combatTick,
-        payload: event.payload,
-        rulesetVersion,
-        version: KERNEL_EVENT_VERSION,
-      }
-      const deterministicKey = hashCanonicalJson(seed)
-      return {
-        eventType: event.eventType,
-        occurredAt: input.occurredAt,
-        actorId: event.actorId,
-        ...(event.commandId !== undefined ? { commandId: event.commandId } : {}),
         tick: input.tick,
-        payload: event.payload,
-        rulesetVersion,
-        version: KERNEL_EVENT_VERSION,
-        eventId: `event_${deterministicKey.slice(0, 32)}`,
-        deterministicKey,
-      } satisfies EventDraft
-    })
+        playerActorId: combat.playerActorId,
+        npcActorId: combat.npcActorId,
+        actors: actorSnapshot(combat),
+        statuses: combat.statuses,
+        targetLocks: combat.targetLocks,
+        pendingCommands: pendingCommands.filter(command => !denied.has(command.commandId)),
+      })
 
-    const committed = input.commit(drafts)
+      const events = [
+        ...staleCommands.map((command) => staleCardPlayRejected(input, command)),
+        ...unauthorized.map(command => ({ ...staleCardPlayRejected(input, command), payload: { ...staleCardPlayRejected(input, command).payload, reason: 'authorization_expired' } })),
+        ...result.events,
+      ]
+
+      if (events.length === 0) {
+        return null
+      }
+
+      const rulesetVersion = input.rulesetVersion ?? DEFAULT_RULESET_VERSION
+      const drafts = events.map((event) => {
+        const seed = {
+          eventType: event.eventType,
+          actorId: event.actorId,
+          commandId: event.commandId ?? null,
+          tick: input.tick,
+          combatTick: input.combatTick,
+          payload: event.payload,
+          rulesetVersion,
+          version: KERNEL_EVENT_VERSION,
+        }
+        const deterministicKey = hashCanonicalJson(seed)
+        return {
+          eventType: event.eventType,
+          occurredAt: input.occurredAt,
+          actorId: event.actorId,
+          ...(event.commandId !== undefined ? { commandId: event.commandId } : {}),
+          tick: input.tick,
+          payload: event.payload,
+          rulesetVersion,
+          version: KERNEL_EVENT_VERSION,
+          eventId: `event_${deterministicKey.slice(0, 32)}`,
+          deterministicKey,
+        } satisfies EventDraft
+      })
+
+      const committed = input.commit(drafts)
+      return { committed, result, staleCommands, pendingCommands }
+    }
+    const prepared = input.runInTransaction ? input.runInTransaction(prepareAndCommit) : prepareAndCommit()
+    if (!prepared) return []
+    const { committed, result, staleCommands, pendingCommands } = prepared
     applyResult(combat, result)
     combat.lastCombatTick = input.combatTick
     if (result.resolved) this.clearPendingForCombat(input.combatId)
@@ -262,7 +276,7 @@ export class CombatSubTickCoordinator {
 
   private projectInitiate(combatId: string, payload: Readonly<Record<string, unknown>>): void {
     const playerActorId = readString(payload, 'playerAccountId') ?? readString(payload, 'playerActorId')
-    const npcActorId = readString(payload, 'npcId') ?? readString(payload, 'npcActorId')
+    const npcActorId = payload.enemyType === 'animal' ? readString(payload, 'animalId') : readString(payload, 'npcId') ?? readString(payload, 'npcActorId')
     const playerHp = readNumber(payload, 'playerCombatHp') ?? readNumber(payload, 'playerHp')
     const npcHp = readNumber(payload, 'npcCombatHp') ?? readNumber(payload, 'npcHp')
     if (!playerActorId || !npcActorId || playerHp === null || npcHp === null) return

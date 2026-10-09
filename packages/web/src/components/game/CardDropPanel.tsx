@@ -18,6 +18,7 @@ import { useI18n } from '../../i18n'
 import { useWorldState } from '../../state/WorldStateContext'
 import type { AreaMapDrop } from '../../game/AreaScene'
 import { CardImage } from './CardImage'
+import { cardPerceivedSeconds } from '../../state/cardPerception'
 
 // 5 秒一 tick；前端以 4 秒 poll，跟 server tick 大致對齊
 const POLL_MS = 4_000
@@ -30,7 +31,7 @@ export interface UseAreaCardsResult {
 }
 
 export function useAreaCards(tileId: string): UseAreaCardsResult {
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const { t } = useI18n()
   const { cards: catalog } = useWorldState()
   const [active, setActive] = useState<{ tick: number; drops: ServerCardDrop[] }>({ tick: 0, drops: [] })
@@ -48,9 +49,9 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
   }, [])
 
   const refresh = useCallback(async () => {
-    if (!token || !tileId) return
+    if (!accountId || !tileId) return
     try {
-      const [a, h] = await Promise.all([api.cardsActive(token, tileId), api.cardsHeld(token)])
+      const [a, h] = await Promise.all([api.cardsActive(accountId, tileId), api.cardsHeld(accountId)])
       setActive({ tick: a.tick, drops: a.drops })
       setHeld(h.drops)
       lastFetchedAt.current = Date.now()
@@ -59,7 +60,7 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
       if (err instanceof ApiError) setError(err.message)
       else if (err instanceof Error) setError(err.message)
     }
-  }, [token, tileId])
+  }, [accountId, tileId])
 
   useEffect(() => {
     void refresh()
@@ -69,12 +70,12 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
 
   const pickupDrop = useCallback(
     async (dropId: number) => {
-      if (!token) {
+      if (!accountId) {
         setError(t('cards.loginGate'))
         return
       }
       try {
-        const r = await api.cardsPickup(token, dropId)
+        const r = await api.cardsPickup(accountId, dropId)
         setFlash(t('cards.pickedUpFlash', { cardId: r.drop.cardId }))
         // 樂觀更新：把 drop 從 active 移走，加進 held
         setActive((prev) => ({ ...prev, drops: prev.drops.filter((d) => d.id !== dropId) }))
@@ -84,14 +85,14 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
         else setError(t('cards.errorGeneric'))
       }
     },
-    [token, t]
+    [accountId, t]
   )
 
   const storeDrop = useCallback(
     async (dropId: number, slotType: ServerCardSlotType) => {
-      if (!token) return
+      if (!accountId) return
       try {
-        const r = await api.cardsStore(token, dropId, slotType)
+        const r = await api.cardsStore(accountId, dropId, slotType)
         setFlash(
           t('cards.storedFlash', {
             slot:
@@ -106,14 +107,14 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
         else setError(t('cards.errorGeneric'))
       }
     },
-    [token, t]
+    [accountId, t]
   )
 
   const releaseDrop = useCallback(
     async (dropId: number) => {
-      if (!token) return
+      if (!accountId) return
       try {
-        const r = await api.cardsRelease(token, dropId)
+        const r = await api.cardsRelease(accountId, dropId)
         setHeld((prev) => prev.filter((d) => d.id !== dropId))
         setActive((prev) => ({ ...prev, drops: [...prev.drops, r.drop] }))
       } catch (err) {
@@ -121,7 +122,7 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
         else setError(t('cards.errorGeneric'))
       }
     },
-    [token, t]
+    [accountId, t]
   )
 
   const catalogById = useMemo(() => {
@@ -149,28 +150,14 @@ export function useAreaCards(tileId: string): UseAreaCardsResult {
       })
   }, [active, catalogById])
 
-  // server tick → wall-clock 秒。
-  // v0.13.0：server 已經算了 `perceivedSecondsLeft`（含 ±N 秒精力誤差），
-  // 前端優先用後端值；缺值才回退到本地推算。
-  const tickDurationMs = 5_000
-  const serverTickAtFetch = active.tick
+  // Only smooth the server's own perception. Unknown energy/perception stays unavailable.
   const fetchedAtMs = lastFetchedAt.current
 
   function ticksToSeconds(
     deadlineTick: number | null,
     perceived?: number | null
-  ): number {
-    if (deadlineTick === null) return 0
-    if (typeof perceived === 'number') {
-      // server 已經套了精力誤差。用 wall-clock 倒算「自從 fetch 以來過了多久」
-      // 再從 perceived 秒數扣掉，以保持每秒倒數平滑感。
-      const elapsedSec = (Date.now() - fetchedAtMs) / 1000
-      return Math.max(0, Math.floor(perceived - elapsedSec))
-    }
-    const elapsedSinceFetchSec = (Date.now() - fetchedAtMs) / 1000
-    const ticksLeftAtFetch = deadlineTick - serverTickAtFetch
-    const secLeft = ticksLeftAtFetch * (tickDurationMs / 1000) - elapsedSinceFetchSec
-    return Math.max(0, Math.floor(secLeft))
+  ): number | null {
+    return deadlineTick === null ? null : cardPerceivedSeconds(perceived, (Date.now() - fetchedAtMs) / 1000)
   }
 
   const heldRows = held.filter((d) => d.holderAccountId === (account?.id ?? -1))
@@ -203,7 +190,7 @@ interface CardSectionProps {
   onPickup: (dropId: number) => void
   onStore: (dropId: number, slotType: ServerCardSlotType) => void
   onRelease: (dropId: number) => void
-  ticksToSeconds: (deadlineTick: number | null, perceived?: number | null) => number
+  ticksToSeconds: (deadlineTick: number | null, perceived?: number | null) => number | null
   flash: string | null
   error: string | null
   dismissFlash: () => void
@@ -278,7 +265,7 @@ function CardSection({
                     </div>
                     <div className="text-[11px] font-display uppercase tracking-tightest text-ground-500">
                       #{String(d.cardId).padStart(3, '0')} ·{' '}
-                      {t('cards.expiresIn', { seconds: secLeft })}
+                      {secLeft === null ? '精力／倒數感知暫不可用' : t('cards.expiresIn', { seconds: secLeft })}
                     </div>
                   </div>
                 </div>
@@ -321,7 +308,7 @@ function CardSection({
                       {c?.name ?? `#${d.cardId}`}
                     </div>
                     <div className="text-[11px] font-display uppercase tracking-tightest text-ember-300">
-                      {t('cards.holdingTimer', { seconds: secLeft })}
+                      {secLeft === null ? '精力／倒數感知暫不可用' : t('cards.holdingTimer', { seconds: secLeft })}
                     </div>
                   </div>
                 </div>

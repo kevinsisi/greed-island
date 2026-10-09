@@ -15,7 +15,7 @@ export type WorldCivilizationPanelSummary = Readonly<{
     techId: string
     title: string
     domain: string
-    evidenceCount: number
+    evidenceCount: number | null
   }[]
 }>
 
@@ -48,7 +48,8 @@ export function summarizeWorldCivilizationPanel(
       techId: tech.techId,
       title: tech.title,
       domain: tech.domain,
-      evidenceCount: tech.evidenceEventIds.length,
+      evidenceCount: typeof tech.evidenceCount === 'number' && Number.isSafeInteger(tech.evidenceCount) && tech.evidenceCount >= 0
+        ? tech.evidenceCount : Array.isArray(tech.evidenceEventIds) ? tech.evidenceEventIds.length : null,
     }))
 
   return {

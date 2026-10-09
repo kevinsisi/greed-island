@@ -17,18 +17,18 @@ type PageState =
 type UploadState = Record<number, 'uploading' | 'deleting' | 'done' | string>
 
 export function AdminCardsPage() {
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [state, setState] = useState<PageState>({ kind: 'loading' })
   const [uploadState, setUploadState] = useState<UploadState>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingCardId = useRef<number | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     try {
       const [catalogData, imagesData] = await Promise.all([
         api.cards(),
-        api.adminCardImages(token),
+        api.adminCardImages(accountId),
       ])
       setState({ kind: 'ready', cards: catalogData.entries as ServerCardCatalogEntry[], images: imagesData.images })
     } catch (err) {
@@ -40,7 +40,7 @@ export function AdminCardsPage() {
             : '載入失敗'
       setState({ kind: 'error', message })
     }
-  }, [token])
+  }, [accountId])
 
   useEffect(() => {
     void refresh()
@@ -49,7 +49,7 @@ export function AdminCardsPage() {
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const id = pendingCardId.current
-      if (!token || id === null) return
+      if (!accountId || id === null) return
       const file = e.target.files?.[0]
       if (!file) return
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -64,7 +64,7 @@ export function AdminCardsPage() {
           binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
         }
         const base64 = btoa(binary)
-        await api.adminUploadCardImage(token, id, base64, file.type)
+        await api.adminUploadCardImage(accountId, id, base64, file.type)
         setUploadState((prev) => ({ ...prev, [id]: 'done' }))
         await refresh()
       } catch (err) {
@@ -72,15 +72,15 @@ export function AdminCardsPage() {
         setUploadState((prev) => ({ ...prev, [id]: message }))
       }
     },
-    [token, refresh]
+    [accountId, refresh]
   )
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!token) return
+      if (!accountId) return
       setUploadState((prev) => ({ ...prev, [id]: 'deleting' }))
       try {
-        await api.adminDeleteCardImage(token, id)
+        await api.adminDeleteCardImage(accountId, id)
         setUploadState((prev) => ({ ...prev, [id]: 'done' }))
         await refresh()
       } catch (err) {
@@ -88,7 +88,7 @@ export function AdminCardsPage() {
         setUploadState((prev) => ({ ...prev, [id]: message }))
       }
     },
-    [token, refresh]
+    [accountId, refresh]
   )
 
   const triggerUpload = (id: number) => {
@@ -96,7 +96,7 @@ export function AdminCardsPage() {
     fileInputRef.current?.click()
   }
 
-  if (!token || !account) {
+  if (!accountId || !account) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader eyebrow="GM 工具" title="卡片美術管理" description="上傳與管理每張紋卡的美術圖片" />

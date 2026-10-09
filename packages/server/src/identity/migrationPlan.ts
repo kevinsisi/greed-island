@@ -50,13 +50,19 @@ export function planIdentityMigration(input: Readonly<{
   canonical: readonly CanonicalIdentityDescriptor[]
   legacy: readonly LegacyIdentityDescriptor[]
   previousMappings?: readonly IdentityMapping[]
+  /** Staged import MUST provide the preserved sequence/history high-water authority. */
+  canonicalIdHighWaterMark?: number
+  canonicalReferencedAccountIds?: readonly number[]
 }>): IdentityMigrationPlan {
   const canonical = new Map<AccountId, CanonicalIdentityDescriptor>()
   const existingSources = new Map<string, IdentityMapping>()
   const aliases = new Map<string, string>()
   const blockers: MigrationBlocker[] = []
   const identities: PlannedIdentity[] = []
-  let nextId = 0
+  const highWater = input.canonicalIdHighWaterMark ?? 0
+  if (!Number.isSafeInteger(highWater) || highWater < 0) throw new Error('Invalid canonical account ID high-water mark.')
+  let nextId = highWater
+  for (const referenced of input.canonicalReferencedAccountIds ?? []) nextId = Math.max(nextId, accountId(referenced))
   for (const descriptor of [...input.canonical].sort((a, b) => a.id - b.id)) {
     const id = accountId(descriptor.id)
     if (canonical.has(id)) throw new Error('Duplicate canonical account ID.')

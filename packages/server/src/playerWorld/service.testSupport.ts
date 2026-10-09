@@ -19,6 +19,7 @@ export class EventFixture {
     const committed = drafts.map(draft => ({ ...draft, sequence: this.events.length + 1 + drafts.indexOf(draft) }))
     this.events.push(...committed); return committed
   }
+  readEventsByTypes(types: readonly string[]) { return this.events.filter(event => types.includes(event.eventType)) }
   readRecentEventsByTypes(limit: number, types: readonly string[]) { return this.events.filter(event => types.includes(event.eventType)).slice(-limit) }
   readEventsByActorCommand(actor: string, command: string, types: readonly string[]) {
     return this.events.filter(event => event.actorId === actor && event.commandId === command && types.includes(event.eventType))

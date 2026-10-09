@@ -45,7 +45,7 @@ const CONFIDENCE_COLOR: Record<string, string> = {
 }
 
 export function NpcMindSheet({ npc }: Props) {
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const [data, setData] = useState<MindData | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAllIntents, setShowAllIntents] = useState(false)
@@ -55,15 +55,15 @@ export function NpcMindSheet({ npc }: Props) {
   const npcIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!token) return
+    if (!accountId) return
     const npcId = npc.id
     npcIdRef.current = npcId
     setData(null)
     setLoading(true)
 
     Promise.all([
-      api.npcIntent(token, npcId).catch(() => ({ intents: [], lessons: [] })),
-      api.npcBeliefs(token, npcId).catch(() => ({ beliefs: [] })),
+      api.npcIntent(accountId, npcId).catch(() => ({ intents: [], lessons: [] })),
+      api.npcBeliefs(accountId, npcId).catch(() => ({ beliefs: [] })),
     ]).then(([intentRes, beliefsRes]) => {
       if (npcIdRef.current !== npcId) return
       setData({
@@ -73,7 +73,7 @@ export function NpcMindSheet({ npc }: Props) {
       })
       setLoading(false)
     })
-  }, [npc.id, token])
+  }, [npc.id, accountId])
 
   if (loading) {
     return (

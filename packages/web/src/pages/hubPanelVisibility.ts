@@ -11,11 +11,11 @@ export function shouldRenderPlayerCivilizationPanel(showCivPanel: boolean, isSig
 }
 
 /** ActionBar: the enter-area button is active only when signed in and a district is selected. */
-export function canEnterArea(token: string | null, districtId: string | null): boolean {
-  return !!token && !!districtId
+export function canEnterArea(accountId: number | null, districtId: string | null): boolean {
+  return !!accountId && !!districtId
 }
 
 /** WhenYouWereGone: the card mount guard — signed-in and not yet dismissed this session. */
-export function shouldShowWhenYouWereGone(token: string | null, dismissed: boolean): boolean {
-  return !!token && !dismissed
+export function shouldShowWhenYouWereGone(accountId: number | null, dismissed: boolean): boolean {
+  return !!accountId && !dismissed
 }

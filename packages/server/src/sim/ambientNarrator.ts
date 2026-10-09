@@ -80,6 +80,12 @@ export class AmbientNarrator {
 
   constructor(private readonly settings: SettingsStore) {}
 
+  /** Read an already generated result without registering a visitor or scheduling AI. */
+  peek(tileId: string): AmbientResult | null {
+    const cached = this.cache.get(tileId)
+    return cached ? { ...cached } : null
+  }
+
   getOrSchedule(ctx: AmbientContext, currentTick: number): AmbientResult {
     this.lastRequestedTickByTile.set(ctx.tileId, currentTick)
     const cached = this.cache.get(ctx.tileId)

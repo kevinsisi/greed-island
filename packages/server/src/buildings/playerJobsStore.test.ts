@@ -5,6 +5,23 @@ import type { Event } from '../kernel/types.js'
 import { PlayerJobsStore } from './playerJobsStore.js'
 
 describe('PlayerJobsStore EventLog projections', () => {
+  it('peekWallet reads stored balances and never seeds a missing wallet', () => {
+    const db = new Database(':memory:')
+    initializeAccountSchema(db)
+    db.prepare(`INSERT INTO accounts(id,email,password_hash,created_at,role) VALUES(1,'peek@example.test','hash',1,'player')`).run()
+    const store = new PlayerJobsStore(db)
+    const changes = () => (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n
+    const before = changes()
+    expect(store.peekWallet(1)).toBeNull()
+    expect(changes()).toBe(before)
+    store.addGold(1, 23)
+    const stored = store.getWallet(1), after = changes()
+    expect(store.peekWallet(1)).toEqual(stored)
+    expect(store.peekWallet(2)).toBeNull()
+    expect(changes()).toBe(after)
+    db.close()
+  })
+
   it('projects PLAYER_ENERGY_SET idempotently from committed events', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')

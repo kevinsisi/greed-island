@@ -389,6 +389,7 @@ export type TranslationKey =
   | 'admin.role.player'
   | 'admin.role.gm'
   | 'admin.role.admin'
+  | 'admin.role.agent'
   | 'admin.setRole'
   | 'admin.youBadge'
   | 'admin.lastAdminWarn'

@@ -18,19 +18,27 @@ import {
   findTechnique,
 } from '../cards/techniques.js'
 import type { PlayerJobsStore } from '../buildings/playerJobsStore.js'
-import type { SocialStore } from './socialStore.js'
+import type { SimulationRuntime } from '../sim/runtime.js'
+import { accountId } from '../identity/principal.js'
+import { OwnedFeatureError, OwnedFeatureTransaction, ownedFeatureErrorStatus } from './ownedFeatureTransaction.js'
 
 const NEON_PORT_TILE = 't_temple' // 霓港區 tile id
 
-export function createTechniqueShopRouter(input: {
+export function createOwnedTechniqueRouter(input: {
   db: import('better-sqlite3').Database
-  jobs: PlayerJobsStore
-  social: SocialStore
+  jobs: Pick<PlayerJobsStore, 'peekWallet' | 'addGold'>
+  runtime: Pick<SimulationRuntime, 'getAdmittedPlayerWorldActors' | 'getPlayerWorldGridPose'>
   authConfig: AuthConfig
+  /** The normal factory shares this exact projection with combat. */
+  store?: TechniqueShopStore
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
-  const store = new TechniqueShopStore(input.db)
+  const store = input.store ?? new TechniqueShopStore(input.db)
+  const transaction = new OwnedFeatureTransaction(input.db, input.authConfig)
+  router.use(['/shop/techniques', '/me/techniques'], (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store'); res.vary('Cookie'); res.vary('Origin'); next()
+  })
 
   router.get('/shop/techniques', auth, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
@@ -76,49 +84,40 @@ export function createTechniqueShopRouter(input: {
 
   router.post('/shop/techniques/:id/buy', auth, (req: Request, res: Response) => {
     try {
-      const accountId = req.auth!.sub
-      const cardId = Number(req.params.id ?? '')
-      const card = findTechnique(cardId)
-      if (!card) {
-        throw new TechniqueShopErrorObj('CARD_NOT_FOUND', `Technique card ${cardId} not found.`)
-      }
-      const playerLoc = input.social.getPlayerLocation(accountId)
-      if (!playerLoc || playerLoc.tile_id !== NEON_PORT_TILE) {
-        throw new TechniqueShopErrorObj(
-          'NOT_IN_NEON_PORT',
-          'Technique cards are sold only at 天際百貨 (霓港區). Move to the temple tile and try again.'
-        )
-      }
-      const wallet = input.jobs.getWallet(accountId)
-      if (wallet.gold < card.priceGold) {
-        throw new TechniqueShopErrorObj(
-          'NOT_ENOUGH_GOLD',
-          `Need ${card.priceGold} gold, have ${wallet.gold}.`
-        )
-      }
-      const ownedCount = store.countOwned(accountId, cardId)
-      if (ownedCount >= card.maxOwnedPerPlayer) {
-        throw new TechniqueShopErrorObj(
-          'OWNED_LIMIT_REACHED',
-          `Already owns ${ownedCount} (limit ${card.maxOwnedPerPlayer}).`
-        )
-      }
-      // Deduct gold first; on success record purchase.
-      const newWallet = input.jobs.addGold(accountId, -card.priceGold)
-      const ownedRow = store.addOwned(accountId, cardId, Date.now())
-      res.json({ owned: ownedRow, wallet: newWallet, card })
-    } catch (err) {
-      if (err instanceof TechniqueShopErrorObj) {
-        const status =
-          err.code === 'CARD_NOT_FOUND' ? 404 :
-          err.code === 'NOT_IN_NEON_PORT' ? 409 :
-          err.code === 'NOT_ENOUGH_GOLD' ? 409 :
-          err.code === 'OWNED_LIMIT_REACHED' ? 409 :
-          400
-        res.status(status).json({ error: err.code, message: err.message })
+      const raw = req.params.id, cardId = typeof raw === 'string' && /^[1-9][0-9]*$/.test(raw) ? Number(raw) : NaN
+      const card = Number.isSafeInteger(cardId) ? findTechnique(cardId) : null
+      if (!card) throw new TechniqueShopErrorObj('CARD_NOT_FOUND', 'Technique card not found.')
+      const result = transaction.run(req, 'shop/techniques/buy', { cardId }, actor => {
+        const location = input.runtime.getAdmittedPlayerWorldActors().find(row => row.accountId === actor)
+        const pose = input.runtime.getPlayerWorldGridPose(accountId(actor))
+        if (!location || !pose) throw new OwnedFeatureError(409, 'WORLD_CONNECTION_REQUIRED', 'An admitted canonical world position is required.')
+        if (location.tileId !== NEON_PORT_TILE) {
+          throw new TechniqueShopErrorObj('NOT_IN_NEON_PORT', 'Technique cards are sold only at 天際百貨 (霓港區).')
+        }
+        const wallet = input.jobs.peekWallet(actor)
+        if (!wallet) throw new OwnedFeatureError(409, 'WALLET_REQUIRED', 'The existing game wallet is not initialized.')
+        if (wallet.gold < card.priceGold) {
+          throw new TechniqueShopErrorObj('NOT_ENOUGH_GOLD', `Need ${card.priceGold} gold, have ${wallet.gold}.`)
+        }
+        const count = store.countOwned(actor, cardId)
+        if (count >= card.maxOwnedPerPlayer) {
+          throw new TechniqueShopErrorObj('OWNED_LIMIT_REACHED', `Already owns ${count} (limit ${card.maxOwnedPerPlayer}).`)
+        }
+        // Balance deduction, owned projection, and retry receipt share ONE DB transaction.
+        const newWallet = input.jobs.addGold(actor, -card.priceGold)
+        const owned = store.addOwned(actor, cardId, Date.now())
+        return { status: 200, body: { owned, wallet: newWallet, card } }
+      })
+      res.status(result.status).json(result.body)
+    } catch (error) {
+      const canonical = ownedFeatureErrorStatus(error)
+      if (canonical) { res.status(canonical.status).json({ error: canonical.code, message: canonical.message }); return }
+      if (error instanceof TechniqueShopErrorObj) {
+        res.status(error.code === 'CARD_NOT_FOUND' ? 404 : 409).json({ error: error.code, message: error.message })
         return
       }
-      throw err
+      console.error('[techniques] purchase failed', error)
+      res.status(500).json({ error: 'INTERNAL_ERROR' })
     }
   })
 

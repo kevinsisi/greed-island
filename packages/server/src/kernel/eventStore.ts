@@ -455,6 +455,8 @@ export function initializeKernelSchema(db: DatabaseConnection): void {
       WHERE event_type IN ('PLAYER_WORLD_ENTERED', 'PLAYER_WORLD_MOVED', 'PLAYER_REGION_TRANSITIONED');
     CREATE UNIQUE INDEX IF NOT EXISTS idx_player_world_intent_command ON event_log(actor_id, command_id)
       WHERE event_type IN ('PLAYER_WORLD_ENTERED', 'PLAYER_WORLD_MOVED', 'PLAYER_REGION_TRANSITIONED', 'PLAYER_WORLD_CHAT_POSTED');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_player_world_feature_receipt ON event_log(actor_id, command_id)
+      WHERE event_type IN ('PLAYER_WORLD_ENTERED', 'PLAYER_WORLD_MOVED', 'PLAYER_REGION_TRANSITIONED', 'PLAYER_WORLD_CHAT_POSTED', 'PLAYER_HARBOR_CONTRIBUTED');
     CREATE INDEX IF NOT EXISTS idx_rejected_command_command ON rejected_command_log(command_id);
   `)
 }

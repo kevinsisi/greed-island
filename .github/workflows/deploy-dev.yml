@@ -1,4 +1,4 @@
-name: Deploy Dev
+name: Manual Legacy Desktop Deploy
 
 # Builds the server and web Docker images, pushes to Docker Hub, then
 # deploys on the Windows desktop host through its self-hosted runner.
@@ -25,13 +25,8 @@ name: Deploy Dev
 #                         (e.g. /d/GitClone/_HomeProject/greed-island/deploy
 #                         under Git-Bash on Windows)
 
+# Manual legacy desktop workflow only. Main CI never deploys this target.
 on:
-  # Only deploy after CI passes on main — prevents broken builds from reaching the desktop.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
-  # Keep manual trigger for hotfix deploys; bypasses CI gate by operator intent.
   workflow_dispatch:
 
 concurrency:

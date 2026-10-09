@@ -7,7 +7,7 @@
 
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
@@ -61,16 +61,13 @@ async function setupApp(deceasedIds: string[]) {
   const store = new PlayerStateStore(db)
   const settings = new SettingsStore(db)
   const account = await accounts.createAccount('mourner@example.test', 'pw123456')
-  const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+  const authConfig: AuthConfig = createCookieTestAuthorization(db)
   const runtime = buildRuntime(deceasedIds)
   const app = express()
   app.use(express.json())
   app.use(createNpcRouter({ runtime, store, settings, accounts, authConfig }))
   const server = await listen(app)
-  const token = jwt.sign(
-    { sub: account.id, email: account.email, role: account.role },
-    authConfig.jwtSecret,
-  )
+  const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
   return { db, server, token, store }
 }
 
@@ -81,7 +78,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${PROFILE.id}/interact`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: { ...cookieTestHeaders(token), 'content-type': 'application/json' },
         body: JSON.stringify({ message: '你還在嗎？' }),
       })
       expect(res.status).toBe(410)
@@ -100,7 +97,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${PROFILE.id}/dialog-hold`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(410)
       const body = (await res.json()) as { error: string }
@@ -116,7 +113,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${PROFILE.id}/greet`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(410)
     } finally {
@@ -131,7 +128,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/intervene`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: { ...cookieTestHeaders(token), 'content-type': 'application/json' },
         body: JSON.stringify({ npcA: ALIVE_PROFILE.id, npcB: PROFILE.id, mode: 'mediate' }),
       })
       expect(res.status).toBe(410)
@@ -149,7 +146,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/intervene`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: { ...cookieTestHeaders(token), 'content-type': 'application/json' },
         body: JSON.stringify({ npcA: ALIVE_PROFILE.id, npcB: PROFILE.id, mode: 'mediate' }),
       })
       expect(res.status).toBe(410)
@@ -175,7 +172,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       })
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${PROFILE.id}/history`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(200)
       const body = (await res.json()) as { events: Array<{ playerMessage: string }> }
@@ -193,7 +190,7 @@ describe('npc router — deceased NPC gate (v0.87.3)', () => {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${PROFILE.id}/dialog-hold`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(200)
       const body = (await res.json()) as { held: boolean }

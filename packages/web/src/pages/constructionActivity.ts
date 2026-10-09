@@ -100,7 +100,9 @@ export function constructionProjectsFromWorldFact(raw: unknown): ConstructionPro
       progress: value.progress,
       targetProgress: value.targetProgress,
       completedAtTick: typeof value.completedAtTick === 'number' ? value.completedAtTick : null,
-      initiatedByNpcId: value.initiatedByNpcId
+      initiatedByNpcId: value.initiatedByNpcId,
+      ...(Array.isArray(value.builderNpcIds) && value.builderNpcIds.every((id): id is string => typeof id === 'string')
+        ? { builderNpcIds: [...value.builderNpcIds] } : {})
     })
   }
   return projects

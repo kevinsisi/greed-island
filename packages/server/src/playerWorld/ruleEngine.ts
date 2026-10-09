@@ -3,7 +3,7 @@ import type { AccountId } from '../identity/principal.js'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import { makeLivingWorldCommand, type LivingWorldCommand } from '../kernel/livingWorldCommands.js'
 import { validWorldChatText, WORLD_CHAT_RATE_STEPS } from './chat.js'
-import { canStand, computeMove, getRegionGeometry } from './geometry.js'
+import { canonicalWorldPointToGrid, canStand, computeMove, getRegionGeometry } from './geometry.js'
 import { PlayerWorldError, type PlayerWorldIntent, type PlayerWorldMap, type PlayerWorldPosition } from './types.js'
 
 function reject(status: number, code: string, message: string): never { throw new PlayerWorldError(status, code, message) }
@@ -16,12 +16,16 @@ export function parsePlayerWorldIntent(body: unknown): PlayerWorldIntent {
   if (!record(body) || !keys(body, ['commandId', 'type', 'payload'])
     || typeof body.commandId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(body.commandId)
     || !record(body.payload)) reject(400, 'INVALID_COMMAND', 'Invalid player-world command.')
+  if (body.type === 'contribute' && keys(body.payload, [])) return { commandId: body.commandId, type: 'contribute', payload: {} }
   if (body.type === 'enter' && keys(body.payload, [])) return { commandId: body.commandId, type: 'enter', payload: {} }
   if (body.type === 'move' && keys(body.payload, ['dx', 'dz'])) {
     const { dx, dz } = body.payload
     if (typeof dx === 'number' && typeof dz === 'number' && Number.isFinite(dx) && Number.isFinite(dz)
       && Math.abs(dx) <= 1 && Math.abs(dz) <= 1) return { commandId: body.commandId, type: 'move', payload: { dx, dz } }
   }
+  if (body.type === 'exit-building' && keys(body.payload, [])) return { commandId: body.commandId, type: 'exit-building', payload: {} }
+  if (body.type === 'enter-building' && keys(body.payload, ['buildingId']) && typeof body.payload.buildingId === 'string'
+    && /^[a-zA-Z0-9_-]{1,100}$/.test(body.payload.buildingId)) return { commandId: body.commandId, type: 'enter-building', payload: { buildingId: body.payload.buildingId } }
   if (body.type === 'chat' && keys(body.payload, ['text']) && validWorldChatText(body.payload.text)) {
     return { commandId: body.commandId, type: 'chat', payload: { text: body.payload.text.trim() } }
   }
@@ -36,13 +40,13 @@ export function intentDigest(intent: PlayerWorldIntent): string { return hashCan
 
 export function evaluatePlayerWorldIntent(input: {
   accountId: AccountId; intent: PlayerWorldIntent; position: PlayerWorldPosition | null
-  map: PlayerWorldMap; getGeometry?: (tileId: string) => import('./geometry.js').RegionGeometry | null; movementStep: number; worldTick: number; submittedAt: number; lastChatStep?: number; displayName?: string | null
+  map: PlayerWorldMap; getBuilding?: (buildingId: string, tileId: string) => import('../buildings/types.js').BuildingDef | null; getGeometry?: (tileId: string) => import('./geometry.js').RegionGeometry | null; movementStep: number; worldTick: number; submittedAt: number; lastChatStep?: number; displayName?: string | null
 }): LivingWorldCommand {
   const id = accountId(input.accountId), { intent, map, movementStep, position } = input
   if (!Number.isSafeInteger(movementStep) || movementStep < 0) reject(500, 'INVALID_SERVER_STEP', 'Server movement step is invalid.')
   const geometryFor = input.getGeometry ?? getRegionGeometry
   const common = { accountId: id, clientCommandId: intent.commandId, intentDigest: intentDigest(intent) }
-  const command = (type: 'PLAYER_WORLD_ENTERED' | 'PLAYER_WORLD_MOVED' | 'PLAYER_REGION_TRANSITIONED', data: Omit<import('./types.js').PlayerWorldEventData, 'accountId' | 'clientCommandId' | 'intentDigest'>): LivingWorldCommand =>
+  const command = (type: 'PLAYER_WORLD_ENTERED' | 'PLAYER_WORLD_MOVED' | 'PLAYER_REGION_TRANSITIONED' | 'PLAYER_BUILDING_ENTERED' | 'PLAYER_BUILDING_EXITED', data: Omit<import('./types.js').PlayerWorldEventData, 'accountId' | 'clientCommandId' | 'intentDigest'>): LivingWorldCommand =>
     makeLivingWorldCommand(type, accountActorId(id), 'player', input.worldTick, input.submittedAt,
       { ...common, ...data }, playerWorldCommandId(id, intent.commandId))
   if (intent.type === 'enter') {
@@ -63,10 +67,28 @@ export function evaluatePlayerWorldIntent(input: {
   if (position.movementStep >= movementStep) reject(429, 'MOVE_RATE_LIMIT', 'Only one movement action per server sub-step is allowed.')
   if (!map.regions.some(region => region.id === position.tileId && region.available)) reject(409, 'REGION_UNAVAILABLE', 'Current canonical region is unavailable.')
   const geometry = geometryFor(position.tileId)
-  if (!geometry || !canStand(position, geometry)) reject(409, 'GEOMETRY_UNAVAILABLE', 'Canonical position requires supported walkable geometry.')
+  if (!geometry || (intent.type !== 'exit-building' && !canStand(position, geometry))) reject(409, 'GEOMETRY_UNAVAILABLE', 'Canonical position requires supported walkable geometry.')
+  if (intent.type === 'exit-building') {
+    if (!position.interior) reject(409, 'NOT_INSIDE_BUILDING', 'The canonical player is outside.')
+    const returnPose = position.interior.returnPose
+    if (!canStand(returnPose, geometry)) reject(409, 'BUILDING_EXIT_BLOCKED', 'The saved exterior return pose is blocked; an explicit recovery policy is required.')
+    return command('PLAYER_BUILDING_EXITED', { tileId: position.tileId, ...returnPose, movementStep, fromBuildingId: position.interior.buildingId })
+  }
+  if (position.interior) reject(409, 'BUILDING_EXIT_REQUIRED', 'Exit the admitted building before exterior movement, crossing, or another entry.')
+  if (intent.type === 'enter-building') {
+    const building = input.getBuilding?.(intent.payload.buildingId, position.tileId)
+    if (!building || !building.enterable || building.tileId !== position.tileId) reject(409, 'BUILDING_UNAVAILABLE', 'Only a visible operational catalog building may be entered.')
+    const pose = canonicalWorldPointToGrid(position, geometry)
+    // Existing AreaMapSvg entry policy: Chebyshev <= 1.5 from the authored placement.
+    if (!pose || Math.max(Math.abs(pose.subCol - building.placement.col), Math.abs(pose.subRow - building.placement.row)) > 1.5)
+      reject(409, 'BUILDING_OUT_OF_RANGE', 'Walk to the authored building entry area first.')
+    return command('PLAYER_BUILDING_ENTERED', { tileId: position.tileId, x: position.x, z: position.z, movementStep,
+      interior: { buildingId: building.id, returnPose: { x: position.x, z: position.z } } })
+  }
   if (intent.type === 'move') return command('PLAYER_WORLD_MOVED', {
     tileId: position.tileId, ...computeMove(position, intent.payload.dx, intent.payload.dz, geometry), movementStep,
   })
+  if (intent.type !== 'transition') throw new PlayerWorldError(500, 'INVALID_INTERNAL_INTENT', 'Contribution must use the canonical harbor rule adapter.')
   const toTileId = intent.payload.toTileId
   if (!map.regions.some(region => region.id === toTileId && region.available)
     || !(map.adjacency[position.tileId] ?? []).includes(toTileId)) reject(409, 'REGION_UNAVAILABLE', 'Destination is not an available adjacent canonical region.')

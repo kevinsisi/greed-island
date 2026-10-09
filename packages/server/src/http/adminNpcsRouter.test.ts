@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
@@ -11,7 +11,7 @@ import { createAdminNpcsRouter, buildNpcStats } from './adminNpcsRouter.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 
-const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+let authConfig: AuthConfig
 
 function fakeRuntime(input: {
   manualIds: readonly string[]
@@ -104,6 +104,7 @@ function seedInheritanceEvent(eventStore: SqliteEventStore, tick: number, npcId:
 describe('admin npcs router — buildNpcStats', () => {
   it('reports empty inheritedRecent when no inheritance events exist (v0.88.0)', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       const runtime = fakeRuntime({ manualIds: ['a'], npcIds: ['a'], tick: 100 })
@@ -116,6 +117,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('bounds inheritedRecent to 10 entries, newest-first (v0.88.0)', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       for (let i = 1; i <= 15; i += 1) {
@@ -135,6 +137,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('reports manual-only origin when no born NPCs exist and empty event log', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       const runtime = fakeRuntime({
@@ -161,6 +164,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('counts born NPCs as those not in manual id set', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       const runtime = fakeRuntime({
@@ -177,6 +181,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('returns recent births descending by tick with mapped payload', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       seedBirthEvent(eventStore, 10, 'child_a')
@@ -202,6 +207,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('returns recent households descending by tick with mapped payload', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       seedHouseholdEvent(eventStore, 5, 'hh1', ['alice', 'bob'])
@@ -226,6 +232,7 @@ describe('admin npcs router — buildNpcStats', () => {
 
   it('returns empty recent feeds when generatedAtTick is 0', () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     try {
       const eventStore = new SqliteEventStore(db)
       const runtime = fakeRuntime({ manualIds: [], npcIds: [], tick: 0 })
@@ -241,6 +248,7 @@ describe('admin npcs router — buildNpcStats', () => {
 describe('admin npcs router — auth gate', () => {
   it('rejects anonymous, rejects player, accepts gm, accepts admin', async () => {
     const db = new Database(':memory:')
+    authConfig = createCookieTestAuthorization(db)
     const accounts = new AccountStore(db, 4)
     const eventStore = new SqliteEventStore(db)
     const runtime = fakeRuntime({ manualIds: ['alpha'], npcIds: ['alpha'], tick: 1 })
@@ -284,8 +292,8 @@ async function fetchWithRole(
 ): Promise<number> {
   const stored = accounts.findById(userId)
   if (!stored) throw new Error('account not found in test setup')
-  const token = jwt.sign({ sub: stored.id, email: stored.email, role }, authConfig.jwtSecret)
-  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } })
+  const token = issueCookieTestSession(authConfig, { sub: stored.id, email: stored.email, role })
+  const res = await fetch(url, { headers: { ...cookieTestHeaders(token) } })
   return res.status
 }
 

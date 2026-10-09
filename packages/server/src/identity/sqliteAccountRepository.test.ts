@@ -65,4 +65,29 @@ describe('one canonical SQLite account repository', () => {
     expect(() => accounts.importLegacyPlayer(input, { ...plan, identities: plan.identities.map(identity => ({ ...identity, role: 'admin' })) })).toThrow('IMPORT_DESCRIPTOR_CONFLICT')
     expect(db.prepare('SELECT COUNT(*) count FROM accounts').get()).toEqual({ count: 1 })
   })
+  it('rejects new explicit imports below the historical sequence but permits exact mapped retries', () => {
+    const { db, accounts } = fixture()
+    db.exec("UPDATE sqlite_sequence SET seq=100 WHERE name='accounts'")
+    const input = { namespace: 'mp-l390', legacyId: 'player-old', username: 'Original_User', name: 'Original', passwordHash: legacyTestHash() }
+    expect(() => accounts.importLegacyPlayer(input, importPlan())).toThrow('IMPORT_HISTORICAL_ID_CONFLICT')
+    const plan = planIdentityMigration({ canonical: [{ id: 42, role: 'admin', aliases: [{ kind: 'email', value: 'owner@example.test' }] }], legacy: [{ namespace: input.namespace, legacyId: input.legacyId, username: input.username, role: 'player', progress: LEGACY_PROGRESS_FIELDS.map(field => ({ field, canonicalRule: `synthetic-approved:${field}` })) }], canonicalIdHighWaterMark: 100 })
+    expect(accounts.importLegacyPlayer(input, plan).accountId).toBe(101)
+    expect(accounts.importLegacyPlayer(input, plan).accountId).toBe(101)
+  })
+  it('also reserves numeric EventLog principals above the SQLite sequence', () => {
+    const { db, accounts } = fixture()
+    db.prepare('INSERT INTO event_log(sequence,actor_id,payload) VALUES(2,?,?)').run('120', '{}')
+    const input = { namespace: 'mp-l390', legacyId: 'player-old', username: 'Original_User', name: 'Original', passwordHash: legacyTestHash() }
+    expect(() => accounts.importLegacyPlayer(input, importPlan())).toThrow('IMPORT_HISTORICAL_ID_CONFLICT')
+    const plan = planIdentityMigration({ canonical: [{ id: 42, role: 'admin', aliases: [{ kind: 'email', value: 'owner@example.test' }] }], legacy: [{ namespace: input.namespace, legacyId: input.legacyId, username: input.username, role: 'player', progress: LEGACY_PROGRESS_FIELDS.map(field => ({ field, canonicalRule: `synthetic-approved:${field}` })) }], canonicalIdHighWaterMark: 120, canonicalReferencedAccountIds: [120] })
+    expect(accounts.importLegacyPlayer(input, plan).accountId).toBe(121)
+  })
+  it('reserves historical system-event account references and fails on ambiguous history', () => {
+    const { db, accounts } = fixture()
+    db.prepare('INSERT INTO event_log(sequence,actor_id,payload) VALUES(2,?,?)').run('system', JSON.stringify({ data: { playerAccountId: 150 } }))
+    const input = { namespace: 'mp-l390', legacyId: 'player-old', username: 'Original_User', name: 'Original', passwordHash: legacyTestHash() }
+    expect(() => accounts.importLegacyPlayer(input, importPlan())).toThrow('IMPORT_HISTORICAL_ID_CONFLICT')
+    db.prepare('UPDATE event_log SET payload=? WHERE sequence=2').run('{invalid')
+    expect(() => accounts.importLegacyPlayer(input, importPlan())).toThrow('IMPORT_HISTORICAL_ID_CONFLICT')
+  })
 })

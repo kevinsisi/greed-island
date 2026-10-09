@@ -19,10 +19,12 @@
 // affect public world presence, it must go through SimulationRuntime and a
 // persisted FACT_SET event rather than a renderer-only lock.
 
-import { Router, type Request, type Response } from 'express'
+import { Router, json, type Request, type Response } from 'express'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import { requireAuth, toPublicAccount, type AuthConfig } from './auth.js'
 import type { AccountStore } from './accounts.js'
+import type { CanonicalAccountView } from './canonicalAccountView.js'
+import { CanonicalGameplayAuthority, reauthorizeGameplayMutation, sendGameplayError } from './gameplayAuthority.js'
 import {
   RELATIONSHIP_MAX,
   RELATIONSHIP_MIN,
@@ -44,6 +46,7 @@ import { GeminiUnavailableError } from '../npcs/geminiClient.js'
 import { isOpenCodeConfigured } from '../npcs/openCodeClient.js'
 import { generateWithProviders, AiUnavailableError } from '../npcs/aiProvider.js'
 import { makeLivingWorldCommand } from '../kernel/livingWorldCommands.js'
+import { validPlayerInterventionEffects } from '../kernel/playerInterventionReceipt.js'
 import {
   deriveDynamicGreetLine,
   derivePersonalityGreetLine,
@@ -97,7 +100,8 @@ export function createNpcRouter(input: {
   runtime: SimulationRuntime
   store: PlayerStateStore
   settings: SettingsStore
-  accounts: AccountStore
+  accounts: Pick<AccountStore, 'findById'> | Pick<CanonicalAccountView, 'findById'>
+  authority?: CanonicalGameplayAuthority
   authConfig: AuthConfig
   getPropertyContext?: (npcId: string) => Promise<readonly { title: string; price: number; address: string; rooms: number; hall: number; bath: number; sizePing: number; buildingType: string; floor: string | null; age: number | null }[]>
   localShoutAiTimeoutMs?: number
@@ -105,6 +109,20 @@ export function createNpcRouter(input: {
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+  const nearby = (req: Request, res: Response, ...ids: string[]) => {
+    if (!input.authority) return true // Legacy rule fixtures only; normal composition uses createUnifiedNpcRouter.
+    try { for (const id of ids) input.authority.requireNearbyNpc(req.auth!.sub, id); return true }
+    catch (error) { sendGameplayError(res, error); return false }
+  }
+  const commit = (req: Request, res: Response, capturedId: number, ...ids: string[]) =>
+    reauthorizeGameplayMutation(input.authConfig, req, res, capturedId) && nearby(req, res, ...ids)
+  const unchangedRelation = (req: Request, res: Response, npcId: string, original: ReturnType<PlayerStateStore['getRelation']>) => {
+    const current = input.store.getRelation(req.auth!.sub, npcId)
+    if ((current?.interactionCount ?? 0) !== (original?.interactionCount ?? 0) || current?.trust !== original?.trust) {
+      res.status(409).json({ error: 'NPC_RELATION_CHANGED' }); return false
+    }
+    return true
+  }
   const localShoutAiTimeoutMs = Math.max(1, input.localShoutAiTimeoutMs ?? LOCAL_SHOUT_AI_TIMEOUT_MS)
   const openCodeEndpointTimeoutMs = Math.max(1, input.openCodeEndpointTimeoutMs ?? OPENCODE_ENDPOINT_TIMEOUT_MS)
 
@@ -116,6 +134,7 @@ export function createNpcRouter(input: {
     }
     const npcId = String(req.params.npcId ?? '')
     if (requireLivingNpc(input.runtime, npcId, res) === null) return
+    if (!commit(req, res, claims.sub, npcId)) return
     const hold = input.runtime.holdNpcForPlayerDialog(String(claims.sub), npcId)
     res.json({
       npcId,
@@ -132,12 +151,16 @@ export function createNpcRouter(input: {
       return
     }
     const body = (req.body ?? {}) as { tileId?: unknown; candidateNpcIds?: unknown; message?: unknown }
-    const tileId = typeof body.tileId === 'string' ? body.tileId.trim() : ''
-    const candidateNpcIds = Array.isArray(body.candidateNpcIds)
+    let tileId = typeof body.tileId === 'string' ? body.tileId.trim() : ''
+    let candidateNpcIds = Array.isArray(body.candidateNpcIds)
       ? body.candidateNpcIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
       : []
+    if (input.authority) {
+      try { tileId = input.authority.requirePosition(claims.sub).tileId; candidateNpcIds = input.authority.localNpcs(claims.sub).map(npc => npc.id) }
+      catch (error) { sendGameplayError(res, error); return }
+    }
     const message = readMessage(body.message)
-    if (!tileId || candidateNpcIds.length === 0 || !message) {
+    if (!tileId || (!input.authority && candidateNpcIds.length === 0) || !message) {
       res.status(400).json({ error: 'INVALID_INPUT', message: 'tileId、candidateNpcIds、message 必填。' })
       return
     }
@@ -174,9 +197,9 @@ export function createNpcRouter(input: {
       return
     }
     const profile = requireLivingNpc(input.runtime, npcId, res)
-    if (!profile) return
+    if (!profile || !nearby(req, res, npcId)) return
 
-    const tick = input.runtime.getCurrentTick()
+    let tick = input.runtime.getCurrentTick()
     const baseTrust = typeof profile.personality.trustBase === 'number'
       ? clampTrust(profile.personality.trustBase)
       : 50
@@ -185,7 +208,7 @@ export function createNpcRouter(input: {
     const previousCount = existing ? existing.interactionCount : 0
     let resolvedIntent: InteractIntent = 'ask'
     const tier: RelationshipTier = tierForRelationship(previousTrust)
-    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.displayName)
     const identityLine = identityReplyFor(profile, message, player.displayName)
     const deterministicLocalLine = identityLine ?? (isRudeLocalShout(message) ? localShoutFallbackLine(profile, message, {
       tileId,
@@ -254,42 +277,31 @@ export function createNpcRouter(input: {
         interactionCount: previousCount,
       })
     }
+    if (!commit(req, res, claims.sub, npcId) || !unchangedRelation(req, res, npcId, existing)) return
+    tick = input.runtime.getCurrentTick()
     const trustDelta = staticTrustDelta(resolvedIntent, previousTrust, profile, {
       tick,
       lastInteractionTick: existing?.lastInteractionTick ?? 0,
       interactionCount: previousCount,
     })
     const trustAfter = clampTrust(previousTrust + trustDelta)
-    const relation = input.store.upsertRelation({
-      accountId: claims.sub,
-      npcId,
-      trust: trustAfter,
-      interactionCount: previousCount + 1,
-      lastInteractionTick: tick,
-    })
-    const personalEvent = input.store.appendPersonalEvent({
-      accountId: claims.sub,
-      npcId,
-      intent: resolvedIntent,
-      playerMessage: message,
-      lineZh: line.zh,
-      lineEn: line.en,
-      tick,
-      trustAfter: relation.trust,
-    })
-    input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
-      npcId,
-      playerAccountId: String(claims.sub),
-      intent: resolvedIntent,
-      playerMessage: message,
-      replyZh: line.zh,
-      replyEn: line.en,
-      tick,
-      trustAfter: relation.trust,
-    })
+    let relation: ReturnType<PlayerStateStore['upsertRelation']> | undefined, personalEvent: ReturnType<PlayerStateStore['appendPersonalEvent']> | undefined
+    const persistPersonal = () => {
+      relation = input.store.upsertRelation({
+        accountId: claims.sub, npcId, trust: trustAfter,
+        interactionCount: previousCount + 1, lastInteractionTick: tick,
+      })
+      personalEvent = input.store.appendPersonalEvent({
+        accountId: claims.sub, npcId, intent: resolvedIntent, playerMessage: message,
+        lineZh: line!.zh, lineEn: line!.en, tick, trustAfter: relation.trust,
+      })
+      input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
+        npcId, playerAccountId: String(claims.sub), intent: resolvedIntent,
+        playerMessage: message, replyZh: line!.zh, replyEn: line!.en, tick, trustAfter: relation.trust,
+      })
+    }
     const dialogueIntent: 'greet' | 'ask' | 'trade' = resolvedIntent === 'leave' ? 'ask' : resolvedIntent
-    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
-      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+    const dialogueCommand = makeLivingWorldCommand(
           'PLAYER_NPC_DIALOGUE',
           String(claims.sub),
           'player',
@@ -303,13 +315,20 @@ export function createNpcRouter(input: {
             playerMessage: message,
             npcReplyZh: line.zh,
             npcReplyEn: line.en,
-            trustDelta: relation.trust - previousTrust,
-            trustAfter: relation.trust,
-            interactionCount: relation.interactionCount,
+            trustDelta: trustAfter - previousTrust,
+            trustAfter,
+            interactionCount: previousCount + 1,
             narration: `${player.displayName}在${tileId}向附近發話：「${summarizeDialogLine(message, 48)}」，${profile.name.zh}回應並把這次對話記進自己的下一步判斷。`,
           }
-        ))
-      : null
+        )
+    let dialogueEvent
+    if (input.authority) {
+      try { dialogueEvent = input.runtime.submitAuthorizedPlayerCommand(dialogueCommand, { authorize: () => { input.authConfig.reauthorizeMutation(req); input.authority!.requireNearbyNpc(claims.sub, npcId) }, beforeCommit: persistPersonal }) }
+      catch (error) { sendGameplayError(res, error); return }
+      if (!dialogueEvent || !relation || !personalEvent) { res.status(422).json({ error: 'PERSONAL_STATE_RECONCILIATION_REQUIRED' }); return }
+    } else { persistPersonal(); dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function' ? input.runtime.submitLivingWorldCommand(dialogueCommand) : null }
+    if (!relation || !personalEvent) { res.status(422).json({ error: 'PERSONAL_STATE_RECONCILIATION_REQUIRED' }); return }
+
 
     res.json({
       npcId,
@@ -317,7 +336,7 @@ export function createNpcRouter(input: {
       tick,
       line: { zh: line.zh, en: line.en },
       replySource,
-      aiError,
+      aiError: input.authority && aiError ? 'AI_UNAVAILABLE' : aiError,
       relationship: {
         trust: relation.trust,
         previousTrust,
@@ -344,7 +363,7 @@ export function createNpcRouter(input: {
     }
     const npcId = String(req.params.npcId ?? '')
     const profile = requireLivingNpc(input.runtime, npcId, res)
-    if (!profile) return
+    if (!profile || !nearby(req, res, npcId)) return
     const body = (req.body ?? {}) as { message?: unknown; intent?: unknown }
     const message = readMessage(body.message)
     const explicitIntent = isInteractIntent(body.intent) ? body.intent : null
@@ -363,7 +382,7 @@ export function createNpcRouter(input: {
       return
     }
 
-    const tick = input.runtime.getCurrentTick()
+    let tick = input.runtime.getCurrentTick()
     const baseTrust =
       typeof profile.personality.trustBase === 'number'
         ? clampTrust(profile.personality.trustBase)
@@ -380,7 +399,7 @@ export function createNpcRouter(input: {
 
     const tier: RelationshipTier = tierForRelationship(previousTrust)
     const playerMessage = message ?? fallbackMessageFor(explicitIntent!)
-    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.email)
+    const player = resolvePlayerIdentity(input.accounts, claims.sub, claims.displayName)
 
     let replySource: ReplySource = 'fallback'
     let replyZh = ''
@@ -558,6 +577,7 @@ export function createNpcRouter(input: {
         }
         if (input.getPropertyContext) {
           const pc = await input.getPropertyContext(npcId)
+          if (!commit(req, res, claims.sub, npcId)) return
           if (pc.length > 0) {
             (dialogCtx as Record<string, unknown>).propertyContext = pc
           }
@@ -589,6 +609,8 @@ export function createNpcRouter(input: {
       replyZh = line.zh
       replyEn = line.en
     }
+    if (!commit(req, res, claims.sub, npcId) || !unchangedRelation(req, res, npcId, existing)) return
+    tick = input.runtime.getCurrentTick()
     // Per ARCHITECTURE.md §9 — AI is read-only and MAY suggest a
     // trustDelta, but the canonical delta MUST come from a server
     // deterministic rule. We discard the AI value and recompute via
@@ -602,38 +624,23 @@ export function createNpcRouter(input: {
     const trustAfter = clampTrust(previousTrust + (aiTrustDelta ?? 0))
     const newTier = tierForRelationship(trustAfter)
 
-    const relation = input.store.upsertRelation({
-      accountId: claims.sub,
-      npcId,
-      trust: trustAfter,
-      interactionCount: previousCount + 1,
-      lastInteractionTick: tick,
-    })
-
-    const personalEvent = input.store.appendPersonalEvent({
-      accountId: claims.sub,
-      npcId,
-      intent: resolvedIntent,
-      playerMessage,
-      lineZh: replyZh,
-      lineEn: replyEn,
-      tick,
-      trustAfter: relation.trust,
-    })
-    input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
-      npcId,
-      playerAccountId: String(claims.sub),
-      intent: resolvedIntent,
-      playerMessage,
-      replyZh,
-      replyEn,
-      tick,
-      trustAfter: relation.trust,
-    })
-
+    let relation: ReturnType<PlayerStateStore['upsertRelation']> | undefined, personalEvent: ReturnType<PlayerStateStore['appendPersonalEvent']> | undefined
+    const persistPersonal = () => {
+      relation = input.store.upsertRelation({
+        accountId: claims.sub, npcId, trust: trustAfter,
+        interactionCount: previousCount + 1, lastInteractionTick: tick,
+      })
+      personalEvent = input.store.appendPersonalEvent({
+        accountId: claims.sub, npcId, intent: resolvedIntent, playerMessage: playerMessage,
+        lineZh: replyZh, lineEn: replyEn, tick, trustAfter: relation.trust,
+      })
+      input.runtime.getNpcMemory?.()?.rememberPlayerDialog({
+        npcId, playerAccountId: String(claims.sub), intent: resolvedIntent,
+        playerMessage: playerMessage, replyZh: replyZh, replyEn: replyEn, tick, trustAfter: relation.trust,
+      })
+    }
     const npcTile = resolveNpcTileForDialog(input.runtime, npcId, profile.defaultLocation)
-    const dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function'
-      ? input.runtime.submitLivingWorldCommand(makeLivingWorldCommand(
+    const dialogueCommand = makeLivingWorldCommand(
           'PLAYER_NPC_DIALOGUE',
           String(claims.sub),
           'player',
@@ -647,13 +654,21 @@ export function createNpcRouter(input: {
             playerMessage,
             npcReplyZh: replyZh,
             npcReplyEn: replyEn,
-            trustDelta: relation.trust - previousTrust,
-            trustAfter: relation.trust,
-            interactionCount: relation.interactionCount,
+            trustDelta: trustAfter - previousTrust,
+            trustAfter,
+            interactionCount: previousCount + 1,
             narration: `${player.displayName}在${npcTile}向${profile.name.zh}說：「${summarizeDialogLine(playerMessage, 48)}」，${profile.name.zh}把這次對話記進自己的下一步判斷。`,
           }
-        ))
-      : null
+        )
+    let dialogueEvent
+    if (input.authority) {
+      try { dialogueEvent = input.runtime.submitAuthorizedPlayerCommand(dialogueCommand, { authorize: () => { input.authConfig.reauthorizeMutation(req); input.authority!.requireNearbyNpc(claims.sub, npcId) }, beforeCommit: persistPersonal }) }
+      catch (error) { sendGameplayError(res, error); return }
+      if (!dialogueEvent || !relation || !personalEvent) { res.status(422).json({ error: 'PERSONAL_STATE_RECONCILIATION_REQUIRED' }); return }
+    } else { persistPersonal(); dialogueEvent = typeof (input.runtime as { submitLivingWorldCommand?: unknown }).submitLivingWorldCommand === 'function' ? input.runtime.submitLivingWorldCommand(dialogueCommand) : null }
+    if (!relation || !personalEvent) { res.status(422).json({ error: 'PERSONAL_STATE_RECONCILIATION_REQUIRED' }); return }
+
+
 
     res.json({
       npcId,
@@ -661,7 +676,7 @@ export function createNpcRouter(input: {
       tick,
       line: { zh: replyZh, en: replyEn },
       replySource,
-      aiError: replySource === 'fallback' ? aiError : null,
+      aiError: replySource === 'fallback' ? (input.authority && aiError ? 'AI_UNAVAILABLE' : aiError) : null,
       relationship: {
         trust: relation.trust,
         previousTrust,
@@ -748,8 +763,8 @@ export function createNpcRouter(input: {
     const profileB = requireLivingNpc(input.runtime, npcB, res)
     if (!profileB) return
     const npcs = input.runtime.getNpcs()
-    const npcAState = npcs.find((n) => n.id === npcA)
-    const npcBState = npcs.find((n) => n.id === npcB)
+    let npcAState = npcs.find((n) => n.id === npcA)
+    let npcBState = npcs.find((n) => n.id === npcB)
     if (!npcAState || !npcBState) {
       res.status(404).json({ error: 'NPC_NOT_FOUND' })
       return
@@ -772,6 +787,7 @@ export function createNpcRouter(input: {
       return
     }
 
+    if (!nearby(req, res, npcA, npcB)) return
     // ---- 步驟 2：意圖分類 ----
     // message 存在 → 用 AI 分類；沒 message → 直接吃 explicitMode
     let intentClass: 'mediate' | 'provoke' | 'watch' | 'threaten' = explicitMode ?? 'watch'
@@ -794,6 +810,13 @@ export function createNpcRouter(input: {
       intentClass = 'watch'
     }
 
+    if (!commit(req, res, claims.sub, npcA, npcB)) return
+    npcAState = input.runtime.getNpcs().find(n => n.id === npcA)
+    npcBState = input.runtime.getNpcs().find(n => n.id === npcB)
+    if (!npcAState || !npcBState || npcAState.location !== npcBState.location
+      || input.runtime.getNpcBuildingId(npcA) !== null || input.runtime.getNpcBuildingId(npcB) !== null) {
+      res.status(409).json({ error: 'NPC_INTERVENTION_CONTEXT_CHANGED' }); return
+    }
     const tick = input.runtime.getCurrentTick()
     const tile = npcAState.location
 
@@ -823,13 +846,6 @@ export function createNpcRouter(input: {
         narration,
       }
     )
-
-    // ---- 步驟 4：Rule Engine 驗證 + 寫 EventLog ----
-    const event = input.runtime.submitLivingWorldCommand(command)
-    if (!event) {
-      res.status(500).json({ error: 'RULE_ENGINE_REJECTED' })
-      return
-    }
 
     // ---- 步驟 5：套 PlayerStateStore 副作用（trust + personal_event） ----
     const baseTrust = (profile: { personality: Readonly<Record<string, number | string>> }) =>
@@ -864,7 +880,15 @@ export function createNpcRouter(input: {
 
     const newTrustA = clampTrust(trustA + trustDeltaA)
     const newTrustB = clampTrust(trustB + trustDeltaB)
+    // Keep the established command ID over the exact intent. Results belong to
+    // the committed receipt and must not make an identical retry a new command.
+    const receiptCommand = { ...command, payload: { ...command.payload, effects: {
+      npcA: { npcId: npcA, trust: newTrustA, trustDelta: newTrustA - trustA, moodDelta },
+      npcB: { npcId: npcB, trust: newTrustB, trustDelta: newTrustB - trustB, moodDelta },
+    } } }
 
+    let personalPersisted = false
+    const persistPersonal = () => {
     if (intentClass !== 'watch') {
       input.store.upsertRelation({
         accountId: claims.sub,
@@ -902,6 +926,21 @@ export function createNpcRouter(input: {
       tick,
       trustAfter: newTrustB,
     })
+    personalPersisted = true
+    }
+    let event
+    if (input.authority) {
+      try { event = input.runtime.submitAuthorizedPlayerCommand(receiptCommand, { authorize: () => { input.authConfig.reauthorizeMutation(req); input.authority!.requireNearbyNpc(claims.sub, npcA); input.authority!.requireNearbyNpc(claims.sub, npcB) }, beforeCommit: persistPersonal }) }
+      catch (error) { sendGameplayError(res, error); return }
+    } else { event = input.runtime.submitLivingWorldCommand(receiptCommand); if (event) persistPersonal() }
+    if (!event) { res.status(422).json({ error: 'RULE_ENGINE_REJECTED' }); return }
+    const receipt = (event.payload as { data?: { effects?: unknown } } | null)?.data
+    const receiptEffects = validPlayerInterventionEffects(receipt?.effects, npcA, npcB) ? receipt.effects : null
+    const currentRelation = (npcId: string) => {
+      const relation = input.store.getRelation(claims.sub, npcId)
+      return { npcId, persisted: relation !== null, trust: relation?.trust ?? null,
+        interactionCount: relation?.interactionCount ?? null, lastInteractionTick: relation?.lastInteractionTick ?? null }
+    }
 
     res.json({
       ok: true,
@@ -911,23 +950,13 @@ export function createNpcRouter(input: {
       tile,
       eventId: event.eventId,
       sequence: event.sequence,
+      duplicate: !personalPersisted,
       classifiedByAi: message.length > 0 && aiClassifyError === null && (input.settings.countActive() > 0 || isOpenCodeConfigured(input.settings)),
-      aiClassifyError,
+      aiClassifyError: input.authority && aiClassifyError ? 'AI_UNAVAILABLE' : aiClassifyError,
       narration,
-      effects: {
-        npcA: {
-          npcId: npcA,
-          trust: newTrustA,
-          trustDelta: trustDeltaA,
-          moodDelta,
-        },
-        npcB: {
-          npcId: npcB,
-          trust: newTrustB,
-          trustDelta: trustDeltaB,
-          moodDelta,
-        },
-      },
+      effects: receiptEffects,
+      effectsStatus: receiptEffects ? 'committed-receipt' : 'legacy-result-unavailable',
+      currentRelations: { npcA: currentRelation(npcA), npcB: currentRelation(npcB) },
     })
   })
 
@@ -939,7 +968,7 @@ export function createNpcRouter(input: {
     }
     const npcId = String(req.params.npcId ?? '')
     const profile = requireLivingNpc(input.runtime, npcId, res)
-    if (!profile) return
+    if (!profile || !nearby(req, res, npcId)) return
     const baseTrust =
       typeof profile.personality.trustBase === 'number'
         ? clampTrust(profile.personality.trustBase)
@@ -1028,7 +1057,7 @@ export function createNpcRouter(input: {
       return
     }
     const npcId = String(req.params.npcId ?? '')
-    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+    if (requireLivingNpc(input.runtime, npcId, res) === null || !nearby(req, res, npcId)) return
 
     const entries = input.runtime.getNpcIntentStack(npcId).slice(0, 3)
     const weights = input.runtime.getNpcLearningWeights(npcId)
@@ -1052,7 +1081,7 @@ export function createNpcRouter(input: {
       return
     }
     const npcId = String(req.params.npcId ?? '')
-    if (requireLivingNpc(input.runtime, npcId, res) === null) return
+    if (requireLivingNpc(input.runtime, npcId, res) === null || !nearby(req, res, npcId)) return
 
     const rows = [...input.runtime.getNpcBeliefs(npcId)]
       .sort((a, b) => b.confidence - a.confidence)
@@ -1067,6 +1096,24 @@ export function createNpcRouter(input: {
     })
   })
 
+  return router
+}
+
+/** Normal startup must mount this reviewed bounded canonical adapter. */
+export function createUnifiedNpcRouter(input: Omit<Parameters<typeof createNpcRouter>[0], 'accounts' | 'authority'> & { accounts: Pick<CanonicalAccountView, 'findById'> }): Router {
+  const router = Router(), pending = new Set<number>()
+  router.use('/npc', input.authConfig.forRequest)
+  router.use('/npc', json({ limit: 4096, strict: true }))
+  router.use('/npc', (req, res, next) => {
+    if (req.body !== undefined && Buffer.byteLength(JSON.stringify(req.body), 'utf8') > 4096) { res.status(413).json({ error: 'PAYLOAD_TOO_LARGE' }); return }
+    if (req.method !== 'POST') { next(); return }
+    const id = req.auth!.sub
+    if (pending.has(id) || pending.size >= 50) { res.status(429).json({ error: 'NPC_INTERACTION_BUSY' }); return }
+    pending.add(id)
+    const release = () => { pending.delete(id); res.off('finish', release); res.off('close', release) }
+    res.on('finish', release); res.on('close', release); next()
+  })
+  router.use(createNpcRouter({ ...input, authority: new CanonicalGameplayAuthority(input.runtime) }))
   return router
 }
 
@@ -1137,15 +1184,15 @@ function extractUnknownEntityTerm(message: string, knownNpcNames: readonly strin
 }
 
 function resolvePlayerIdentity(
-  accounts: AccountStore,
+  accounts: Pick<AccountStore, 'findById'> | Pick<CanonicalAccountView, 'findById'>,
   accountId: number,
-  email: string
-): { accountId: number; displayName: string; email: string } {
+  assertedDisplayName: string
+): { accountId: number; displayName: string } {
   const account = accounts.findById(accountId)
   const displayName = account
     ? toPublicAccount(account).displayName
-    : email.split('@')[0] ?? `玩家 #${accountId}`
-  return { accountId, displayName, email }
+    : assertedDisplayName
+  return { accountId, displayName }
 }
 
 function identityReplyFor(

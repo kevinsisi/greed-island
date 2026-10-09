@@ -1,103 +1,55 @@
-// World/NPC/Event/Card/Map read endpoints + dashboard summary.
-//
-// Reads here are world-level (public) projections. Player-specific
-// data — most notably the trust value with each NPC — is overlaid only
-// when an Authorization header is present so logged-in players see
-// their own relationship with each NPC. Anonymous clients fall back
-// to the NPC profile's seed trust.
-
-import { Router, type Request, type Response } from 'express'
+// Reviewed world/catalog geography and actor-owned dashboard projections.
+import { Router, type RequestHandler } from 'express'
+import type Database from 'better-sqlite3'
+import type { SqliteEventStore } from '../kernel/eventStore.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
-import { optionalAuth, type AuthConfig } from './auth.js'
-import { type PlayerStateStore, clampTrust } from './playerState.js'
-import { getCardImageUrl } from './adminCardsRouter.js'
+import type { AuthConfig } from './auth.js'
+import { findCardArt } from './cardArtFiles.js'
+import { publicWorldSnapshot, publicNpc, publicCatalog, publicNarrativeEvent, publicActiveEvent, tableExists, readPublicNarratives, operatorWorldSnapshot } from './publicReadModels.js'
 
-const RECENT_EVENT_LIMIT = 100
-const DASHBOARD_RECENT_EVENTS = 5
-
-export function createWorldRouter(input: {
-  runtime: SimulationRuntime
-  store: PlayerStateStore
-  authConfig: AuthConfig
-  dataDir?: string
-}): Router {
-  const router = Router()
-  const overlay = optionalAuth(input.authConfig)
-
-  router.get('/world', (_req: Request, res: Response) => {
-    res.json(input.runtime.getSnapshot())
+export function createWorldRouter(input: { runtime: SimulationRuntime; db: Database.Database; eventStore: SqliteEventStore; authConfig: AuthConfig; dataDir: string }): Router {
+  const router = Router(), { runtime, db, authConfig } = input
+  // A requested personalized view requires the asserted current cookie owner.
+  // A plain public request never silently acquires private data from a cookie.
+  const contextOrPublic: RequestHandler = (req, res, next) => {
+    if (req.get('X-Greed-Account-Id') !== undefined) authConfig.session(req, res, next)
+    else authConfig.optional(req, res, next)
+  }
+  const events = (limit: number) => readPublicNarratives(input.eventStore, runtime, limit)
+  router.get('/admin/world', authConfig.role('gm','admin'), (_req, res) => { res.json(operatorWorldSnapshot(runtime)) })
+  router.get('/world', (_req, res) => { res.json(publicWorldSnapshot(runtime)) })
+  router.get('/npcs', contextOrPublic, (req, res) => {
+    const actor = req.get('X-Greed-Account-Id') !== undefined ? req.auth?.sub : undefined
+    const ready = tableExists(db, 'player_npc_relations')
+    const relations = actor !== undefined && ready ? new Map((db.prepare('SELECT npc_id,trust,interaction_count,last_interaction_tick FROM player_npc_relations WHERE account_id=?').all(actor) as Array<{ npc_id: string; trust: number; interaction_count: number; last_interaction_tick: number }>).map(row => [row.npc_id, row])) : null
+    res.json(runtime.getNpcs().filter(npc => !npc.deceased).map(npc => {
+      const dto = publicNpc(npc)
+      if (actor === undefined) return dto
+      const relation = relations?.get(npc.id)
+      return { ...dto, relationshipProgressReady: ready,
+        ...(ready ? { relationshipScore: relation?.trust ?? dto.relationshipScore,
+          relationshipScoreSource: relation ? 'owned-relation' : 'profile-seed',
+          interactionCount: relation?.interaction_count ?? 0, lastInteractionTick: relation?.last_interaction_tick ?? 0 } : {}) }
+    }))
   })
-
-  router.get('/npcs', overlay, (req: Request, res: Response) => {
-    const npcs = input.runtime.getNpcs()
-    const accountId = req.auth?.sub ?? null
-    // npcs 已含 activity / mood / health / faction / targetTile
-    if (accountId === null) {
-      res.json(npcs)
-      return
-    }
-    const relations = new Map(
-      input.store.listRelations(accountId).map((r) => [r.npcId, r] as const)
-    )
-    res.json(
-      npcs.map((npc) => {
-        const r = relations.get(npc.id)
-        return {
-          ...npc,
-          relationshipScore: r ? r.trust : clampTrust(npc.relationshipScore),
-          interactionCount: r ? r.interactionCount : 0,
-          lastInteractionTick: r ? r.lastInteractionTick : 0,
-        }
-      })
-    )
+  router.get('/events', (req, res) => {
+    const requested = typeof req.query.limit === 'string' && /^[1-9][0-9]*$/.test(req.query.limit) ? Number(req.query.limit) : 50
+    res.json(events(Math.min(100, Number.isSafeInteger(requested) ? requested : 50)))
   })
-
-  router.get('/events', (req: Request, res: Response) => {
-    const limit = clampInt(req.query.limit, 1, RECENT_EVENT_LIMIT, 50)
-    res.json(input.runtime.getRecentEvents(limit))
+  router.get('/cards', (_req, res) => { res.json(publicCatalog(runtime, id => findCardArt(input.dataDir, id)?.imageUrl ?? null)) })
+  router.get('/world-events', (_req, res) => { res.json({ active: runtime.getActiveWorldEvents().flatMap(event => { const dto = publicActiveEvent(event); return dto ? [dto] : [] }) }) })
+  router.get('/dashboard', contextOrPublic, (req, res) => {
+    const actor = req.get('X-Greed-Account-Id') !== undefined ? req.auth?.sub : undefined
+    const codexReady = actor !== undefined && tableExists(db, 'player_codex')
+    const owned = codexReady ? (db.prepare('SELECT COUNT(*) AS count FROM player_codex WHERE account_id=?').get(actor) as { count: number }).count : null
+    const lastSeen = actor === undefined ? null : (db.prepare("SELECT last_seen_tick FROM accounts WHERE id=? AND status='active'").get(actor) as { last_seen_tick: number } | undefined)?.last_seen_tick ?? null
+    const walletRow = actor !== undefined && tableExists(db, 'player_wallet') ? db.prepare('SELECT gold,energy,updated_at FROM player_wallet WHERE account_id=?').get(actor) as { gold: number; energy: number; updated_at: number } | undefined : undefined
+    const wallet = walletRow ? { accountId: actor, gold: walletRow.gold, energy: walletRow.energy, updatedAt: walletRow.updated_at } : null
+    res.json({ world: publicWorldSnapshot(runtime), cardsOwned: owned, cardsOwnedReady: codexReady,
+      cardsTotal: runtime.getCardCatalog().entries.length, recentEvents: events(5), rareWindowOpen: runtime.isRareWindowOpen(),
+      activeEvents: runtime.getActiveWorldEvents().flatMap(event => { const dto = publicActiveEvent(event); return dto ? [dto] : [] }),
+      ticksSinceLastVisit: lastSeen === null ? null : Math.max(0, runtime.getCurrentTick() - lastSeen),
+      wallet, walletInitialized: wallet !== null, accountContext: actor ?? null })
   })
-
-  router.get('/cards', (_req: Request, res: Response) => {
-    const catalog = input.runtime.getCardCatalog()
-    if (!input.dataDir) {
-      res.json(catalog)
-      return
-    }
-    const dataDir = input.dataDir
-    const entries = catalog.entries.map((e) => {
-      const imageUrl = getCardImageUrl(dataDir, e.id)
-      return imageUrl ? { ...e, imageUrl } : e
-    })
-    res.json({ ...catalog, entries })
-  })
-
-  router.get('/map', (_req: Request, res: Response) => {
-    res.json(input.runtime.getMap())
-  })
-
-  router.get('/dashboard', (_req: Request, res: Response) => {
-    const world = input.runtime.getSnapshot()
-    const cards = input.runtime.getCardCatalog()
-    res.json({
-      world,
-      cardsOwned: 0,
-      cardsTotal: cards.entries.length,
-      recentEvents: input.runtime.getRecentEvents(DASHBOARD_RECENT_EVENTS),
-      rareWindowOpen: input.runtime.isRareWindowOpen(),
-      activeEvents: input.runtime.getActiveWorldEvents(),
-      ticksSinceLastVisit: 0,
-    })
-  })
-
-  router.get('/world-events', (_req: Request, res: Response) => {
-    res.json({ active: input.runtime.getActiveWorldEvents() })
-  })
-
   return router
-}
-
-function clampInt(raw: unknown, min: number, max: number, fallback: number): number {
-  const n = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
-  if (!Number.isFinite(n)) return fallback
-  return Math.max(min, Math.min(max, n))
 }

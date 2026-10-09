@@ -23,6 +23,6 @@ describe('canonical autonomous history excludes movement before limiting', () =>
     expect(runtime.collectWorldCivilizationEvidence(250)).toEqual(originalEvidence)
     expect(runtime.collectRecentNpcFreeformActionKinds(400)).toEqual(originalCooldown)
     expect(originalEvidence.map(event => event.eventId)).toEqual(['road']); expect(originalCooldown.get('npc-existing')).toEqual(['work'])
-    expect(read.mock.calls.every(call => call[1] === PLAYER_WORLD_EVENT_TYPES)).toBe(true)
+    expect(read.mock.calls.every(call => PLAYER_WORLD_EVENT_TYPES.every(type => call[1].includes(type)) && call[1].includes('LEGACY_WORLD_PRIVATE_ARCHIVE_V1'))).toBe(true)
   })
 })

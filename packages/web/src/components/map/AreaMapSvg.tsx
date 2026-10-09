@@ -5,7 +5,7 @@
 // Ground #1a1510, ember #f39c20 warm glow, tide #4db8c8 cold water accents.
 // Follows the same design grammar as WorldMapSvg (Phase M1).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { AreaEcologyView } from '../../api/client'
 import type {
   AreaMapBuilding,
@@ -38,8 +38,7 @@ const PIXEL_H = 400
 const INTERACT_CELLS = 2
 // Chebyshev distance threshold for building entry proximity
 const BUILDING_ENTER_CELLS = 1.5
-// localStorage key prefix (v2 col/row format; avoids collision with old Phaser {x,y} keys)
-const POS_PREFIX = 'gi:areaPos:v2:'
+
 
 // ── CSS colour maps (night nautical, readable) ─────────────────────────────
 // map-visual-language 契約:亮度撐開到 6%–42%。不變量:
@@ -322,33 +321,6 @@ function TerrainDetailLayer({ grid }: { grid: AnyTerrain[][] }) {
   )
 }
 
-// ── localStorage helpers ───────────────────────────────────────────────────
-
-function posKey(tileId: string, playerId?: number | null): string {
-  return `${POS_PREFIX}${playerId != null ? `u${playerId}:` : 'guest:'}${tileId}`
-}
-
-function loadPos(tileId: string, playerId?: number | null): { col: number; row: number } | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(posKey(tileId, playerId))
-    if (!raw) return null
-    const p = JSON.parse(raw) as unknown
-    if (p && typeof p === 'object') {
-      const { col, row } = p as { col?: unknown; row?: unknown }
-      if (typeof col === 'number' && typeof row === 'number') return { col, row }
-    }
-    return null
-  } catch { return null }
-}
-
-function savePos(tileId: string, playerId: number | null | undefined, col: number, row: number): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(posKey(tileId, playerId), JSON.stringify({ col, row }))
-  } catch { /* storage quota */ }
-}
-
 // ── Deterministic position hash (FNV-1a 32-bit) ───────────────────────────
 
 function hashPosition(key: string, tileId: string, seed: number): { xPct: number; yPct: number } {
@@ -379,6 +351,8 @@ export interface AreaMapSvgProps {
   weather?: AreaWeather
   ecology?: AreaEcologyView | null
   controlsEnabled?: boolean
+  authoritativePosition?: { col: number; row: number } | null
+  onMoveDestination?: (col: number, row: number) => void
   onNpcInteract: (npcId: string) => void
   onDropPickup: (dropId: number) => void
   onNearbyNpcsChange?: (ids: string[]) => void
@@ -400,54 +374,28 @@ export function AreaMapSvg({
   drops,
   buildings = [],
   locale,
-  playerId,
+  playerId: _playerId,
   playerName,
   hudStrings: _hudStrings,
   weather = 'clear',
   ecology = null,
   controlsEnabled = true,
+  authoritativePosition = null,
+  onMoveDestination,
   onNpcInteract,
   onDropPickup,
   onNearbyNpcsChange,
   onInteractTooFar: _onInteractTooFar,
   onBuildingEnter,
   onExit,
-  onPositionChange,
+  onPositionChange: _onPositionChange,
   onNearbyBuildingChange,
   onAnimalHunt,
   onFish,
 }: AreaMapSvgProps) {
-  // ── Player position (grid cells) ─────────────────────────────────────────
-  const initialPos = useMemo(() => {
-    const s = loadPos(tileId, playerId)
-    return { col: s?.col ?? 7, row: s?.row ?? 5 }
-    // Initial value only — deps intentionally omitted
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const [playerCol, setPlayerCol] = useState(initialPos.col)
-  const [playerRow, setPlayerRow] = useState(initialPos.row)
-
-  // Reset position when tileId / playerId changes (after initial mount)
-  const prevTileRef = useRef(tileId)
-  useEffect(() => {
-    if (prevTileRef.current === tileId) return
-    prevTileRef.current = tileId
-    const s = loadPos(tileId, playerId)
-    const col = s?.col ?? 7
-    const row = s?.row ?? 5
-    setPlayerCol(col)
-    setPlayerRow(row)
-    onPositionChange?.({ x: col * 40 + 20, y: row * 40 + 20, z: 0 })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileId, playerId])
-
-  // Signal initial position to social-presence system on mount
-  useEffect(() => {
-    onPositionChange?.({ x: playerCol * 40 + 20, y: playerRow * 40 + 20, z: 0 })
-    // Intentionally run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Rendering coordinates come only from the sole canonical snapshot.
+  const playerCol = authoritativePosition?.col ?? Number.NaN
+  const playerRow = authoritativePosition?.row ?? Number.NaN
 
   // ── Terrain grid ─────────────────────────────────────────────────────────
   const terrainGrid = useMemo(
@@ -497,11 +445,8 @@ export function AreaMapSvg({
     if (!controlsEnabled) return
     const terrain = terrainGrid[row]?.[col]
     if (terrain === 'open_water' || terrain === 'blocked') return
-    setPlayerCol(col)
-    setPlayerRow(row)
-    savePos(tileId, playerId, col, row)
-    onPositionChange?.({ x: col * 40 + 20, y: row * 40 + 20, z: 0 })
-  }, [controlsEnabled, terrainGrid, tileId, playerId, onPositionChange])
+    onMoveDestination?.(col, row)
+  }, [controlsEnabled, terrainGrid, onMoveDestination])
 
   const handleNpcClick = useCallback((npcId: string) => {
     onNpcInteract(npcId)
@@ -999,7 +944,7 @@ export function AreaMapSvg({
         })}
 
         {/* ── Player token (human silhouette + hexagon frame) ───────── */}
-        {controlsEnabled && (
+        {authoritativePosition && (
           <div
             className="absolute"
             style={{

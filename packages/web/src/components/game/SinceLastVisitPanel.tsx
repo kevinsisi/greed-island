@@ -40,11 +40,11 @@ const PRESSURE_LABEL: Readonly<Record<string, string>> = {
 }
 
 interface SinceLastVisitPanelProps {
-  token: string
+  accountId: number
   onClose: () => void
 }
 
-export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps) {
+export function SinceLastVisitPanel({ accountId, onClose }: SinceLastVisitPanelProps) {
   const navigate = useNavigate()
   const [cards, setCards] = useState<ServerSinceLastVisit | null>(null)
   const [world, setWorld] = useState<ServerCatchUpSummary | null>(null)
@@ -55,8 +55,8 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
     let cancelled = false
     setLoading(true)
     Promise.allSettled([
-      api.cardsSinceLastVisit(token),
-      api.worldSinceLastVisit(token)
+      api.cardsSinceLastVisit(accountId),
+      api.worldSinceLastVisit(accountId)
     ]).then((results) => {
       if (cancelled) return
       const c = results[0].status === 'fulfilled' ? results[0].value : null
@@ -83,13 +83,13 @@ export function SinceLastVisitPanel({ token, onClose }: SinceLastVisitPanelProps
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [accountId])
 
   const digest = useMemo(() => buildDigest(cards, world), [cards, world])
 
   const goToArea = (tileId: string) => {
     onClose()
-    navigate(`/area/${tileId}`)
+    navigate(`/game/area/${tileId}`)
   }
 
   if (loading || !hasContent) return null

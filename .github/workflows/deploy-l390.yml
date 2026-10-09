@@ -1,0 +1,163 @@
+name: Deploy L390
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: greed-island-l390-production
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package exact successful main SHA
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.current.outputs.sha }}
+    steps:
+      - name: Require the successful CI SHA to still be current main
+        id: current
+        uses: actions/github-script@v7
+        env:
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const sha = process.env.CI_HEAD_SHA;
+            if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid CI head SHA.');
+            const { data } = await github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: 'main' });
+            if (data.commit.sha !== sha) throw new Error('Stale CI result: main has advanced.');
+            core.setOutput('sha', sha);
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.current.outputs.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout and exact Caddy routing
+        env:
+          EXPECTED_SHA: ${{ steps.current.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 scripts/test-l390-deploy-contracts.py
+          python3 scripts/test-l390-routing.py
+
+      - name: Build local exact-SHA images on the hosted runner
+        env:
+          DEPLOY_SHA: ${{ steps.current.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker build --label "org.opencontainers.image.revision=$DEPLOY_SHA" -t "greed-island-l390-multiplayer:$DEPLOY_SHA" -f packages/server/Dockerfile .
+          docker build --label "org.opencontainers.image.revision=$DEPLOY_SHA" -t "greed-island-l390-web:$DEPLOY_SHA" -f packages/web/Dockerfile .
+          mkdir -p artifacts/l390-package
+          docker save "greed-island-l390-multiplayer:$DEPLOY_SHA" "greed-island-l390-web:$DEPLOY_SHA" -o artifacts/l390-package/images.tar
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('artifacts/l390-package')
+          manifest = {
+              'schemaVersion': 1, 'sha': os.environ['DEPLOY_SHA'],
+              'appVersion': json.loads(Path('package.json').read_text())['version'],
+              'archiveSha256': hashlib.file_digest((root / 'images.tar').open('rb'), 'sha256').hexdigest(),
+              'images': [
+                  'greed-island-l390-multiplayer:' + os.environ['DEPLOY_SHA'],
+                  'greed-island-l390-web:' + os.environ['DEPLOY_SHA'],
+              ],
+          }
+          (root / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+
+      - name: Store code images only, never databases or account backups
+        uses: actions/upload-artifact@v4
+        with:
+          name: l390-package-${{ steps.current.outputs.sha }}
+          path: artifacts/l390-package/
+          if-no-files-found: error
+          retention-days: 7
+
+  syntax:
+    name: Parse Windows deployment script
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: PowerShell 5.1 AST validation only; never execute deployment
+        shell: powershell
+        run: |
+          $tokens = $null; $errors = $null
+          $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'scripts/deploy-l390.ps1'), [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+
+  deploy:
+    name: Deploy and test only NB-L390
+    needs: [package, syntax]
+    if: >-
+      needs.package.result == 'success' &&
+      needs.syntax.result == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, Windows, X64, greed-island-l390]
+    timeout-minutes: 25
+    env:
+      L390_DEPLOY_PATH: ${{ vars.L390_DEPLOY_PATH }}
+      DEPLOY_SHA: ${{ needs.package.outputs.sha }}
+    steps:
+      - name: Require a dedicated existing L390 path and Linux Docker access
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:L390_DEPLOY_PATH -or -not [IO.Path]::IsPathRooted($env:L390_DEPLOY_PATH) -or -not (Test-Path -LiteralPath $env:L390_DEPLOY_PATH -PathType Container)) {
+            throw 'Set L390_DEPLOY_PATH to the verified existing L390 project path. No desktop fallback is permitted.'
+          }
+          $engine = docker info --format '{{.OSType}}'
+          if ($LASTEXITCODE -ne 0 -or $engine -ne 'linux') { throw 'The dedicated runner needs authorized access to L390 Linux Docker. No elevation fallback.' }
+
+      - name: Recheck current main immediately before host work
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getBranch({ owner: context.repo.owner, repo: context.repo.repo, branch: 'main' });
+            if (data.commit.sha !== process.env.DEPLOY_SHA) throw new Error('Stale package: main advanced before deployment.');
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.sha }}
+          persist-credentials: false
+          path: source
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: l390-package-${{ needs.package.outputs.sha }}
+          path: l390-package
+
+      - name: Quiesced local backup, exact images, readiness gates and rollout tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = git -C "$env:GITHUB_WORKSPACE\source" rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:DEPLOY_SHA) { throw 'Checkout SHA does not match successful current-main CI.' }
+          & "$env:GITHUB_WORKSPACE\source\scripts\deploy-l390.ps1" -DeployPath $env:L390_DEPLOY_PATH -SourcePath "$env:GITHUB_WORKSPACE\source" -PackagePath "$env:GITHUB_WORKSPACE\l390-package" -ExpectedSha $env:DEPLOY_SHA
+
+      # Deliberately no upload-artifact here. User data, .env, local backups,
+      # runner diagnostics and credentials never leave L390.

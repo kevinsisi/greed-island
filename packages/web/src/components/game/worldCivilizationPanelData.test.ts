@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { summarizeWorldCivilizationPanel } from './worldCivilizationPanelData'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { WorldCivilizationPanel } from './WorldCivilizationPanel'
 
 const snapshot = {
   goals: [
@@ -58,6 +61,14 @@ const snapshot = {
 } as const
 
 describe('summarizeWorldCivilizationPanel', () => {
+  it('renders safe actual evidence counts and explicit unavailable evidence without raw ID fallback', () => {
+    const technology = { techId: 'public-tech', domain: 'learning', title: '公開科技', discoveredAtTick: 22, unlocks: [] }
+    expect(summarizeWorldCivilizationPanel({ goals: [], technologies: [{ ...technology, evidenceCount: 4 }] }).recentTechnologies[0]?.evidenceCount).toBe(4)
+    expect(summarizeWorldCivilizationPanel({ goals: [], technologies: [technology] }).recentTechnologies[0]?.evidenceCount).toBeNull()
+    const html = renderToStaticMarkup(createElement(WorldCivilizationPanel, { snapshot: { goals: [], technologies: [technology] } }))
+    expect(html).toContain('事件證據資料未公開')
+    expect(html).not.toContain('來自 0 個世界事件證據')
+  })
   it('prioritizes active high-progress goals and recent technologies for Hub display', () => {
     const summary = summarizeWorldCivilizationPanel(snapshot, 2)
 

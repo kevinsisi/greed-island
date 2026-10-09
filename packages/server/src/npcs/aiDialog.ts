@@ -140,7 +140,6 @@ export type AiDialogContext = Readonly<{
   player: Readonly<{
     accountId: number
     displayName: string
-    email: string
   }>
   trust: number
   tier: RelationshipTier

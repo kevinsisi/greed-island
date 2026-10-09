@@ -1,0 +1,9 @@
+- [x] Reproduce duplicate reply mismatch against frozen source without editing it
+- [x] Persist bounded server-derived results and preserve exact original intent receipts
+- [x] Return original effects separately from current persisted relation snapshots
+- [x] Cover same-tick duplicate, intervening change, legacy receipt and revoked retry
+- [x] Cover exact-field and non-intervention conflict rejection
+- [x] Add an actual SQLite/private-store reopen gate
+- [ ] Run native SQLite gate in supported Node/native dependency environment
+- [ ] Verify normal consumer handling of nullable original effects and current snapshot
+- [ ] Independent source review of corrective delta

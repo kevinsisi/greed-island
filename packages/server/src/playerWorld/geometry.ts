@@ -162,3 +162,15 @@ export function projectNpcPoint(subCol: number, subRow: number, geometry: Region
   return { x: geometry.minX + r + subCol / (AREA_GRID_COLUMNS - 1) * (geometry.maxX - geometry.minX - 2 * r),
     z: geometry.minZ + r + subRow / (AREA_GRID_ROWS - 1) * (geometry.maxZ - geometry.minZ - 2 * r) }
 }
+
+export type CanonicalPlayerGridPose = Readonly<{ subCol: number; subRow: number; subZ: 0 }>
+/** Exterior-only projection into canonical NPC/building coordinates. No caller pose or floor authority. */
+export function canonicalWorldPointToGrid(point: Point, geometry: RegionGeometry): CanonicalPlayerGridPose | null {
+  if (!canStand(point, geometry)) return null
+  if (geometry.presentation === 'canonical-area-grid') return { subCol: point.x, subRow: point.z, subZ: 0 }
+  if (geometry.presentation !== 'harbor-3d') return null
+  const r = geometry.playerRadius, width = geometry.maxX - geometry.minX - 2 * r, depth = geometry.maxZ - geometry.minZ - 2 * r
+  if (width <= 0 || depth <= 0) return null
+  return { subCol: (point.x - geometry.minX - r) / width * (AREA_GRID_COLUMNS - 1),
+    subRow: (point.z - geometry.minZ - r) / depth * (AREA_GRID_ROWS - 1), subZ: 0 }
+}

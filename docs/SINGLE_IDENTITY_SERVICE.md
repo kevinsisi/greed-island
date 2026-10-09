@@ -34,7 +34,7 @@ and never overwrite a user's later password/profile changes.
 
 `migrateIdentitySchema(db)` must be called separately in an exclusively owned
 offline connection. No constructor calls it. Unified repository/service
-constructors fail closed unless schema version 2 is ready and foreign-key
+constructors fail closed unless the current identity schema is ready and foreign-key
 enforcement is enabled.
 
 The migration validates known legacy columns, IDs, credentials and existing
@@ -48,9 +48,12 @@ existing violations block the operation rather than discard information.
 Older schemas receive only their established optional profile defaults;
 there is no automatic administrator promotion.
 
-Version 2 adds typed alias, legacy provenance and hashed-token session tables
+The initial version2 adds typed alias, legacy provenance and hashed-token session tables
 in the same DB. `ownershipReadiness()` explicitly reports missing canonical
 admin ownership. It does not choose or promote an owner.
+
+The follow-on version3 recovery schema is an explicit additive upgrade;
+see UNIFIED_ADMIN_RECOVERY.md. No constructor performs that upgrade.
 
 Before any live invocation, consistent recoverable backups, offline writer
 control, reviewed source/conflict/progress mapping, owner proof if needed,

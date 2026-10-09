@@ -21,39 +21,6 @@ export interface PhaserGameProps {
   controlsEnabled?: boolean
 }
 
-const PLAYER_POS_STORAGE_KEY = 'gi:hub:player-pos:v1'
-const PLAYER_POS_AUTOSAVE_MS = 2_000
-
-function loadPlayerPosition(): { x: number; y: number } | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(PLAYER_POS_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown }
-    const x = typeof parsed.x === 'number' ? parsed.x : NaN
-    const y = typeof parsed.y === 'number' ? parsed.y : NaN
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
-    return {
-      x: Math.min(Math.max(x, 0), CANVAS_WIDTH),
-      y: Math.min(Math.max(y, 0), CANVAS_HEIGHT)
-    }
-  } catch {
-    return null
-  }
-}
-
-function savePlayerPosition(pos: { x: number; y: number } | null): void {
-  if (typeof window === 'undefined' || !pos) return
-  try {
-    window.localStorage.setItem(
-      PLAYER_POS_STORAGE_KEY,
-      JSON.stringify({ x: pos.x, y: pos.y })
-    )
-  } catch {
-    // localStorage may be full or disabled — non-fatal for the prototype.
-  }
-}
-
 /**
  * 把 Phaser 場景嵌進 React。生命週期：mount 建一次 game，unmount 才 destroy。
  * Props 變動 (npcs / locale / hud strings) 會以 emit 形式餵進 scene，避免重建整個 game。
@@ -75,8 +42,6 @@ export function PhaserGame({
 }: PhaserGameProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
-  const controlsEnabledRef = useRef(controlsEnabled)
-  controlsEnabledRef.current = controlsEnabled
 
   // callback ref：讓 scene 內部呼叫時拿到最新版的 React handlers，避免閉包過期。
   const callbacksRef = useRef({ onAreaEnter, onNpcInteract, onPositionChange })
@@ -128,7 +93,7 @@ export function PhaserGame({
       ...(playerName !== undefined ? { playerName } : {}),
       locale,
       hudStrings,
-      initialPosition: controlsEnabled ? loadPlayerPosition() : null,
+      initialPosition: null,
       controlsEnabled
     }
     if (areaOverlays) init.areaOverlays = areaOverlays
@@ -136,33 +101,6 @@ export function PhaserGame({
     if (constructionActivities) init.constructionActivities = constructionActivities
     if (ecologyByTile) init.ecologyByTile = ecologyByTile
     game.scene.start(MapScene.KEY, init)
-
-    // 每 2 秒把玩家當前位置寫進 localStorage，避免 tab 突然關閉時遺失。
-    const autosaveTimer = window.setInterval(() => {
-      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-      if (controlsEnabledRef.current && scene && scene.scene.isActive()) {
-        const pos = scene.getPlayerPosition()
-        savePlayerPosition(pos)
-        if (pos) callbacksRef.current.onPositionChange?.({ x: Math.round(pos.x), y: Math.round(pos.y), z: 0 })
-      }
-    }, PLAYER_POS_AUTOSAVE_MS)
-
-    window.setTimeout(() => {
-      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-      if (!controlsEnabledRef.current || !scene || !scene.scene.isActive()) return
-      const pos = scene.getPlayerPosition()
-      if (pos) callbacksRef.current.onPositionChange?.({ x: Math.round(pos.x), y: Math.round(pos.y), z: 0 })
-    }, 0)
-
-    const handleVisibility = () => {
-      if (document.visibilityState !== 'visible') {
-        const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-        if (controlsEnabledRef.current && scene && scene.scene.isActive()) {
-          savePlayerPosition(scene.getPlayerPosition())
-        }
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
 
     // v0.15.40：把 Hub traveller 診斷快照掛到 window，方便 production browser
     // devtools 直接呼叫，不需要 dev build。回傳目前 MapScene 看到的輸入 NPC 與
@@ -177,10 +115,6 @@ export function PhaserGame({
     }
 
     return () => {
-      const scene = game.scene.getScene(MapScene.KEY) as MapScene | null
-      if (controlsEnabledRef.current && scene) savePlayerPosition(scene.getPlayerPosition())
-      window.clearInterval(autosaveTimer)
-      document.removeEventListener('visibilitychange', handleVisibility)
       delete (window as HubTravellerDebugWindow).__giHubTravellerDiagnostics
       game.destroy(true)
       gameRef.current = null

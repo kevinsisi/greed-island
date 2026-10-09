@@ -1,26 +1,16 @@
 import { randomBytes } from 'node:crypto'
 import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
 
-type Player = { id: string; name: string; x: number; z: number; online: boolean }
-type Obstacle = { x: number; z: number; width: number; depth: number }
-type Snapshot = {
-  tick: number
-  selfId: string
-  players: Player[]
-  world: {
-    minX: number
-    maxX: number
-    minZ: number
-    maxZ: number
-    playerRadius?: number
-    movePerTick?: number
-    obstacles: Obstacle[]
-  }
-}
 type Point = { x: number; z: number }
-
-const SCENE_ERROR = 'Default sandboxed Chromium could not start the WebGL scene; this test intentionally uses no unsafe browser flags.'
-
+type Player = Point & { accountId: number; online: boolean; tileId: string }
+type Snapshot = {
+  version: 1; selfId: number; tileId: string; revision: number; presenceRevision: number; movementStep: number; worldTick: number
+  players: Player[]
+  npcs: Array<{ id: string; location: string; activity: string }>
+  messages: Array<{ id: string; accountId: number; tileId: string; text: string; sequence: number }>
+  geometry: { minX: number; maxX: number; minZ: number; maxZ: number; playerRadius: number; movePerStep: number; obstacles: Array<Point & { width: number; depth: number }>; portals: Array<Point & { toTileId: string; radius: number }> }
+  map: { regions: Array<{ id: string; available: boolean; geometrySupported: boolean }>; regionOnlineCounts: Record<string, number> }
+}
 async function withDeadline<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -49,7 +39,8 @@ function trackMovementCommands(page: Page, markPhase: (phase: string) => void) {
   const pending = new Map<Request, MovementRecord>()
   const onRequest = (request: Request) => {
     if (request.method() !== 'POST') return
-    try { if (new URL(request.url()).pathname !== '/mp-api/command') return } catch { return }
+    try { if (new URL(request.url()).pathname !== '/api/world/command') return } catch { return }
+    try { if (request.postDataJSON()?.type !== 'move') return } catch { return }
     const startedAt = Date.now()
     const previous = records.at(-1)
     const record: MovementRecord = { startedAt, dispatchGapMs: previous ? startedAt - previous.startedAt : null, responseMs: null, status: null }
@@ -100,346 +91,200 @@ async function measureRenderCadence(page: Page): Promise<string> {
     .catch(() => 'unavailable')
 }
 
-function credentials() {
-  return {
-    username: `e2e-${randomBytes(8).toString('hex')}`,
-    password: `ci-only-${randomBytes(24).toString('base64url')}`,
-  }
-}
-
-async function blockNonLoopback(context: BrowserContext): Promise<void> {
+function credentials() { return { username: `e2e-${randomBytes(8).toString('hex')}`, password: `ci-only-${randomBytes(24).toString('base64url')}` } }
+async function isolate(context: BrowserContext) {
   await context.route('**/*', route => {
     const url = new URL(route.request().url())
-    const localAppRequest = url.protocol === 'http:'
-      && url.hostname === '127.0.0.1'
-      && (url.port === '4178' || url.port === '4179')
-    return localAppRequest ? route.continue() : route.abort()
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && ['4178', '4179'].includes(url.port) ? route.continue() : route.abort()
   })
 }
-
-async function readSnapshot(page: Page): Promise<Snapshot> {
+async function snapshot(page: Page): Promise<Snapshot> {
   return withDeadline(page.evaluate(async () => {
-    try {
-      const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
-      if (!response.ok) throw new Error()
-      return await response.json()
-    } catch {
-      throw new Error('The local multiplayer snapshot request failed or timed out.')
-    }
+    const result = await fetch('/api/world/snapshot', { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(5_000) })
+    if (!result.ok) throw new Error('Disposable canonical snapshot unavailable.')
+    return result.json()
   }) as Promise<Snapshot>, 7_000, 'Snapshot page evaluation')
 }
-
 async function probeSnapshotFromNode(page: Page): Promise<string> {
   const startedAt = Date.now()
   return withDeadline(
-    page.context().request.get(new URL('/mp-api/snapshot', page.url()).toString(), { timeout: 1_500 }),
+    page.context().request.get(new URL('/api/world/snapshot', page.url()).toString(), { timeout: 1_500 }),
     2_000,
     'Node-side snapshot probe',
   ).then(response => `status=${response.status()},elapsedMs=${Date.now() - startedAt}`)
     .catch(() => `unavailable,elapsedMs=${Date.now() - startedAt}`)
 }
 
-async function fillPassword(page: Page, label: string, password: string): Promise<void> {
-  try {
-    await page.getByLabel(label, { exact: true }).fill(password)
-  } catch {
-    // Keep synthetic credentials out of Playwright's action error and reporter output.
-    throw new Error('Could not fill a synthetic password field.')
-  }
+function self(state: Snapshot): Player {
+  const player = state.players.find(p => p.accountId === state.selfId)
+  if (!player) throw new Error('Canonical snapshot omitted self.')
+  return player
 }
-
-function selfPlayer(snapshot: Snapshot): Player {
-  const self = snapshot.players.find(player => player.id === snapshot.selfId)
-  if (!self) throw new Error('The local room snapshot omitted its own player.')
-  return self
+async function field(page: Page, selector: string, value: string) {
+  try { await page.locator(selector).fill(value) } catch { throw new Error('Could not fill a synthetic account field.') }
 }
-
-async function waitUntil(predicate: () => Promise<boolean>, timeoutMs = 8_000): Promise<void> {
-  await expect.poll(predicate, { timeout: timeoutMs, intervals: [50, 100, 200] }).toBe(true)
-}
-
-async function register(page: Page, account: ReturnType<typeof credentials>, markPhase: (phase: string) => void, label: string): Promise<void> {
-  markPhase(`${label}-registration-navigation-started`)
-  await page.goto('/multiplayer-3d')
-  markPhase(`${label}-registration-page-loaded`)
-  await page.getByRole('button', { name: '申請帳號', exact: true }).click()
-  markPhase(`${label}-signup-form-opened`)
-  await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
-  await fillPassword(page, '密碼', account.password)
-  await fillPassword(page, '再次輸入密碼', account.password)
-  markPhase(`${label}-signup-form-filled`)
-  await page.getByRole('button', { name: '建立帳號並進入 →', exact: true }).click()
-  markPhase(`${label}-signup-submitted`)
-  await expect(page.locator('.mp-connection')).toHaveText('房間已連線')
+async function wait(predicate: () => Promise<boolean>, timeout = 10_000) { await expect.poll(predicate, { timeout, intervals: [100, 200] }).toBe(true) }
+async function ready(page: Page) {
+  await expect(page.locator('.mp-connection')).toHaveText('世界已連線', { timeout: 20_000 })
   await expect(page.locator('.mp-login-backdrop')).toHaveCount(0)
-  markPhase(`${label}-signup-authenticated`)
-  await waitUntil(async () => {
-    const errorCount = await page.locator('.mp-scene-error').count()
-    const hasContext = await page.locator('canvas').evaluate(canvas => !!(canvas.getContext('webgl2') || canvas.getContext('webgl')))
-    return errorCount > 0 || hasContext
-  }, 20_000)
-  markPhase(`${label}-scene-context-ready`)
   await expect(page.locator('.mp-scene-loading')).toHaveCount(0, { timeout: 20_000 })
-  markPhase(`${label}-scene-render-ready`)
-  const sceneError = page.locator('.mp-scene-error')
-  if (await sceneError.count() > 0) {
-    const detail = await sceneError.innerText()
-    throw new Error(`${SCENE_ERROR} ${detail}`)
-  }
+  await expect(page.locator('.mp-scene-error')).toHaveCount(0)
+  expect(await page.locator('canvas').evaluate(canvas => canvas instanceof HTMLCanvasElement && !!(canvas.getContext('webgl2') || canvas.getContext('webgl')))).toBe(true)
+  await page.waitForTimeout(250)
 }
-
-async function login(page: Page, account: ReturnType<typeof credentials>, markPhase: (phase: string) => void, label: string): Promise<void> {
-  markPhase(`${label}-logout-started`)
-  await page.locator('.mp-logout').click()
-  await expect(page.locator('.mp-login-backdrop')).toBeVisible()
-  markPhase(`${label}-login-panel-visible`)
+async function register(page: Page, account: ReturnType<typeof credentials>) {
+  await page.goto('/game')
+  await page.getByRole('button', { name: '申請帳號', exact: true }).click()
+  await field(page, '#mp-username', account.username)
+  await field(page, '#mp-password', account.password)
+  await field(page, '#mp-confirm-password', account.password)
+  await page.getByRole('button', { name: '建立帳號並進入 →', exact: true }).click()
+  await ready(page)
+}
+async function login(page: Page, account: ReturnType<typeof credentials>) {
   await page.getByRole('button', { name: '登入', exact: true }).click()
-  await page.getByRole('textbox', { name: '帳號', exact: true }).fill(account.username)
-  await fillPassword(page, '密碼', account.password)
-  markPhase(`${label}-login-form-filled`)
-  await page.getByRole('button', { name: '進入共同港口 →', exact: true }).click()
-  markPhase(`${label}-login-submitted`)
-  await expect(page.locator('.mp-connection')).toHaveText('房間已連線')
-  await expect(page.locator('.mp-login-backdrop')).toHaveCount(0)
-  markPhase(`${label}-login-authenticated`)
+  await field(page, '#mp-username', account.username)
+  await field(page, '#mp-password', account.password)
+  await page.getByRole('button', { name: '進入共同世界 →', exact: true }).click()
+  await ready(page)
 }
-
-function assertSafePosition(snapshot: Snapshot): void {
-  const self = selfPlayer(snapshot)
-  const radius = snapshot.world.playerRadius ?? 0.35
-  expect(self.x).toBeGreaterThanOrEqual(snapshot.world.minX + radius - 0.001)
-  expect(self.x).toBeLessThanOrEqual(snapshot.world.maxX - radius + 0.001)
-  expect(self.z).toBeGreaterThanOrEqual(snapshot.world.minZ + radius - 0.001)
-  expect(self.z).toBeLessThanOrEqual(snapshot.world.maxZ - radius + 0.001)
-  for (const obstacle of snapshot.world.obstacles) {
-    const withinX = Math.abs(self.x - obstacle.x) < obstacle.width / 2 + radius - 0.001
-    const withinZ = Math.abs(self.z - obstacle.z) < obstacle.depth / 2 + radius - 0.001
-    expect(withinX && withinZ).toBe(false)
-  }
+function safe(state: Snapshot) {
+  const actor = self(state), g = state.geometry
+  expect(actor.x).toBeGreaterThanOrEqual(g.minX + g.playerRadius - .001); expect(actor.x).toBeLessThanOrEqual(g.maxX - g.playerRadius + .001)
+  expect(actor.z).toBeGreaterThanOrEqual(g.minZ + g.playerRadius - .001); expect(actor.z).toBeLessThanOrEqual(g.maxZ - g.playerRadius + .001)
+  for (const o of g.obstacles) expect(Math.abs(actor.x - o.x) < o.width / 2 + g.playerRadius - .001 && Math.abs(actor.z - o.z) < o.depth / 2 + g.playerRadius - .001).toBe(false)
 }
-
-function assertBoundedStep(before: Snapshot, after: Snapshot): void {
-  const tickDelta = Math.max(1, after.tick - before.tick)
-  const movePerTick = after.world.movePerTick ?? 0.4
-  const beforePlayer = selfPlayer(before)
-  const afterPlayer = selfPlayer(after)
-  expect(Math.hypot(afterPlayer.x - beforePlayer.x, afterPlayer.z - beforePlayer.z))
-    .toBeLessThanOrEqual(movePerTick * (tickDelta + 1) + 0.002)
-  assertSafePosition(after)
+function bounded(before: Snapshot, after: Snapshot) {
+  safe(after)
+  if (before.tileId !== after.tileId) return
+  const steps = Math.max(0, after.movementStep - before.movementStep)
+  expect(Math.hypot(self(after).x - self(before).x, self(after).z - self(before).z)).toBeLessThanOrEqual(after.geometry.movePerStep * (steps + 1) + .002)
 }
-
-/** Project a ground point through the untouched default camera, away from its occlusion ray. */
-async function projectGroundPoint(page: Page, point: Point): Promise<{ x: number; y: number }> {
-  return withDeadline(page.evaluate(async ({ x, z }) => {
-    const canvas = document.querySelector('canvas')
-    if (!canvas) throw new Error('The multiplayer scene canvas was missing.')
-    const response = await fetch('/mp-api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5_000) })
-    if (!response.ok) throw new Error('The local multiplayer snapshot was unavailable.')
-    const snapshot = await response.json()
-    const self = snapshot.players.find((player: { id: string }) => player.id === snapshot.selfId)
-    if (!self) throw new Error('The local room snapshot omitted its own player.')
-
-    const pitch = 0.55
-    // scene.ts uses DEFAULT_DISTANCE=8. The test never zooms or rotates; its route
-    // targets keep the camera's ray behind the player clear of the two buildings.
-    const distance = 8
-    const targetY = 1.3
-    const cameraX = self.x
-    const cameraY = targetY + Math.sin(pitch) * distance
-    const cameraZ = self.z - Math.cos(pitch) * distance
-    const relativeX = x - cameraX
-    const relativeY = -cameraY
-    const relativeZ = z - cameraZ
-    const depth = -relativeY * Math.sin(pitch) + relativeZ * Math.cos(pitch)
-    const vertical = relativeY * Math.cos(pitch) + relativeZ * Math.sin(pitch)
-    if (depth <= 0) throw new Error('The ground destination is behind the camera.')
-
-    const rect = canvas.getBoundingClientRect()
-    const focal = rect.height / (2 * Math.tan(0.9 / 2))
-    const result = {
-      x: rect.left + rect.width / 2 + relativeX * focal / depth,
-      y: rect.top + rect.height / 2 - vertical * focal / depth,
-    }
-    const element = document.elementFromPoint(result.x, result.y)
-    if (element !== canvas) throw new Error('The projected ground target is covered by a UI element.')
-    return result
-  }, point), 7_000, 'Ground projection')
-}
-
-async function clickGroundPoint(page: Page, point: Point): Promise<void> {
+async function ground(page: Page, destination: Point) {
   await page.bringToFront()
-  const before = await readSnapshot(page)
-  const screenPoint = await projectGroundPoint(page, point)
-  // This is a real Chromium pointer action on the canvas, not dispatchEvent or scene injection.
-  await page.mouse.click(screenPoint.x, screenPoint.y)
-  assertBoundedStep(before, await readSnapshot(page))
-  await expect(page.locator('.mp-feedback')).toContainText('正在前往目的地。', { timeout: 8_000 })
+  const point = await withDeadline(page.evaluate(async ({ x, z }) => {
+    const canvas = document.querySelector('canvas')
+    if (!canvas) throw new Error('Canonical canvas missing.')
+    const response = await fetch('/api/world/snapshot', { credentials: 'include', cache: 'no-store' })
+    if (!response.ok) throw new Error('Canonical snapshot unavailable.')
+    const state = await response.json(), actor = state.players.find((p: { accountId: number }) => p.accountId === state.selfId)
+    if (!actor) throw new Error('Canonical self missing.')
+    const pitch = .55, distance = 8, cameraY = 1.3 + Math.sin(pitch) * distance
+    const rx = x - actor.x, ry = -cameraY, rz = z - (actor.z - Math.cos(pitch) * distance)
+    const depth = -ry * Math.sin(pitch) + rz * Math.cos(pitch), vertical = ry * Math.cos(pitch) + rz * Math.sin(pitch)
+    if (depth <= 0) throw new Error('Ground target is behind the untouched camera.')
+    const rect = canvas.getBoundingClientRect(), focal = rect.height / (2 * Math.tan(.9 / 2))
+    const result = { x: rect.left + rect.width / 2 + rx * focal / depth, y: rect.top + rect.height / 2 - vertical * focal / depth }
+    if (document.elementFromPoint(result.x, result.y) !== canvas) throw new Error('Ground target covered by UI.')
+    return result
+  }, destination), 7_000, 'Ground projection')
+  await page.mouse.click(point.x, point.y)
 }
-
-async function waitForArrival(page: Page, destination: Point, timeoutMs = 35_000, markPhase?: (phase: string) => void, movementSummary?: () => string): Promise<void> {
-  let previous = await readSnapshot(page)
-  const start = selfPlayer(previous)
-  const startTick = previous.tick
-  assertSafePosition(previous)
-  const deadline = Date.now() + timeoutMs
-  let observedSteps = 0
-  let snapshotFailure = ''
-
+async function arrive(page: Page, destination: Point, timeout = 35_000) {
+  let previous = await snapshot(page)
+  const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    await page.waitForTimeout(50)
-    let current: Snapshot
-    const snapshotStartedAt = Date.now()
-    try { current = await readSnapshot(page) }
-    catch (error) { snapshotFailure = error instanceof Error ? error.message : 'A bounded room-snapshot request failed.'; break }
-    const snapshotElapsedMs = Date.now() - snapshotStartedAt
-    if (snapshotElapsedMs >= 500) markPhase?.(`route-snapshot-roundtrip-ms=${snapshotElapsedMs}`)
-    const after = selfPlayer(current)
-    // The observed authoritative position may advance only by bounded server move intents.
-    assertBoundedStep(previous, current)
-    if (Math.hypot(after.x - selfPlayer(previous).x, after.z - selfPlayer(previous).z) > 0.001) observedSteps += 1
-    if (Math.hypot(after.x - destination.x, after.z - destination.z) <= 0.65) return
+    await page.waitForTimeout(100)
+    const current = await snapshot(page); bounded(previous, current)
+    if (Math.hypot(self(current).x - destination.x, self(current).z - destination.z) <= .65) { await page.waitForTimeout(250); return }
     previous = current
   }
-  const finalPlayer = selfPlayer(previous)
-  const navigation = await withDeadline(page.locator('.mp-feedback').innerText(), 1_000, 'Navigation diagnostic').catch(() => '<unavailable>')
-  const sceneError = await withDeadline(page.locator('.mp-scene-error').innerText(), 1_000, 'Scene diagnostic').catch(() => '<unavailable>')
-  const pageState = await withDeadline(page.evaluate(() => ({
-    visibility: document.visibilityState,
-    activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
-    canvasMatches: document.activeElement === document.querySelector('canvas'),
-  })), 1_000, 'Page-state diagnostic').catch(() => ({
-    visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false,
-  }))
-  const connectionStatus = await withDeadline(page.locator('.mp-connection').innerText(), 1_000, 'Connection diagnostic').catch(() => '<unavailable>')
-  const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(page), measureRenderCadence(page)])
-  const movement = movementSummary?.() ?? '<unavailable>'
-  throw new Error(`The server-authoritative player did not reach the requested ground destination in time (start=${start.x.toFixed(2)},${start.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; target=${destination.x.toFixed(2)},${destination.z.toFixed(2)}; ticks=${previous.tick - startTick}; observedSteps=${observedSteps}; snapshotFailure=${snapshotFailure}; navigation=${navigation}; sceneError=${sceneError}; connectionStatus=${connectionStatus}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
+  throw new Error('Bounded server-authoritative destination deadline expired.')
+}
+async function phase(name: string, operation: () => Promise<void>) {
+  const started = Date.now()
+  console.log(`[multiplayer-e2e] ${name} started`)
+  try { await test.step(name, operation) } catch { throw new Error(`Canonical UI phase failed: ${name}; elapsed ${Date.now() - started}ms. No synthetic credentials or payloads retained.`) }
+  finally { console.log(`[multiplayer-e2e] ${name} elapsedMs=${Date.now() - started}`) }
 }
 
-test('two synthetic accounts share the local room and use server-authoritative ground navigation', async ({ browser }) => {
+test('one cookie world preserves normal signup, chat, navigation and canonical crossings', async ({ browser }) => {
+  const accountA = credentials(), accountB = credentials()
+  const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } }), contextB = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  await Promise.all([isolate(contextA), isolate(contextB)])
+  const pageA = await contextA.newPage(), pageB = await contextB.newPage()
   const testStartedAt = Date.now()
-  const markPhase = (phase: string) => console.log(`[multiplayer-e2e] ${phase} elapsedMs=${Date.now() - testStartedAt}`)
-  const accountA = credentials()
-  const accountB = credentials()
-  const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-  const contextB = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-  await Promise.all([blockNonLoopback(contextA), blockNonLoopback(contextB)])
-  const pageA = await contextA.newPage()
-  const pageB = await contextB.newPage()
-  const movementTelemetryA = trackMovementCommands(pageA, markPhase)
-  const movementTelemetryB = trackMovementCommands(pageB, markPhase)
-
+  const markPhase = (message: string) => console.log(`[multiplayer-e2e] ${message} elapsedMs=${Date.now() - testStartedAt}`)
+  const movementA = trackMovementCommands(pageA, markPhase), movementB = trackMovementCommands(pageB, markPhase)
+  let forbiddenLegacyRequest = false, transitions = 0
+  pageA.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/mp-api')) forbiddenLegacyRequest = true
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/world/command') {
+      try { if (request.postDataJSON()?.type === 'transition') transitions += 1 } catch { /* no payload diagnostics */ }
+    }
+  })
   try {
-    await register(pageA, accountA, markPhase, 'account-a')
-    markPhase('registered-account-a')
-    markPhase('starting-ground-route')
-    await clickGroundPoint(pageA, { x: 10, z: 13 })
-    markPhase('ground-route-clicked')
-    await waitForArrival(pageA, { x: 10, z: 13 }, 35_000, markPhase, () => movementTelemetryA.summary())
-    await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
-    markPhase('ground-route-arrived')
-
-    await login(pageA, accountA, markPhase, 'account-a')
-    markPhase('logged-in-account-a')
-    await register(pageB, accountB, markPhase, 'account-b')
-    markPhase('registered-account-b')
-
-    await expect(pageA.locator('.mp-players')).toContainText(accountB.username)
-    await expect(pageB.locator('.mp-players')).toContainText(accountA.username)
-    await waitUntil(async () => {
-      const snapshot = await readSnapshot(pageA)
-      return snapshot.players.some(player => player.name === accountB.username && player.online)
+    await phase('normal registration and original-credential login', async () => {
+      await register(pageA, accountA)
+      await pageA.locator('.mp-logout').click(); await expect(pageA.locator('.mp-login-backdrop')).toBeVisible()
+      await login(pageA, accountA); await register(pageB, accountB)
     })
-    markPhase('both-players-online')
-
-    const message = `ci-shared-${randomBytes(8).toString('hex')}`
-    await pageA.getByRole('textbox', { name: '聊天訊息', exact: true }).fill(message)
-    await pageA.getByRole('button', { name: '傳送', exact: true }).click()
-    await expect(pageB.locator('.mp-messages')).toContainText(message)
-    markPhase('shared-chat-delivered')
-
-    // Registrations share a safe but identical default spawn, so move B away before navigation.
-    const beforeMoveBSnapshot = await readSnapshot(pageB)
-    const beforeMoveB = selfPlayer(beforeMoveBSnapshot)
-    await pageB.bringToFront()
-    await pageB.locator('canvas').focus()
-    await pageB.keyboard.down('ArrowRight')
-    await pageB.waitForTimeout(800)
-    await pageB.keyboard.up('ArrowRight')
-    try {
-      await waitUntil(async () => selfPlayer(await readSnapshot(pageB)).x >= beforeMoveB.x + 0.1)
-    } catch {
-      const finalSnapshot = await withDeadline(readSnapshot(pageB), 2_000, 'B timeout snapshot').catch(() => null)
-      const final = finalSnapshot ?? beforeMoveBSnapshot
-      const finalPlayer = selfPlayer(final)
-      const pageState = await withDeadline(pageB.evaluate(() => ({
-        visibility: document.visibilityState,
-        activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
-        canvasMatches: document.activeElement === document.querySelector('canvas'),
-      })), 1_000, 'B timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
-      const connectionStatus = await withDeadline(pageB.locator('.mp-connection').innerText(), 1_000, 'B timeout connection').catch(() => '')
-      const sceneError = await withDeadline(pageB.locator('.mp-scene-error').innerText(), 1_000, 'B timeout scene error').catch(() => '')
-      const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(pageB), measureRenderCadence(pageB)])
-      const movement = movementTelemetryB.summary()
-      throw new Error(`The focused canvas did not move player B as expected (start=${beforeMoveB.x.toFixed(2)},${beforeMoveB.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeMoveBSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
-    }
-    markPhase('player-b-moved-one-step')
-
-    // A direction key is an ordinary manual input and must cancel the active click route.
-    const cancellationTarget = { x: 10, z: 16 }
-    await clickGroundPoint(pageA, cancellationTarget)
-    const beforeCancelSnapshot = await readSnapshot(pageA)
-    const beforeCancel = selfPlayer(beforeCancelSnapshot)
-    try {
-      await waitUntil(async () => {
-        const current = selfPlayer(await readSnapshot(pageA))
-        return Math.hypot(current.x - beforeCancel.x, current.z - beforeCancel.z) > 0.1
-      })
-    } catch {
-      const finalSnapshot = await withDeadline(readSnapshot(pageA), 2_000, 'Route timeout snapshot').catch(() => null)
-      const final = finalSnapshot ?? beforeCancelSnapshot
-      const finalPlayer = selfPlayer(final)
-      const pageState = await withDeadline(pageA.evaluate(() => ({
-        visibility: document.visibilityState,
-        activeElementTag: document.activeElement?.tagName.toLowerCase() ?? 'none',
-        canvasMatches: document.activeElement === document.querySelector('canvas'),
-      })), 1_000, 'Route timeout page-state').catch(() => ({ visibility: 'unavailable', activeElementTag: 'unavailable', canvasMatches: false }))
-      const connectionStatus = await withDeadline(pageA.locator('.mp-connection').innerText(), 1_000, 'Route timeout connection').catch(() => '')
-      const sceneError = await withDeadline(pageA.locator('.mp-scene-error').innerText(), 1_000, 'Route timeout scene error').catch(() => '')
-      const [nodeProbe, renderCadence] = await Promise.all([probeSnapshotFromNode(pageA), measureRenderCadence(pageA)])
-      const movement = movementTelemetryA.summary()
-      throw new Error(`The active route did not produce a movement step (start=${beforeCancel.x.toFixed(2)},${beforeCancel.z.toFixed(2)}; final=${finalPlayer.x.toFixed(2)},${finalPlayer.z.toFixed(2)}; ticks=${final.tick - beforeCancelSnapshot.tick}; snapshotAvailable=${!!finalSnapshot}; connectionStatus=${connectionStatus}; sceneError=${sceneError}; visibility=${pageState.visibility}; activeElementTag=${pageState.activeElementTag}; canvasMatches=${pageState.canvasMatches}; nodeSnapshotProbe=${nodeProbe}; renderCadence=${renderCadence}; movement=${movement}).`)
-    }
-    await pageA.bringToFront()
-    await pageA.locator('canvas').focus()
-    await pageA.keyboard.down('ArrowRight')
-    await expect(pageA.locator('.mp-feedback')).toContainText('已切換手動移動，自動導航已取消。')
-    await pageA.keyboard.up('ArrowRight')
-    markPhase('route-cancelled-by-manual-input')
-    const afterManualRelease = selfPlayer(await readSnapshot(pageA))
-    await pageA.waitForTimeout(250)
-    const afterCancel = await readSnapshot(pageA)
-    const afterCancelPlayer = selfPlayer(afterCancel)
-    expect(Math.abs(afterCancelPlayer.z - afterManualRelease.z))
-      .toBeLessThanOrEqual((afterCancel.world.movePerTick ?? 0.4) + 0.002)
-    assertSafePosition(afterCancel)
-
-    // Two rapid real pointer clicks should leave the newer destination as the active route.
-    const firstRapidTarget = { x: 10.2, z: 16 }
-    const latestRapidTarget = { x: 11, z: 16 }
-    await pageA.bringToFront()
-    const beforeRapidClicks = await readSnapshot(pageA)
-    const firstScreenPoint = await projectGroundPoint(pageA, firstRapidTarget)
-    const latestScreenPoint = await projectGroundPoint(pageA, latestRapidTarget)
-    await pageA.mouse.click(firstScreenPoint.x, firstScreenPoint.y)
-    await pageA.mouse.click(latestScreenPoint.x, latestScreenPoint.y)
-    assertBoundedStep(beforeRapidClicks, await readSnapshot(pageA))
-    await expect(pageA.locator('.mp-feedback')).toContainText('正在前往目的地。')
-    await waitForArrival(pageA, latestRapidTarget, 35_000, markPhase, () => movementTelemetryA.summary())
-    await expect(pageA.locator('.mp-feedback')).toContainText('已抵達目的地。')
-    markPhase('rapid-retarget-arrived')
+    const idA = (await snapshot(pageA)).selfId, idB = (await snapshot(pageB)).selfId
+    await phase('same-region peer and canonical NPC projection', async () => {
+      await wait(async () => (await snapshot(pageA)).players.some(p => p.accountId === idB && p.online))
+      await wait(async () => (await snapshot(pageB)).players.some(p => p.accountId === idA && p.online))
+      const state = await snapshot(pageA)
+      expect(state.npcs.every(n => n.location === state.tileId && n.activity !== 'move')).toBe(true)
+      await wait(async () => await pageA.locator('.mp-npcs li strong').count() === (await snapshot(pageA)).npcs.length)
+      const tab = await contextA.newPage(); await tab.goto('/game'); await ready(tab)
+      const duplicate = await snapshot(tab)
+      expect(duplicate.players.filter(p => p.accountId === idA).length).toBe(1)
+      expect(duplicate.map.regionOnlineCounts[duplicate.tileId]).toBe(2)
+      await tab.close()
+    })
+    await phase('public escaped world chat and input-focus safety', async () => {
+      const before = self(await snapshot(pageA))
+      await field(pageA, '#world-chat', 'WASD <script>plain text</script>')
+      await pageA.getByRole('button', { name: '傳送', exact: true }).click()
+      await wait(async () => (await snapshot(pageB)).messages.some(m => m.accountId === idA && m.text === 'WASD <script>plain text</script>'))
+      expect(await pageA.locator('.mp-messages script').count()).toBe(0)
+      const after = self(await snapshot(pageA)); expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeLessThan(.05)
+    })
+    await phase('real canvas arrival, retargeting and keyboard cancellation', async () => {
+      await ground(pageA, { x: 4, z: -2 }); await arrive(pageA, { x: 4, z: -2 })
+      await ground(pageA, { x: 4, z: 6 }); await pageA.waitForTimeout(150)
+      await ground(pageA, { x: 0, z: 0 }); await arrive(pageA, { x: 0, z: 0 })
+      await ground(pageA, { x: 0, z: 8 }); await pageA.locator('canvas').focus(); await pageA.keyboard.down('ArrowRight'); await pageA.waitForTimeout(250); await pageA.keyboard.up('ArrowRight')
+      await expect(pageA.locator('.mp-feedback')).toContainText('取消')
+      const stop = await snapshot(pageA); await pageA.waitForTimeout(400); bounded(stop, await snapshot(pageA))
+      expect(Math.abs(self(await snapshot(pageA)).z - self(stop).z)).toBeLessThan(.5)
+    })
+    await phase('locked or unsupported map selections fail closed', async () => {
+      const state = await snapshot(pageA), locked = state.map.regions.find(r => !r.available || !r.geometrySupported)
+      if (!locked) throw new Error('Disposable world omitted its locked/unsupported map states.')
+      const count = transitions
+      await pageA.locator('#world-region').selectOption(locked.id)
+      await expect(pageA.locator('.mp-actions .mp-primary')).toBeDisabled()
+      await pageA.waitForTimeout(200); expect(transitions).toBe(count)
+      await pageA.locator('#world-region').selectOption('t_dock')
+    })
+    await phase('ordinary crossing to central rebuilds the same world region', async () => {
+      for (const destination of [{ x: 0, z: 2 }, { x: 0, z: 10 }, { x: 0, z: 16 }]) { await ground(pageA, destination); await arrive(pageA, destination) }
+      await pageA.locator('#world-region').selectOption('t_central')
+      const cross = pageA.locator('.mp-actions .mp-primary'); await expect(cross).toBeEnabled(); await cross.click()
+      await wait(async () => (await snapshot(pageA)).tileId === 't_central')
+      await expect(pageA.locator('.mp-mission h1')).toHaveText('夜潮區')
+      expect((await snapshot(pageA)).npcs.every(n => n.location === 't_central')).toBe(true)
+      await field(pageA, '#world-chat', 'cross-region-world-message'); await pageA.getByRole('button', { name: '傳送', exact: true }).click()
+      await wait(async () => (await snapshot(pageB)).messages.some(m => m.accountId === idA && m.tileId === 't_central' && m.text === 'cross-region-world-message'))
+    })
+    await phase('shared-cookie account switch invalidates stale tab identity', async () => {
+      const tab = await contextA.newPage(); await tab.goto('/game'); await ready(tab)
+      await tab.locator('.mp-logout').click(); await expect(tab.locator('.mp-login-backdrop')).toBeVisible()
+      await login(tab, accountB)
+      await wait(async () => (await snapshot(pageA)).selfId === idB)
+      await wait(async () => (await pageA.locator('.mp-self').innerText()).includes(`#${idB}`))
+      await ready(pageA)
+      expect((await snapshot(pageA)).players.filter(p => p.accountId === idB).length).toBe(1)
+      await tab.close()
+    })
+    expect(forbiddenLegacyRequest).toBe(false)
+    expect(await pageA.evaluate(() => localStorage.getItem('gi.auth.token'))).toBeNull()
   } finally {
-    movementTelemetryA.dispose(); movementTelemetryB.dispose()
+    const [probeA, probeB, cadenceA, cadenceB] = await Promise.all([probeSnapshotFromNode(pageA), probeSnapshotFromNode(pageB), measureRenderCadence(pageA), measureRenderCadence(pageB)])
+    markPhase(`A movement=${movementA.summary()};nodeSnapshotProbe=${probeA};renderCadence=${cadenceA}`)
+    markPhase(`B movement=${movementB.summary()};nodeSnapshotProbe=${probeB};renderCadence=${cadenceB}`)
+    movementA.dispose(); movementB.dispose()
     await Promise.all([contextA.close(), contextB.close()])
   }
 })

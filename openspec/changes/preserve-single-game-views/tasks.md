@@ -1,0 +1,10 @@
+- [x] Inventory actual route/page/provider/API dependencies.
+- [x] Replace legacy JWT AuthContext/API transport with sole cookie numeric-profile provider.
+- [x] Restore explicit nested routes and original bookmark aliases.
+- [x] Restore canonical world chat and same-client detailed-map navigation/projections.
+- [x] Adapt profile/password/admin/recovery DTOs and stale-cache invalidation.
+- [x] Run available frontend and pure transport/projection tests.
+- [ ] Review final consolidated source independently.
+- [ ] Verify all per-family backend adapters and approved spatial policies.
+- [ ] Pass exact pinned-dependency build/typecheck and disposable normal browser CI.
+- [ ] Verify preserved legacy progress/data and every original working workflow before release/merge.

@@ -1,3 +1,8 @@
+import { parseAdminWorldSnapshot } from './adminWorld'
+import type { AccountProfile } from '../multiplayer3d/types'
+import { isAccountProfile } from '../multiplayer3d/protocol'
+import { parseWalletResponse } from './wallet'
+import { parseCardRead } from './cardRead'
 // Thin fetch wrapper for the greed-island server. The frontend is
 // served from the same origin as the server (Caddy proxies /api/*),
 // so requests are relative URLs.
@@ -95,7 +100,7 @@ export type ServerWorldCivilizationGoal = {
   goalId: string
   domain: string
   title: string
-  rationale: string
+  rationale?: string
   targetProgress: number
   progress: number
   declaredAtTick: number
@@ -108,7 +113,8 @@ export type ServerWorldTechnology = {
   domain: string
   title: string
   discoveredAtTick: number
-  evidenceEventIds: readonly string[]
+  evidenceEventIds?: readonly string[]
+  evidenceCount?: number
   unlocks: readonly string[]
 }
 
@@ -274,24 +280,20 @@ export type ServerMap = {
 
 export type ServerDashboard = {
   world: ServerWorldSnapshot
-  cardsOwned: number
+  cardsOwned: number | null
+  cardsOwnedReady: boolean
   cardsTotal: number
   recentEvents: ServerNarrativeEvent[]
   rareWindowOpen: boolean
-  ticksSinceLastVisit: number
+  ticksSinceLastVisit: number | null
+  wallet: ServerPlayerWallet | null
+  walletInitialized: boolean
+  accountContext: number | null
 }
 
-export type AccountRole = 'player' | 'gm' | 'admin'
+export type AccountRole = AccountProfile['role']
 
-export type ServerAccount = {
-  id: number
-  email: string
-  createdAt: number
-  role: AccountRole
-  nickname: string | null
-  avatar: string
-  displayName: string
-}
+export type ServerAccount = AccountProfile & { id: number }
 
 export type ServerNpcStatsBirth = {
   tick: number
@@ -374,33 +376,9 @@ export type ServerNpcStats = {
   generatedAtTick: number
 }
 
-export type ServerAdminUser = {
-  id: number
-  email: string
-  role: AccountRole
-  createdAt: string
-  nickname: string | null
-  avatar: string
-  displayName: string
-}
-
-export type ServerAdminResetIssue = {
-  ok: true
-  target: { id: number; email: string }
-  token: string
-  expiresAt: string
-  resetPath: string
-}
-
-export type ServerForgotPasswordResponse = {
-  ok: true
-  message: string
-}
-
-export type ServerProfile = {
-  account: ServerAccount
-  avatarPresets: string[]
-}
+export type ServerAdminUser = AccountProfile & { status: 'active' | 'disabled' }
+export type ServerAdminResetIssue = { ok: true; target: ServerAdminUser; token: string; expiresAt: number; resetPath: '/reset-password' }
+export type ServerProfile = { profile: AccountProfile }
 
 export type NpcInteractIntent = 'greet' | 'ask' | 'trade' | 'leave'
 
@@ -518,7 +496,7 @@ export type ServerNpcDialogHold = {
 
 export type ServerPublicAccount = {
   id: number
-  email: string
+  email: string | null
   displayName: string
 }
 
@@ -591,6 +569,8 @@ export type ServerCardDrop = {
   /** v0.13.0：後端真實秒數（不含誤差），給除錯/日誌用 */
   rawSecondsLeft?: number | null
 }
+export type ServerCardRead = { tick: number; drops: ServerCardDrop[] }
+  & ({ walletInitialized: false; energy: null } | { walletInitialized: true; energy: number })
 
 /** v0.13.0：玩家不在時的紋卡摘要 */
 export type ServerSinceLastVisit = {
@@ -833,11 +813,10 @@ export type ServerPlayerWallet = {
 }
 
 export type ServerWalletResponse = {
-  wallet: ServerPlayerWallet
   jobs: ServerPlayerJob[]
   currentTick: number
   currentShift: ServerShift | null
-}
+} & ({ walletInitialized: false; wallet: null } | { walletInitialized: true; wallet: ServerPlayerWallet })
 
 export type SocialStreamEvent =
   | { type: 'friend.request'; from: number; requestId: number; occurredAt: string }
@@ -889,6 +868,7 @@ export class ApiError extends Error {
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    credentials: 'include',
     cache: 'no-store',
     headers: {
       Accept: 'application/json',
@@ -907,42 +887,45 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // body wasn't JSON — keep the default message
     }
+    if (typeof window !== 'undefined' && code === 'WORLD_CONNECTION_REQUIRED') window.dispatchEvent(new Event('greed-world-connection-invalidated'))
+    if (typeof window !== 'undefined' && (response.status === 401 || code === 'ACCOUNT_CHANGED' || code === 'ACCOUNT_CONTEXT_REQUIRED')) window.dispatchEvent(new Event('greed-session-invalidated'))
     throw new ApiError(message, response.status, code)
   }
   return (await response.json()) as T
 }
 
-function authHeaders(token: string | null): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {}
+export function authHeaders(accountId: number | null): Record<string, string> {
+  return accountId !== null && Number.isSafeInteger(accountId) && accountId > 0 ? { 'X-Greed-Account-Id': String(accountId) } : {}
+}
+function ownProfile(value: unknown, expectedAccountId?: number): { profile: AccountProfile } {
+  if (!value || typeof value !== 'object' || !('profile' in value) || !isAccountProfile(value.profile)
+    || expectedAccountId !== undefined && value.profile.accountId !== expectedAccountId) {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('greed-session-invalidated'))
+    throw new ApiError('Account profile response mismatch.', 409, 'ACCOUNT_CHANGED')
+  }
+  return { profile: value.profile }
 }
 
 export const api = {
   world: () => jsonFetch<ServerWorldSnapshot>('/world'),
-  npcs: (token: string | null = null) =>
-    jsonFetch<ServerNpc[]>('/npcs', { headers: authHeaders(token) }),
+  adminWorld: (accountId: number, signal?: AbortSignal) => {
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) throw new Error('Operator account context is required.')
+    return jsonFetch<unknown>('/admin/world', { headers: authHeaders(accountId), ...(signal ? { signal } : {}) }).then(parseAdminWorldSnapshot)
+  },
+  npcs: (accountId: number | null = null) =>
+    jsonFetch<ServerNpc[]>('/npcs', { headers: authHeaders(accountId) }),
   events: (limit = 50) => jsonFetch<ServerNarrativeEvent[]>(`/events?limit=${limit}`),
   cards: () => jsonFetch<ServerCardCatalog>('/cards'),
   map: () => jsonFetch<ServerMap>('/map'),
-  dashboard: () => jsonFetch<ServerDashboard>('/dashboard'),
+  dashboard: (accountId: number | null = null) => jsonFetch<ServerDashboard>('/dashboard', { headers: authHeaders(accountId) }),
   worldEvents: () => jsonFetch<{ active: ServerActiveWorldEvent[] }>('/world-events'),
   worldChronicle: (limit = 40, useAi = true) =>
     jsonFetch<ServerChronicleResponse>(`/world/chronicle?limit=${limit}&ai=${useAi ? '1' : '0'}`),
-  register: (email: string, password: string) =>
-    jsonFetch<{ token: string; account: ServerAccount }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
-    }),
-  login: (email: string, password: string) =>
-    jsonFetch<{ token: string; account: ServerAccount }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password })
-    }),
-  me: (token: string) =>
-    jsonFetch<{ account: ServerAccount }>('/auth/me', {
-      headers: authHeaders(token)
-    }),
+  register: (username: string, password: string) => jsonFetch<unknown>('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }).then(value => ownProfile(value)),
+  login: (identifier: string, password: string) => jsonFetch<unknown>('/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) }).then(value => ownProfile(value)),
+  me: (accountId: number) => jsonFetch<unknown>('/auth/me', { headers: authHeaders(accountId) }).then(value => ownProfile(value, accountId)),
   npcInteract: (
-    token: string,
+    accountId: number,
     npcId: string,
     payload: { message?: string; intent?: NpcInteractIntent },
     options?: { timeoutMs?: number }
@@ -953,7 +936,7 @@ export const api = {
         `/npc/${encodeURIComponent(npcId)}/interact`,
         {
           method: 'POST',
-          headers: authHeaders(token),
+          headers: authHeaders(accountId),
           body: JSON.stringify(payload)
         }
       )
@@ -964,21 +947,21 @@ export const api = {
       `/npc/${encodeURIComponent(npcId)}/interact`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify(payload),
         signal: controller.signal,
       }
     ).finally(() => window.clearTimeout(timer))
   },
   npcLocalShout: (
-    token: string,
+    accountId: number,
     payload: { tileId: string; candidateNpcIds: readonly string[]; message: string },
     options?: { timeoutMs?: number }
   ) => {
     const timeoutMs = options?.timeoutMs
     const init: RequestInit = {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify(payload),
     }
     if (!timeoutMs) return jsonFetch<ServerNpcInteraction>('/npc/local-shout', init)
@@ -989,17 +972,17 @@ export const api = {
       signal: controller.signal,
     }).finally(() => window.clearTimeout(timer))
   },
-  npcDialogHold: (token: string, npcId: string) =>
+  npcDialogHold: (accountId: number, npcId: string) =>
     jsonFetch<ServerNpcDialogHold>(
       `/npc/${encodeURIComponent(npcId)}/dialog-hold`,
       {
         method: 'POST',
-        headers: authHeaders(token)
+        headers: authHeaders(accountId)
       }
     ),
   /** v0.14.0：玩家介入兩位 NPC 的爭執。回傳介入後的好感變化。 */
   npcIntervene: (
-    token: string,
+    accountId: number,
     npcA: string,
     npcB: string,
     mode: 'mediate' | 'provoke' | 'watch'
@@ -1015,25 +998,25 @@ export const api = {
       line: LocalizedLine
     }>('/npc/intervene', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ npcA, npcB, mode })
     }),
-  npcHistory: (token: string, npcId: string, limit = 20) =>
+  npcHistory: (accountId: number, npcId: string, limit = 20) =>
     jsonFetch<ServerNpcHistory>(
       `/npc/${encodeURIComponent(npcId)}/history?limit=${limit}`,
       {
-        headers: authHeaders(token)
+        headers: authHeaders(accountId)
       }
     ),
-  settingsHealth: (token: string) =>
+  settingsHealth: (accountId: number) =>
     jsonFetch<ServerSettingsHealth>('/settings/health', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  settingsListKeys: (token: string) =>
+  settingsListKeys: (accountId: number) =>
     jsonFetch<{ keys: ServerApiKeySummary[] }>('/settings/keys', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  settingsAddKeys: (token: string, keys: string) =>
+  settingsAddKeys: (accountId: number, keys: string) =>
     jsonFetch<{
       inserted: number
       submitted: number
@@ -1041,34 +1024,34 @@ export const api = {
       keys: ServerApiKeySummary[]
     }>('/settings/keys', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ keys })
     }),
-  settingsDeleteKey: (token: string, id: number) =>
+  settingsDeleteKey: (accountId: number, id: number) =>
     jsonFetch<{ ok: true; keys: ServerApiKeySummary[] }>(
       `/settings/keys/${id}`,
       {
         method: 'DELETE',
-        headers: authHeaders(token)
+        headers: authHeaders(accountId)
       }
     ),
-  settingsReactivateKeys: (token: string) =>
+  settingsReactivateKeys: (accountId: number) =>
     jsonFetch<{ reactivated: number; keys: ServerApiKeySummary[] }>(
       '/settings/keys/reactivate-all',
       {
         method: 'POST',
-        headers: authHeaders(token)
+        headers: authHeaders(accountId)
       }
     ),
   // v0.42.0 — provider configuration (OpenCode URL/model + priority order).
-  settingsGetProviders: (token: string) =>
+  settingsGetProviders: (accountId: number) =>
     jsonFetch<{
       openCodeBaseUrl: string | null
       openCodeModel: string | null
       providerPriority: string
-    }>('/settings/providers', { headers: authHeaders(token) }),
+    }>('/settings/providers', { headers: authHeaders(accountId) }),
   settingsUpdateProviders: (
-    token: string,
+    accountId: number,
     body: {
       openCodeBaseUrl?: string | null
       openCodeModel?: string | null
@@ -1081,81 +1064,81 @@ export const api = {
       providerPriority: string
     }>('/settings/providers', {
       method: 'PUT',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify(body)
     }),
   // v0.65.0 — contract-aligned OpenCode settings (servers, model select).
-  settingsGetOpenCode: (token: string) =>
-    jsonFetch<ServerOpenCodeStatus>('/settings/opencode', { headers: authHeaders(token) }),
+  settingsGetOpenCode: (accountId: number) =>
+    jsonFetch<ServerOpenCodeStatus>('/settings/opencode', { headers: authHeaders(accountId) }),
   settingsUpdateOpenCode: (
-    token: string,
+    accountId: number,
     body: { servers?: string; text_model?: string }
   ) =>
     jsonFetch<ServerOpenCodeStatus>('/settings/opencode', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify(body),
     }),
-  settingsDeleteOpenCode: (token: string) =>
+  settingsDeleteOpenCode: (accountId: number) =>
     jsonFetch<ServerOpenCodeStatus>('/settings/opencode', {
       method: 'DELETE',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
     }),
-  settingsGetOpenCodeModels: (token: string) =>
-    jsonFetch<ServerOpenCodeModels>('/settings/opencode/models', { headers: authHeaders(token) }),
+  settingsGetOpenCodeModels: (accountId: number) =>
+    jsonFetch<ServerOpenCodeModels>('/settings/opencode/models', { headers: authHeaders(accountId) }),
   // -- version --------------------------------------------------------
   version: () => jsonFetch<ServerVersion>('/version'),
   // -- social: friends -----------------------------------------------
-  socialFriends: (token: string) =>
+  socialFriends: (accountId: number) =>
     jsonFetch<{ friends: ServerFriendDto[] }>('/social/friends', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  socialFriendRequests: (token: string) =>
+  socialFriendRequests: (accountId: number) =>
     jsonFetch<ServerFriendRequestList>('/social/friend-requests', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  socialFriendRequest: (token: string, targetUserId: number) =>
+  socialFriendRequest: (accountId: number, targetUserId: number) =>
     jsonFetch<{ request: ServerFriendDto }>(
       `/social/friend-request/${targetUserId}`,
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
-  socialFriendAccept: (token: string, requestId: number) =>
+  socialFriendAccept: (accountId: number, requestId: number) =>
     jsonFetch<{ request: ServerFriendDto }>(
       `/social/friend-accept/${requestId}`,
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
-  socialFriendReject: (token: string, requestId: number) =>
+  socialFriendReject: (accountId: number, requestId: number) =>
     jsonFetch<{ request: ServerFriendDto }>(
       `/social/friend-reject/${requestId}`,
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
-  socialFriendRemove: (token: string, friendId: number) =>
+  socialFriendRemove: (accountId: number, friendId: number) =>
     jsonFetch<{ removed: true }>(`/social/friends/${friendId}`, {
       method: 'DELETE',
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   // -- social: messages ----------------------------------------------
-  socialSendMessage: (token: string, targetUserId: number, content: string) =>
+  socialSendMessage: (accountId: number, targetUserId: number, content: string) =>
     jsonFetch<{ message: ServerMessageDto }>(
       `/social/message/${targetUserId}`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ content })
       }
     ),
-  socialMessages: (token: string, peerId: number, limit = 50) =>
+  socialMessages: (accountId: number, peerId: number, limit = 50) =>
     jsonFetch<{ peer: ServerPublicAccount; messages: ServerMessageDto[] }>(
       `/social/messages/${peerId}?limit=${limit}`,
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
-  socialConversations: (token: string) =>
+  socialConversations: (accountId: number) =>
     jsonFetch<{ conversations: ServerConversationItem[] }>(
       '/social/conversations',
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
   // -- social: presence ----------------------------------------------
-  socialPresence: (token: string, tileId: string, position?: { x: number; y: number; z: number } | null) =>
+  socialPresence: (accountId: number, _tileId: string, _position?: { x: number; y: number; z: number } | null) =>
     jsonFetch<{
       location: {
         userId: number
@@ -1168,80 +1151,75 @@ export const api = {
       }
     }>('/social/presence', {
       method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify(
-        position
-          ? { tileId, x: position.x, y: position.y, z: position.z, clientUpdatedAt: Date.now() }
-          : { tileId, clientUpdatedAt: Date.now() }
-      )
+      headers: authHeaders(accountId),
+      body: JSON.stringify({})
     }),
-  socialNearby: (token: string, tileId?: string) =>
+  socialNearby: (accountId: number, tileId?: string) =>
     jsonFetch<{ tileId: string | null; players: ServerNearbyPlayer[] }>(
       tileId ? `/social/nearby?tileId=${encodeURIComponent(tileId)}` : '/social/nearby',
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
   // -- social: alliance ----------------------------------------------
-  socialAlliance: (token: string) =>
+  socialAlliance: (accountId: number) =>
     jsonFetch<{ alliance: ServerAllianceDto | null }>('/social/alliance', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  socialAllianceCreate: (token: string, name: string) =>
+  socialAllianceCreate: (accountId: number, name: string) =>
     jsonFetch<{ alliance: ServerAllianceDto }>('/social/alliance/create', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ name })
     }),
-  socialAllianceInvite: (token: string, userId: number) =>
+  socialAllianceInvite: (accountId: number, userId: number) =>
     jsonFetch<{ alliance: ServerAllianceDto }>(
       `/social/alliance/invite/${userId}`,
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
-  socialAllianceLeave: (token: string) =>
+  socialAllianceLeave: (accountId: number) =>
     jsonFetch<{ left: true; disbanded: boolean; nextLeaderId: number | null }>(
       '/social/alliance/leave',
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
   // -- admin ---------------------------------------------------------
-  adminUsers: (token: string) =>
+  adminUsers: (accountId: number) =>
     jsonFetch<{ users: ServerAdminUser[] }>('/admin/users', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  adminSetRole: (token: string, userId: number, role: AccountRole) =>
-    jsonFetch<{ user: ServerAdminUser }>(`/admin/users/${userId}/role`, {
+  adminSetRole: (accountId: number, userId: number, role: AccountRole) =>
+    jsonFetch<{ profile: AccountProfile }>(`/admin/users/${userId}/role`, {
       method: 'PUT',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ role })
     }),
-  adminResetUserPassword: (token: string, userId: number) =>
+  adminResetUserPassword: (accountId: number, userId: number) =>
     jsonFetch<ServerAdminResetIssue>(`/admin/users/${userId}/reset-password`, {
-      method: 'POST',
-      headers: authHeaders(token)
+      method: 'POST', headers: authHeaders(accountId), body: JSON.stringify({}),
     }),
-  adminNpcStats: (token: string) =>
-    jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(token) }),
-  adminLineage: (token: string) =>
-    jsonFetch<ServerLineageResponse>('/admin/lineage', { headers: authHeaders(token) }),
-  adminSimAdvance: (token: string, ticks: number) =>
+  adminNpcStats: (accountId: number) =>
+    jsonFetch<ServerNpcStats>('/admin/npc-stats', { headers: authHeaders(accountId) }),
+  adminLineage: (accountId: number) =>
+    jsonFetch<ServerLineageResponse>('/admin/lineage', { headers: authHeaders(accountId) }),
+  adminSimAdvance: (accountId: number, ticks: number) =>
     jsonFetch<{ ok: boolean; beforeTick: number; afterTick: number; requestedTicks: number; advancedTicks: number; elapsedMs: number; capped: boolean }>(
       '/admin/sim/advance',
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ ticks }),
       }
     ),
-  adminCardImages: (token: string) =>
-    jsonFetch<{ images: Record<number, string> }>('/admin/cards/images', { headers: authHeaders(token) }),
-  adminUploadCardImage: (token: string, id: number, imageBase64: string, mimeType: string) =>
+  adminCardImages: (accountId: number) =>
+    jsonFetch<{ images: Record<number, string> }>('/admin/cards/images', { headers: authHeaders(accountId) }),
+  adminUploadCardImage: (accountId: number, id: number, imageBase64: string, mimeType: string) =>
     jsonFetch<{ ok: boolean; imageUrl: string }>(`/admin/cards/${id}/image`, {
       method: 'PUT',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ imageBase64, mimeType }),
     }),
-  adminDeleteCardImage: (token: string, id: number) =>
+  adminDeleteCardImage: (accountId: number, id: number) =>
     jsonFetch<{ ok: boolean }>(`/admin/cards/${id}/image`, {
       method: 'DELETE',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
     }),
   settlements: () =>
     jsonFetch<{ settlements: readonly ServerSettlement[] }>('/settlements'),
@@ -1260,111 +1238,94 @@ export const api = {
   goodsInventory: (ownerId: string) =>
     jsonFetch<readonly GoodsInventoryEntry[]>(`/goods/inventory/${encodeURIComponent(ownerId)}`),
   // -- profile -------------------------------------------------------
-  profile: (token: string) =>
-    jsonFetch<ServerProfile>('/profile', { headers: authHeaders(token) }),
-  updateProfile: (
-    token: string,
-    patch: { nickname?: string | null; avatar?: string }
-  ) =>
-    jsonFetch<{ account: ServerAccount }>('/profile', {
-      method: 'PATCH',
-      headers: authHeaders(token),
-      body: JSON.stringify(patch)
-    }),
-  changePassword: (token: string, currentPassword: string, newPassword: string) =>
-    jsonFetch<{ ok: true; account: ServerAccount }>('/profile/password', {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ currentPassword, newPassword })
-    }),
-  // -- password reset ------------------------------------------------
-  forgotPassword: (email: string) =>
-    jsonFetch<ServerForgotPasswordResponse>('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email })
-    }),
-  resetPassword: (resetToken: string, password: string) =>
-    jsonFetch<{ ok: true; token: string; account: ServerAccount }>('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token: resetToken, password })
-    }),
+  profile: (accountId: number) => jsonFetch<unknown>('/profile', { headers: authHeaders(accountId) }).then(value => ownProfile(value, accountId)),
+  updateProfile: (accountId: number, patch: { nickname?: string | null; avatar?: string }) => jsonFetch<unknown>('/profile', {
+    method: 'PATCH', headers: authHeaders(accountId), body: JSON.stringify(patch),
+  }).then(value => ownProfile(value, accountId)),
+  changePassword: (accountId: number, currentPassword: string, newPassword: string) => jsonFetch<{ ok: true }>('/profile/password', {
+    method: 'POST', headers: authHeaders(accountId), body: JSON.stringify({ currentPassword, newPassword }),
+  }),
   // -- card drops / codex / trade ----------------------------------
   cardConfig: () => jsonFetch<ServerCardConfig>('/cards/config'),
-  cardsActive: (token: string, tileId: string) =>
-    jsonFetch<{ tileId: string; tick: number; drops: ServerCardDrop[] }>(
+  cardsActive: (accountId: number, tileId: string) =>
+    jsonFetch<unknown>(
       `/cards/active?tileId=${encodeURIComponent(tileId)}`,
-      { headers: authHeaders(token) }
-    ),
-  cardsHeld: (token: string) =>
-    jsonFetch<{ tick: number; drops: ServerCardDrop[] }>('/cards/held', {
-      headers: authHeaders(token)
+      { headers: authHeaders(accountId) }
+    ).then(value => {
+      const read = parseCardRead(value)
+      if (!value || typeof value !== 'object' || !('tileId' in value) || value.tileId !== tileId) throw new Error('Owned-card region response mismatch.')
+      return { ...read, tileId }
     }),
-  cardsPickup: (token: string, dropId: number) =>
+  cardsHeld: (accountId: number) =>
+    jsonFetch<unknown>('/cards/held', {
+      headers: authHeaders(accountId)
+    }).then(parseCardRead),
+  cardsPickup: (accountId: number, dropId: number) =>
     jsonFetch<{ drop: ServerCardDrop }>('/cards/pickup', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ dropId })
     }),
   cardsStore: (
-    token: string,
+    accountId: number,
     dropId: number,
     slotType: ServerCardSlotType
   ) =>
     jsonFetch<{ drop: ServerCardDrop; codex: ServerCodexEntry }>('/cards/store', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ dropId, slotType })
     }),
-  cardsRelease: (token: string, dropId: number) =>
+  cardsRelease: (accountId: number, dropId: number) =>
     jsonFetch<{ drop: ServerCardDrop }>('/cards/release', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ dropId })
     }),
-  cardsSinceLastVisit: (token: string) =>
+  cardsSinceLastVisit: (accountId: number) =>
     jsonFetch<ServerSinceLastVisit>('/cards/since-last-visit', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   /** v0.14.0：完整 living-world catch-up（pressure / world events / NPC 互動） */
-  worldSinceLastVisit: (token: string) =>
+  worldSinceLastVisit: (accountId: number) =>
     jsonFetch<ServerWorldSinceLastVisit>('/world/since-last-visit', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  codex: (token: string) =>
-    jsonFetch<ServerCodexResponse>('/codex', { headers: authHeaders(token) }),
-  codexMaterialize: (token: string, codexId: number) =>
+  codex: (accountId: number) =>
+    jsonFetch<ServerCodexResponse>('/codex', { headers: authHeaders(accountId) }),
+  codexMaterialize: (accountId: number, codexId: number) =>
     jsonFetch<{ materialized: ServerCodexEntry }>('/codex/materialize', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ codexId })
     }),
-  tradeList: (token: string) =>
-    jsonFetch<ServerTradeList>('/trade/list', { headers: authHeaders(token) }),
+  tradeList: (accountId: number) =>
+    jsonFetch<ServerTradeList>('/trade/list', { headers: authHeaders(accountId) }),
   tradePropose: (
-    token: string,
+    accountId: number,
     targetUserId: number,
     offeredCodexId: number,
     requestedCardId: number
   ) =>
     jsonFetch<{ trade: ServerTradeDto }>('/trade/propose', {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({ targetUserId, offeredCodexId, requestedCardId })
     }),
-  tradeAccept: (token: string, tradeId: number) =>
+  tradeAccept: (accountId: number, tradeId: number) =>
     jsonFetch<{ trade: ServerTradeDto }>(`/trade/accept/${tradeId}`, {
       method: 'POST',
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  tradeReject: (token: string, tradeId: number) =>
+  tradeReject: (accountId: number, tradeId: number) =>
     jsonFetch<{ trade: ServerTradeDto }>(`/trade/reject/${tradeId}`, {
       method: 'POST',
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  tradeCancel: (token: string, tradeId: number) =>
+  tradeCancel: (accountId: number, tradeId: number) =>
     jsonFetch<{ trade: ServerTradeDto }>(`/trade/cancel/${tradeId}`, {
       method: 'POST',
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   // -- Living World v0.10.0 --
   areaState: (tileId: string) =>
@@ -1378,76 +1339,76 @@ export const api = {
     ),
   buildingDetail: (buildingId: string) =>
     jsonFetch<{ building: ServerBuildingView }>(`/buildings/${encodeURIComponent(buildingId)}`),
-  buildingApply: (token: string, buildingId: string, shift: ServerShift) =>
+  buildingApply: (accountId: number, buildingId: string, shift: ServerShift) =>
     jsonFetch<{ job: ServerPlayerJob; building: ServerBuildingDef }>(
       `/buildings/${encodeURIComponent(buildingId)}/apply`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ shift })
       }
     ),
-  buildingQuit: (token: string, buildingId: string, shift: ServerShift) =>
+  buildingQuit: (accountId: number, buildingId: string, shift: ServerShift) =>
     jsonFetch<{ removed: boolean }>(
       `/buildings/${encodeURIComponent(buildingId)}/quit`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ shift })
       }
     ),
-  buildingWork: (token: string, buildingId: string) =>
+  buildingWork: (accountId: number, buildingId: string) =>
     jsonFetch<{
       job: ServerPlayerJob
       wallet: ServerPlayerWallet
       wage: number
     }>(`/buildings/${encodeURIComponent(buildingId)}/work`, {
       method: 'POST',
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  buildingRest: (token: string, buildingId: string) =>
+  buildingRest: (accountId: number, buildingId: string) =>
     jsonFetch<{ wallet: ServerPlayerWallet; restoredAt: number; building: ServerBuildingDef }>(
       `/buildings/${encodeURIComponent(buildingId)}/rest`,
       {
         method: 'POST',
-        headers: authHeaders(token)
+        headers: authHeaders(accountId)
       }
     ),
-  wallet: (token: string) =>
-    jsonFetch<ServerWalletResponse>('/wallet', {
-      headers: authHeaders(token)
-    }),
+  wallet: (accountId: number) =>
+    jsonFetch<unknown>('/wallet', {
+      headers: authHeaders(accountId)
+    }).then(value => parseWalletResponse(value, accountId)),
   // ── Combat (Phase B, v0.15.0；v0.90.0 加術式卡手牌) ──
-  combatActive: (token: string) =>
+  combatActive: (accountId: number) =>
     jsonFetch<{ active: ServerCombatSession | null; log?: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/active',
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
-  combatGet: (token: string, combatId: string) =>
+  combatGet: (accountId: number, combatId: string) =>
     jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       `/combat/${encodeURIComponent(combatId)}`,
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
-  combatInitiate: (token: string, targetNpcId: string) =>
+  combatInitiate: (accountId: number, targetNpcId: string) =>
     jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/initiate',
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ targetNpcId })
       }
     ),
-  combatInitiateAnimal: (token: string, targetAnimalId: string, speciesId: string) =>
+  combatInitiateAnimal: (accountId: number, targetAnimalId: string, speciesId: string) =>
     jsonFetch<{ session: ServerCombatSession; log: ServerCombatLogRow[]; hand?: ServerCombatHandCard[]; usedCardClasses?: string[] }>(
       '/combat/initiate-animal',
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ targetAnimalId, speciesId })
       }
     ),
   combatAction: (
-    token: string,
+    accountId: number,
     combatId: string,
     action: 'attack' | 'defend' | 'flee',
     cardId?: number,
@@ -1460,7 +1421,7 @@ export const api = {
       log: ServerCombatLogRow[]
     }>(`/combat/${encodeURIComponent(combatId)}/action`, {
       method: 'POST',
-      headers: authHeaders(token),
+      headers: authHeaders(accountId),
       body: JSON.stringify({
         action,
         ...(cardId !== undefined ? { cardId } : {}),
@@ -1468,43 +1429,43 @@ export const api = {
       })
     }),
   // ── Combat (Phase C, v0.25.x) ──
-  combatPlay: (token: string, combatId: string, cardClass: string, targetActorId: string) =>
+  combatPlay: (accountId: number, combatId: string, cardClass: string, targetActorId: string) =>
     jsonFetch<{ accepted: true; commandId: string }>(
       `/combat/${encodeURIComponent(combatId)}/play`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ cardClass, targetActorId }),
       }
     ),
-  combatCancel: (token: string, combatId: string, commandId: string) =>
+  combatCancel: (accountId: number, combatId: string, commandId: string) =>
     jsonFetch<{ cancelled: boolean; commandId: string }>(
       `/combat/${encodeURIComponent(combatId)}/cancel`,
       {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: authHeaders(accountId),
         body: JSON.stringify({ commandId }),
       }
     ),
-  combatSnapshot: (token: string, combatId: string) =>
+  combatSnapshot: (accountId: number, combatId: string) =>
     jsonFetch<import('../state/CombatProjection.js').CombatSseSnapshot>(
       `/combat/${encodeURIComponent(combatId)}/snapshot`,
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
   combatStreamUrl: (combatId: string): string =>
     `${API_BASE}/combat/${encodeURIComponent(combatId)}/stream`,
   // ── Technique shop (Phase B, v0.15.0) ──
-  shopTechniques: (token: string) =>
+  shopTechniques: (accountId: number) =>
     jsonFetch<{ items: ServerTechniqueShopItem[]; locationTile: string }>(
       '/shop/techniques',
-      { headers: authHeaders(token) }
+      { headers: authHeaders(accountId) }
     ),
-  shopBuyTechnique: (token: string, cardId: number) =>
+  shopBuyTechnique: (accountId: number, cardId: number) =>
     jsonFetch<{ owned: { card_id: number; count: number }; wallet: ServerPlayerWallet }>(
       `/shop/techniques/${cardId}/buy`,
-      { method: 'POST', headers: authHeaders(token) }
+      { method: 'POST', headers: authHeaders(accountId) }
     ),
-  myTechniques: (token: string) =>
+  myTechniques: (accountId: number) =>
     jsonFetch<{
       owned: Array<{
         cardId: number
@@ -1518,44 +1479,44 @@ export const api = {
           effectDescription: string
         } | null
       }>
-    }>('/me/techniques', { headers: authHeaders(token) }),
+    }>('/me/techniques', { headers: authHeaders(accountId) }),
   // ── Per-player dynamic NPC greet (Phase B) ──
-  npcGreet: (token: string, npcId: string) =>
+  npcGreet: (accountId: number, npcId: string) =>
     jsonFetch<{
       npcId: string
       greetLine: { zh: string; en: string }
       relationship: { trust: number; tier: 'low' | 'mid' | 'high'; interactionCount: number }
     }>(`/npc/${encodeURIComponent(npcId)}/greet`, {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   // ── Phase 6 — Player Civilization ──
-  playerState: (token: string) =>
+  playerState: (accountId: number) =>
     jsonFetch<PlayerCivilizationSnapshot>('/world/player-state', {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
-  playerAction: (token: string, type: string, payload: Record<string, unknown>) =>
+  playerAction: (accountId: number, type: string, payload: Record<string, unknown>) =>
     jsonFetch<PlayerActionResult>('/world/player-action', {
       method: 'POST',
-      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      headers: { ...authHeaders(accountId), 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, payload })
     }),
   // ── v0.96.0  MindSheet — NPC 意圖 ──
-  npcIntent: (token: string, npcId: string) =>
+  npcIntent: (accountId: number, npcId: string) =>
     jsonFetch<NpcIntentResponse>(`/npc/${encodeURIComponent(npcId)}/intent`, {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   // ── v0.96.0  MindSheet — NPC 信念 ──
-  npcBeliefs: (token: string, npcId: string) =>
+  npcBeliefs: (accountId: number, npcId: string) =>
     jsonFetch<NpcBeliefsResponse>(`/npc/${encodeURIComponent(npcId)}/beliefs`, {
-      headers: authHeaders(token)
+      headers: authHeaders(accountId)
     }),
   // ── SP1 — Player Survival Needs ──
-  playerNeeds: (token: string) =>
-    jsonFetch<PlayerNeedsState>('/player/needs', { headers: authHeaders(token) }),
-  eatRation: (token: string) =>
+  playerNeeds: (accountId: number) =>
+    jsonFetch<PlayerNeedsState>('/player/needs', { headers: authHeaders(accountId) }),
+  eatRation: (accountId: number) =>
     jsonFetch<{ accepted: boolean; needs: PlayerNeedsState }>('/player/eat', {
       method: 'POST',
-      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      headers: { ...authHeaders(accountId), 'Content-Type': 'application/json' },
     })
 }
 
@@ -1677,6 +1638,7 @@ export function streamUrl(): string {
   return `${API_BASE}/events/stream`
 }
 
-export function socialStreamUrl(): string {
-  return `${API_BASE}/social/stream`
+export function socialStreamUrl(expectedAccountId: number): string {
+  if (!Number.isSafeInteger(expectedAccountId) || expectedAccountId <= 0) throw new Error('Invalid social stream account context.')
+  return `${API_BASE}/social/stream?expectedAccountId=${expectedAccountId}`
 }

@@ -34,8 +34,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'env -i PATH="$PATH" TMPDIR="${RUNNER_TEMP:-/tmp}" MULTIPLAYER_HOST=127.0.0.1 MULTIPLAYER_PORT=4179 MULTIPLAYER_ALLOWED_ORIGINS=http://127.0.0.1:4178 MULTIPLAYER_DATA_DIR="$MULTIPLAYER_DATA_DIR" node packages/server/dist/multiplayer/server.js --fixture-count 2',
-      url: 'http://127.0.0.1:4179/mp-api/snapshot',
+      command: 'env -i PATH="$PATH" TMPDIR="${RUNNER_TEMP:-/tmp}" UNIFIED_FIXTURE_PORT=4179 UNIFIED_FIXTURE_ALLOWED_ORIGINS=http://127.0.0.1:4178 node scripts/unified-browser-fixture.mjs',
+      url: 'http://127.0.0.1:4179/healthz',
       timeout: 60_000,
       reuseExistingServer: false,
       stdout: 'ignore',
@@ -43,9 +43,9 @@ export default defineConfig({
       gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
     },
     {
-      command: 'env -i PATH="$PATH" TMPDIR="${RUNNER_TEMP:-/tmp}" node ../../node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4178 --strictPort',
+      command: 'env -i PATH="$PATH" TMPDIR="${RUNNER_TEMP:-/tmp}" UNIFIED_FIXTURE_API=1 node ../../node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4178 --strictPort',
       cwd: 'packages/web',
-      url: `${appUrl}/multiplayer-3d`,
+      url: `${appUrl}/game`,
       timeout: 60_000,
       reuseExistingServer: false,
       stdout: 'ignore',

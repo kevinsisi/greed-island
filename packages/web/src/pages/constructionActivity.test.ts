@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { constructionActivitiesFor } from './constructionActivity'
+import { constructionActivitiesFor, constructionProjectsFromWorldFact } from './constructionActivity'
 import type { EventSummary, NpcSummary } from '../state/types'
 
 function event(payload: EventSummary['payload'], sequence = 10): EventSummary {
@@ -28,6 +28,14 @@ function npc(id: string, name = id): NpcSummary {
 }
 
 describe('construction activity projection', () => {
+  it('preserves the actual allowlisted construction crew from public world facts', () => {
+    const projects = constructionProjectsFromWorldFact({ constructionProjects: { project: {
+      projectId: 'project', targetTileId: 't_central', buildingId: 'building', progress: 3, targetProgress: 24,
+      completedAtTick: null, initiatedByNpcId: 'npc.a', builderNpcIds: ['npc.a', 'npc.b']
+    } } })
+    expect(projects[0]?.builderNpcIds).toEqual(['npc.a', 'npc.b'])
+    expect(constructionActivitiesFor([], [npc('npc.a', '築仔'), npc('npc.b', '木匠')], projects)[0]?.builderNames).toEqual(['築仔', '木匠'])
+  })
   it('shows the latest unfinished construction crew on districts', () => {
     const activities = constructionActivitiesFor(
       [

@@ -13,14 +13,14 @@ type LoadState =
 
 export function AdminNpcsPage() {
   const { t } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [state, setState] = useState<LoadState>({ kind: 'idle' })
 
   const refresh = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setState({ kind: 'loading' })
     try {
-      const stats = await api.adminNpcStats(token)
+      const stats = await api.adminNpcStats(accountId)
       setState({ kind: 'ready', stats })
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -30,13 +30,13 @@ export function AdminNpcsPage() {
       const message = err instanceof Error ? err.message : t('admin.errorForbidden')
       setState({ kind: 'error', message })
     }
-  }, [token, t])
+  }, [accountId, t])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
-  if (!token || !account) {
+  if (!accountId || !account) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
@@ -71,13 +71,13 @@ export function AdminNpcsPage() {
         actions={
           <div className="flex gap-2">
             <Link
-              to="/admin/lineage"
+              to="/game/admin/lineage"
               className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
             >
               家族樹
             </Link>
             <Link
-              to={account.role === 'admin' ? '/admin' : '/admin/world'}
+              to={account.role === 'admin' ? '/game/admin' : '/game/admin/world'}
               className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
             >
               {account.role === 'admin' ? t('admin.npcs.backToAdmin') : t('nav.gmWorld')}

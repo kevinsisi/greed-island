@@ -6,6 +6,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type PlayerNeedsState } from '../../api/client'
+import { usePlayerWallet } from '../../state/usePlayerWallet'
+import { canSpendWallet } from '../../state/walletRead'
+import { WalletSpendButton, WalletStatus } from './WalletStatus'
 
 // Mirror SP1 constants (server/config/world.ts) — frontend display only
 const DANGER_THRESHOLD = 25
@@ -52,21 +55,22 @@ function NeedBar({ label, value, danger }: NeedBarProps) {
 }
 
 type SurvivalHudProps = {
-  token: string
+  accountId: number
   tick: number
   /** compact: hides the eat button; used when ActionBar carries that action */
   compact?: boolean
 }
 
-export function SurvivalHud({ token, tick, compact = false }: SurvivalHudProps) {
+export function SurvivalHud({ accountId, tick, compact = false }: SurvivalHudProps) {
   const [needs, setNeeds] = useState<PlayerNeedsState | null>(null)
   const [eating, setEating] = useState(false)
   const [eatError, setEatError] = useState<string | null>(null)
   const lastTickRef = useRef<number>(-1)
+  const { read: walletRead, refresh: refreshWallet } = usePlayerWallet(accountId)
 
   const fetchNeeds = useCallback(() => {
-    api.playerNeeds(token).then(setNeeds).catch(() => {})
-  }, [token])
+    api.playerNeeds(accountId).then(setNeeds).catch(() => {})
+  }, [accountId])
 
   // Fetch on mount and when tick advances
   useEffect(() => {
@@ -82,21 +86,22 @@ export function SurvivalHud({ token, tick, compact = false }: SurvivalHudProps) 
   }, [fetchNeeds])
 
   const handleEat = useCallback(async () => {
-    if (eating) return
+    if (eating || !canSpendWallet(walletRead, EAT_GOLD_COST)) return
     setEating(true)
     setEatError(null)
     try {
-      const result = await api.eatRation(token)
+      const result = await api.eatRation(accountId)
       if (result.accepted) {
         setNeeds(result.needs)
       }
+      await refreshWallet()
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message ?? '進食失敗'
       setEatError(msg.includes('INSUFFICIENT_GOLD') ? `金幣不足（需 ${EAT_GOLD_COST} 枚）` : msg)
     } finally {
       setEating(false)
     }
-  }, [token, eating])
+  }, [accountId, eating, walletRead, refreshWallet])
 
   if (!needs) {
     return (
@@ -131,19 +136,21 @@ export function SurvivalHud({ token, tick, compact = false }: SurvivalHudProps) 
 
       {!compact && (
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <WalletSpendButton
             onClick={handleEat}
-            disabled={eating}
+            busy={eating}
+            read={walletRead}
+            amount={EAT_GOLD_COST}
             className="gi-touch flex-1 px-3 py-1.5 text-[11px] font-display tracking-eyebrow uppercase bg-ground-700 hover:bg-ember-500/20 border border-ground-600 hover:border-ember-600 rounded-sharp text-ground-300 hover:text-ember-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {eating ? '進食中…' : `進食 −${EAT_GOLD_COST} 金`}
-          </button>
+          </WalletSpendButton>
           {eatError && (
             <span className="text-[10px] text-rust-400 flex-1 truncate">{eatError}</span>
           )}
         </div>
       )}
+      {!compact && walletRead.status !== 'ready' && <WalletStatus read={walletRead} />}
     </div>
   )
 }

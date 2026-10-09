@@ -1,3 +1,41 @@
+## 2026-10-08 — Independent canonical intervention retry correction (source only)
+
+- Reproduced against frozen fa4231fc: identical same-tick mediate commits once but second reply claimed trust54 while persisted trust stayed52.
+- New typed receipts preserve original server-derived effects under the existing intent-based command ID. Replies distinguish original effects from currentRelations; historical missing results are explicitly unavailable. Other command/intent conflicts and transaction-time authorization stay enforced.
+- Final source-only regression run: 15 suites / 167 tests passed, including same-tick duplicate, intervening-threaten, historical receipt, forged result input and revoked transaction-time retry. Actual SQLite/private-store reopen regression is added but all three native test cases remain blocked before assertions by missing better-sqlite3 binding.
+- Exact full noEmit still reports only the existing missing bcryptjs declarations (three errors) and runtimeBudget.test.ts implicit-any dependency-drift error. No production build, real cookie, normal-UI E2E, publication, live AI or deployment proof is claimed. Frozen source/artifacts were not edited.
+- Consumer response contract is recorded in CANONICAL_GAMEPLAY_ADAPTERS.md; nullable effects and independently labeled current snapshot remain integration/UI gates.
+- This fixes same-tick identical typed-intent duplicates only. The existing command ID contains world tick, AI-classified intent and generated narration; later-tick or differently classified retries can be new commands. No general network-retry idempotency or new client request-ID API is claimed.
+
+## 2026-10-08 — Isolated settings credential-origin correction
+
+- Independent review reproduced a blocker: arbitrary edited provider origins
+  inherited the global Basic credential. Replacement snapshots a separate
+  trusted startup origin; absent/malformed/mismatched origin gets no header.
+  Same-origin path variants preserve intended auth; redirect:error and actual
+  upstream failures remain. No editable setting can change credential trust.
+- Supplemental source HTTP tests 25/25 passed with inert mocked provider/env
+  inputs, including the original 14 cases. Focused strict TS passed with the
+  existing temporary declaration. Re-review and startup config integration
+  remain gates; no live env secret inspection/provider call, push or deployment.
+
+## 2026-10-08 — Isolated canonical settings/GM administration candidate
+
+- Preserved SettingsPage provider/key APIs, AdminLineage simulation advance and
+  AdminCards art APIs via injected shared canonical authorization/store/runtime;
+  no AccountStore, JWT, identity/admin-reset route, bootstrap or Caddy edits.
+- Route-local parsers follow current-role authorization; context/Origin/session
+  are rechecked after body awaits and before commit. Private provider reads also
+  recheck current identity/role after network/JSON awaits.
+- Keys/errors fully redacted. Art replacement/removal archives old bytes privately
+  with bounded history and symlink/ID/signature checks; no old asset deletion.
+- Supplemental Node24 node:sqlite HTTP suite 14/14 passed; focused strict TS
+  passed with a temporary declaration. Native bcryptjs/better-sqlite3 dependencies
+  are unavailable. Full server check has only pre-existing missing bcryptjs and
+  runtimeBudget Vitest4 typing diagnostics. Exact native CI, full startup/browser
+  integration, main merge and L390 release remain required. No push or deployment.
+- Integration/route contract: docs/CANONICAL_ADMIN_SETTINGS.md.
+
 ## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
 
 - 做了什麼：多人版 host/port/資料目錄/Origin 改 env 可設（`packages/server/src/multiplayer/config.ts`、`fixtureStorage.ts`、`http.ts`、`server.ts`）；帳號與 DB 持久化於 volume；新增 `deploy/l390/`（只含 multiplayer＋web，`/api/*`、`/card-images/*` 回 404，不部署主 server）。

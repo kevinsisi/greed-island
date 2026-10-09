@@ -1,4 +1,5 @@
-# L390 serves only the web app and the isolated multiplayer API.
+# CANDIDATE: one /game entry, one cookie-auth/world backend.
+# No live reload is authorized by checking in this file.
 {
 	auto_https off
 }
@@ -6,7 +7,25 @@
 :80 {
 	root * /srv/greed-island-web
 
-	handle /mp-api/* {
+	# Reviewed route families only; the application enforces per-method cookie,
+	# account context, current role and ownership. Unknown API paths stay denied.
+	@unifiedApi path /api/version /api/world /api/npcs /api/events /api/cards /api/world-events /api/dashboard /api/admin/world /api/events/stream /api/stream /api/auth/register /api/auth/login /api/auth/me /api/auth/logout /api/auth/forgot-password /api/auth/reset-password /api/profile /api/profile/password /api/admin/users /api/world/snapshot /api/world/stream /api/world/command /api/map /api/social/stream /api/social/friends /api/social/friend-requests /api/social/conversations /api/social/presence /api/social/nearby /api/social/alliance /api/social/alliance/create /api/social/alliance/leave /api/buildings /api/buildings-catalog /api/wallet /api/areas /api/goods/market-prices /api/goods/inventory/self /api/properties /api/properties/bindings /api/cards/active /api/cards/held /api/cards/since-last-visit /api/cards/visit /api/cards/pickup /api/cards/store /api/cards/release /api/cards/config /api/codex /api/codex/materialize /api/trade/list /api/trade/propose /api/shop/techniques /api/me/techniques /api/admin/cards/images /api/settings/health /api/settings/keys /api/settings/keys/reactivate-all /api/settings/providers /api/settings/opencode /api/settings/opencode/models /api/admin/sim/advance /api/npc/local-shout /api/npc/intervene /api/player/needs /api/player/needs/reconcile /api/player/eat /api/world/player-action /api/world/player-state /api/combat/active /api/combat/initiate /api/combat/initiate-animal
+	# Every dynamic identifier occupies exactly one segment. Nested endpoints
+	# are named explicitly; unreviewed descendants never reach the backend.
+	@unifiedDynamicApi path_regexp unifiedDynamicApi ^/api/(admin/users/[^/]+/(role|status|reset-password)|social/(friend-request|friend-accept|friend-reject|friends|message)/[^/]+|social/messages/[^/]+(/read)?|social/alliance/invite/[^/]+|buildings/[^/]+|areas/[^/]+|area/[^/]+/ecology|goods/inventory/[^/]+|trade/(accept|reject|cancel)/[^/]+|shop/techniques/[^/]+/buy|admin/cards/[^/]+/image|settings/keys/[^/]+|npc/[^/]+/(dialog-hold|interact|greet|history|intent|beliefs)|combat/[^/]+(/(action|play|cancel|snapshot|stream))?)$
+	handle @unifiedDynamicApi {
+		header Cache-Control "no-store"
+		reverse_proxy multiplayer:4179 {
+			flush_interval -1
+			header_up Accept-Encoding identity
+			transport http {
+				read_timeout 24h
+				write_timeout 24h
+				dial_timeout 5s
+			}
+		}
+	}
+	handle @unifiedApi {
 		header Cache-Control "no-store"
 		reverse_proxy multiplayer:4179 {
 			flush_interval -1
@@ -19,18 +38,20 @@
 		}
 	}
 
-	@api path /api /api/*
-	handle @api {
-		respond 404
+	@cardArt path_regexp cardArt ^/card-images/([1-9][0-9]?|100)\.(webp|png|jpg|jpeg)$
+	handle @cardArt {
+		reverse_proxy multiplayer:4179
 	}
 
-	@cardImages path /card-images /card-images/*
-	handle @cardImages {
+	@reservedApi path /api /api/* /mp-api /mp-api/* /card-images /card-images/*
+	handle @reservedApi {
+		header Cache-Control "no-store"
 		respond 404
 	}
 
 	handle /healthz {
-		respond "ok" 200
+		header Cache-Control "no-store"
+		reverse_proxy multiplayer:4179
 	}
 
 	handle /assets/* {
@@ -39,19 +60,24 @@
 		file_server
 	}
 
-	@multiplayer path /multiplayer-3d /multiplayer-3d/*
-	handle @multiplayer {
+	@game path /game /game/*
+	handle @game {
 		encode zstd gzip
 		header Cache-Control "no-store"
 		try_files {path} /index.html
 		file_server
 	}
 
-	# Only existing, non-hidden root files may bypass the page redirect.
-	# Keep reserved endpoints out even if a same-named file is introduced.
+	# Old game URLs redirect once to the active SPA; /game never redirects.
+	@oldGame path /multiplayer-3d /multiplayer-3d/* /prototype-3d /prototype-3d/* /account /account/*
+	handle @oldGame {
+		header Cache-Control "no-store"
+		redir * /game 302
+	}
+
 	@rootStatic {
 		path_regexp rootStatic ^/[^/.][^/]*$
-		not path /api /card-images /account /assets /mp-api /healthz /multiplayer-3d
+		not path /api /card-images /account /assets /mp-api /healthz /game /multiplayer-3d /prototype-3d
 		file {path}
 	}
 	handle @rootStatic {
@@ -62,7 +88,7 @@
 
 	handle {
 		header Cache-Control "no-store"
-		redir * /multiplayer-3d 302
+		redir * /game 302
 	}
 
 	log {

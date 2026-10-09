@@ -1,3 +1,6 @@
+import { canonicalWorldPointToGrid, getRegionGeometry } from './geometry.js'
+import { HarborBeaconProjection, type HarborProgressPolicy } from './harborBeacon.js'
+import { HARBOR_BEACON_EVENT_TYPES } from './harborBeaconData.js'
 import { accountActorId, accountId } from '../identity/principal.js'
 import type { AccountId } from '../identity/principal.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
@@ -20,6 +23,9 @@ type Evaluation = { eventIndex?: number; ack: PlayerWorldAck } | { error: unknow
 /** One canonical store, one event-only position projection, and one bounded movement cadence. */
 export class PlayerWorldService {
   private readonly projection = new PlayerWorldProjection()
+  private readonly harbor = new HarborBeaconProjection()
+  private readonly harborSnapshotPolicies = new Map<AccountId, 'new-player' | 'legacy-review-required'>()
+  private harborPolicy: HarborProgressPolicy | undefined
   private readonly chat = new PlayerWorldChatProjection()
   private readonly engine = new LivingWorldRuleEngine()
   private readonly connections = new Map<AccountId, Set<symbol>>()
@@ -38,7 +44,8 @@ export class PlayerWorldService {
     // Mandatory on EVERY boot, independently of SimulationRuntime's small/large-log branches.
     this.projection.rebuildFromEvents(store.readLatestEventsPerActor(PLAYER_WORLD_POSITION_EVENT_TYPES))
     this.chat.rebuildFromEvents(store.readRecentEventsByTypes(WORLD_CHAT_HISTORY_LIMIT, [WORLD_CHAT_EVENT_TYPE]), store.readLatestEventsPerActor([WORLD_CHAT_EVENT_TYPE]))
-    this.movementStep = this.projection.list().reduce((step, player) => Math.max(step, player.movementStep), this.chat.getMaximumPostedStep()) + 1
+    this.harbor.rebuildFromEvents(store.readEventsByTypes(HARBOR_BEACON_EVENT_TYPES))
+    this.movementStep = this.projection.list().reduce((step, player) => Math.max(step, player.movementStep), Math.max(this.chat.getMaximumPostedStep(), this.harbor.getMaximumMovementStep())) + 1
   }
 
   snapshot(id: AccountId): PlayerWorldSnapshot {
@@ -49,8 +56,12 @@ export class PlayerWorldService {
         this.displayNames.set(account, typeof name === 'string' && name.trim() ? name.trim().slice(0, 80) : null)
       }
     }
-    return createPlayerWorldSnapshot(principal, this.projection, this.source, online, this.movementStep, this.displayNames, this.presenceRevision, this.chat.list())
+    return createPlayerWorldSnapshot(principal, this.projection, this.source, online, this.movementStep, this.displayNames, this.presenceRevision, this.chat.list(), this.harbor, id => {
+      if (!this.harborSnapshotPolicies.has(id)) this.harborSnapshotPolicies.set(id, this.harborPolicy?.(id) ?? 'legacy-review-required')
+      return this.harborSnapshotPolicies.get(id)!
+    })
   }
+  setHarborProgressPolicy(policy: HarborProgressPolicy): void { this.harborPolicy = policy; this.harborSnapshotPolicies.clear(); this.markDirty() }
   setDisplayNameResolver(resolver: PlayerWorldDisplayNameResolver): void { this.displayNameResolver = resolver; this.displayNames.clear(); this.markDirty() }
   private publicDisplayName(id: AccountId): string | null {
     if (!this.displayNames.has(id)) {
@@ -60,6 +71,20 @@ export class PlayerWorldService {
     return this.displayNames.get(id) ?? null
   }
   getPosition(id: AccountId) { return this.projection.get(accountId(id)) }
+  /** Read-only canonical exterior pose, derived exclusively from the durable position and server geometry. */
+  getGridPose(id: AccountId) {
+    const position = this.getPosition(id)
+    if (!position || position.interior) return null
+    const geometry = this.source.getGeometry ? this.source.getGeometry(position.tileId) : getRegionGeometry(position.tileId)
+    return geometry ? canonicalWorldPointToGrid(position, geometry) : null
+  }
+  /** Defensive cross-region roster of admitted connections; cookies alone never make an actor online. */
+  getAdmittedActors() {
+    return [...this.connections.keys()].sort((a, b) => a - b).flatMap(id => {
+      const position = this.projection.get(id)
+      return position ? [position] : []
+    })
+  }
   getMovementStep(): number { return this.movementStep }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
   /** One account may own several tabs; each live subscription owns exactly one connection token. */
@@ -92,10 +117,11 @@ export class PlayerWorldService {
     if (this.movementStep >= Number.MAX_SAFE_INTEGER) throw new Error('Player movement sub-clock exhausted.')
     this.movementStep += 1
     this.displayNames.clear()
+    this.harborSnapshotPolicies.clear()
     const batch = this.pending.splice(0, PLAYER_WORLD_MAX_BATCH)
-    if (batch.length) {
+    if (batch.length || this.harbor.isCollecting()) {
       try {
-        const results = this.commitPrepared(batch, false)
+        const results = this.commitPrepared(batch, false, true)
         batch.forEach((item, index) => {
           const result = results[index]!
           if ('error' in result) item.reject(result.error); else item.resolve(result.ack)
@@ -116,7 +142,7 @@ export class PlayerWorldService {
   execute(id: AccountId, body: unknown): PlayerWorldAck { return this.executeBatch([{ accountId: id, body }])[0]! }
   executeBatch(batch: readonly PlayerWorldSubmission[]): PlayerWorldAck[] {
     if (batch.length < 1 || batch.length > PLAYER_WORLD_MAX_BATCH) throw new PlayerWorldError(400, 'INVALID_BATCH', 'Invalid player-world batch size.')
-    const prepared = batch.map(item => ({ accountId: accountId(item.accountId), intent: parsePlayerWorldIntent(item.body) }))
+    const prepared = batch.map(item => { const intent = parsePlayerWorldIntent(item.body); return { accountId: accountId(item.accountId), intent, ...(['enter-building', 'exit-building'].includes(intent.type) ? { requiresAdmission: true as const } : {}) } })
     return this.commitPrepared(prepared, true).map(result => {
       if ('error' in result) throw result.error
       return result.ack
@@ -152,16 +178,30 @@ export class PlayerWorldService {
     for (const item of rejected) item.reject(new PlayerWorldError(409, 'COMMAND_CANCELLED', 'Queued command was cancelled before commit.'))
   }
 
-  private commitPrepared(batch: readonly PreparedSubmission[], atomic: boolean): Evaluation[] {
+  private commitPrepared(batch: readonly PreparedSubmission[], atomic: boolean, advanceHarborClock = false): Evaluation[] {
     if (this.committing) throw new Error('Reentrant player-world transaction is not allowed.')
     this.committing = true
     let committed: Event[] = [], results: Evaluation[]
     try {
       results = this.store.runInTransaction(() => {
         const staged = this.projection.clone(batch.map(item => item.accountId)), stagedChat = this.chat.clone(), drafts: EventDraft[] = [], evaluations: Evaluation[] = []
+        let stagedHarbor = this.harbor.clone()
         const receipts = new Map<string, { digest: string; eventIndex: number }>()
         const map = this.source.getMap(), tick = this.source.getTick(), submittedAt = (this.options.now ?? Date.now)()
         let stagedSequence = Math.max(this.source.getRevision(), ...staged.list().map(player => player.sequence))
+        const harborPositions = (id?: AccountId) => [...new Set([...(id ? [id] : []), ...stagedHarbor.getParticipantAccountIds()])]
+          .flatMap(account => { const position = staged.get(account) ?? this.projection.get(account); return position ? [position] : [] })
+        const compile = (commands: readonly import('../kernel/livingWorldCommands.js').LivingWorldCommand[]) => commands.map(command => {
+          const result = this.engine.evaluate(command, { rulesetVersion: PLAYER_WORLD_RULESET })
+          if (!result.accepted) throw new PlayerWorldError(400, result.rejection.code, result.rejection.reason)
+          if (result.events.length !== 1) throw new Error('Each canonical typed command must compile to one event.')
+          return result.events[0]!
+        })
+        // Cutoff/completion precedes player commands, and shares their SAME transaction/sub-step.
+        for (const draft of compile(advanceHarborClock ? stagedHarbor.advance({ positions: harborPositions(), movementStep: this.movementStep,
+          worldTick: tick, submittedAt, ...(this.harborPolicy ? { policy: this.harborPolicy } : {}) }) : [])) {
+          stagedHarbor.project({ ...draft, sequence: ++stagedSequence }); drafts.push(draft)
+        }
         for (const item of batch) {
           try {
             item.authorize?.()
@@ -180,17 +220,25 @@ export class PlayerWorldService {
               if (prior.length !== 1 || data.intentDigest !== digest) throw new PlayerWorldError(409, 'COMMAND_ID_CONFLICT', 'Command ID already has different content.')
               evaluations.push({ ack: { accepted: true, commandId: item.intent.commandId, revision: prior[0]!.sequence, duplicate: true } }); continue
             }
-            const command = evaluatePlayerWorldIntent({ accountId: item.accountId, intent: item.intent,
-              position: staged.get(item.accountId), map, ...(this.source.getGeometry ? { getGeometry: this.source.getGeometry.bind(this.source) } : {}), movementStep: this.movementStep, worldTick: tick, submittedAt,
-              ...(stagedChat.getLastPostedStep(item.accountId) !== undefined ? { lastChatStep: stagedChat.getLastPostedStep(item.accountId)! } : {}),
-              ...(this.displayNameResolver ? { displayName: this.publicDisplayName(item.accountId) } : {}) })
-            const compiled = this.engine.evaluate(command, { rulesetVersion: PLAYER_WORLD_RULESET })
-            if (!compiled.accepted) throw new PlayerWorldError(400, compiled.rejection.code, compiled.rejection.reason)
-            if (compiled.events.length !== 1) throw new Error('Canonical player action must compile to one typed event.')
-            const draft = compiled.events[0]!, eventIndex = drafts.length
-            const stagedEvent = { ...draft, sequence: ++stagedSequence }
-            if (draft.eventType === WORLD_CHAT_EVENT_TYPE) stagedChat.project(stagedEvent); else staged.project(stagedEvent)
-            drafts.push(draft); receipts.set(commandId, { digest, eventIndex })
+            if (item.intent.type === 'contribute' && staged.get(item.accountId)?.interior) throw new PlayerWorldError(409, 'BUILDING_EXIT_REQUIRED', 'Exit the building before contributing outdoors.')
+            const commands = item.intent.type === 'contribute'
+              ? stagedHarbor.contribution({ accountId: item.accountId, commandId: item.intent.commandId, intentDigest: digest,
+                positions: harborPositions(item.accountId), movementStep: this.movementStep, worldTick: tick, submittedAt,
+                ...(this.harborPolicy ? { policy: this.harborPolicy } : {}) })
+              : [evaluatePlayerWorldIntent({ accountId: item.accountId, intent: item.intent,
+                position: staged.get(item.accountId), map, ...(this.source.getBuilding ? { getBuilding: this.source.getBuilding.bind(this.source) } : {}), ...(this.source.getGeometry ? { getGeometry: this.source.getGeometry.bind(this.source) } : {}), movementStep: this.movementStep, worldTick: tick, submittedAt,
+                ...(stagedChat.getLastPostedStep(item.accountId) !== undefined ? { lastChatStep: stagedChat.getLastPostedStep(item.accountId)! } : {}),
+                ...(this.displayNameResolver ? { displayName: this.publicDisplayName(item.accountId) } : {}) })]
+            if (item.intent.type === 'contribute' && !map.regions.some(region => region.id === 't_dock' && region.available)) throw new PlayerWorldError(409, 'REGION_UNAVAILABLE', 'Canonical harbor is unavailable.')
+            const compiled = compile(commands), eventIndex = drafts.length, nextHarbor = stagedHarbor.clone()
+            // All generated auxiliary facts are validated/projected before accepting this command's receipt.
+            for (const draft of compiled) {
+              const event = { ...draft, sequence: ++stagedSequence }
+              nextHarbor.project(event)
+              if (draft.eventType === WORLD_CHAT_EVENT_TYPE) stagedChat.project(event)
+              else if ((PLAYER_WORLD_POSITION_EVENT_TYPES as readonly string[]).includes(draft.eventType)) staged.project(event)
+            }
+            stagedHarbor = nextHarbor; drafts.push(...compiled); receipts.set(commandId, { digest, eventIndex })
             evaluations.push({ eventIndex, ack: { accepted: true, commandId: item.intent.commandId, revision: 0 } })
           } catch (error) {
             if (atomic) throw error
@@ -205,7 +253,7 @@ export class PlayerWorldService {
       })
     } finally { this.committing = false }
     // Never change projections, acknowledge success, or notify before the outer transaction commits.
-    for (const event of committed) { this.projection.project(event); this.chat.project(event) }
+    for (const event of committed) { this.projection.project(event); this.chat.project(event); this.harbor.project(event) }
     if (committed.length) {
       this.markDirty()
       try { this.options.onCommitted?.(committed) }

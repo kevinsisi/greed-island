@@ -38,6 +38,6 @@ export function legacyTestDatabase(admin = true): Database.Database {
   return db
 }
 export function nonAccountRows(db: Database.Database): Record<string, unknown[]> {
-  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('accounts','sqlite_sequence','identity_schema','account_login_aliases','account_source_identities','auth_sessions') ORDER BY name").all() as Array<{ name: string }>
+  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('accounts','sqlite_sequence','identity_schema','account_login_aliases','account_source_identities','auth_sessions','auth_password_resets') ORDER BY name").all() as Array<{ name: string }>
   return Object.fromEntries(rows.map(row => [row.name, db.prepare(`SELECT * FROM "${row.name.replaceAll('"','""')}"`).all()]))
 }

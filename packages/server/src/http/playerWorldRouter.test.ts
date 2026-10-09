@@ -6,6 +6,7 @@ import type { SqliteEventStore } from '../kernel/eventStore.js'
 import { getKnownMapEdges, getKnownMapRegions, getMapAdjacency } from '../sim/mapGraph.js'
 import type { PlayerWorldNpc } from '../playerWorld/types.js'
 import { PlayerWorldService } from '../playerWorld/service.js'
+import type { PlayerWorldSnapshot } from '../playerWorld/snapshot.js'
 import { EventFixture } from '../playerWorld/service.testSupport.js'
 import { createPlayerWorldRouter, type PlayerWorldAuth } from './playerWorldRouter.js'
 
@@ -61,6 +62,25 @@ async function firstSnapshot(response: Response) {
     const frames = text.split('\n\n'), frame = frames.find(frame => frame.split('\n').includes('event: snapshot'))
     if (frame) { const data = frame.split('\n').find(line => line.startsWith('data: ')); return { snapshot: JSON.parse(data!.slice(6)), reader } }
   }
+}
+async function snapshotMatching(reader: ReadableStreamDefaultReader<Uint8Array>, matches: (snapshot: PlayerWorldSnapshot) => boolean) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Live chat SSE frame timed out.')), 2000) })
+  const read = async () => {
+    const decoder = new TextDecoder(); let buffered = ''
+    for (;;) {
+      const chunk = await reader.read(); if (chunk.done) throw new Error('Live chat SSE stream closed early.')
+      buffered += decoder.decode(chunk.value, { stream: true })
+      let end: number
+      while ((end = buffered.indexOf('\n\n')) >= 0) {
+        const frame = buffered.slice(0, end); buffered = buffered.slice(end + 2)
+        if (!frame.split('\n').includes('event: snapshot')) continue
+        const data = frame.split('\n').find(line => line.startsWith('data: ')); if (!data) continue
+        const snapshot = JSON.parse(data.slice(6)) as PlayerWorldSnapshot; if (matches(snapshot)) return snapshot
+      }
+    }
+  }
+  try { return await Promise.race([read(), timeout]) } finally { if (timer) clearTimeout(timer) }
 }
 async function ended(reader: ReadableStreamDefaultReader<Uint8Array>) { for (;;) { if ((await reader.read()).done) return } }
 
@@ -192,14 +212,43 @@ describe('canonical world chat HTTP binding', () => {
     const harness = await setup(); harness.service.execute(alice, body('join', 'enter', {})); harness.service.execute(bob, body('join', 'enter', {}))
     const offline = await harness.command(tokenA, body('offline-chat', 'chat', { text: 'no slot' }))
     expect(offline.status).toBe(409); expect(await offline.json()).toMatchObject({ error: 'WORLD_CONNECTION_REQUIRED' })
-    const streamA = await harness.stream(tokenA), streamB = await harness.stream(tokenB); await firstSnapshot(streamA.response); await firstSnapshot(streamB.response)
+    const streamA = await harness.stream(tokenA), streamB = await harness.stream(tokenB); await firstSnapshot(streamA.response); const peerStream = await firstSnapshot(streamB.response)
     harness.service.setDisplayNameResolver(id => `Public ${id}`)
     const sent = await harness.command(tokenA, body('world-chat', 'chat', { text: '<b>plain text</b>' })); expect(sent.status).toBe(200)
+    const liveB = await snapshotMatching(peerStream.reader, snapshot => snapshot.messages?.some((message: { text: string }) => message.text === '<b>plain text</b>'))
+    expect(liveB.selfId).toBe(2)
+    expect(liveB.messages).toHaveLength(1)
+    expect(liveB.messages[0]).toMatchObject({ accountId: 1, tileId: 't_dock', displayName: 'Public 1', text: '<b>plain text</b>' })
     const snapshotB = await (await harness.snapshot(tokenB)).json()
     expect(snapshotB.messages).toHaveLength(1); expect(snapshotB.messages[0]).toMatchObject({ accountId: 1, tileId: 't_dock', displayName: 'Public 1', text: '<b>plain text</b>' })
     expect(snapshotB.messages[0]).not.toHaveProperty('email'); expect(snapshotB.messages[0]).not.toHaveProperty('role')
     const repeated = await harness.command(tokenA, body('world-chat', 'chat', { text: '<b>plain text</b>' }))
     expect(repeated.status).toBe(200); expect(await repeated.json()).toMatchObject({ duplicate: true })
     expect(harness.service.snapshot(bob).messages).toHaveLength(1)
+  })
+})
+
+
+describe('canonical harbor beacon HTTP binding', () => {
+  it('uses the same authenticated admitted queue and peer SSE for original two-player contribution/open/progress', async () => {
+    const harness = await setup(false); harness.service.setHarborProgressPolicy(() => 'new-player')
+    for (const id of [alice,bob]) { harness.service.execute(id, body('enter', 'enter', {})); harness.service.connect(id) }
+    for (let step = 0; step < 30; step++) { harness.service.advanceMovementStep(); harness.service.executeBatch([alice,bob].map(id => ({ accountId: id, body: body(`walk${step}`, 'move', { dx: 0, dz: 1 }) }))) }
+    const stream = await harness.stream(tokenB), peer = await firstSnapshot(stream.response)
+    expect(peer.snapshot.harborProgress).toEqual({ status: 'ready', supplies: 1, rewards: 0 })
+    const one = harness.command(tokenA, body('contribute', 'contribute', {})), two = harness.command(tokenB, body('contribute', 'contribute', {}))
+    await waitFor(() => harness.runtime.submitPlayerWorldCommand.mock.calls.length === 2)
+    const before = harness.fixture.transactions; harness.service.advanceMovementStep()
+    expect((await one).status).toBe(200); expect((await two).status).toBe(200); expect(harness.fixture.transactions - before).toBe(1)
+    const opened = await snapshotMatching(peer.reader, snapshot => snapshot.beacon.phase === 'collecting')
+    expect(opened.beacon).toMatchObject({ id: 'harbor-beacon-1', tileId: 't_dock', x: 0, z: 6, radius: 2.5, required: 2, contributors: [1,2], completed: false })
+    expect(opened.beacon.closesAtTick! - opened.beacon.tick).toBe(300)
+    expect(opened.harborProgress).toEqual({ status: 'ready', supplies: 0, rewards: 0 })
+    expect(opened.players.every(player => player.harborProgress.supplies === 0)).toBe(true)
+    const forged = await harness.command(tokenA, body('forged', 'contribute', { accountId: 2, supplies: 999 })); expect(forged.status).toBe(400)
+    const expectedCalls = harness.runtime.submitPlayerWorldCommand.mock.calls.length + 1
+    const retry = harness.command(tokenA, body('contribute', 'contribute', {})); await waitFor(() => harness.runtime.submitPlayerWorldCommand.mock.calls.length === expectedCalls)
+    harness.service.advanceMovementStep(); expect(await (await retry).json()).toMatchObject({ accepted: true, duplicate: true })
+    expect(harness.fixture.events.filter(event => event.eventType === 'PLAYER_HARBOR_CONTRIBUTED')).toHaveLength(2)
   })
 })

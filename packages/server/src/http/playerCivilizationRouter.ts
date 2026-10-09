@@ -1,6 +1,8 @@
-import { Router, type Request, type Response } from 'express'
+import { Router, json, type Request, type Response } from 'express'
 import { requireAuth, type AuthConfig } from './auth.js'
 import { makeLivingWorldCommand, isLivingWorldCommandType } from '../kernel/livingWorldCommands.js'
+import { prepareCanonicalPlayerAction } from './playerActionPolicy.js'
+import { reauthorizeGameplayMutation, sendGameplayError } from './gameplayAuthority.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 
 const PLAYER_CIVILIZATION_COMMAND_TYPES = new Set([
@@ -25,6 +27,7 @@ const PLAYER_CIVILIZATION_COMMAND_TYPES = new Set([
 export function createPlayerCivilizationRouter(input: {
   runtime: SimulationRuntime
   authConfig: AuthConfig
+  canonicalActions?: true
 }): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
@@ -35,7 +38,7 @@ export function createPlayerCivilizationRouter(input: {
       res.status(401).json({ error: 'UNAUTHORIZED' })
       return
     }
-    const { type, payload } = req.body as { type: unknown; payload: unknown }
+    const { type, payload } = (req.body ?? {}) as { type?: unknown; payload?: unknown }
     if (typeof type !== 'string' || !PLAYER_CIVILIZATION_COMMAND_TYPES.has(type)) {
       res.status(400).json({ accepted: false, reason: 'unknown or disallowed command type' })
       return
@@ -44,15 +47,23 @@ export function createPlayerCivilizationRouter(input: {
       res.status(400).json({ accepted: false, reason: 'unknown command type' })
       return
     }
+    if (!reauthorizeGameplayMutation(input.authConfig, req, res, claims.sub)) return
+    let checkedPayload = payload
+    if (input.canonicalActions) {
+      try { checkedPayload = prepareCanonicalPlayerAction(input.runtime, claims.sub, type, payload) }
+      catch (error) { sendGameplayError(res, error); return }
+    }
     const tick = input.runtime.getCurrentTick()
     const accountId = String(claims.sub)
     const mergedPayload = {
-      ...(typeof payload === 'object' && payload !== null ? payload : {}),
+      ...(typeof checkedPayload === 'object' && checkedPayload !== null ? checkedPayload : {}),
       playerAccountId: accountId,
       tick,
     }
     const command = makeLivingWorldCommand(type, accountId, 'player', tick, Date.now(), mergedPayload)
-    const event = input.runtime.submitLivingWorldCommand(command)
+    let event
+    try { event = input.canonicalActions ? input.runtime.submitAuthorizedPlayerCommand(command, { authorize: () => { input.authConfig.reauthorizeMutation(req); prepareCanonicalPlayerAction(input.runtime, claims.sub, type, payload) } }) : input.runtime.submitLivingWorldCommand(command) }
+    catch (error) { sendGameplayError(res, error); return }
     if (!event) {
       res.status(422).json({ accepted: false, reason: 'rule engine rejected' })
       return
@@ -70,5 +81,19 @@ export function createPlayerCivilizationRouter(input: {
     res.json(snapshot)
   })
 
+  return router
+}
+
+
+/** Keeps private existing state; unknown legacy outcomes are rejected, never injected. */
+export function createUnifiedPlayerCivilizationRouter(input: Omit<Parameters<typeof createPlayerCivilizationRouter>[0], 'canonicalActions'>): Router {
+  const router = Router()
+  router.use('/world/player-action', json({ limit: 4096, strict: true }))
+  router.use('/world/player-action', (req, res, next) => {
+    if (req.body !== undefined && Buffer.byteLength(JSON.stringify(req.body), 'utf8') > 4096) { res.status(413).json({ error: 'PAYLOAD_TOO_LARGE' }); return }
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length !== 2 || !Object.hasOwn(req.body, 'type') || !Object.hasOwn(req.body, 'payload')) { res.status(400).json({ error: 'INVALID_INPUT' }); return }
+    next()
+  })
+  router.use(createPlayerCivilizationRouter({ ...input, canonicalActions: true }))
   return router
 }

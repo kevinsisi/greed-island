@@ -10,11 +10,11 @@ import {
 } from './whenYouWereGoneLogic'
 
 type WhenYouWereGoneProps = {
-  token: string
+  accountId: number
   onDismiss: () => void
 }
 
-export function WhenYouWereGone({ token, onDismiss }: WhenYouWereGoneProps) {
+export function WhenYouWereGone({ accountId, onDismiss }: WhenYouWereGoneProps) {
   const navigate = useNavigate()
   const [world, setWorld] = useState<ServerCatchUpSummary | null>(null)
   const [needs, setNeeds] = useState<PlayerNeedsState | null>(null)
@@ -25,8 +25,8 @@ export function WhenYouWereGone({ token, onDismiss }: WhenYouWereGoneProps) {
     let cancelled = false
     setLoading(true)
     Promise.allSettled([
-      api.worldSinceLastVisit(token),
-      api.playerNeeds(token),
+      api.worldSinceLastVisit(accountId),
+      api.playerNeeds(accountId),
     ]).then(([worldResult, needsResult]) => {
       if (cancelled) return
       const w = worldResult.status === 'fulfilled' ? worldResult.value.summary : null
@@ -39,7 +39,7 @@ export function WhenYouWereGone({ token, onDismiss }: WhenYouWereGoneProps) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [accountId])
 
   const hoursLabel = useMemo(
     () => (world ? ticksToHoursLabel(world.sinceTick, world.untilTick) : null),
@@ -88,7 +88,7 @@ export function WhenYouWereGone({ token, onDismiss }: WhenYouWereGoneProps) {
             type="button"
             onClick={() => {
               if (btn.kind === 'navigate' && btn.tileId) {
-                navigate(`/area/${btn.tileId}`)
+                navigate(`/game/area/${btn.tileId}`)
               }
               onDismiss()
             }}

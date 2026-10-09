@@ -3,6 +3,7 @@ import { assertUnifiedIdentitySchema } from './schema.js'
 import { accountId, normalizeLoginAlias, type AccountId, type AccountRepository, type AccountRole, type LoginAlias, type Principal } from './principal.js'
 import { hashStoredPassword, passwordScheme, verifyStoredPassword } from './passwordVerifier.js'
 import type { IdentityMigrationPlan } from './migrationPlan.js'
+import { assertAccountAllocatorReady, readCanonicalAccountIdAuthority } from './accountIdAuthority.js'
 
 type Row = { id: number; email: string | null; password_hash: string; password_scheme: string; role: AccountRole; status: 'active' | 'disabled'; nickname: string | null; avatar: string; display_name: string | null; created_at: number }
 export type AccountProfile = Readonly<{ accountId: AccountId; email: string | null; username: string | null; nickname: string | null; avatar: string; displayName: string; role: AccountRole; createdAt: number }>
@@ -12,6 +13,7 @@ const DUMMY_HASH = `scrypt-v1:${'0'.repeat(32)}:${'0'.repeat(64)}`
 export class SqliteAccountRepository implements AccountRepository {
   constructor(private readonly db: Database.Database, private readonly now: () => number = Date.now) {
     assertUnifiedIdentitySchema(db)
+    assertAccountAllocatorReady(db)
     if (Number(db.pragma('foreign_keys', { simple: true })) !== 1) throw new Error('Unified account repository requires foreign-key enforcement.')
   }
 
@@ -24,9 +26,9 @@ export class SqliteAccountRepository implements AccountRepository {
     const row = this.byAlias(alias)
     return row?.status === 'active' ? this.principal(row) : null
   }
-  getProfile(id: AccountId): AccountProfile | null {
+  getProfile(id: AccountId, options: Readonly<{ includeDisabled?: boolean }> = {}): AccountProfile | null {
     const row = this.row(accountId(id))
-    if (!row || row.status !== 'active') return null
+    if (!row || (row.status !== 'active' && !options.includeDisabled)) return null
     const alias = this.db.prepare("SELECT display_value FROM account_login_aliases WHERE account_id=? AND kind='username'").get(id) as { display_value: string } | undefined
     const username = alias?.display_value ?? null
     return { accountId: accountId(row.id), email: row.email, username, nickname: row.nickname, avatar: row.avatar, displayName: row.nickname ?? row.display_name ?? username ?? row.email?.split('@')[0] ?? `Player ${row.id}`, role: this.principal(row).role, createdAt: row.created_at }
@@ -48,6 +50,7 @@ export class SqliteAccountRepository implements AccountRepository {
     const alias = normalizeLoginAlias(raw)
     const hash = await hashStoredPassword(password)
     return this.db.transaction(() => {
+      assertAccountAllocatorReady(this.db)
       if (this.byAlias(alias)) throw new IdentityError('ALIAS_TAKEN')
       const result = this.db.prepare("INSERT INTO accounts(email,password_hash,password_scheme,created_at,role,nickname,avatar,display_name,last_seen_tick) VALUES(?,?,?,?,'player',NULL,'tide',NULL,0)").run(alias.kind === 'email' ? alias.value : null, hash, 'scrypt-v1', this.now())
       const id = accountId(Number(result.lastInsertRowid))
@@ -77,6 +80,9 @@ export class SqliteAccountRepository implements AccountRepository {
         return this.principal(row)
       }
       if (identity.action !== 'create' || identity.role !== 'player' || this.row(id) || this.byAlias(alias)) throw new IdentityError('IMPORT_DESCRIPTOR_CONFLICT')
+      let historicalMaximum: number
+      try { historicalMaximum = readCanonicalAccountIdAuthority(this.db) } catch { throw new IdentityError('IMPORT_HISTORICAL_ID_CONFLICT') }
+      if (id <= historicalMaximum) throw new IdentityError('IMPORT_HISTORICAL_ID_CONFLICT')
       this.db.prepare("INSERT INTO accounts(id,email,password_hash,password_scheme,created_at,role,nickname,avatar,display_name,last_seen_tick) VALUES(?,NULL,?,'legacy-mp-scrypt-v1',?,'player',NULL,'tide',?,0)").run(id, input.passwordHash, this.now(), input.name)
       this.db.prepare("INSERT INTO account_login_aliases(kind,normalized,display_value,account_id) VALUES('username',?,?,?)").run(alias.value, input.username, id)
       this.db.prepare('INSERT INTO account_source_identities(namespace,legacy_id,account_id) VALUES(?,?,?)').run(input.namespace, input.legacyId, id)

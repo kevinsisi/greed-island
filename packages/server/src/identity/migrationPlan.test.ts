@@ -23,6 +23,12 @@ describe('pure identity migration dry-run', () => {
     const a = legacy('player-b'), b = legacy('player-a')
     expect(planIdentityMigration({ canonical: [owner], legacy: [a, b] })).toEqual(planIdentityMigration({ canonical: [owner], legacy: [b, a] }))
   })
+  it('never reuses deleted/historically referenced account IDs above active rows', () => {
+    const plan = planIdentityMigration({ canonical: [owner], legacy: [legacy()], canonicalIdHighWaterMark: 100, canonicalReferencedAccountIds: [120] })
+    expect(plan.identities[0]?.mapping.accountId).toBe(121)
+    expect(() => planIdentityMigration({ canonical: [owner], legacy: [legacy()], canonicalIdHighWaterMark: -1 })).toThrow('high-water')
+    expect(() => planIdentityMigration({ canonical: [owner], legacy: [legacy()], canonicalReferencedAccountIds: [Number.MAX_SAFE_INTEGER] })).toThrow('safe integer')
+  })
   it('never merges by an email local part or similarly named username', () => {
     const plan = planIdentityMigration({ canonical: [owner], legacy: [legacy('player-a', { username: 'owner' })] })
     expect(plan.identities[0]?.mapping.accountId).toBe(11)

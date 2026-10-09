@@ -36,7 +36,7 @@ describe('canonical player-world pure rules and projection', () => {
     { commandId: 'c', type: 'enter', payload: { tileId: 't_central' } },
     { commandId: 'c', type: 'enter', payload: {}, actorId: '2' },
     { commandId: 'c', type: 'enter', payload: {}, tick: 100 },
-    { commandId: 'c', type: 'contribute', payload: {} },
+    { commandId: 'c', type: 'contribute', payload: { supplies: 999 } },
   ])('rejects untrusted authority in %j', command => expect(() => parsePlayerWorldIntent(command)).toThrow())
   it('uses numeric canonical accounts and refuses to replace an existing position with a spawn', () => {
     const command = evaluate(intent('enter'), null)

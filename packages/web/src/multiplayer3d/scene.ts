@@ -15,7 +15,9 @@ import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder'
 import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder'
 import type { Mesh } from '@babylonjs/core/Meshes/mesh'
 import type { LinesMesh } from '@babylonjs/core/Meshes/linesMesh'
-import type { MultiplayerSceneOptions, RoomPlayer, RoomSnapshot } from './types'
+import type { MultiplayerSceneOptions, PlayerWorldSnapshot, WorldPoint } from './types'
+import { isGameplayFocus } from './input'
+import { harborBeaconVisual } from './harborBeacon'
 import { findNavigationPath, moveIntentToward, type NavigationPoint } from './navigation'
 
 const INPUT_INTERVAL_MS = 100
@@ -75,10 +77,8 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     land: material('harbor-land', '#aeb39b'),
     stone: material('harbor-stone', '#8c9892'),
     darkStone: material('harbor-dark-stone', '#536967'),
-    path: material('harbor-path', '#c6baa0'),
     wood: material('harbor-wood', '#755f4c'),
     wall: material('harbor-wall', '#d1c2a2'),
-    roof: material('harbor-roof', '#a45e4b'),
     dark: material('harbor-dark', '#344a49'),
     skin: material('harbor-skin', '#ddb48e'),
     self: material('harbor-self-cloak', '#c56746'),
@@ -115,73 +115,70 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     return mesh
   }
 
-  type Harbor = { root: TransformNode; floor: Mesh; blockers: Set<Mesh>; crystal: Mesh; beam: Mesh; contributionLights: Mesh[]; ring: Mesh }
-  let harbor: Harbor | null = null
+  type BeaconVisual = { crystal: Mesh; beam: Mesh; ring: Mesh; contributionLights: Mesh[] }
+  type Region = { root: TransformNode; floor: Mesh; blockers: Set<Mesh>; beacon: BeaconVisual | null }
+  let region: Region | null = null
   let geometryKey = ''
-  function createHarbor(snapshot: RoomSnapshot): Harbor {
-    harbor?.root.dispose()
-    const root = new TransformNode('multiplayer-harbor', scene)
-    const { world, beacon } = snapshot
+  function createRegion(snapshot: PlayerWorldSnapshot): Region {
+    region?.root.dispose()
+    const root = new TransformNode(`world-region-${snapshot.tileId}`, scene)
+    const world = snapshot.geometry
     const width = world.maxX - world.minX
     const depth = world.maxZ - world.minZ
     const centerX = (world.minX + world.maxX) / 2
     const centerZ = (world.minZ + world.maxZ) / 2
     const blockers = new Set<Mesh>()
-    box('harbor-water', 350, 0.2, 350, mats.sea, centerX, -1.15, centerZ, root)
-    box('harbor-island-edge', width + 2, 0.7, depth + 2, mats.darkStone, centerX, -0.48, centerZ, root)
-    const floor = box('harbor-floor', width, 0.2, depth, mats.land, centerX, -0.1, centerZ, root)
-    // Only the ground surface is pickable, so clicks never target buildings or players.
+    if (world.presentation === 'harbor-3d') box('region-water', 350, 0.2, 350, mats.sea, centerX, -1.15, centerZ, root)
+    box('region-edge', width + 2, 0.7, depth + 2, mats.darkStone, centerX, -0.48, centerZ, root)
+    const floor = box('region-floor', width, 0.2, depth, mats.land, centerX, -0.1, centerZ, root)
     floor.isPickable = true
-    box('harbor-central-path', 5, 0.025, depth, mats.path, centerX, 0.015, centerZ, root)
-    for (let z = world.minZ + 1; z < world.maxZ; z += 2) {
-      box(`harbor-paving-${z}`, 4.6, 0.015, 0.045, mats.stone, centerX, 0.035, z, root)
-    }
-    // Barrier faces are outside the accepted center-position bounds, never inside them.
-    box('harbor-west-boundary', 0.4, 0.55, depth + 0.8, mats.stone, world.minX - 0.2, 0.275, centerZ, root)
-    box('harbor-east-boundary', 0.4, 0.55, depth + 0.8, mats.stone, world.maxX + 0.2, 0.275, centerZ, root)
-    box('harbor-north-boundary', width, 0.55, 0.4, mats.stone, centerX, 0.275, world.maxZ + 0.2, root)
-    box('harbor-south-boundary', width, 0.55, 0.4, mats.stone, centerX, 0.275, world.minZ - 0.2, root)
+    // No authored road or building is invented. Footprints come from server geometry.
     world.obstacles.forEach((obstacle, index) => {
-      // Building footprints are the exact server rectangles; no client collision authority.
-      const walls = box(`harbor-obstacle-${index}`, obstacle.width, 3, obstacle.depth, mats.wall, obstacle.x, 1.5, obstacle.z, root)
-      const roof = box(`harbor-roof-${index}`, obstacle.width, 0.5, obstacle.depth, mats.roof, obstacle.x, 3.25, obstacle.z, root)
-      blockers.add(walls)
-      blockers.add(roof)
-      box(`harbor-door-${index}`, 0.9, 1.9, 0.035, mats.wood, obstacle.x, 0.95, obstacle.z - obstacle.depth / 2 - 0.02, root)
-      for (const side of [-1, 1]) {
-        box(`harbor-window-${index}-${side}`, 0.65, 0.8, 0.04, mats.gold, obstacle.x + side * obstacle.width * 0.31, 1.8, obstacle.z - obstacle.depth / 2 - 0.025, root)
-        cylinder(`harbor-post-${index}-${side}`, 0.18, 3.1, mats.wood, obstacle.x + side * (obstacle.width / 2 - 0.12), 1.55, obstacle.z - obstacle.depth / 2 + 0.12, root)
-      }
+      const wall = box(`region-obstacle-${obstacle.id ?? index}`, obstacle.width, world.presentation === 'harbor-3d' ? 3 : 1.2, obstacle.depth,
+        mats.wall, obstacle.x, world.presentation === 'harbor-3d' ? 1.5 : 0.6, obstacle.z, root)
+      blockers.add(wall)
     })
-    const beaconRoot = new TransformNode('multiplayer-beacon', scene)
-    beaconRoot.position.set(beacon.x, 0, beacon.z)
-    beaconRoot.parent = root
-    // The server does not make the beacon an obstacle, so leave the walking space open.
-    cylinder('beacon-platform', 2.1, 0.025, mats.darkStone, 0, 0.018, 0, beaconRoot)
-    const crystal = stone('beacon-crystal', mats.unlit, 0, 2.95, 0, new Vector3(0.46, 0.74, 0.46), beaconRoot)
-    crystal.rotation.z = 0.14
-    const beam = cylinder('beacon-light-column', 0.18, 7, mats.lit, 0, 6, 0, beaconRoot, 0.08)
-    beam.setEnabled(false)
-    const ring = CreateTorus('beacon-interaction-radius', { diameter: beacon.radius * 2, thickness: 0.045, tessellation: 48 }, scene)
-    ring.position.y = 0.06
-    ring.parent = beaconRoot
-    ring.material = mats.gold
-    ring.isPickable = false
-    const contributionLights: Mesh[] = []
-    for (let index = 0; index < beacon.required; index++) {
-      const angle = Math.PI * 2 * index / beacon.required
-      contributionLights.push(stone(`beacon-contribution-${index}`, mats.unlit, Math.cos(angle) * 0.76, 0.37, Math.sin(angle) * 0.76, new Vector3(0.19, 0.23, 0.19), beaconRoot))
+    world.portals.forEach((portal, index) => {
+      const ring = CreateTorus(`region-crossing-${index}`, { diameter: portal.radius * 2, thickness: 0.045, tessellation: 32 }, scene)
+      ring.position.set(portal.x, 0.06, portal.z)
+      ring.material = mats.gold
+      ring.parent = root
+      ring.isPickable = false
+    })
+    let beaconVisual: BeaconVisual | null = null
+    const beacon = harborBeaconVisual(snapshot)
+    if (beacon) {
+      const beaconRoot = new TransformNode('canonical-harbor-beacon', scene)
+      beaconRoot.position.set(beacon.x, 0, beacon.z)
+      beaconRoot.parent = root
+      // Original beacon remains walkable; only server geometry supplies blockers.
+      cylinder('beacon-platform', 2.1, .025, mats.darkStone, 0, .018, 0, beaconRoot)
+      const crystal = stone('beacon-crystal', mats.unlit, 0, 2.95, 0, new Vector3(.46, .74, .46), beaconRoot)
+      const beam = cylinder('beacon-light-column', .18, 7, mats.lit, 0, 6, 0, beaconRoot, .08)
+      const ring = CreateTorus('beacon-interaction-radius', { diameter: beacon.radius * 2, thickness: .045, tessellation: 48 }, scene)
+      ring.position.y = .04; ring.material = mats.gold; ring.parent = beaconRoot; ring.isPickable = false
+      const contributionLights: Mesh[] = []
+      // Bounded decorative lamps; exact participants/required values remain in the panel.
+      const lamps = Math.min(beacon.required, 32)
+      for (let index = 0; index < lamps; index++) {
+        const angle = Math.PI * 2 * index / lamps
+        contributionLights.push(stone(`beacon-contribution-${index}`, mats.unlit, Math.cos(angle) * .76, .37, Math.sin(angle) * .76, new Vector3(.19, .23, .19), beaconRoot))
+      }
+      beaconVisual = { crystal, beam, ring, contributionLights }
     }
-    return { root, floor, blockers, crystal, beam, contributionLights, ring }
+    return { root, floor, blockers, beacon: beaconVisual }
   }
 
-  function createPlayer(player: RoomPlayer, self: boolean) {
+  type VisualActor = WorldPoint & { id: string; y?: number; npcColor?: number }
+
+  function createPlayer(player: VisualActor, self: boolean) {
     const root = new TransformNode(`multiplayer-player-${player.id}`, scene)
-    root.position.set(player.x, 0, player.z)
+    root.position.set(player.x, player.y ?? 0, player.z)
     root.metadata = { playerId: player.id }
     const body = new TransformNode(`multiplayer-body-${player.id}`, scene)
     body.parent = root
-    const cloakMaterial = self ? mats.self : mats.peer
+    const npcMaterial = player.npcColor === undefined ? null : material(`npc-cloak-${player.id}`, `#${player.npcColor.toString(16).padStart(6, '0')}`)
+    const cloakMaterial = npcMaterial ?? (self ? mats.self : mats.peer)
     cylinder(`player-coat-${player.id}`, 0.65, 0.77, mats.cream, 0, 1.05, 0, body, 0.5)
     stone(`player-head-${player.id}`, mats.skin, 0, 1.72, 0.03, new Vector3(0.25, 0.3, 0.23), body)
     cylinder(`player-hair-${player.id}`, 0.5, 0.18, mats.dark, 0, 1.95, 0.025, body, 0.38)
@@ -211,12 +208,12 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     ring.parent = root
     ring.isPickable = false
     const meshes = root.getChildMeshes().map(mesh => ({ mesh, visibility: mesh.visibility }))
-    return { root, body, cloak, limbs, meshes, self, from: root.position.clone(), target: root.position.clone(), receivedAt: performance.now() }
+    return { root, body, cloak, limbs, meshes, self, npcMaterial, from: root.position.clone(), target: root.position.clone(), receivedAt: performance.now() }
   }
   const players = new Map<string, ReturnType<typeof createPlayer>>()
-  let lastSnapshotKey = ''
-  let lastRoomId: string | null = null
-  let lastSelfId: string | null = null
+  let lastSnapshot: PlayerWorldSnapshot | null = null
+  let lastTileId: string | null = null
+  let lastSelfId: number | null = null
   let yaw = 0
   let pitch = DEFAULT_PITCH
   let distance = DEFAULT_DISTANCE
@@ -279,26 +276,26 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   function setNavigationDestination(): void {
     clearNavigation()
     stopIntent()
-    const pick = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh === harbor?.floor, false, camera)
+    const pick = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh === region?.floor, false, camera)
     if (!pick?.hit || !pick.pickedPoint) {
-      navigationStatus('請在港口地面點選目的地。')
+      navigationStatus('請在區域地面點選目的地。')
       return
     }
     const destination = { x: pick.pickedPoint.x, z: pick.pickedPoint.z }
     const snapshot = options.getSnapshot()
-    const self = snapshot?.players.find((player) => player.id === options.getSelfId())
+    const self = snapshot?.players.find((player) => player.accountId === options.getSelfId())
     if (!snapshot || !self?.online || controls.paused) return
 
-    if (typeof snapshot.world.playerRadius !== 'number' || typeof snapshot.world.movePerTick !== 'number' || snapshot.world.movePerTick <= 0) {
+    if (typeof snapshot.geometry.playerRadius !== 'number' || typeof snapshot.geometry.movePerStep !== 'number' || snapshot.geometry.movePerStep <= 0) {
       showRejectedDestination(destination)
-      navigationStatus('目前房間伺服器未提供自動導航資料，請使用方向鍵或搖桿移動。')
+      navigationStatus('目前世界伺服器未提供自動導航資料，請使用方向鍵或搖桿移動。')
       return
     }
     const start = { x: self.x, z: self.z }
-    const path = findNavigationPath(start, destination, snapshot.world)
+    const path = findNavigationPath(start, destination, { ...snapshot.geometry, movePerTick: snapshot.geometry.movePerStep })
     if (path === null) {
       showRejectedDestination(destination)
-      navigationStatus('這個位置無法安全抵達，請在道路或港邊再點一次。')
+      navigationStatus('這個位置無法安全抵達，請在可通行地面再點一次。')
       return
     }
     if (path.length === 0) {
@@ -339,11 +336,16 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   }
   function keyDown(event: KeyboardEvent): void {
     if (!DIRECTION_KEYS.has(event.code) || controls.paused || document.hidden) return
-    if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return
+    if (!isGameplayFocus(event.target, canvas, document.body)) return
+    // A held key must not restart movement after focus loss or reconnect cancellation.
+    if (event.repeat && !keys.has(event.code)) return
     event.preventDefault()
     if (!event.repeat && hasNavigationMarker) clearNavigation('已切換手動移動，自動導航已取消。')
     keys.add(event.code)
     if (!event.repeat) pendingKeys.add(event.code)
+  }
+  function focusChanged(event: FocusEvent): void {
+    if (!isGameplayFocus(event.target, canvas, document.body)) clearInput()
   }
   function keyUp(event: KeyboardEvent): void {
     keys.delete(event.code)
@@ -399,7 +401,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   }
   function contextLost(): void {
     clearInput()
-    options.onError('3D 繪圖中斷，請重新整理並重新連線。房間進度仍由伺服器保存。')
+    options.onError('3D 繪圖中斷，請重新整理並重新連線。玩家位置仍由伺服器保存。')
   }
 
   const observer = new ResizeObserver(resize)
@@ -409,6 +411,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   window.addEventListener('blur', clearInput)
   window.addEventListener('resize', resize)
   document.addEventListener('visibilitychange', clearInput)
+  document.addEventListener('focusin', focusChanged)
   canvas.addEventListener('pointerdown', pointerDown)
   canvas.addEventListener('pointermove', pointerMove)
   canvas.addEventListener('pointerup', pointerUp)
@@ -426,66 +429,71 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     if (document.hidden) return
     const snapshot = options.getSnapshot()
     const selfId = options.getSelfId()
-    const self = snapshot?.players.find(player => player.id === selfId)
+    const self = snapshot?.players.find(player => player.accountId === selfId)
     const paused = controls.paused || !snapshot || !self || !self.online
     if (paused && !wasPaused) clearInput()
     wasPaused = paused
 
     if (snapshot) {
-      const nextGeometryKey = JSON.stringify([snapshot.roomId, snapshot.world, snapshot.beacon.x, snapshot.beacon.z, snapshot.beacon.radius, snapshot.beacon.required])
+      const nextGeometryKey = JSON.stringify([snapshot.tileId, snapshot.geometry, harborBeaconVisual(snapshot) && [snapshot.beacon.id, snapshot.beacon.x, snapshot.beacon.z, snapshot.beacon.radius, snapshot.beacon.required]])
       if (nextGeometryKey !== geometryKey) {
         const geometryChanged = geometryKey !== ''
-        harbor = createHarbor(snapshot)
+        region = createRegion(snapshot)
         geometryKey = nextGeometryKey
-        if (geometryChanged) clearNavigation('港口地圖已更新，請重新設定目的地。')
+        if (geometryChanged) clearNavigation('區域地圖已更新，請重新設定目的地。')
       }
-      if (lastRoomId !== snapshot.roomId || lastSelfId !== selfId) {
-        for (const player of players.values()) player.root.dispose()
+      if (lastTileId !== snapshot.tileId || lastSelfId !== selfId) {
+        for (const player of players.values()) { player.root.dispose(); player.npcMaterial?.dispose() }
         players.clear()
-        lastSnapshotKey = ''
-        lastRoomId = snapshot.roomId
+        lastSnapshot = null
+        lastTileId = snapshot.tileId
         lastSelfId = selfId
         yaw = 0
         pitch = DEFAULT_PITCH
         distance = DEFAULT_DISTANCE
         clearInput()
       }
-      const snapshotKey = `${snapshot.revision}:${snapshot.presenceRevision}`
-      if (snapshotKey !== lastSnapshotKey) {
-        lastSnapshotKey = snapshotKey
+      if (snapshot !== lastSnapshot) {
+        lastSnapshot = snapshot
+        const actors: VisualActor[] = [
+          ...snapshot.players.filter(p => p.accountId === selfId || p.online).map(p => ({ id: `player-${p.accountId}`, x: p.x, z: p.z })),
+          ...snapshot.npcs.map(npc => ({ id: `npc-${npc.id}`, ...npc.presentationPosition, y: npc.subZ, npcColor: npc.color })),
+        ]
         const visibleIds = new Set<string>()
-        for (const authoritative of snapshot.players) {
-          if (authoritative.id !== selfId && !authoritative.online) continue
+        for (const authoritative of actors) {
           visibleIds.add(authoritative.id)
           let visual = players.get(authoritative.id)
           if (!visual) {
-            visual = createPlayer(authoritative, authoritative.id === selfId)
+            visual = createPlayer(authoritative, authoritative.id === `player-${selfId}`)
             players.set(authoritative.id, visual)
+            // Canonical-grid coordinates use one unit per area cell.
+            visual.root.scaling.setAll(snapshot.geometry.presentation === 'canonical-area-grid' ? 0.42 : 1)
           }
+          if (visual.npcMaterial && authoritative.npcColor !== undefined) visual.npcMaterial.diffuseColor = Color3.FromHexString(`#${authoritative.npcColor.toString(16).padStart(6, '0')}`)
           visual.from.copyFrom(visual.root.position)
-          visual.target.set(authoritative.x, 0, authoritative.z)
+          visual.target.set(authoritative.x, authoritative.y ?? 0, authoritative.z)
           visual.receivedAt = now
           if (Vector3.Distance(visual.from, visual.target) > TELEPORT_DISTANCE) visual.from.copyFrom(visual.target)
         }
         for (const [id, visual] of players) {
-          if (!visibleIds.has(id)) { visual.root.dispose(); players.delete(id) }
+          if (!visibleIds.has(id)) { visual.root.dispose(); visual.npcMaterial?.dispose(); players.delete(id) }
         }
-      }
-      if (harbor) {
-        harbor.crystal.material = snapshot.beacon.completed ? mats.lit : mats.unlit
-        harbor.beam.setEnabled(snapshot.beacon.completed)
-        harbor.ring.material = snapshot.beacon.completed ? mats.lit : mats.gold
-        harbor.contributionLights.forEach((light, index) => { light.material = index < snapshot.beacon.contributors.length ? mats.lit : mats.unlit })
+        if (region?.beacon) {
+          region.beacon.crystal.material = snapshot.beacon.completed ? mats.lit : mats.unlit
+          region.beacon.beam.setEnabled(snapshot.beacon.completed)
+          region.beacon.ring.material = snapshot.beacon.completed ? mats.lit : mats.gold
+          region.beacon.contributionLights.forEach((light, index) => { light.material = index < snapshot.beacon.contributors.length ? mats.lit : mats.unlit })
+        }
       }
     } else {
       clearNavigation()
-      for (const player of players.values()) player.root.dispose()
+      for (const player of players.values()) { player.root.dispose(); player.npcMaterial?.dispose() }
       players.clear()
-      harbor?.root.dispose()
-      harbor = null
+      region?.root.dispose()
+      region = null
       geometryKey = ''
-      lastSnapshotKey = ''
-      lastRoomId = null
+      lastSnapshot = null
+      lastTileId = null
       lastSelfId = null
     }
 
@@ -508,7 +516,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
           stopIntent()
         } else {
           const waypoint = navigationPath[navigationIndex]
-          const speed = snapshot.world.movePerTick
+          const speed = snapshot.geometry.movePerStep
           if (!waypoint || typeof speed !== 'number') {
             clearNavigation('導航資料已變更，請重新設定目的地。')
             stopIntent()
@@ -554,12 +562,12 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
       visual.body.position.y = walking ? Math.abs(Math.sin(animationTime * 10)) * 0.045 : 0
       visual.cloak.rotation.x = -0.12 - (walking ? 0.1 : 0)
     }
-    const selfVisual = selfId ? players.get(selfId) : undefined
+    const selfVisual = selfId ? players.get(`player-${selfId}`) : undefined
     if (selfVisual) {
       if (controls.recenter) { yaw = selfVisual.root.rotation.y; pitch = DEFAULT_PITCH; distance = DEFAULT_DISTANCE; controls.recenter = false }
       const target = selfVisual.root.position.add(new Vector3(0, CAMERA_HEIGHT, 0))
       const direction = new Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch))
-      const hit = scene.pickWithRay(new Ray(target, direction, distance), mesh => harbor?.blockers.has(mesh as Mesh) ?? false)
+      const hit = scene.pickWithRay(new Ray(target, direction, distance), mesh => region?.blockers.has(mesh as Mesh) ?? false)
       const safeDistance = hit?.hit ? Math.max(camera.minZ + 0.02, hit.distance - 0.35) : distance
       cameraDistance = safeDistance < cameraDistance ? safeDistance : cameraDistance + (safeDistance - cameraDistance) * Math.min(1, delta * 6)
       camera.position.copyFrom(target.add(direction.scale(cameraDistance)))
@@ -567,13 +575,9 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
       const visibility = clamp((cameraDistance - 2) / 1.5, 0, 1)
       for (const item of selfVisual.meshes) item.mesh.visibility = item.visibility * visibility
     } else if (snapshot) {
-      const center = new Vector3((snapshot.world.minX + snapshot.world.maxX) / 2, 0, (snapshot.world.minZ + snapshot.world.maxZ) / 2)
+      const center = new Vector3((snapshot.geometry.minX + snapshot.geometry.maxX) / 2, 0, (snapshot.geometry.minZ + snapshot.geometry.maxZ) / 2)
       camera.position.copyFrom(center.add(new Vector3(0, 18, -18)))
       camera.setTarget(center)
-    }
-    if (harbor) {
-      harbor.crystal.rotation.y += delta * 0.45
-      harbor.crystal.position.y = 2.95 + Math.sin(animationTime * 1.8) * 0.1
     }
     scene.render()
     if (!ready) { ready = true; options.onReady() }
@@ -583,7 +587,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
       engine.stopRenderLoop(safeRender)
       clearInput()
       console.error('[multiplayer3d] Scene rendering failed', error)
-      options.onError('多人港口畫面中斷。請重新整理以取得伺服器最新狀態。')
+      options.onError('世界場景畫面中斷。請重新整理以取得伺服器最新狀態。')
     }
   }
   engine.runRenderLoop(safeRender)
@@ -599,6 +603,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     window.removeEventListener('blur', clearInput)
     window.removeEventListener('resize', resize)
     document.removeEventListener('visibilitychange', clearInput)
+    document.removeEventListener('focusin', focusChanged)
     canvas.removeEventListener('pointerdown', pointerDown)
     canvas.removeEventListener('pointermove', pointerMove)
     canvas.removeEventListener('pointerup', pointerUp)

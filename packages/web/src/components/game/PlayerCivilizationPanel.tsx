@@ -17,16 +17,16 @@ interface ActionError {
 }
 
 function usePlayerCivState() {
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const [state, setState] = useState<PlayerCivilizationSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setLoading(true)
     try {
-      const snapshot = await api.playerState(token)
+      const snapshot = await api.playerState(accountId)
       setState(snapshot)
       setError(null)
     } catch (err) {
@@ -34,7 +34,7 @@ function usePlayerCivState() {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [accountId])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -42,7 +42,7 @@ function usePlayerCivState() {
 }
 
 export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationPanelProps) {
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const { t } = useI18n()
   const { npcs, world } = useWorldState()
   const { state, loading, refresh } = usePlayerCivState()
@@ -54,9 +54,9 @@ export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationP
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!token) return
-    api.cardsHeld(token).then((r) => setHeldCards(r.drops)).catch(() => {})
-  }, [token])
+    if (!accountId) return
+    api.cardsHeld(accountId).then((r) => setHeldCards(r.drops)).catch(() => {})
+  }, [accountId])
 
   const showError = useCallback((context: string, message: string) => {
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
@@ -74,10 +74,10 @@ export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationP
     type: string,
     payload: Record<string, unknown>
   ): Promise<boolean> => {
-    if (!token) return false
+    if (!accountId) return false
     clearError()
     try {
-      const result = await api.playerAction(token, type, payload)
+      const result = await api.playerAction(accountId, type, payload)
       if (result.accepted) {
         await refresh()
         return true
@@ -88,7 +88,7 @@ export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationP
       showError(context, err instanceof Error ? err.message : 'Request failed')
       return false
     }
-  }, [token, refresh, showError, clearError])
+  }, [accountId, refresh, showError, clearError])
 
   const factionIds = (
     (world.facts?.factionEcologyStances as Array<{ factionId: string }> | undefined) ?? []
@@ -240,7 +240,7 @@ export function PlayerCivilizationPanel({ tileId, onClose }: PlayerCivilizationP
                   const ok = await submitAction('card', 'PLAYER_PLAYED_CARD', { cardId: Number(selectedCardId), tileId: tileId! })
                   if (ok) {
                     setSelectedCardId('')
-                    if (token) api.cardsHeld(token).then((r) => setHeldCards(r.drops)).catch(() => {})
+                    if (accountId) api.cardsHeld(accountId).then((r) => setHeldCards(r.drops)).catch(() => {})
                   }
                 }}
                 className="gi-touch px-3 py-1.5 bg-ground-800 border border-ground-600 rounded-sharp text-xs disabled:opacity-40 hover:enabled:border-ember-500 hover:enabled:text-ember-200 transition-colors"

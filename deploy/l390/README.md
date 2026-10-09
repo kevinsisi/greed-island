@@ -1,45 +1,88 @@
-# L390 multiplayer
-Run PowerShell commands from the repository root.
-Setup (`MULTIPLAYER_ALLOWED_ORIGINS` is required):
-```powershell
-Copy-Item deploy/l390/.env.example deploy/l390/.env
-notepad deploy/l390/.env
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml build
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d
-```
-Web binds to `GREED_L390_BIND_ADDR` (default `127.0.0.1`); set it to the L390 tailnet IP to bind only to tailnet. Do not use `0.0.0.0` or a LAN address.
-Rollback to loopback by setting `GREED_L390_BIND_ADDR=127.0.0.1` in `.env`, then rerun `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d`.
-Restart containers: `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml restart`
-Recreate after `.env` changes: `docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d --force-recreate`
-Before an upgrade, save the current images:
-```powershell
-docker save greed-island-l390-multiplayer:local greed-island-l390-web:local -o .\greed-l390-rollback-images.tar
-```
-Rollback to those images; `down` keeps the named volume:
-```powershell
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml down
-docker load -i .\greed-l390-rollback-images.tar
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml up -d
-```
-Back up the volume while multiplayer is stopped, then start it again:
-```powershell
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml stop multiplayer
-docker run --rm -v greed-l390-mp-data:/data -v "${PWD}:/backup" alpine:3.20 sh -c "tar -czf /backup/greed-l390-mp-data.tgz -C /data ."
-docker compose --env-file deploy/l390/.env -f deploy/l390/docker-compose.yml start multiplayer
-```
-Restore with multiplayer stopped using `tar -xzf` and the same volume mounts.
-Retrieve fixture credentials (the output is secret; do not paste it into logs or tickets):
-```powershell
-docker run --rm -v greed-l390-mp-data:/data alpine:3.20 cat /data/credentials.json
-```
+# L390 unified server candidate
 
-Known limits:
-- Login is limited to 20 attempts per source IP per 60 s (`http.ts:52-59`). Behind Caddy every player shares one source IP, so many logins within a minute get 429; retry after a minute.
-- Self-service accounts are stored as scrypt hashes in `/app/mp-data/accounts.json` (mode `0600`); the persistent `greed-l390-mp-data` volume keeps them and registered player events across container recreation. Existing `credentials.json` fixture identities remain separate.
-- Admin claiming is optional. To authorize Kevin's reserved `kevin950805` account, deploy a one-time random claim code in `/app/mp-data/admin-claim-code` (mode `0600`) without putting the code in this repository or logs. `MP_ADMIN_CLAIM_FILE` defaults to that container path. The claim file is atomically renamed with `.used` after successful claim; never put the password in deployment configuration—the account owner sets it on the registration page.
-- Move commands are limited to one per player per 100 ms tick (429 `MOVE_RATE_LIMIT`); this is a game rule, not an error.
+This is a source/configuration candidate, not a deployed stack. Do not run a
+rebuild/recreate or reload the live Caddy configuration until the owner approves
+the exact backup, dry-run identity mapping, active-admin verification and
+progress-preservation plan. Feature-branch CI/browser/routing acceptance must
+also pass on the complete bundle first.
 
-Public path (active since 2026-10-08; reachable inside the tailnet only, the GB10 Caddy name resolves to its tailnet IP):
-- Browser -> `https://greed.sisihome.org` -> GB10 Caddy (`/opt/caddy/routes.caddyfile`, `@greed host greed.sisihome.org`) -> `https://nb-l390.bunny-salmon.ts.net:8100` (L390 `tailscale serve`) -> `127.0.0.1:28100` (web container) -> `/mp-api/*` -> multiplayer:4179.
-- Backups made before the switch: GB10 `/opt/caddy/.deploy-backups/20261008T005604Z-greed/`; L390 serve state before: `_ProjectControl/work/greed-l390-serve-before-1008.txt`.
-- Undo: remove the `@greed` block from `/opt/caddy/routes.caddyfile` (backups sit next to it as `routes.caddyfile.bak-before-greed-<time>`), reload Caddy; on L390 run `tailscale serve --https=8100 off`.
+## One active topology
+
+The current private route is retained:
+Browser → https://greed.sisihome.org → existing GB10 Caddy → existing L390
+tailscale serve → 127.0.0.1:28100 web → existing multiplayer:4179 container.
+That backend now runs dist/server.js, the one unified canonical server. It is
+not an additional service, account store or world. Port 4179 is internal only;
+web remains loopback-bound. No GB10, tailscale, DNS or public exposure change is
+part of this candidate.
+
+Caddy serves /game and redirects /multiplayer-3d and /prototype-3d once to
+/game. It proxies only reviewed exact auth/world/profile/map/version endpoints.
+Unreviewed /api paths, /mp-api and card-image paths are denied. Health proxies
+the actual unified application. Auth and world keep the same cookie principal;
+Origin is forwarded unchanged.
+
+## Database selection and preserved sources
+
+GREED_L390_CANONICAL_VOLUME has no default and must name an already existing,
+owner-reviewed volume containing greed-island.sqlite. The container opens that
+file with fileMustExist. The read-only identity/EventLog/foreign-key/active-admin
+preflight happens before WAL or schema constructors. No startup migration,
+fresh world, first-signup admin, admin claim file or credential generation is
+allowed.
+
+The former greed-l390-mp-data volume is not mounted, copied, renamed or deleted.
+Its room.sqlite/accounts.json/fixture credentials and progress remain a
+preservation source until the explicit reviewed import is approved. Do not
+point the canonical volume at it merely to bypass the required decision.
+Canonical account IDs, source aliases, original password verifiers and stored
+progress require an exact dry-run import report and rollback backup. Logging
+in successfully alone does not establish progress preservation.
+
+## Configuration review
+
+.env.example contains the exact HTTPS allowed origin and existing host port.
+GREED_L390_CANONICAL_VOLUME intentionally stays blank. Do not copy former
+MULTIPLAYER_* / MP_ADMIN_CLAIM_FILE configuration into the new startup. No
+JWT secret is used by the unified cookie-session boundary.
+
+The source configuration does not contain an import command or an automatic
+owner-bootstrap flow. Immutable CI images use GREED_L390_IMAGE_TAG=<exactSHA>;
+GREED_L390_BUILD_SHA carries matching health metadata. Main deployment is
+source-defined in Deploy L390; the former desktop workflow is manual-only. Selecting the canonical data source, preserving all
+existing multiplayer/prototype progress, and the guarded admin recovery/last
+admin adapter remain deployment gates. Existing social/card/NPC/commerce
+mutators cannot be exposed before their identity, authority and privacy review.
+
+## Verification and rollback
+
+python3 scripts/test-l390-routing.py runs real Caddy containers on an isolated
+internal Docker network with synthetic static files/backend. It proves route
+matching, proxy header forwarding, /game's terminating redirect and denied
+legacy endpoints. Its stub 401 is not application authentication evidence.
+Node22 native tests and the disposable unified browser fixture prove the
+actual auth/world paths separately.
+
+For a later authorized cutover, preserve both current images, versioned Caddy
+configuration, both source data backups and the prior compose/environment
+settings before changing anything. Verify existing owner login/recovery and
+progress against the reviewed dry-run report, then new-player signup, two
+peers, cross-region/NPC visibility, reconnect/restart, private reachability and
+actual unified health. Rollback restores the prior image/configuration and
+separate source databases; no destructive volume operations belong here.
+
+## First-cutover review receipt
+
+The deployer refuses the first old-room→canonical cutover without the local
+deploy/l390/unified-cutover-review.json review record. Its fields are reviewed,
+canonicalVolume, legacyVolumes, mappingDigest and progressPreservationDigest.
+This record belongs to the completed owner-reviewed dry-run/import process;
+setting a flag does not supply a mapping or migrate data. No sample with
+reviewed:true is checked in. Both source and ready staged DB stay backed up
+locally. Source volume and staged canonical volume are distinct.
+
+The CI package contains code images only. Local AppData backups and diagnostics
+are never uploaded. Source/data readiness failure occurs before stopping any
+old container. A partial-stop failure enters the same protected rollback path;
+rollback uses a validated captured resolved Compose model and exact prior image
+IDs rather than assuming a mutable .env still describes the previous stack.
