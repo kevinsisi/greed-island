@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
@@ -21,7 +21,7 @@ describe('npc router', () => {
     const account = await accounts.createAccount('gon@example.test', 'hunter123')
     accounts.updateProfile(account.id, { nickname: '小傑' })
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-test',
       name: { zh: '米特', en: 'Mito' },
@@ -46,14 +46,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/${profile.id}/interact`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ message: '我是誰？' }),
@@ -78,7 +75,7 @@ describe('npc router', () => {
     const account = await accounts.createAccount('dialogue@example.test', 'hunter123')
     accounts.updateProfile(account.id, { nickname: '奇犽' })
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-dialogue',
       name: { zh: '雲漪', en: 'Yunyi' },
@@ -108,14 +105,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/${profile.id}/interact`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ intent: 'greet', message: '你好，雲漪。' }),
@@ -154,7 +148,7 @@ describe('npc router', () => {
     const account = await accounts.createAccount('shout@example.test', 'hunter123')
     accounts.updateProfile(account.id, { nickname: '小喜' })
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profiles: NpcProfile[] = [
       {
         id: 'npc-a',
@@ -196,14 +190,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-a', 'npc-b'], message: '各位好' }),
@@ -267,7 +258,7 @@ describe('npc router', () => {
     const aiAddress = aiServer.address() as AddressInfo
     settings.setSetting('opencode_base_url', `http://127.0.0.1:${aiAddress.port}`)
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-ai',
       name: { zh: '星沉', en: 'Xingchen' },
@@ -294,14 +285,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-ai'], message: '大家好' }),
@@ -370,7 +358,7 @@ describe('npc router', () => {
       `http://127.0.0.1:${fastAiAddress.port}`,
     ].join('\n'))
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-ai-failover',
       name: { zh: '星沉', en: 'Xingchen' },
@@ -405,14 +393,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-ai-failover'], message: '大家好' }),
@@ -455,7 +440,7 @@ describe('npc router', () => {
     const aiAddress = aiServer.address() as AddressInfo
     settings.setSetting('opencode_base_url', `http://127.0.0.1:${aiAddress.port}`)
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-rude-ai',
       name: { zh: '霧川', en: 'Wuchuan' },
@@ -490,15 +475,12 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const startedAt = Date.now()
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-rude-ai'], message: '廢物們' }),
@@ -542,7 +524,7 @@ describe('npc router', () => {
     const aiAddress = aiServer.address() as AddressInfo
     settings.setSetting('opencode_base_url', `http://127.0.0.1:${aiAddress.port}`)
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-slow-ai',
       name: { zh: '星沉', en: 'Xingchen' },
@@ -577,15 +559,12 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const startedAt = Date.now()
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-slow-ai'], message: '大家好' }),
@@ -613,7 +592,7 @@ describe('npc router', () => {
     const settings = new SettingsStore(db)
     const account = await accounts.createAccount('rotate-shout@example.test', 'hunter123')
 
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profiles: NpcProfile[] = [
       {
         id: 'npc-a',
@@ -662,14 +641,11 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/local-shout`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          ...cookieTestHeaders(token),
           'content-type': 'application/json',
         },
         body: JSON.stringify({ tileId: 't_central', candidateNpcIds: ['npc-a', 'npc-b'], message: '還有人聽得到嗎？' }),
@@ -691,7 +667,7 @@ describe('npc router', () => {
     const store = new PlayerStateStore(db)
     const settings = new SettingsStore(db)
     const account = await accounts.createAccount('hold@example.test', 'hunter123')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const profile: NpcProfile = {
       id: 'npc-hold',
       name: { zh: '守門人', en: 'Gatekeeper' },
@@ -721,13 +697,10 @@ describe('npc router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
       const response = await fetch(`http://127.0.0.1:${address.port}/npc/${profile.id}/dialog-hold`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       const payload = (await response.json()) as { held: boolean; tick: number; expiresAtTick: number }
 

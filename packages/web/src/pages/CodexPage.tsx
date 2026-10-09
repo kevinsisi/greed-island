@@ -39,7 +39,7 @@ const DEFAULT_CARRY_SLOT_COUNT = 45
 export function CodexPage() {
   const { cards } = useWorldState()
   const { t } = useI18n()
-  const { account, token } = useAuth()
+  const { account, accountId } = useAuth()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [filterId, setFilterId] = useState<CardFilter['id']>('all')
   const [codex, setCodex] = useState<ServerCodexResponse | null>(null)
@@ -47,19 +47,19 @@ export function CodexPage() {
   const [busy, setBusy] = useState(false)
 
   const refresh = useCallback(async () => {
-    if (!token) {
+    if (!accountId) {
       setCodex(null)
       return
     }
     try {
-      const r = await api.codex(token)
+      const r = await api.codex(accountId)
       setCodex(r)
       setError(null)
     } catch (err) {
       if (err instanceof ApiError) setError(err.message)
       else if (err instanceof Error) setError(err.message)
     }
-  }, [token])
+  }, [accountId])
 
   useEffect(() => {
     void refresh()
@@ -112,7 +112,7 @@ export function CodexPage() {
 
   const startMaterializeLongPress = useCallback(
     (codexId: number) => {
-      if (!token) return
+      if (!accountId) return
       setLongPressCodexId(codexId)
       setLongPressProgress(0)
       const startedAt = Date.now()
@@ -129,7 +129,7 @@ export function CodexPage() {
         setLongPressProgress(1)
         setBusy(true)
         try {
-          await api.codexMaterialize(token, codexId)
+          await api.codexMaterialize(accountId, codexId)
           await refresh()
         } catch (err) {
           if (err instanceof ApiError) setError(err.message)
@@ -141,7 +141,7 @@ export function CodexPage() {
         }
       }, HOLD_MS)
     },
-    [token, refresh]
+    [accountId, refresh]
   )
   const cancelMaterializeLongPress = useCallback(() => {
     if (longPressTimerRef.current !== null) {

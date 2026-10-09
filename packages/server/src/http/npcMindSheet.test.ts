@@ -5,7 +5,7 @@
 
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
@@ -75,16 +75,13 @@ async function setupApp(opts: { deceased?: boolean } = {}) {
   const store = new PlayerStateStore(db)
   const settings = new SettingsStore(db)
   const account = await accounts.createAccount('player@example.test', 'password1')
-  const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+  const authConfig: AuthConfig = createCookieTestAuthorization(db)
   const runtime = buildRuntime(opts)
   const app = express()
   app.use(express.json())
   app.use(createNpcRouter({ runtime, store, settings, accounts, authConfig }))
   const server = await listen(app)
-  const token = jwt.sign(
-    { sub: account.id, email: account.email, role: account.role },
-    authConfig.jwtSecret,
-  )
+  const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
   return { db, server, token }
 }
 
@@ -94,7 +91,7 @@ describe('GET /npc/:id/intent (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${ALIVE_PROFILE.id}/intent`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(200)
       const body = (await res.json()) as {
@@ -122,7 +119,7 @@ describe('GET /npc/:id/intent (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/npc.nobody/intent`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(404)
       const body = (await res.json()) as { error: string }
@@ -138,7 +135,7 @@ describe('GET /npc/:id/intent (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${ALIVE_PROFILE.id}/intent`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(410)
       const body = (await res.json()) as { error: string }
@@ -156,7 +153,7 @@ describe('GET /npc/:id/beliefs (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${ALIVE_PROFILE.id}/beliefs`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(200)
       const body = (await res.json()) as {
@@ -181,7 +178,7 @@ describe('GET /npc/:id/beliefs (MindSheet)', () => {
       const addr = server.address() as AddressInfo
       // use a known NPC id that returns empty beliefs in the mock
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${ALIVE_PROFILE.id}/beliefs`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(200)
     } finally {
@@ -195,7 +192,7 @@ describe('GET /npc/:id/beliefs (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/npc.nobody/beliefs`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(404)
     } finally {
@@ -209,7 +206,7 @@ describe('GET /npc/:id/beliefs (MindSheet)', () => {
     try {
       const addr = server.address() as AddressInfo
       const res = await fetch(`http://127.0.0.1:${addr.port}/npc/${ALIVE_PROFILE.id}/beliefs`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: { ...cookieTestHeaders(token) },
       })
       expect(res.status).toBe(410)
     } finally {

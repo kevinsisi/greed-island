@@ -1,7 +1,11 @@
 import express from 'express'
+import Database from 'better-sqlite3'
+import { createCookieTestAuthorization } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+const fixtures: Database.Database[] = []
+afterEach(() => { for (const db of fixtures.splice(0)) db.close() })
 import { createGoodsRouter } from './goodsRouter.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import type { GoodsInventoryRow } from '../projections/goodsInventory.js'
@@ -13,7 +17,8 @@ function makeApp(rows: GoodsInventoryRow[], priceRows: MarketPriceRow[] = []) {
     getMarketPrices: () => priceRows,
   } as unknown as SimulationRuntime
   const app = express()
-  app.use('/api', createGoodsRouter({ runtime }))
+  const db = new Database(':memory:'); fixtures.push(db)
+  app.use('/api', createGoodsRouter({ runtime, authConfig: createCookieTestAuthorization(db) }))
   return app
 }
 

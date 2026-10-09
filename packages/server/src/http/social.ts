@@ -5,10 +5,10 @@
 // stream (/api/social/stream) can push real-time hints to peers.
 
 import { Router, type Request, type Response } from 'express'
-import jwt from 'jsonwebtoken'
 import type { SimulationRuntime } from '../sim/runtime.js'
 import { requireAuth, type AuthConfig } from './auth.js'
-import { AccountStore, isAccountRole, type AccountRole } from './accounts.js'
+import type { CanonicalAccountView, CanonicalAccountSummary } from './canonicalAccountView.js'
+export { createSocialSseRouter } from './socialStream.js'
 import {
   ALLIANCE_MAX_MEMBERS,
   MESSAGE_MAX,
@@ -19,32 +19,18 @@ import {
   type AllianceRow,
   type FriendRow,
   type MessageRow,
-  type PlayerLocationRow,
 } from './socialStore.js'
-import type { SocialBus, SocialEvent } from './socialBus.js'
-
-// Players are considered "online in this area" if their last seen tick
-// is within this window of the current simulation tick. With a 5s tick
-// rate this is roughly 5 minutes of grace.
-const PRESENCE_FRESH_TICKS = 60
-const HUB_PRESENCE_TILE_ID = 'hub'
-const AREA_PRESENCE_MAX_X = 600
-const AREA_PRESENCE_MAX_Y = 400
-const HUB_PRESENCE_MAX_X = 800
-const HUB_PRESENCE_MAX_Y = 600
-const AREA_PRESENCE_MIN_Z = 0
-const AREA_PRESENCE_MAX_Z = 16
+import type { SocialBus } from './socialBus.js'
 
 type PublicAccountSummary = Readonly<{
   id: number
-  email: string
   displayName: string
 }>
 
 export function createSocialRouter(input: {
   runtime: SimulationRuntime
   social: SocialStore
-  accounts: AccountStore
+  accounts: CanonicalAccountView
   bus: SocialBus
   authConfig: AuthConfig
 }): Router {
@@ -177,14 +163,24 @@ export function createSocialRouter(input: {
     const peer = parseUserId(req.params.userId)
     if (peer === null) return sendError(res, new SocialError('INVALID_USER', 'Invalid user id.'))
     const peerAccount = input.accounts.findById(peer)
-    if (!peerAccount) return sendError(res, new SocialError('USER_NOT_FOUND', 'User not found.'))
     const limit = clampInt(req.query.limit, 1, 200, 50)
     const rows = input.social.listMessagesBetween(me, peer, limit)
-    input.social.markMessagesRead(me, peer)
+    // Disabling a peer prevents new targeting, not access to the caller's
+    // preserved inbox. No disabled login/contact alias is exposed.
+    if (!peerAccount && rows.length === 0) return sendError(res, new SocialError('USER_NOT_FOUND', 'User not found.'))
     res.json({
-      peer: accountToSummary(peerAccount),
+      peer: peerAccount ? accountToSummary(peerAccount) : { id: peer, displayName: 'Unavailable account' },
       messages: rows.map(messageRowToDto),
     })
+  })
+
+  // Reading messages is side-effect free; marking only this actor's inbox is
+  // an explicit Origin/context-guarded mutation.
+  router.post('/social/messages/:userId/read', handleSocial, (req: Request, res: Response) => {
+    const peer = parseUserId(req.params.userId)
+    if (peer === null) return sendError(res, new SocialError('INVALID_USER', 'Invalid user id.'))
+    if (!input.accounts.findById(peer) && input.social.listMessagesBetween(req.auth!.sub, peer, 1).length === 0) return sendError(res, new SocialError('USER_NOT_FOUND', 'User not found.'))
+    res.json({ marked: input.social.markMessagesRead(req.auth!.sub, peer) })
   })
 
   router.get('/social/conversations', handleSocial, (req: Request, res: Response) => {
@@ -194,7 +190,7 @@ export function createSocialRouter(input: {
       conversations: rows.map((c) => {
         const peer = input.accounts.findById(c.peerId)
         return {
-          peer: peer ? accountToSummary(peer) : { id: c.peerId, email: 'unknown', displayName: 'unknown' },
+          peer: peer ? accountToSummary(peer) : { id: c.peerId, displayName: 'Unavailable account' },
           lastMessage: messageRowToDto(c.lastMessage),
           unread: c.unread,
         }
@@ -205,79 +201,34 @@ export function createSocialRouter(input: {
   // -- Presence ---------------------------------------------------------
 
   router.post('/social/presence', handleSocial, (req: Request, res: Response) => {
-    const me = req.auth!.sub
-    const tileId = readTileId(req.body)
-    if (tileId === null) return sendError(res, new SocialError('INVALID_TILE', 'tileId is required.'))
-    const position = readPresencePosition(req.body, tileId)
-    const clientUpdatedAt = readClientUpdatedAt(req.body)
-    const tick = input.runtime.getCurrentTick()
-    if (tileId === HUB_PRESENCE_TILE_ID) {
-      const updated = input.social.upsertHubLocation(me, tick, position, clientUpdatedAt)
-      res.json({ location: presenceToDto(updated.row) })
-      return
-    }
-    const previous = input.social.getPlayerLocation(me)
-    const updated = input.social.upsertPlayerLocation(me, tileId, tick, position, clientUpdatedAt)
-    if (updated.applied && (!previous || previous.tile_id !== updated.row.tile_id)) {
-      // notify other players in the new tile that someone arrived
-      const peers = input.social.listPlayersInTile(updated.row.tile_id, tick - PRESENCE_FRESH_TICKS)
-      for (const p of peers) {
-        if (p.user_id === me) continue
-        input.bus.publish({
-          type: 'presence.enter',
-          to: p.user_id,
-          userId: me,
-          tileId: updated.row.tile_id,
-          occurredAt: new Date().toISOString(),
-        })
-      }
-      if (previous) {
-        const prevPeers = input.social.listPlayersInTile(previous.tile_id, tick - PRESENCE_FRESH_TICKS)
-        for (const p of prevPeers) {
-          if (p.user_id === me) continue
-          input.bus.publish({
-            type: 'presence.leave',
-            to: p.user_id,
-            userId: me,
-            tileId: previous.tile_id,
-            occurredAt: new Date().toISOString(),
-          })
-        }
-      }
-    }
-    res.json({ location: presenceToDto(updated.row) })
+    // Compatibility heartbeat only. Never persist body/localStorage position
+    // or admit an account; the world service alone owns both truths.
+    const actor = input.runtime.getAdmittedPlayerWorldActors().find(value => value.accountId === req.auth!.sub)
+    const pose = actor ? input.runtime.getPlayerWorldGridPose(actor.accountId) : null
+    if (!actor || !pose) { res.status(409).json({ error: 'WORLD_PRESENCE_REQUIRED' }); return }
+    res.json({ location: {
+      userId: actor.accountId, tileId: actor.tileId,
+      x: pose.subCol, y: pose.subRow, z: pose.subZ,
+      lastSeenTick: input.runtime.getCurrentTick(),
+    } })
   })
 
   router.get('/social/nearby', handleSocial, (req: Request, res: Response) => {
-    const me = req.auth!.sub
-    const tileId = typeof req.query.tileId === 'string' ? req.query.tileId : null
-    const tick = input.runtime.getCurrentTick()
-    const myLoc = input.social.getPlayerLocation(me)
-    const targetTile = tileId ?? myLoc?.tile_id ?? null
-    if (!targetTile) {
-      res.json({ tileId: null, players: [] })
-      return
+    const actors = input.runtime.getAdmittedPlayerWorldActors()
+    const me = actors.find(value => value.accountId === req.auth!.sub)
+    if (!me) { res.status(409).json({ error: 'WORLD_PRESENCE_REQUIRED' }); return }
+    // A requested tile is a view assertion, never a way to enumerate a remote
+    // location or replace the caller's authoritative region.
+    if (req.query.tileId !== undefined && req.query.tileId !== me.tileId) {
+      res.status(409).json({ error: 'PLAYER_LOCATION_CHANGED' }); return
     }
-    const rows = targetTile === HUB_PRESENCE_TILE_ID
-      ? input.social.listHubPlayers(tick - PRESENCE_FRESH_TICKS)
-      : input.social.listPlayersInTile(targetTile, tick - PRESENCE_FRESH_TICKS)
-    const players = rows
-      .filter((r) => r.user_id !== me)
-      .map((r) => {
-        const acc = input.accounts.findById(r.user_id)
-        return acc
-          ? {
-              ...accountToSummary(acc),
-              tileId: r.tile_id,
-              lastSeenTick: r.last_seen_tick,
-              x: r.pos_x,
-              y: r.pos_y,
-              z: r.pos_z,
-            }
-          : null
-      })
-      .filter((p): p is PublicAccountSummary & { tileId: string; lastSeenTick: number; x: number | null; y: number | null; z: number | null } => p !== null)
-    res.json({ tileId: targetTile, players })
+    const players = actors.filter(actor => actor.accountId !== me.accountId && actor.tileId === me.tileId).flatMap(actor => {
+      const account = input.accounts.findById(actor.accountId)
+      const pose = input.runtime.getPlayerWorldGridPose(actor.accountId)
+      return account && pose ? [{ ...accountToSummary(account), tileId: actor.tileId,
+        lastSeenTick: input.runtime.getCurrentTick(), x: pose.subCol, y: pose.subRow, z: pose.subZ }] : []
+    })
+    res.json({ tileId: me.tileId, players })
   })
 
   // -- Alliance ---------------------------------------------------------
@@ -355,106 +306,15 @@ export function createSocialRouter(input: {
   return router
 }
 
-// ---------------------------------------------------------------------- SSE
-
-const KEEPALIVE_INTERVAL_MS = 25_000
-
-export function createSocialSseRouter(input: {
-  bus: SocialBus
-  authConfig: AuthConfig
-}): Router {
-  const router = Router()
-
-  // EventSource cannot set Authorization headers, so this stream also
-  // accepts ?access_token=<jwt>. The header form still wins when
-  // present (Caddy / proxies may strip query strings).
-  router.get('/social/stream', (req: Request, res: Response) => {
-    const claims =
-      readClaimsFromHeader(req, input.authConfig) ?? readClaimsFromQuery(req, input.authConfig)
-    const userId = claims?.sub
-    if (typeof userId !== 'number') {
-      res.status(401).json({ error: 'UNAUTHORIZED' })
-      return
-    }
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders?.()
-
-    res.write(`retry: 5000\n\n`)
-    res.write(`event: hello\ndata: ${JSON.stringify({ userId })}\n\n`)
-
-    const unsubscribe = input.bus.subscribe(userId, (event: SocialEvent) => {
-      res.write(`event: ${event.type}\n`)
-      res.write(`data: ${JSON.stringify(event)}\n\n`)
-    })
-
-    const keepalive = setInterval(() => {
-      res.write(': keepalive\n\n')
-    }, KEEPALIVE_INTERVAL_MS)
-
-    const cleanup = () => {
-      clearInterval(keepalive)
-      unsubscribe()
-      try {
-        res.end()
-      } catch {
-        // socket may already be closed
-      }
-    }
-
-    req.on('close', cleanup)
-    req.on('error', cleanup)
-  })
-
-  return router
-}
-
 // ---------------------------------------------------------------------- helpers
-
-function readClaimsFromHeader(
-  req: Request,
-  config: AuthConfig
-): { sub: number; email: string; role: AccountRole } | null {
-  const header = req.header('authorization') ?? req.header('Authorization')
-  if (!header || !header.toLowerCase().startsWith('bearer ')) return null
-  return verifyJwt(header.slice(7).trim(), config)
-}
-
-function readClaimsFromQuery(
-  req: Request,
-  config: AuthConfig
-): { sub: number; email: string; role: AccountRole } | null {
-  const raw = req.query.access_token
-  const token = typeof raw === 'string' ? raw.trim() : ''
-  if (token.length === 0) return null
-  return verifyJwt(token, config)
-}
-
-function verifyJwt(token: string, config: AuthConfig): { sub: number; email: string; role: AccountRole } | null {
-  if (token.length === 0) return null
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret) as {
-      sub?: unknown
-      email?: unknown
-      role?: unknown
-    }
-    if (typeof decoded.sub !== 'number' || typeof decoded.email !== 'string') return null
-    const role = isAccountRole(decoded.role) ? decoded.role : 'player'
-    return { sub: decoded.sub, email: decoded.email, role }
-  } catch {
-    return null
-  }
-}
 
 function parseUserId(raw: unknown): number | null {
   return parsePositiveInt(raw)
 }
 
 function parsePositiveInt(raw: unknown): number | null {
-  const n = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
-  if (!Number.isFinite(n) || n <= 0) return null
+  const n = typeof raw === 'string' && /^[1-9][0-9]*$/.test(raw) ? Number(raw) : NaN
+  if (!Number.isSafeInteger(n) || n <= 0) return null
   return n
 }
 
@@ -473,50 +333,9 @@ function readMessageContent(body: unknown): string | null {
   return trimmed
 }
 
-function readTileId(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null
-  const t = (body as { tileId?: unknown }).tileId
-  if (typeof t !== 'string') return null
-  const trimmed = t.trim()
-  if (trimmed.length === 0 || trimmed.length > 64) return null
-  return trimmed
-}
-
-function readPresencePosition(body: unknown, tileId: string): { x: number; y: number; z: number } | null {
-  if (!body || typeof body !== 'object') return null
-  const rawX = (body as { x?: unknown }).x
-  const rawY = (body as { y?: unknown }).y
-  const rawZ = (body as { z?: unknown }).z
-  if (typeof rawX !== 'number' || typeof rawY !== 'number') return null
-  if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return null
-  const maxX = tileId === HUB_PRESENCE_TILE_ID ? HUB_PRESENCE_MAX_X : AREA_PRESENCE_MAX_X
-  const maxY = tileId === HUB_PRESENCE_TILE_ID ? HUB_PRESENCE_MAX_Y : AREA_PRESENCE_MAX_Y
-  const z = typeof rawZ === 'number' && Number.isFinite(rawZ) ? rawZ : 0
-  return {
-    x: Math.max(0, Math.min(maxX, Math.round(rawX))),
-    y: Math.max(0, Math.min(maxY, Math.round(rawY))),
-    z: Math.max(AREA_PRESENCE_MIN_Z, Math.min(AREA_PRESENCE_MAX_Z, Math.round(z))),
-  }
-}
-
-function readClientUpdatedAt(body: unknown): number | null {
-  if (!body || typeof body !== 'object') return null
-  const raw = (body as { clientUpdatedAt?: unknown }).clientUpdatedAt
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
-  return Math.max(0, Math.round(raw))
-}
-
-function accountToSummary(account: {
-  id: number
-  email: string
-  nickname?: string | null
-}): PublicAccountSummary {
-  const fallback = account.email.split('@')[0] ?? account.email
-  return {
-    id: account.id,
-    email: account.email,
-    displayName: account.nickname ?? fallback,
-  }
+function accountToSummary(account: CanonicalAccountSummary): PublicAccountSummary {
+  // An account's contact/login aliases are not peer presence or social data.
+  return { id: account.id, displayName: account.displayName }
 }
 
 type FriendDto = {
@@ -531,17 +350,17 @@ type FriendDto = {
 
 function friendRowToDto(
   row: FriendRow,
-  accounts: AccountStore,
+  accounts: CanonicalAccountView,
   perspectiveUserId?: number
 ): FriendDto {
   const requester = accounts.findById(row.requester_id)
   const addressee = accounts.findById(row.addressee_id)
   const requesterSummary = requester
     ? accountToSummary(requester)
-    : { id: row.requester_id, email: 'unknown', displayName: 'unknown' }
+    : { id: row.requester_id, displayName: 'Unavailable account' }
   const addresseeSummary = addressee
     ? accountToSummary(addressee)
-    : { id: row.addressee_id, email: 'unknown', displayName: 'unknown' }
+    : { id: row.addressee_id, displayName: 'Unavailable account' }
   const dto: FriendDto = {
     id: row.id,
     status: row.status,
@@ -577,7 +396,7 @@ function messageRowToDto(row: MessageRow): {
 function allianceToDto(
   alliance: AllianceRow,
   members: AllianceMemberRow[],
-  accounts: AccountStore
+  accounts: CanonicalAccountView
 ): {
   id: number
   name: string
@@ -596,32 +415,12 @@ function allianceToDto(
       return {
         ...(acc
           ? accountToSummary(acc)
-          : { id: m.user_id, email: 'unknown', displayName: 'unknown' }),
+          : { id: m.user_id, displayName: 'Unavailable account' }),
         joinedAt: new Date(m.joined_at).toISOString(),
         isLeader: m.user_id === alliance.leader_id,
       }
     }),
     maxMembers: ALLIANCE_MAX_MEMBERS,
-  }
-}
-
-function presenceToDto(row: PlayerLocationRow): {
-  userId: number
-  tileId: string
-  x: number | null
-  y: number | null
-  z: number | null
-  lastSeenTick: number
-  updatedAt: string
-} {
-  return {
-    userId: row.user_id,
-    tileId: row.tile_id,
-    x: row.pos_x,
-    y: row.pos_y,
-    z: row.pos_z,
-    lastSeenTick: row.last_seen_tick,
-    updatedAt: new Date(row.updated_at).toISOString(),
   }
 }
 

@@ -136,3 +136,25 @@ describe('AmbientNarrator.backgroundRefresh', () => {
     expect(userPromptOf(mockedGenerate.mock.calls.length - 1)).toContain('t_b')
   })
 })
+
+
+describe('AmbientNarrator.peek', () => {
+  it('never schedules AI or registers a visitor, and returns only existing cache', async () => {
+    const narrator = new AmbientNarrator(makeSettings(1))
+    expect(narrator.peek('t_a')).toBeNull()
+    narrator.tickRefresh(100, getContext)
+    await flush()
+    expect(mockedGenerate).not.toHaveBeenCalled()
+    narrator.backgroundRefresh(PERIOD, ['t_a'], getContext)
+    await flush()
+    expect(mockedGenerate).toHaveBeenCalledTimes(1)
+    const cached = narrator.peek('t_a')
+    expect(cached).toMatchObject({ tileId: 't_a', text: '潮味的風從巷口灌進來。' })
+    if (!cached) throw new Error('Missing generated cache')
+    ;(cached as { text: string }).text = 'caller changed copy'
+    expect(narrator.peek('t_a')?.text).toBe('潮味的風從巷口灌進來。')
+    narrator.tickRefresh(100, getContext)
+    await flush()
+    expect(mockedGenerate).toHaveBeenCalledTimes(1)
+  })
+})

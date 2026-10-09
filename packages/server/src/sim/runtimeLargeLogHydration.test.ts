@@ -100,6 +100,10 @@ function makeLargeLogStore(): { store: any; tickWindowReads: TickWindowRead[] } 
       readLatestFactValues: () => ({}),
       readEvents: () => [],
       readRecentEvents: () => [],
+      readRecentEventsExcludingTypes: () => [],
+      readRecentEventsByTypes: () => [],
+      readLatestEventsPerActor: () => [],
+      readEventsByActorCommand: () => [],
       readEventsByTickWindow: (input: TickWindowRead) => {
         tickWindowReads.push(input)
         const events = ecologyEvents

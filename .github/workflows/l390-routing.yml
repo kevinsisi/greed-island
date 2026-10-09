@@ -1,0 +1,40 @@
+name: L390 Caddy routing
+
+on:
+  push:
+    branches:
+      - feat/tideborn-3d-preview
+    paths:
+      - deploy/l390/**
+      - packages/web/Dockerfile
+      - scripts/test-l390-routing.py
+      - .github/workflows/l390-routing.yml
+  pull_request:
+    paths:
+      - deploy/l390/**
+      - packages/web/Dockerfile
+      - scripts/test-l390-routing.py
+      - .github/workflows/l390-routing.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact L390 Caddy configuration and HTTP routing
+        run: python3 scripts/test-l390-routing.py
+      - name: Retain routing evidence and versioned deployment configuration
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l390-routing-${{ github.sha }}
+          path: artifacts/l390-routing/
+          if-no-files-found: error
+          retention-days: 14

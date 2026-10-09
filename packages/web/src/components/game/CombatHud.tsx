@@ -36,7 +36,7 @@ interface CombatHudProps {
 }
 
 export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc', hand, initialUsedCardClasses }: CombatHudProps) {
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const [session, setSession] = useState<ServerCombatSession>(initialSession)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,12 +59,12 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc',
 
   const submit = useCallback(
     async (action: CombatAction) => {
-      if (!token || busy) return
+      if (!accountId || busy) return
       setBusy(true)
       setError(null)
       const cardClass = selectedCard ?? undefined
       try {
-        const r = await api.combatAction(token, session.combatId, action, undefined, cardClass)
+        const r = await api.combatAction(accountId, session.combatId, action, undefined, cardClass)
         setSession(r.session)
         setLastEvents(r.events)
         if (cardClass) {
@@ -83,7 +83,7 @@ export function CombatHud({ npcName, initialSession, onClose, enemyType = 'npc',
         setBusy(false)
       }
     },
-    [token, session.combatId, busy, selectedCard]
+    [accountId, session.combatId, busy, selectedCard]
   )
 
   const isResolved = session.state === 'resolved'
@@ -309,7 +309,7 @@ export interface CombatHudPhaseCProps {
 }
 
 export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, onClose }: CombatHudPhaseCProps) {
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const [projection] = useState(() => new CombatProjection())
   const [hpDisplay, setHpDisplay] = useState<{ playerHp: number; npcHp: number; maxHp: number } | null>(null)
   const [statusLabels, setStatusLabels] = useState<string[]>([])
@@ -382,11 +382,11 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
 
   // Fetch initial snapshot + subscribe SSE
   useEffect(() => {
-    if (!token) return
+    if (!accountId) return
     let es: EventSource | null = null
     let closed = false
 
-    void api.combatSnapshot(token, combatId).then((snap: CombatSseSnapshot) => {
+    void api.combatSnapshot(accountId, combatId).then((snap: CombatSseSnapshot) => {
       if (closed) return
       projection.applySnapshot(snap)
       syncState()
@@ -422,8 +422,8 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
         }
 
         // Stale check — re-fetch snapshot if tickDigest drifted
-        if (token && next && prev && projection.isStale(msg.tickDigest)) {
-          void api.combatSnapshot(token, combatId).then((snap: CombatSseSnapshot) => {
+        if (accountId && next && prev && projection.isStale(msg.tickDigest)) {
+          void api.combatSnapshot(accountId, combatId).then((snap: CombatSseSnapshot) => {
             if (closed) return
             projection.applySnapshot(snap)
             syncState()
@@ -438,7 +438,7 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
       closed = true
       es?.close()
     }
-  }, [token, combatId, projection, syncState])
+  }, [accountId, combatId, projection, syncState])
 
   // Show dismiss toast after 2s
   useEffect(() => {
@@ -448,7 +448,7 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
   }, [toast])
 
   const playCard = useCallback(async (cardClass: string) => {
-    if (!token || resolved) return
+    if (!accountId || resolved) return
     const meta = getCombatHandCardMeta(cardClass)
     if (!meta) return
     const targetActorId = meta.targetSelf ? playerActorId : npcActorId
@@ -462,7 +462,7 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
     setPendingCmds((m) => new Map(m).set(commandId, cardClass))
 
     try {
-      const r = await api.combatPlay(token, combatId, cardClass, targetActorId)
+      const r = await api.combatPlay(accountId, combatId, cardClass, targetActorId)
       const result = projection.reconcile(commandId, true)
       if (shouldShowRejectToast(result)) setToast(`${meta.labelZh} 被拒絕`)
       setPendingCmds((m) => { const n = new Map(m); n.delete(r.commandId); return n })
@@ -473,7 +473,7 @@ export function CombatHudPhaseC({ combatId, playerActorId, npcActorId, npcName, 
       setPendingCmds((m) => { const n = new Map(m); n.delete(commandId); return n })
     }
     syncState()
-  }, [token, resolved, combatId, playerActorId, npcActorId, projection, syncState])
+  }, [accountId, resolved, combatId, playerActorId, npcActorId, projection, syncState])
 
   return (
     <div

@@ -13,7 +13,7 @@ import { useI18n } from '../i18n'
 
 export function SettingsPage() {
   const { t } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [health, setHealth] = useState<ServerSettingsHealth | null>(null)
   const [keys, setKeys] = useState<ServerApiKeySummary[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -23,13 +23,13 @@ export function SettingsPage() {
   const [flash, setFlash] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setLoading(true)
     setError(null)
     try {
       const [h, list] = await Promise.all([
-        api.settingsHealth(token),
-        api.settingsListKeys(token)
+        api.settingsHealth(accountId),
+        api.settingsListKeys(accountId)
       ])
       setHealth(h)
       setKeys(list.keys)
@@ -48,7 +48,7 @@ export function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }, [token, t])
+  }, [accountId, t])
 
   useEffect(() => {
     void refresh()
@@ -57,12 +57,12 @@ export function SettingsPage() {
   const handleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (!token || textarea.trim().length === 0) return
+      if (!accountId || textarea.trim().length === 0) return
       setSubmitting(true)
       setFlash(null)
       setError(null)
       try {
-        const result = await api.settingsAddKeys(token, textarea)
+        const result = await api.settingsAddKeys(accountId, textarea)
         setKeys(result.keys)
         setTextarea('')
         setFlash(
@@ -79,14 +79,14 @@ export function SettingsPage() {
         setSubmitting(false)
       }
     },
-    [token, textarea, refresh, t]
+    [accountId, textarea, refresh, t]
   )
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!token) return
+      if (!accountId) return
       try {
-        const result = await api.settingsDeleteKey(token, id)
+        const result = await api.settingsDeleteKey(accountId, id)
         setKeys(result.keys)
         void refresh()
       } catch (err) {
@@ -94,13 +94,13 @@ export function SettingsPage() {
         setError(msg)
       }
     },
-    [token, refresh, t]
+    [accountId, refresh, t]
   )
 
   const handleReactivate = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     try {
-      const result = await api.settingsReactivateKeys(token)
+      const result = await api.settingsReactivateKeys(accountId)
       setKeys(result.keys)
       setFlash(t('settings.flashReactivated', { count: result.reactivated }))
       void refresh()
@@ -108,7 +108,7 @@ export function SettingsPage() {
       const msg = err instanceof Error ? err.message : t('settings.errorGeneric')
       setError(msg)
     }
-  }, [token, refresh, t])
+  }, [accountId, refresh, t])
 
   // v0.65.0 — contract-aligned OpenCode settings state.
   const [ocStatus, setOcStatus] = useState<ServerOpenCodeStatus | null>(null)
@@ -122,22 +122,22 @@ export function SettingsPage() {
   const [ocError, setOcError] = useState<string | null>(null)
 
   const loadOpenCode = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     try {
-      const status = await api.settingsGetOpenCode(token)
+      const status = await api.settingsGetOpenCode(accountId)
       setOcStatus(status)
       setOcServersInput(status.servers.map((s) => s.base_url).join('\n'))
       setOcTextModel(status.text_model_source === 'setting' ? status.text_model : '')
     } catch {
       // non-fatal
     }
-  }, [token])
+  }, [accountId])
 
   const loadOpenCodeModels = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setOcModelsLoading(true)
     try {
-      const result = await api.settingsGetOpenCodeModels(token)
+      const result = await api.settingsGetOpenCodeModels(accountId)
       setOcGroups(result.groups)
       if (result.error) setOcError(result.error)
     } catch (err) {
@@ -145,19 +145,19 @@ export function SettingsPage() {
     } finally {
       setOcModelsLoading(false)
     }
-  }, [token])
+  }, [accountId])
 
   useEffect(() => {
     void loadOpenCode()
   }, [loadOpenCode])
 
   const handleSaveOpenCode = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setOcSaving(true)
     setOcFlash(null)
     setOcError(null)
     try {
-      const updated = await api.settingsUpdateOpenCode(token, {
+      const updated = await api.settingsUpdateOpenCode(accountId, {
         servers: ocServersInput,
         text_model: ocTextModel,
       })
@@ -169,16 +169,16 @@ export function SettingsPage() {
     } finally {
       setOcSaving(false)
     }
-  }, [token, ocServersInput, ocTextModel, loadOpenCodeModels])
+  }, [accountId, ocServersInput, ocTextModel, loadOpenCodeModels])
 
   const handleClearOpenCode = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     if (!confirm('確定要清除 DB 中的 OpenCode 設定？清除後將改讀環境變數。')) return
     setOcSaving(true)
     setOcFlash(null)
     setOcError(null)
     try {
-      const updated = await api.settingsDeleteOpenCode(token)
+      const updated = await api.settingsDeleteOpenCode(accountId)
       setOcStatus(updated)
       setOcServersInput(updated.servers.map((s) => s.base_url).join('\n'))
       setOcTextModel(updated.text_model_source === 'setting' ? updated.text_model : '')
@@ -188,7 +188,7 @@ export function SettingsPage() {
     } finally {
       setOcSaving(false)
     }
-  }, [token])
+  }, [accountId])
 
   const filteredGroups = ocGroups.map((g) => ({
     ...g,
@@ -207,7 +207,7 @@ export function SettingsPage() {
         <Header title={t('settings.title')} eyebrow={t('settings.eyebrow')} />
         <div className="gi-panel p-5 text-sm text-ground-300">
           {t('settings.loginGate')}{' '}
-          <Link to="/account" className="text-ember-400 hover:underline">
+          <Link to="/game" className="text-ember-400 hover:underline">
             {t('account.signin')}
           </Link>
         </div>

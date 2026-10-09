@@ -1,6 +1,6 @@
 {
   "name": "@greed-island/server",
-  "version": "0.100.1",
+  "version": "0.104.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-data-assets.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "start:multiplayer": "node dist/multiplayer/server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

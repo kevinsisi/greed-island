@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -44,7 +44,7 @@ describe('playerCivilizationRouter', () => {
 
   async function setup() {
     const db = new Database(':memory:')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const accounts = new AccountStore(db, 4)
     const account = await accounts.createAccount('player@example.test', 'pass1234')
     const proj = new PlayerCivilizationProjection()
@@ -55,14 +55,14 @@ describe('playerCivilizationRouter', () => {
     const server = await listen(app)
     servers.push(server)
     const port = (server.address() as AddressInfo).port
-    const token = jwt.sign({ sub: account.id, email: account.email, role: account.role }, authConfig.jwtSecret)
-    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+    const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
+    const headers = { ...cookieTestHeaders(token), 'content-type': 'application/json' }
     return { port, headers, accountId: String(account.id), proj }
   }
 
   it('returns 401 when unauthenticated', async () => {
     const { port } = await setup()
-    const res = await fetch(`http://127.0.0.1:${port}/world/player-action`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'PLAYER_CLAIMED_TERRITORY', payload: {} }) })
+    const res = await fetch(`http://127.0.0.1:${port}/world/player-action`, { method: 'POST', headers: { 'content-type': 'application/json', Origin: 'http://127.0.0.1:4178' }, body: JSON.stringify({ type: 'PLAYER_CLAIMED_TERRITORY', payload: {} }) })
     expect(res.status).toBe(401)
   })
 

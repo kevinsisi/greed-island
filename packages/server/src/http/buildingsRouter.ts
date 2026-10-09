@@ -20,66 +20,33 @@ import { REST_RESTORATION } from '../buildings/types.js'
 import { listAllBuildings } from '../buildings/catalog.js'
 import { requireAuth, type AuthConfig } from './auth.js'
 import type { ConstructionProjectRow } from '../projections/constructionProjects.js'
+import type { AreaState } from '../sim/areaStateEngine.js'
+import type { AmbientResult } from '../sim/ambientNarrator.js'
 
 const VALID_SHIFTS: readonly Shift[] = ['morning', 'afternoon', 'night']
 const REST_COOLDOWN_TICKS = 60 // 5 分鐘冷卻（避免短時間反覆按）
 
-export function createBuildingsRouter(input: {
+export type BuildingsRouterInput = {
   runtime: SimulationRuntime
   jobs: PlayerJobsStore
   authConfig: AuthConfig
-}): Router {
+}
+
+/** Reviewed read surface only; employment/rest commands are a separate gate. */
+export function createBuildingsReadRouter(input: BuildingsRouterInput): Router {
+  const router = Router()
+  registerBuildingReads(router, input)
+  return router
+}
+
+export function createBuildingsRouter(input: BuildingsRouterInput): Router {
   const router = Router()
   const auth = requireAuth(input.authConfig)
+  registerBuildingReads(router, input)
   const findVisibleBuilding = (id: string) => {
     return input.runtime.getAllBuildings().find((v) => v.def.id === id) ??
       constructionSiteView(input.runtime.getInProgressConstructionProjects().find((p) => p.buildingId === id))
   }
-
-  router.get('/buildings', (req: Request, res: Response) => {
-    const tileId = typeof req.query.tileId === 'string' ? req.query.tileId : null
-    const views = tileId
-      ? input.runtime.getBuildingsOnTile(tileId)
-      : input.runtime.getAllBuildings()
-    const inProgress = input.runtime.getInProgressConstructionProjects(tileId ?? undefined)
-    const constructionSites = inProgress
-      .map((project) => constructionSiteView(project))
-      .filter((view): view is BuildingRuntimeView => view !== null)
-
-    // v0.49.0 — inject building state/health/constructionProgress
-    let buildingStates: Map<string, { state: string; health: number }> | null = null
-    if (tileId && input.runtime.getBuildingStatesByTile) {
-      buildingStates = new Map(
-        input.runtime.getBuildingStatesByTile(tileId).map((s) => [s.buildingId, { state: s.state, health: s.health }])
-      )
-    }
-
-    const buildingsWithState = buildingStates
-      ? [...views, ...constructionSites].map((view) => {
-          const bState = buildingStates!.get(view.def.id)
-          return {
-            ...view,
-            def: {
-              ...view.def,
-              state: bState?.state ?? 'operational',
-              health: bState?.health ?? 100,
-              constructionProgress: undefined  // TODO: wire from construction project when tracked
-            }
-          }
-        })
-      : [...views, ...constructionSites]
-
-    res.json({ buildings: buildingsWithState.map((v) => enrichBuildingView(v, input.runtime)), inProgress })
-  })
-
-  router.get('/buildings/:id', (req: Request, res: Response) => {
-    const view = findVisibleBuilding(req.params.id ?? '')
-    if (!view) {
-      res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
-      return
-    }
-    res.json({ building: enrichBuildingView(view, input.runtime) })
-  })
 
   router.post('/buildings/:id/apply', auth, (req: Request, res: Response) => {
     const view = findVisibleBuilding(req.params.id ?? '')
@@ -212,40 +179,139 @@ export function createBuildingsRouter(input: {
     res.json({ wallet: updated, restoredAt: tick, building: def })
   })
 
-  router.get('/wallet', auth, (req: Request, res: Response) => {
+
+  return router
+}
+
+function registerBuildingReads(router: Router, input: BuildingsRouterInput): void {
+  const findVisibleBuilding = (id: string) => input.runtime.getAllBuildings().find(v => v.def.id === id)
+    ?? constructionSiteView(input.runtime.getInProgressConstructionProjects().find(p => p.buildingId === id))
+  router.get('/buildings', (req: Request, res: Response) => {
+    const tileId = typeof req.query.tileId === 'string' ? req.query.tileId : null
+    const views = tileId
+      ? input.runtime.getBuildingsOnTile(tileId)
+      : input.runtime.getAllBuildings()
+    const inProgress = input.runtime.getInProgressConstructionProjects(tileId ?? undefined)
+    const constructionSites = inProgress
+      .map((project) => constructionSiteView(project))
+      .filter((view): view is BuildingRuntimeView => view !== null)
+
+    // v0.49.0 — inject building state/health/constructionProgress
+    let buildingStates: Map<string, { state: string; health: number }> | null = null
+    if (tileId && input.runtime.getBuildingStatesByTile) {
+      buildingStates = new Map(
+        input.runtime.getBuildingStatesByTile(tileId).map((s) => [s.buildingId, { state: s.state, health: s.health }])
+      )
+    }
+
+    const buildingsWithState = buildingStates
+      ? [...views, ...constructionSites].map((view) => {
+          const bState = buildingStates!.get(view.def.id)
+          return {
+            ...view,
+            def: {
+              ...view.def,
+              state: bState?.state ?? 'operational',
+              health: bState?.health ?? 100,
+              constructionProgress: undefined  // TODO: wire from construction project when tracked
+            }
+          }
+        })
+      : [...views, ...constructionSites]
+
+    res.json({ buildings: buildingsWithState.map((v) => enrichBuildingView(v, input.runtime)), inProgress: inProgress.map(publicConstructionProject) })
+  })
+
+  router.get('/buildings/:id', (req: Request, res: Response) => {
+    const view = findVisibleBuilding(req.params.id ?? '')
+    if (!view) {
+      res.status(404).json({ error: 'BUILDING_NOT_FOUND' })
+      return
+    }
+    res.json({ building: enrichBuildingView(view, input.runtime) })
+  })
+
+
+  router.get('/wallet', input.authConfig.session, (req: Request, res: Response) => {
+    const id = req.auth!.sub
     const currentTick = input.runtime.getCurrentTick()
-    const wallet = input.jobs.getWallet(req.auth!.sub)
-    const jobs = input.jobs.listJobs(req.auth!.sub)
-    res.json({ wallet, jobs, currentTick, currentShift: shiftFor(currentTick) })
+    const wallet = input.jobs.peekWallet(id)
+    const jobs = input.jobs.listJobs(id).map(job => ({
+      accountId: id, buildingId: job.buildingId, shift: job.shift,
+      hiredAtTick: job.hiredAtTick, totalEarnings: job.totalEarnings,
+      shiftsCompleted: job.shiftsCompleted, lastShiftTick: job.lastShiftTick,
+    }))
+    res.json({ wallet: wallet ? {
+      accountId: id, gold: wallet.gold, energy: wallet.energy, updatedAt: wallet.updatedAt,
+    } : null, walletInitialized: wallet !== null, jobs, currentTick, currentShift: shiftFor(currentTick) })
   })
 
   router.get('/areas/:tileId', (req: Request, res: Response) => {
     const tileId = req.params.tileId ?? ''
     const state = input.runtime.getAreaState(tileId)
-    if (!state) {
-      res.status(404).json({ error: 'TILE_NOT_FOUND' })
-      return
-    }
-    const ambient = input.runtime.getAmbientNarrator()
-    let ambientResult = null
-    if (ambient) {
-      const ctx = input.runtime.buildAmbientContext(tileId)
-      if (ctx) {
-        ambientResult = ambient.getOrSchedule(ctx, input.runtime.getCurrentTick())
-      }
-    }
-    res.json({ areaState: state, ambient: ambientResult })
+    if (!state) { res.status(404).json({ error: 'TILE_NOT_FOUND' }); return }
+    const ambient = input.runtime.getAmbientNarrator()?.peek(tileId) ?? null
+    res.json({ areaState: publicAreaState(state), ambient: publicAmbient(ambient) })
   })
 
   router.get('/areas', (_req: Request, res: Response) => {
-    res.json({ areas: input.runtime.getAreaStates() })
+    res.json({ areas: input.runtime.getAreaStates().map(publicAreaState) })
   })
 
   router.get('/buildings-catalog', (_req: Request, res: Response) => {
-    res.json({ buildings: listAllBuildings() })
+    res.json({ buildings: listAllBuildings().map(publicBuildingDef) })
   })
+}
 
-  return router
+function publicConstructionProject(project: ConstructionProjectRow): object {
+  return {
+    projectId: project.projectId, kind: project.kind, targetTileId: project.targetTileId,
+    buildingId: project.buildingId, progress: project.progress, targetProgress: project.targetProgress,
+    startedAtTick: project.startedAtTick, completedAtTick: project.completedAtTick,
+    initiatedByNpcId: project.initiatedByNpcId, builderNpcIds: [...project.builderNpcIds],
+  }
+}
+
+function publicAmbient(ambient: AmbientResult | null): object | null {
+  return ambient ? {
+    tileId: ambient.tileId, text: ambient.text, source: ambient.source,
+    generatedAtTick: ambient.generatedAtTick, generatedAt: ambient.generatedAt,
+  } : null
+}
+
+function publicAreaState(state: AreaState): object {
+  return {
+    tileId: state.tileId,
+    factionControl: { tide_hunters: state.factionControl.tide_hunters,
+      free_runners: state.factionControl.free_runners, guild: state.factionControl.guild,
+      civilian: state.factionControl.civilian },
+    dominantFaction: state.dominantFaction,
+    resources: { food: state.resources.food, safety: state.resources.safety, economy: state.resources.economy },
+    lastUpdatedTick: state.lastUpdatedTick,
+    recentEvents: state.recentEvents.map(event => ({
+      tick: event.tick, kind: event.kind, narration: event.narration,
+      detail: Object.fromEntries(['faction', 'resource', 'value'].flatMap(key => {
+        const value = event.detail[key]
+        return typeof value === 'string' || typeof value === 'number' ? [[key, value]] : []
+      })),
+    })),
+  }
+}
+
+function publicBuildingDef(def: BuildingDef): object {
+  const state = def as BuildingDef & { state?: string; health?: number; constructionProgress?: number }
+  return {
+    id: def.id, tileId: def.tileId, nameZh: def.nameZh, nameEn: def.nameEn,
+    descriptionZh: def.descriptionZh, type: def.type,
+    placement: { col: def.placement.col, row: def.placement.row, glyph: def.placement.glyph, size: def.placement.size },
+    interior: { cols: def.interior.cols, rows: def.interior.rows, backgroundColor: def.interior.backgroundColor,
+      props: def.interior.props.map(prop => ({ col: prop.col, row: prop.row, glyph: prop.glyph, size: prop.size, label: prop.label })) },
+    ownerNpcId: def.ownerNpcId,
+    hiring: def.hiring.map(slot => ({ shift: slot.shift, capacity: slot.capacity, wage: slot.wage, taskZh: slot.taskZh })),
+    enterable: def.enterable, restorative: def.restorative, tags: def.tags ? [...def.tags] : undefined,
+    livestockCapacity: def.livestockCapacity,
+    state: state.state, health: state.health, constructionProgress: state.constructionProgress,
+  }
 }
 
 function constructionSiteView(project: ConstructionProjectRow | undefined): BuildingRuntimeView | null {
@@ -296,12 +362,12 @@ function enrichBuildingView(view: BuildingRuntimeView, runtime: SimulationRuntim
     const npcInfo = runtime.getNpcActivityAndName?.(occ.npcId)
     const lastProductive = runtime.getLastProductiveAction?.(occ.npcId)
     return {
-      ...occ,
+      npcId: occ.npcId, shift: occ.shift, isOwner: occ.isOwner,
       nameZh: npcInfo?.nameZh ?? occ.npcId,
       activity: npcInfo?.activity ?? 'idle',
       domain: lastProductive?.domain ?? undefined,
       narration: lastProductive?.narration ?? undefined,
     }
   })
-  return { ...view, occupants }
+  return { def: publicBuildingDef(view.def), occupants }
 }

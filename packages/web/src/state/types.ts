@@ -7,7 +7,7 @@ export interface WorldCivilizationGoal {
   goalId: string
   domain: string
   title: string
-  rationale: string
+  rationale?: string
   targetProgress: number
   progress: number
   declaredAtTick: number
@@ -20,7 +20,8 @@ export interface WorldTechnology {
   domain: string
   title: string
   discoveredAtTick: number
-  evidenceEventIds: readonly string[]
+  evidenceEventIds?: readonly string[]
+  evidenceCount?: number
   unlocks: readonly string[]
 }
 
@@ -209,11 +210,15 @@ export interface WorldMap {
 
 export interface DashboardSummary {
   world: WorldSnapshot
-  cardsOwned: number
+  cardsOwned: number | null
   cardsTotal: number
   recentEvents: EventSummary[]
   rareWindowOpen: boolean
-  ticksSinceLastVisit: number
+  ticksSinceLastVisit: number | null
+  cardsOwnedReady?: boolean
+  wallet?: { accountId: number; gold: number; energy: number; updatedAt: number } | null
+  walletInitialized?: boolean
+  accountContext?: number | null
 }
 
 // ─── Living World v0.10.0 — Areas + Buildings ───────────────────

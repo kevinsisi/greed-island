@@ -1,203 +1,127 @@
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { once } from 'node:events'
 import type { Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
-import { describe, expect, it } from 'vitest'
-import { AccountStore } from './accounts.js'
-import type { AuthConfig } from './auth.js'
+import { afterEach, describe, expect, it } from 'vitest'
+import { AuthService } from '../identity/authService.js'
+import { migrateIdentitySchema } from '../identity/schema.js'
+import { createHttpAuthorization } from './authorization.js'
+import { createCanonicalAccountView } from './canonicalAccountView.js'
 import { createSocialRouter } from './social.js'
 import { SocialBus } from './socialBus.js'
 import { SocialStore } from './socialStore.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
 
-describe('social presence', () => {
-  it('returns nearby players with their last area coordinates', async () => {
-    const db = new Database(':memory:')
-    const accounts = new AccountStore(db, 4)
-    const social = new SocialStore(db)
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
-    const runtime = { getCurrentTick: () => 100 } as unknown as SimulationRuntime
-    const bus = new SocialBus()
-    const playerA = await accounts.createAccount('a@example.test', 'hunter123')
-    const playerB = await accounts.createAccount('b@example.test', 'hunter123')
-    accounts.updateProfile(playerA.id, { nickname: 'K' })
-    accounts.updateProfile(playerB.id, { nickname: '恒文' })
-
-    const app = express()
-    app.use(express.json())
-    app.use(createSocialRouter({ runtime, social, accounts, bus, authConfig }))
-    const server = await listen(app)
-
-    try {
-      const address = server.address() as AddressInfo
-      const tokenA = signToken(playerA.id, playerA.email, playerA.role, authConfig)
-      const tokenB = signToken(playerB.id, playerB.email, playerB.role, authConfig)
-
-      const presenceA = await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', x: 48, y: 52, z: 2, clientUpdatedAt: 1_000 }),
-      })
-      const presenceB = await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenB}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', x: 302, y: 214, z: 0, clientUpdatedAt: 1_000 }),
-      })
-      const nearby = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=t_dock`, {
-        headers: { authorization: `Bearer ${tokenB}` },
-      })
-      const payload = (await nearby.json()) as {
-        players: Array<{ id: number; displayName: string; x: number | null; y: number | null; z: number | null }>
-      }
-
-      expect(presenceA.status).toBe(200)
-      expect(presenceB.status).toBe(200)
-      expect(nearby.status).toBe(200)
-      expect(payload.players).toEqual([
-        expect.objectContaining({ id: playerA.id, displayName: 'K', x: 48, y: 52, z: 2 }),
-      ])
-
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', clientUpdatedAt: 3_000 }),
-      })
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', x: 60, y: 70, z: 3, clientUpdatedAt: 2_500 }),
-      })
-      const afterHeartbeat = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=t_dock`, {
-        headers: { authorization: `Bearer ${tokenB}` },
-      })
-      const afterHeartbeatPayload = (await afterHeartbeat.json()) as {
-        players: Array<{ id: number; x: number | null; y: number | null; z: number | null }>
-      }
-
-      expect(afterHeartbeatPayload.players).toEqual([
-        expect.objectContaining({ id: playerA.id, x: 60, y: 70, z: 3 }),
-      ])
-
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_forest', clientUpdatedAt: 4_000 }),
-      })
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenB}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_forest', x: 80, y: 90, z: 0, clientUpdatedAt: 4_000 }),
-      })
-      const movedNearby = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=t_forest`, {
-        headers: { authorization: `Bearer ${tokenB}` },
-      })
-      const movedPayload = (await movedNearby.json()) as {
-        players: Array<{ id: number; x: number | null; y: number | null; z: number | null }>
-      }
-
-      expect(movedPayload.players).toEqual([
-        expect.objectContaining({ id: playerA.id, x: null, y: null, z: null }),
-      ])
-
-      const busEvents: unknown[] = []
-      const unsubscribe = bus.subscribe(playerB.id, (event) => busEvents.push(event))
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', x: 48, y: 52, z: 2, clientUpdatedAt: 3_500 }),
-      })
-      unsubscribe()
-      const afterStale = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=t_forest`, {
-        headers: { authorization: `Bearer ${tokenB}` },
-      })
-      const afterStalePayload = (await afterStale.json()) as {
-        players: Array<{ id: number; x: number | null; y: number | null; z: number | null }>
-      }
-
-      expect(afterStalePayload.players).toEqual([
-        expect.objectContaining({ id: playerA.id, x: null, y: null, z: null }),
-      ])
-      expect(busEvents).toEqual([])
-    } finally {
-      await close(server)
-      db.close()
+const origin = 'http://127.0.0.1:4178'
+const resources: Array<{ db: Database.Database; server: Server }> = []
+afterEach(async () => {
+  for (const { db, server } of resources.splice(0)) {
+    await new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections() }); db.close()
+  }
+})
+async function setup() {
+  const db = new Database(':memory:'); migrateIdentitySchema(db)
+  const auth = new AuthService(db, { allowedOrigins: [origin], secureCookies: false })
+  const one = await auth.register({ kind: 'email', value: 'private-one@example.test' }, 'synthetic-social-password', origin)
+  const two = await auth.register({ kind: 'username', value: 'social-two' }, 'synthetic-social-password', origin)
+  const three = await auth.register({ kind: 'email', value: 'private-three@example.test' }, 'synthetic-social-password', origin)
+  const social = new SocialStore(db), bus = new SocialBus()
+  const actors = [one, two, three].map((grant, index) => ({ accountId: grant.principal.accountId,
+    tileId: index === 2 ? 't_forest' : 't_dock', x: index, z: index, sequence: index + 1, movementStep: 1 }))
+  const runtime = {
+    getCurrentTick: () => 100,
+    getAdmittedPlayerWorldActors: () => actors.map(actor => ({ ...actor })),
+    getPlayerWorldGridPose: (id: number) => actors.some(actor => actor.accountId === id) ? { subCol: id, subRow: 2, subZ: 0 } : null,
+  } as unknown as SimulationRuntime
+  const app = express(); app.use(express.json({ limit: '4kb' }))
+  app.use('/api', createSocialRouter({ runtime, social, accounts: createCanonicalAccountView(db, auth.accounts), bus, authConfig: createHttpAuthorization(auth) }))
+  const server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); resources.push({ db, server })
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing socket')
+  const headers = (grant: typeof one) => ({ Cookie: 'greed_session=' + grant.token, Origin: origin, 'X-Greed-Account-Id': String(grant.principal.accountId), 'Content-Type': 'application/json' })
+  return { db, auth, social, bus, actors, one, two, three, headers, base: `http://127.0.0.1:${address.port}/api/social` }
+}
+describe('same-cookie preserved Social family', () => {
+  it('guards every mounted REST route against anonymous, stale-context and revoked sessions', async () => {
+    const { base, auth, one, two, headers } = await setup()
+    const routes = [
+      ['POST', '/friend-request/1'], ['POST', '/friend-accept/1'], ['POST', '/friend-reject/1'],
+      ['GET', '/friends'], ['GET', '/friend-requests'], ['DELETE', '/friends/1'],
+      ['POST', '/message/1'], ['GET', '/messages/1'], ['POST', '/messages/1/read'],
+      ['GET', '/conversations'], ['POST', '/presence'], ['GET', '/nearby'],
+      ['POST', '/alliance/create'], ['POST', '/alliance/invite/1'], ['POST', '/alliance/leave'], ['GET', '/alliance'],
+    ] as const
+    for (const [method, route] of routes) {
+      const options = { method, ...(method === 'GET' ? {} : { body: '{}' }) }
+      expect((await fetch(base + route, { ...options, headers: { Origin: origin, 'Content-Type': 'application/json' } })).status, method + ' ' + route).toBe(401)
+      expect((await fetch(base + route, { ...options, headers: { ...headers(two), 'X-Greed-Account-Id': String(one.principal.accountId) } })).status, method + ' ' + route).toBe(409)
+    }
+    auth.logout(one.token, origin)
+    for (const [method, route] of routes) {
+      expect((await fetch(base + route, { method, headers: headers(one), ...(method === 'GET' ? {} : { body: '{}' }) })).status, method + ' ' + route).toBe(401)
     }
   })
-
-  it('keeps hub presence coordinates across the full main map canvas', async () => {
-    const db = new Database(':memory:')
-    const accounts = new AccountStore(db, 4)
-    const social = new SocialStore(db)
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
-    const runtime = { getCurrentTick: () => 100 } as unknown as SimulationRuntime
-    const bus = new SocialBus()
-    const playerA = await accounts.createAccount('a@example.test', 'hunter123')
-    const playerB = await accounts.createAccount('b@example.test', 'hunter123')
-
-    const app = express()
-    app.use(express.json())
-    app.use(createSocialRouter({ runtime, social, accounts, bus, authConfig }))
-    const server = await listen(app)
-
-    try {
-      const address = server.address() as AddressInfo
-      const tokenA = signToken(playerA.id, playerA.email, playerA.role, authConfig)
-      const tokenB = signToken(playerB.id, playerB.email, playerB.role, authConfig)
-
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 't_dock', x: 48, y: 52, z: 2, clientUpdatedAt: 500 }),
-      })
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenA}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 'hub', x: 760, y: 540, z: 0, clientUpdatedAt: 1_000 }),
-      })
-      await fetch(`http://127.0.0.1:${address.port}/social/presence`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${tokenB}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ tileId: 'hub', x: 20, y: 30, z: 0, clientUpdatedAt: 1_000 }),
-      })
-
-      const nearby = await fetch(`http://127.0.0.1:${address.port}/social/nearby?tileId=hub`, {
-        headers: { authorization: `Bearer ${tokenB}` },
-      })
-      const payload = (await nearby.json()) as {
-        players: Array<{ id: number; x: number | null; y: number | null; z: number | null }>
-      }
-
-      expect(payload.players).toEqual([
-        expect.objectContaining({ id: playerA.id, x: 760, y: 540, z: 0 }),
-      ])
-      expect(social.getPlayerLocation(playerA.id)).toEqual(
-        expect.objectContaining({ tile_id: 't_dock', pos_x: 48, pos_y: 52, pos_z: 2 })
-      )
-    } finally {
-      await close(server)
-      db.close()
-    }
+  it('keeps inbox reads private and side-effect-free; mark-read is an actor-guarded POST', async () => {
+    const { base, db, social, one, two, three, headers } = await setup()
+    const own = social.insertMessage(two.principal.accountId, one.principal.accountId, 'hello owner')
+    social.insertMessage(two.principal.accountId, three.principal.accountId, 'third-party secret')
+    expect((await fetch(base + '/messages/' + two.principal.accountId)).status).toBe(401)
+    const read = await fetch(base + '/messages/' + two.principal.accountId, { headers: headers(one) })
+    expect(read.status).toBe(200)
+    const payload = await read.json() as { peer: unknown; messages: Array<{ content: string; readAt: string | null }> }
+    expect(payload.peer).toEqual({ id: two.principal.accountId, displayName: 'social-two' })
+    expect(payload.messages).toHaveLength(1); expect(payload.messages[0]).toMatchObject({ content: 'hello owner', readAt: null })
+    expect(social.listMessagesBetween(one.principal.accountId, two.principal.accountId, 50)[0]!.read_at).toBeNull()
+    const wrong = await fetch(base + '/messages/' + two.principal.accountId + '/read', { method: 'POST', headers: { ...headers(one), 'X-Greed-Account-Id': String(three.principal.accountId) } })
+    expect(wrong.status).toBe(409)
+    const marked = await fetch(base + '/messages/' + two.principal.accountId + '/read', { method: 'POST', headers: headers(one) })
+    expect(await marked.json()).toEqual({ marked: 1 })
+    expect(social.listMessagesBetween(one.principal.accountId, two.principal.accountId, 50)[0]!.id).toBe(own.id)
+    expect(social.listMessagesBetween(one.principal.accountId, two.principal.accountId, 50)[0]!.read_at).not.toBeNull()
+    expect(social.listMessagesBetween(two.principal.accountId, three.principal.accountId, 50)[0]!.read_at).toBeNull()
+    db.prepare("UPDATE accounts SET status='disabled' WHERE id=?").run(two.principal.accountId)
+    const archived = await (await fetch(base + '/messages/' + two.principal.accountId, { headers: headers(one) })).json() as { peer: unknown; messages: unknown[] }
+    expect(archived.peer).toEqual({ id: two.principal.accountId, displayName: 'Unavailable account' })
+    expect(archived.messages).toHaveLength(1)
+    expect((await fetch(base + '/message/' + two.principal.accountId, { method: 'POST', headers: headers(one), body: JSON.stringify({ content: 'disabled target' }) })).status).toBe(404)
+  })
+  it('derives nearby/presence from admitted canonical actors, ignoring supplied position', async () => {
+    const { base, social, actors, one, two, three, headers } = await setup()
+    const response = await fetch(base + '/presence', { method: 'POST', headers: headers(one), body: JSON.stringify({ accountId: three.principal.accountId, tileId: 'hub', x: 999, y: 999, z: 16 }) })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ location: { userId: one.principal.accountId, tileId: 't_dock', x: one.principal.accountId, y: 2, z: 0, lastSeenTick: 100 } })
+    expect(social.getPlayerLocation(one.principal.accountId)).toBeNull()
+    const nearby = await fetch(base + '/nearby?tileId=t_dock', { headers: headers(one) })
+    expect(await nearby.json()).toEqual({ tileId: 't_dock', players: [{ id: two.principal.accountId, displayName: 'social-two', tileId: 't_dock', x: two.principal.accountId, y: 2, z: 0, lastSeenTick: 100 }] })
+    expect((await fetch(base + '/nearby?tileId=t_forest', { headers: headers(one) })).status).toBe(409)
+    actors.splice(0, 1)
+    expect((await fetch(base + '/presence', { method: 'POST', headers: headers(one), body: '{}' })).status).toBe(409)
+  })
+  it('enforces target ownership, stale read context, revocation and peer alias privacy', async () => {
+    const { base, auth, social, one, two, three, headers } = await setup()
+    const request = social.createFriendRequest(one.principal.accountId, two.principal.accountId)
+    expect((await fetch(base + '/friend-accept/' + request.id, { method: 'POST', headers: headers(three) })).status).toBe(403)
+    expect((await fetch(base + '/friend-accept/' + request.id, { method: 'POST', headers: headers(two) })).status).toBe(200)
+    const friends = await fetch(base + '/friends', { headers: headers(two) })
+    const text = await friends.text(); expect(text).not.toContain('email'); expect(text).not.toContain('private-one@example.test')
+    expect((await fetch(base + '/conversations', { headers: { ...headers(two), 'X-Greed-Account-Id': String(one.principal.accountId) } })).status).toBe(409)
+    auth.logout(two.token, origin)
+    expect((await fetch(base + '/friends', { headers: headers(two) })).status).toBe(401)
+    const before = social.listMessagesBetween(one.principal.accountId, three.principal.accountId, 50)
+    expect((await fetch(base + '/message/' + three.principal.accountId, { method: 'POST', headers: { ...headers(one), Origin: 'https://evil.example' }, body: JSON.stringify({ content: 'forged' }) })).status).toBe(403)
+    expect(social.listMessagesBetween(one.principal.accountId, three.principal.accountId, 50)).toEqual(before)
+  })
+  it('preserves alliance leader/member ownership without exposing member aliases', async () => {
+    const { base, social, one, two, three, headers } = await setup()
+    const created = await fetch(base + '/alliance/create', { method: 'POST', headers: headers(one), body: JSON.stringify({ name: 'Synthetic Alliance' }) })
+    expect(created.status).toBe(201)
+    expect((await created.text())).not.toContain('private-one@example.test')
+    expect((await fetch(base + '/alliance/invite/' + two.principal.accountId, { method: 'POST', headers: headers(three) })).status).toBe(400)
+    expect((await fetch(base + '/alliance/invite/' + two.principal.accountId, { method: 'POST', headers: headers(one) })).status).toBe(201)
+    expect((await fetch(base + '/alliance/invite/' + three.principal.accountId, { method: 'POST', headers: headers(two) })).status).toBe(403)
+    const members = await fetch(base + '/alliance', { headers: headers(two) })
+    expect((await members.text())).not.toContain('email')
+    expect((await fetch(base + '/alliance/leave', { method: 'POST', headers: headers(two) })).status).toBe(200)
+    expect(social.getAllianceForUser(two.principal.accountId)).toBeNull()
+    expect(social.getAllianceForUser(one.principal.accountId)!.members).toHaveLength(1)
   })
 })
-
-function signToken(
-  accountId: number,
-  email: string,
-  role: string,
-  authConfig: AuthConfig
-): string {
-  return jwt.sign({ sub: accountId, email, role }, authConfig.jwtSecret)
-}
-
-function listen(app: express.Express): Promise<Server> {
-  return new Promise((resolve) => {
-    const server = app.listen(0, () => resolve(server))
-  })
-}
-
-function close(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()))
-  })
-}

@@ -280,10 +280,6 @@ export type TranslationKey =
   | 'forgot.submitting'
   | 'forgot.backToLogin'
   | 'forgot.successGeneric'
-  | 'forgot.successWithToken'
-  | 'forgot.linkLabel'
-  | 'forgot.copyLink'
-  | 'forgot.copied'
   | 'forgot.errorGeneric'
   // reset password
   | 'reset.eyebrow'
@@ -393,6 +389,7 @@ export type TranslationKey =
   | 'admin.role.player'
   | 'admin.role.gm'
   | 'admin.role.admin'
+  | 'admin.role.agent'
   | 'admin.setRole'
   | 'admin.youBadge'
   | 'admin.lastAdminWarn'

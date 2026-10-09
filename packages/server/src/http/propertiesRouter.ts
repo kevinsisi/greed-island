@@ -4,7 +4,7 @@
 
 import { Router, type Request, type Response } from 'express'
 import type { Database } from 'better-sqlite3'
-import type { AccountStore } from './accounts.js'
+import type { CanonicalAccountView } from './canonicalAccountView.js'
 import type { AuthConfig } from './auth.js'
 import { requireRole } from './auth.js'
 
@@ -59,65 +59,26 @@ export function initializeAgentBindingSchema(db: Database): void {
   `)
 }
 
-export function createPropertiesRouter(deps: {
+export type PropertiesRouterInput = {
   db: Database
-  accounts: AccountStore
+  accounts: CanonicalAccountView
   runtime: { getNpcs: () => readonly NpcRef[] }
   authConfig: AuthConfig
-}): Router {
+}
+
+/** Only public listings and cookie-owned bindings. Binding commands stay gated. */
+export function createPropertiesReadRouter(deps: PropertiesRouterInput): Router {
   const router = Router()
-
   initializeAgentBindingSchema(deps.db)
+  registerPropertyReads(router, deps)
+  return router
+}
 
-  // Agent + admin can manage NPC bindings
+export function createPropertiesRouter(deps: PropertiesRouterInput): Router {
+  const router = Router()
+  initializeAgentBindingSchema(deps.db)
+  registerPropertyReads(router, deps)
   const requireAgent = requireRole(deps.authConfig, deps.accounts, 'agent', 'admin')
-
-  router.get('/properties', async (req: Request, res: Response) => {
-    try {
-      const upstreamUrl = buildUpstreamUrl(req.query)
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
-      const response = await fetch(upstreamUrl, { signal: controller.signal })
-      clearTimeout(timer)
-
-      if (!response.ok) {
-        console.error(`[properties] upstream returned ${response.status}`)
-        res.status(503).json({ error: 'UPSTREAM_UNAVAILABLE', message: '房源系統暫時無法連線' })
-        return
-      }
-
-      const raw = await response.json() as { listings?: readonly unknown[]; total?: number }
-      const listings = normaliseListings(raw.listings ?? [])
-      res.json({
-        listings,
-        total: raw.total ?? listings.length,
-        page: Number(req.query.page) || 1,
-        pageSize: Number(req.query.limit) || DEFAULT_PAGE_SIZE,
-      } satisfies PropertyListResponse)
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        res.status(503).json({ error: 'UPSTREAM_TIMEOUT', message: '房源系統連線逾時' })
-        return
-      }
-      console.error('[properties] proxy error', err)
-      res.status(503).json({ error: 'UPSTREAM_UNAVAILABLE', message: '房源系統暫時無法連線' })
-    }
-  })
-
-  router.get('/properties/bindings', requireAgent, (req: Request, res: Response) => {
-    const accountId = req.auth!.sub
-    const rows = listBindings(deps.db, accountId)
-    const npcs = deps.runtime.getNpcs()
-    const npcMap = new Map(npcs.map((n) => [n.id, n.name.zh]))
-    const bindings: AgentNpcBinding[] = rows.map((r) => ({
-      accountId: r.account_id,
-      npcId: r.npc_id,
-      npcName: npcMap.get(r.npc_id) ?? r.npc_id,
-      boundAt: r.bound_at,
-    }))
-    res.json({ bindings })
-  })
 
   router.post('/properties/bindings', requireAgent, (req: Request, res: Response) => {
     const accountId = req.auth!.sub
@@ -145,33 +106,103 @@ export function createPropertiesRouter(deps: {
   return router
 }
 
-function buildUpstreamUrl(query: Record<string, unknown>): string {
+function registerPropertyReads(router: Router, deps: PropertiesRouterInput): void {
+  const requireAgent = requireRole(deps.authConfig, deps.accounts, 'agent', 'admin')
+  router.get('/properties', async (req: Request, res: Response) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      const { url: upstreamUrl, page, pageSize } = buildUpstreamUrl(req.query)
+      const response = await fetch(upstreamUrl, { signal: controller.signal })
+
+      if (!response.ok) {
+        console.error(`[properties] upstream returned ${response.status}`)
+        res.status(503).json({ error: 'UPSTREAM_UNAVAILABLE', message: '房源系統暫時無法連線' })
+        return
+      }
+
+      const decoded: unknown = await response.json()
+      if (!isRecord(decoded) || !Array.isArray(decoded.listings)) throw new Error('Invalid listing response')
+      const raw = decoded
+      const listings = normaliseListings((raw.listings as unknown[]).slice(0, pageSize))
+      res.json({
+        listings,
+        total: typeof raw.total === 'number' && Number.isSafeInteger(raw.total) && raw.total >= 0 ? raw.total : listings.length,
+        page, pageSize,
+      } satisfies PropertyListResponse)
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        res.status(503).json({ error: 'UPSTREAM_TIMEOUT', message: '房源系統連線逾時' })
+        return
+      }
+      res.status(503).json({ error: 'UPSTREAM_UNAVAILABLE', message: '房源系統暫時無法連線' })
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+
+  router.get('/properties/bindings', requireAgent, (req: Request, res: Response) => {
+    const accountId = req.auth!.sub
+    const rows = listBindings(deps.db, accountId)
+    const npcs = deps.runtime.getNpcs()
+    const npcMap = new Map(npcs.map((n) => [n.id, n.name.zh]))
+    const bindings: AgentNpcBinding[] = rows.map((r) => ({
+      accountId: r.account_id,
+      npcId: r.npc_id,
+      npcName: npcMap.get(r.npc_id) ?? r.npc_id,
+      boundAt: r.bound_at,
+    }))
+    res.json({ bindings })
+  })
+
+}
+
+function buildUpstreamUrl(query: Record<string, unknown>): { url: string; page: number; pageSize: number } {
   const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(query)) {
-    if (typeof value === 'string' && value.length > 0) params.set(key, value)
+  // Current browser filters only. Never forward cookie, account, token or private selectors.
+  const allowed = ['region', 'type', 'rooms', 'priceMin', 'priceMax', 'sizeMin', 'sizeMax', 'ageMax']
+  for (const key of allowed) {
+    const value = query[key]
+    if (typeof value === 'string' && value.length > 0 && value.length <= 200) params.set(key, value)
   }
-  if (!params.has('limit')) params.set('limit', String(DEFAULT_PAGE_SIZE))
-  return `${UPSTREAM_BASE}/api/listings?${params.toString()}`
+  const page = boundedPositiveInteger(query.page, 1, 1_000_000)
+  const pageSize = boundedPositiveInteger(query.limit, DEFAULT_PAGE_SIZE, 100)
+  params.set('page', String(page)); params.set('limit', String(pageSize))
+  return { url: `${UPSTREAM_BASE}/api/listings?${params.toString()}`, page, pageSize }
+}
+
+function boundedPositiveInteger(value: unknown, fallback: number, maximum: number): number {
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return fallback
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? Math.min(parsed, maximum) : fallback
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function finiteNumber(value: unknown): number {
+  const number = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN
+  return Number.isFinite(number) ? number : 0
 }
 
 function normaliseListings(raw: readonly unknown[]): readonly PropertyListing[] {
-  return raw.map((item: unknown) => {
-    const r = item as Record<string, unknown>
+  return raw.filter(isRecord).map(r => {
     return {
       id: String(r.id ?? ''),
       title: String(r.title ?? ''),
-      price: Number(r.price) || 0,
+      price: finiteNumber(r.price),
       address: String(r.address ?? ''),
-      lat: Number(r.lat) || 0,
-      lng: Number(r.lng) || 0,
-      rooms: Number(r.rooms) || 0,
-      hall: Number(r.hall) || 0,
-      bath: Number(r.bath) || 0,
-      sizePing: Number(r.sizePing) || 0,
+      lat: finiteNumber(r.lat),
+      lng: finiteNumber(r.lng),
+      rooms: finiteNumber(r.rooms),
+      hall: finiteNumber(r.hall),
+      bath: finiteNumber(r.bath),
+      sizePing: finiteNumber(r.sizePing),
       buildingType: String(r.buildingType ?? ''),
       floor: r.floor !== null && r.floor !== undefined ? String(r.floor) : null,
-      age: r.age !== null && r.age !== undefined ? Number(r.age) : null,
-      photoUrls: Array.isArray(r.photoUrls) ? r.photoUrls.map(String) : [],
+      age: r.age !== null && r.age !== undefined ? finiteNumber(r.age) : null,
+      photoUrls: Array.isArray(r.photoUrls) ? r.photoUrls.filter((value): value is string => typeof value === 'string' && /^https?:\/\//.test(value) && value.length <= 2048).slice(0, 50) : [],
       agentName: String(r.agentName ?? ''),
       agentContact: String(r.agentContact ?? ''),
     } satisfies PropertyListing
@@ -209,7 +240,7 @@ export type PropertyContextRow = Readonly<{
 
 export function createPropertyContextProvider(
   db: Database,
-  _accounts: AccountStore,
+  _accounts: CanonicalAccountView,
   _runtime: { getNpcs: () => readonly NpcRef[] },
 ): (npcId: string) => Promise<readonly PropertyContextRow[]> {
   return async (npcId: string): Promise<readonly PropertyContextRow[]> => {

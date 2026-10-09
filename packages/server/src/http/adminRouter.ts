@@ -103,7 +103,7 @@ function parseUserId(raw: unknown): number | null {
 
 function toAdminUser(account: AccountRecord): {
   id: number
-  email: string
+  email: string | null
   role: AccountRecord['role']
   nickname: string | null
   avatar: string

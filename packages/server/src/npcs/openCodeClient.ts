@@ -13,6 +13,7 @@
 //   opencode_base_url   — e.g. "http://host.docker.internal:4096"
 //   opencode_model      — e.g. "opencode/deepseek-v4-flash-free"
 
+import { providerDeadline, throwIfProviderCancelled, withAbortSignal } from './providerCancellation.js'
 import type { SettingsStore } from '../http/settings.js'
 
 export const OPENCODE_DEFAULT_MODEL = 'opencode/deepseek-v4-flash-free'
@@ -24,6 +25,7 @@ export type OpenCodeGenerationOptions = Readonly<{
   /** Override the default model (e.g. `openai/gpt-4o-mini`). */
   model?: string
   timeoutMs?: number
+  signal?: AbortSignal
 }>
 
 export class OpenCodeUnavailableError extends Error {
@@ -97,81 +99,52 @@ async function readJson<T>(res: Response, op: string): Promise<T> {
  */
 export async function generateWithOpenCode(
   baseURL: string,
-  options: OpenCodeGenerationOptions,
+  inputOptions: OpenCodeGenerationOptions,
 ): Promise<string> {
-  const rawModel = options.model ?? OPENCODE_DEFAULT_MODEL
-  const model = parseModel(rawModel)
-  const timeoutMs = Math.max(1, options.timeoutMs ?? OPENCODE_REQUEST_TIMEOUT_MS)
-  const deadline = Date.now() + timeoutMs
-  const sessionModel = { providerID: model.providerID, id: model.modelID }
+  const { signal, ...values } = inputOptions
+  const options = Object.freeze({ ...values, ...(signal ? { signal } : {}) })
+  throwIfProviderCancelled(signal)
+  const model = parseModel(options.model ?? OPENCODE_DEFAULT_MODEL)
+  const timeoutMs = Math.max(1, options.timeoutMs ?? OPENCODE_REQUEST_TIMEOUT_MS), end = Date.now() + timeoutMs
   const headers = { 'Content-Type': 'application/json' }
-
-  // 1. Create session
-  const abortCreate = new AbortController()
-  const timerCreate = setTimeout(() => abortCreate.abort(), remainingTimeoutMs(deadline))
-  let sessionID: string
+  let sessionID: string | undefined
+  const request = async <T>(url: string, init: RequestInit, stage: 'create-session' | 'send-message', op: string): Promise<T> => {
+    throwIfProviderCancelled(signal)
+    const deadline = providerDeadline(remainingTimeoutMs(end), signal)
+    try {
+      const response = await withAbortSignal(fetch(url, { ...init, signal: deadline.signal }), deadline.signal)
+      throwIfProviderCancelled(signal)
+      const parsed = await withAbortSignal(readJson<T>(response, op), deadline.signal)
+      throwIfProviderCancelled(signal)
+      return parsed
+    } catch (err) {
+      throwIfProviderCancelled(signal)
+      if ((err as { name?: string }).name === 'AbortError') throw new OpenCodeUnavailableError(`OpenCode ${stage} timeout after ${timeoutMs}ms`)
+      if (err instanceof OpenCodeUnavailableError) throw err
+      throw new OpenCodeUnavailableError(`OpenCode ${stage} error: ${(err as Error).message}`)
+    } finally { deadline.close() }
+  }
   try {
-    const sessionRes = await fetch(`${baseURL}/session`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ title: 'greed-island', agent: 'general', model: sessionModel }),
-      signal: abortCreate.signal,
-    })
-    const session = await readJson<OpenCodeSessionResponse>(sessionRes, 'create session')
+    const session = await request<OpenCodeSessionResponse>(`${baseURL}/session`, {
+      method: 'POST', headers, body: JSON.stringify({ title: 'greed-island', agent: 'general', model: { providerID: model.providerID, id: model.modelID } }),
+    }, 'create-session', 'create session')
     if (!session.id) throw new OpenCodeUnavailableError('OpenCode create session response missing id')
     sessionID = session.id
-  } catch (err) {
-    clearTimeout(timerCreate)
-    if ((err as { name?: string }).name === 'AbortError') {
-      throw new OpenCodeUnavailableError(`OpenCode create-session timeout after ${timeoutMs}ms`)
-    }
-    if (err instanceof OpenCodeUnavailableError) throw err
-    throw new OpenCodeUnavailableError(`OpenCode create-session error: ${(err as Error).message}`)
+    throwIfProviderCancelled(signal)
+    const msg = await request<OpenCodeMessageResponse>(`${baseURL}/session/${encodeURIComponent(sessionID)}/message`, {
+      method: 'POST', headers, body: JSON.stringify({ agent: 'general', model: { providerID: model.providerID, modelID: model.modelID }, system: options.systemPrompt, parts: [{ type: 'text', text: options.userPrompt }] }),
+    }, 'send-message', 'send message')
+    const text = (msg.parts ?? []).filter((p): p is OpenCodeMessagePart & { text: string } => p.type === 'text' && !p.synthetic && typeof p.text === 'string').map(p => p.text).join('').trim()
+    if (!text) throw new OpenCodeUnavailableError('OpenCode returned empty text response')
+    return text
   } finally {
-    clearTimeout(timerCreate)
-  }
-
-  // 2. Send message → read response
-  try {
-    const abortMsg = new AbortController()
-    const timerMsg = setTimeout(() => abortMsg.abort(), remainingTimeoutMs(deadline))
-    try {
-      const msgRes = await fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}/message`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          agent: 'general',
-          model: { providerID: model.providerID, modelID: model.modelID },
-          system: options.systemPrompt,
-          parts: [{ type: 'text', text: options.userPrompt }],
-        }),
-        signal: abortMsg.signal,
-      })
-      const msg = await readJson<OpenCodeMessageResponse>(msgRes, 'send message')
-      const text = (msg.parts ?? [])
-        .filter((p): p is OpenCodeMessagePart & { text: string } =>
-          p.type === 'text' && !p.synthetic && typeof p.text === 'string'
-        )
-        .map((p) => p.text)
-        .join('')
-        .trim()
-      if (text.length === 0) {
-        throw new OpenCodeUnavailableError('OpenCode returned empty text response')
-      }
-      return text
-    } catch (err) {
-      if ((err as { name?: string }).name === 'AbortError') {
-        throw new OpenCodeUnavailableError(`OpenCode send-message timeout after ${timeoutMs}ms`)
-      }
-      throw err
-    } finally {
-      clearTimeout(timerMsg)
+    // Cleanup is bounded and participates in the same lifecycle. Never start a request after cancellation.
+    if (sessionID && !signal?.aborted) {
+      const cleanup = providerDeadline(Math.min(1000, remainingTimeoutMs(end)), signal)
+      try { await withAbortSignal(fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}`, { method: 'DELETE', headers, signal: cleanup.signal }), cleanup.signal) }
+      catch { /* best-effort session cleanup */ }
+      finally { cleanup.close() }
     }
-  } finally {
-    // Fire-and-forget cleanup.
-    fetch(`${baseURL}/session/${encodeURIComponent(sessionID)}`, {
-      method: 'DELETE',
-      headers,
-    }).catch(() => {})
+    throwIfProviderCancelled(signal)
   }
 }

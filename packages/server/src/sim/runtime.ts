@@ -1,3 +1,9 @@
+import { LEGACY_ARCHIVE_EVENT_TYPE } from '../migration/legacyWorldRules.js'
+import type { AccountId } from '../identity/principal.js'
+import { getRegionGeometry } from '../playerWorld/geometry.js'
+import { PlayerWorldService } from '../playerWorld/service.js'
+import { commitAuthorizedPlayerCommand } from '../http/playerCommandCommit.js'
+import { PLAYER_MOVEMENT_STEP_MS, PLAYER_WORLD_EVENT_TYPES } from '../playerWorld/types.js'
 // Simulation runtime — drives a 5-second tick loop on top of the
 // append-only kernel event log. Every tick the runtime:
 //   1. Increments world.tick
@@ -116,7 +122,7 @@ import { derivePersonalityGreetLine } from '../npcs/greetLine.js'
 import type { CardCatalog, CardRuleOperatorDef } from '../cards/types.js'
 import { WorldEventEngine, rebuildActiveEvent } from '../events/engine.js'
 import type { ActiveWorldEvent } from '../events/types.js'
-import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles, EXPANSION_TILES } from './mapGraph.js'
+import { MAP_TILES, TILE_BY_ID, TILE_NAME_BY_ID, getMapAdjacency, listMapTiles, EXPANSION_TILES, getKnownMapRegions, getKnownMapEdges } from './mapGraph.js'
 import { buildAreaEcology, type AreaEcologyView } from './areaEcology.js'
 import { planAnimalAggression, planAnimalRetaliation } from '../ecosystem/aggression.js'
 import {
@@ -627,8 +633,10 @@ export type NarrativeEvent = Readonly<{
 type Listener = (event: NarrativeEvent) => void
 type TickListener = (tick: number) => void
 type DeferredHydrationState = 'not_needed' | 'pending' | 'running' | 'complete' | 'failed'
+class DeferredHydrationCancelled extends Error {}
 
 const RECENT_EVENTS_BUFFER = 200
+const WORLD_HISTORY_EXCLUDED_EVENT_TYPES = [...PLAYER_WORLD_EVENT_TYPES, LEGACY_ARCHIVE_EVENT_TYPE]
 
 export class SimulationRuntime {
   private currentTick = 0
@@ -647,6 +655,7 @@ export class SimulationRuntime {
   private deferredHydrationState: DeferredHydrationState = 'not_needed'
   private deferredHydrationPromise: Promise<void> | null = null
   private deferredHydrationError: string | null = null
+  private deferredHydrationGeneration = 0
   private lastSequence = 0
   private eventCount = 0
   // Per-tick budget gate (simulation-budget-enforcement).
@@ -676,6 +685,8 @@ export class SimulationRuntime {
   // commands, commits one EventLog transaction, then fans out events.
   private readonly combatRuntime: CombatRuntime
   private readonly combatSubTicks = new CombatSubTickCoordinator()
+  // Trusted ephemeral fences only, never persisted cookie/session material.
+  private readonly combatCardAuthorizers = new Map<string, { combatId: string; accountId: number; authorize: () => void }>()
   private readonly combatEventListeners = new Map<string, Set<(event: Event, tickDigest: string) => void>>()
   private combatStore: CombatStore | null = null
   private playerJobsStore: PlayerJobsStore | null = null
@@ -690,6 +701,8 @@ export class SimulationRuntime {
   private npcRelationships: SqliteNpcRelationshipsStore | null = null
   private ambientNarrator: AmbientNarrator | null = null
   private npcAgentRunner: NpcAgentRunner | null = null
+  private backgroundPaused = false
+  private backgroundGeneration = 0
   private readonly combatResolvedListeners = new Set<(info: CombatResolvedInfo) => void>()
   /** Most recent accepted AI utterance per NPC — populated by applyFreeformAgentActionEvent. */
   private readonly npcUtteranceMap = new Map<string, { text: string; tick: number }>()
@@ -746,6 +759,8 @@ export class SimulationRuntime {
   private readonly playerNpcRelationshipProjection = new PlayerNpcRelationshipProjection()
   private readonly playerRelationshipActionProjection = new PlayerRelationshipActionProjection()
   private readonly playerSurvivalProjection = new PlayerSurvivalProjection()
+  private readonly playerWorld: PlayerWorldService
+  private playerMovementTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     private readonly store: SqliteEventStore,
@@ -764,6 +779,24 @@ export class SimulationRuntime {
     this.bornNpcsProjection = new BornNpcsProjection(new Set(profiles.map((p) => p.id)))
     this.validateScheduleBuildingIds(profiles)
     this.hydrateFromEventLog()
+    this.playerWorld = new PlayerWorldService(this.store, {
+      getGeometry: tileId => getRegionGeometry(tileId, this.lifeExpansion.unlockedBuildingIds),
+      getBuilding: (id, tileId) => {
+        // Authored catalog only; no synthetic construction/floor/entrance data.
+        const building = listBuildingsForTile(tileId, this.lifeExpansion.unlockedBuildingIds).find(def => def.id === id)
+        const state = this.buildingStateProjection.getState(id)
+        return building && (!state || state.state === 'operational') ? building : null
+      },
+      getMap: () => this.getMap(), getTick: () => this.currentTick,
+      getRevision: () => this.lastSequence, getNpcs: () => this.getNpcs(),
+    }, { onCommitted: (events) => {
+      const last = events[events.length - 1]!
+      this.lastSequence = last.sequence
+      this.eventCount += events.length
+      // Position-only commits do not invalidate unchanged, potentially expensive NPC snapshots.
+      if (this.npcSnapshotCache) this.npcSnapshotCache = { ...this.npcSnapshotCache, lastSequence: this.lastSequence }
+      this.publishCommittedEvents(events)
+    } })
     // After hydration, admit any matured born NPCs into NpcEngine so they participate
     // in subsequent tick processing from tick 0 of this run.
     for (const profile of this.bornNpcsProjection.listMaturedProfiles()) {
@@ -819,6 +852,7 @@ export class SimulationRuntime {
     if (this.ambientNarrator) return this.ambientNarrator
     const narrator = new AmbientNarrator(settings)
     this.ambientNarrator = narrator
+    if (this.backgroundPaused) narrator.stop()
     // v0.15.1：每 tick 主動推「最近被玩家請求過、cache 已過期」的 tile 進下一輪
     // refresh，這樣下次 polling 拿到的 ambient 文字真的會變動，而不是靜止 30 tick。
     // autonomous-world-narration：背景輪轉的全 world tile 來源 —— 與
@@ -880,6 +914,7 @@ export class SimulationRuntime {
       getBeliefContext: (npcId) => this.getFormattedBeliefContext(npcId),
       getReflectionContext: (npcId) => this.getFormattedReflectionContext(npcId),
       submitDecision: ({ profile, tile, resolution, decidedAtTick }) => {
+        if (this.backgroundPaused) return
         const actionLabel = resolution.resolved.kind
         const narration = narrateFreeformAgentDecision(profile.name.zh, resolution)
         const command = makeLivingWorldCommand(
@@ -909,6 +944,7 @@ export class SimulationRuntime {
       },
     })
     this.npcAgentRunner = runner
+    if (this.backgroundPaused) runner.stop()
     this.subscribeTick((tick) => runner.tick(tick))
     return runner
   }
@@ -943,12 +979,23 @@ export class SimulationRuntime {
 
   start(): void {
     if (this.tickLoopActive) return
+    this.backgroundPaused = false
+    this.npcAgentRunner?.start(); this.ambientNarrator?.start()
     this.tickLoopActive = true
+    this.playerMovementTimer = setInterval(() => this.playerWorld.advanceMovementStep(), PLAYER_MOVEMENT_STEP_MS)
     this.nextTickDueAtMs = Date.now() + this.tickDurationMs
     this.scheduleNextTick(this.tickDurationMs)
   }
 
   stop(): void {
+    this.backgroundPaused = true; this.backgroundGeneration += 1
+    this.npcAgentRunner?.stop(); this.ambientNarrator?.stop()
+    // stop() remains a reusable pause. Only work captured before this stop is
+    // cancelled; a later start/hydration may use the next generation.
+    this.deferredHydrationGeneration += 1
+    if (this.playerMovementTimer !== null) clearInterval(this.playerMovementTimer)
+    this.playerMovementTimer = null
+    this.playerWorld.cancelPending()
     this.tickLoopActive = false
     this.nextTickDueAtMs = null
     if (this.timer !== null) {
@@ -959,6 +1006,13 @@ export class SimulationRuntime {
     // when the world tick stops, so test teardown and production
     // shutdown both leave no orphaned timers behind.
     this.combatRuntime.shutdownAll()
+    this.combatCardAuthorizers.clear()
+  }
+
+  /** Drain existing cancelled NPC/narration continuations only; never starts background work. */
+  async waitForBackgroundWork(timeoutMs = 1000): Promise<boolean> {
+    const settled = await Promise.all([this.npcAgentRunner?.waitForIdle(timeoutMs) ?? true, this.ambientNarrator?.waitForIdle(timeoutMs) ?? true])
+    return settled.every(Boolean)
   }
 
   private scheduleNextTick(delayMs = this.tickDurationMs): void {
@@ -1962,32 +2016,45 @@ export class SimulationRuntime {
     return this.cards
   }
 
-  getMap(): Readonly<{
-    width: number
-    height: number
-    tiles: Array<{
-      id: string
-      name: string
-      x: number
-      y: number
-      biome: string
-      npcIds: string[]
-    }>
-  }> {
-    // 室內 NPC 不算在 area scene 上 — 玩家進建築才看到
-    const tiles = listMapTiles(this.lifeExpansion.unlockedTileIds, this.dynamicTileProjection.listTileIds()).map((tile) => ({
-      ...tile,
-      npcIds: this.profiles
-        .filter((p) => {
-          const tileMatch = (this.npcEngine.getState(p.id)?.tile ?? p.defaultLocation) === tile.id
-          if (!tileMatch) return false
-          const insideBuildingId = this.getNpcBuildingId(p.id)
-          return insideBuildingId === null
-        })
-        .map((p) => p.id)
+  getMap() {
+    const unlocked = this.lifeExpansion.unlockedTileIds, generated = this.dynamicTileProjection.listTileIds()
+    const livingOutdoor = this.getNpcs().filter(npc => npc.buildingId === null
+      && npc.activity !== 'move' && npc.travelRoute === null)
+    const tiles = listMapTiles(unlocked, generated).map(tile => ({ ...tile,
+      npcIds: livingOutdoor.filter(npc => npc.location === tile.id).map(npc => npc.id),
     }))
-    return { width: 9, height: 6, tiles }
+    const regions = getKnownMapRegions(unlocked, generated), available = new Set(tiles.map(tile => tile.id))
+    // Generated frontier adjacency may mention still-locked endpoints; those never become traversable.
+    const adjacency = Object.fromEntries(Object.entries(getMapAdjacency(unlocked, generated))
+      .filter(([tileId]) => available.has(tileId))
+      .map(([tileId, neighbors]) => [tileId, neighbors.filter(neighbor => available.has(neighbor))]))
+    return { width: Math.max(9, ...tiles.map(tile => tile.x + 1)), height: Math.max(6, ...tiles.map(tile => tile.y + 1)),
+      tiles, regions, adjacency, edges: getKnownMapEdges(unlocked, generated) }
   }
+
+  /** AuthService must authenticate before invoking these facades; no second account store exists here. */
+  submitPlayerWorldCommand(id: AccountId, body: unknown, authorize?: import('../playerWorld/types.js').PlayerWorldAuthorize) {
+    return this.playerWorld.submit(id, body, authorize)
+  }
+  attachPlayerWorldHarborProgressPolicy(policy: import('../playerWorld/harborBeacon.js').HarborProgressPolicy): void { this.playerWorld.setHarborProgressPolicy(policy) }
+  attachPlayerWorldDisplayNameResolver(resolver: import('../playerWorld/types.js').PlayerWorldDisplayNameResolver): void {
+    this.playerWorld.setDisplayNameResolver(resolver)
+  }
+  executePlayerWorldCommand(id: AccountId, body: unknown) { return this.playerWorld.execute(id, body) }
+  executePlayerWorldCommands(batch: readonly import('../playerWorld/service.js').PlayerWorldSubmission[]) {
+    return this.playerWorld.executeBatch(batch)
+  }
+  getPlayerWorldSnapshot(id: AccountId) { return this.playerWorld.snapshot(id) }
+  getPlayerWorldPosition(id: AccountId) { return this.playerWorld.getPosition(id) }
+  getPlayerWorldGridPose(id: AccountId) { return this.playerWorld.getGridPose(id) }
+  getAdmittedPlayerWorldActors() { return this.playerWorld.getAdmittedActors() }
+  connectPlayerWorld(id: AccountId) { return this.playerWorld.connect(id) }
+  disconnectPlayerWorldAccount(id: AccountId) { this.playerWorld.disconnectAccount(id) }
+  subscribePlayerWorld(id: AccountId, listener: (snapshot: import('../playerWorld/snapshot.js').PlayerWorldSnapshot) => void) {
+    return this.playerWorld.subscribeAccount(id, listener)
+  }
+  /** Explicit deterministic driver for tests; HTTP cannot choose the server sub-step. */
+  advancePlayerMovementStep(): void { this.playerWorld.advanceMovementStep() }
 
   /** 此 NPC 是否在某棟建築內？回傳建築 id 或 null。 */
   getNpcBuildingId(npcId: string): string | null {
@@ -2024,16 +2091,33 @@ export class SimulationRuntime {
 
   async startDeferredHydration(): Promise<void> {
     if (this.deferredHydrationState === 'not_needed' || this.deferredHydrationState === 'complete') return
+    const generation = this.deferredHydrationGeneration
     if (this.deferredHydrationPromise) {
       await this.deferredHydrationPromise
+      // A caller requesting hydration after stop/start may have joined the
+      // cancelled generation. Restart only for that explicit new request.
+      if (generation === this.deferredHydrationGeneration
+        && (this.deferredHydrationState === 'pending' || this.deferredHydrationState === 'running')) await this.startDeferredHydration()
       return
     }
     this.deferredHydrationState = 'running'
-    this.deferredHydrationPromise = this.runDeferredHydration().catch((err) => {
+    this.deferredHydrationError = null
+    const operation = this.runDeferredHydration(generation).catch((err) => {
+      if (err instanceof DeferredHydrationCancelled) {
+        this.deferredHydrationState = 'pending'
+        return
+      }
       this.deferredHydrationState = 'failed'
       this.deferredHydrationError = err instanceof Error ? err.message : String(err)
       throw err
     })
+    this.deferredHydrationPromise = operation
+    try { await operation }
+    finally { if (this.deferredHydrationPromise === operation) this.deferredHydrationPromise = null }
+  }
+
+  /** Drain existing work only. Shutdown must never start a new replay. */
+  async waitForDeferredHydration(): Promise<void> {
     await this.deferredHydrationPromise
   }
 
@@ -2128,6 +2212,10 @@ export class SimulationRuntime {
    *     where the combat rule engine computes the result snapshot before commit.
    */
   submitLivingWorldCommand(command: LivingWorldCommand): Event | null {
+    if ((PLAYER_WORLD_EVENT_TYPES as readonly string[]).includes(command.commandType)) {
+      console.warn('[runtime] rejected raw player-world position command; use the authenticated intent facade')
+      return null
+    }
     if (COMBAT_RULE_ENGINE_OWNED_COMMANDS.has(command.commandType)) {
       console.warn(
         `[runtime] rejected direct ${command.commandType}; use submitCombatRoundAction()`
@@ -2137,15 +2225,29 @@ export class SimulationRuntime {
     return this.commitLivingWorldCommand(command)
   }
 
+  /** Authenticated synchronous player side effects commit with their EventLog fact. */
+  submitAuthorizedPlayerCommand(command: LivingWorldCommand, hooks: { authorize: () => void; beforeCommit?: () => void }): Event | null {
+    if ((PLAYER_WORLD_EVENT_TYPES as readonly string[]).includes(command.commandType) || COMBAT_RULE_ENGINE_OWNED_COMMANDS.has(command.commandType)) return null
+    const committed = commitAuthorizedPlayerCommand(this.store, command, hooks)
+    if (!committed) return null
+    if (!committed.duplicate) {
+      this.lastSequence = committed.event.sequence; this.eventCount += 1
+      this.publishCommittedEvents([committed.event])
+    }
+    return committed.event
+  }
+
   /** Phase C — submit a COMBAT_CARD_PLAY command for the next sub-tick. */
   submitCombatCardPlay(input: {
     accountId: number
     combatId: string
     cardClass: string
     targetActorId: string
+    authorize?: () => void
   }): { commandId: string } | null {
+    input.authorize?.()
     const snapshot = this.combatSubTicks.getCombatSnapshot(input.combatId)
-    if (!snapshot || snapshot.resolved) return null
+    if (!snapshot || snapshot.resolved || this.combatSubTicks.pendingCount() >= 1000 || this.combatSubTicks.pendingCount(input.combatId) >= 4) return null
     const combatTick = snapshot.lastCombatTick + 1
     const payload: CombatCardPlayPayload = {
       combatId: input.combatId,
@@ -2171,6 +2273,7 @@ export class SimulationRuntime {
     )
     const committed = this.submitLivingWorldCommand(command)
     if (!committed) return null
+    if (input.authorize) this.combatCardAuthorizers.set(commandId, { combatId: input.combatId, accountId: input.accountId, authorize: input.authorize })
     return { commandId }
   }
 
@@ -2181,7 +2284,7 @@ export class SimulationRuntime {
     cancelCommandId: string
   }): boolean {
     const snapshot = this.combatSubTicks.getCombatSnapshot(input.combatId)
-    if (!snapshot || snapshot.resolved) return false
+    if (!snapshot || snapshot.resolved || !this.combatSubTicks.ownsPendingCommand(String(input.accountId), input.combatId, input.cancelCommandId)) return false
     const payload: CombatCardCancelPayload = {
       combatId: input.combatId,
       combatTick: snapshot.lastCombatTick + 1,
@@ -2196,7 +2299,9 @@ export class SimulationRuntime {
       Date.now(),
       payload,
     )
-    return this.submitLivingWorldCommand(command) !== null
+    const cancelled = this.submitLivingWorldCommand(command) !== null
+    if (cancelled) this.combatCardAuthorizers.delete(input.cancelCommandId)
+    return cancelled
   }
 
   /** Phase C — return current in-memory combat snapshot for the snapshot endpoint. */
@@ -2342,7 +2447,7 @@ export class SimulationRuntime {
 
   private collectWorldCivilizationEvidence(limit = 250): WorldCivilizationEvidence[] {
     const evidence: WorldCivilizationEvidence[] = []
-    for (const ev of this.store.readRecentEvents(limit)) {
+    for (const ev of this.store.readRecentEventsExcludingTypes(limit, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)) {
       if (!WORLD_CIVILIZATION_EVIDENCE_EVENT_TYPES.has(ev.eventType)) continue
       const data = (ev.payload as { data?: Record<string, unknown> })?.data ?? {}
       const domain = inferWorldCivilizationDomain(ev.eventType, data)
@@ -2365,6 +2470,13 @@ export class SimulationRuntime {
 
   private processCombatSubTick(input: { combatId: string; combatTick: number }): void {
     this.combatSubTicks.processTick({
+      runInTransaction: operation => this.store.runInTransaction(operation),
+      authorizeCommand: command => {
+        if (!/^[1-9][0-9]*$/.test(command.actorId)) return true // Simulation-owned NPC actor.
+        const fence = this.combatCardAuthorizers.get(command.commandId)
+        if (!fence || fence.combatId !== input.combatId || String(fence.accountId) !== command.actorId) return false
+        try { fence.authorize(); return true } catch { return false }
+      },
       combatId: input.combatId,
       combatTick: input.combatTick,
       tick: this.currentTick,
@@ -2378,7 +2490,11 @@ export class SimulationRuntime {
         }
         return committed
       },
-      afterCommit: (events) => this.publishCommittedEvents(events, { projectCombatSubTicks: false }),
+      afterCommit: (events) => {
+        for (const event of events) if (event.commandId && ['COMBAT_CARD_PLAY_ACCEPTED', 'COMBAT_CARD_PLAY_REJECTED'].includes(event.eventType)) this.combatCardAuthorizers.delete(event.commandId)
+        if (events.some(event => event.eventType === 'COMBAT_RESOLVE')) for (const [commandId, fence] of this.combatCardAuthorizers) if (fence.combatId === input.combatId) this.combatCardAuthorizers.delete(commandId)
+        this.publishCommittedEvents(events, { projectCombatSubTicks: false })
+      },
     })
   }
 
@@ -2386,6 +2502,10 @@ export class SimulationRuntime {
     committed: readonly Event[],
     options: { projectCombatSubTicks?: boolean } = {}
   ): void {
+    this.playerWorld?.markDirty()
+    // PlayerWorldService already projected these complete position facts after commit.
+    // Do not fan high-frequency bookkeeping into unrelated NPC stores or narrative SSE.
+    if (committed.every(event => (PLAYER_WORLD_EVENT_TYPES as readonly string[]).includes(event.eventType))) return
     const projectCombatSubTicks = options.projectCombatSubTicks ?? true
     const npcTileMap = this.getLivingNpcLocationMap()
     this.projectCommittedNpcSqliteStores(committed, npcTileMap)
@@ -2663,9 +2783,11 @@ export class SimulationRuntime {
     })
   }
 
-  private hydrateCombatRuntimeFromEvents(events: readonly Event[]): void {
+  private hydrateCombatRuntimeFromEvents(events: readonly Event[], authorize?: () => void): void {
+    authorize?.()
     this.combatSubTicks.rebuildFromEvents(events)
     for (const combatId of computeUnresolvedCombats(events)) {
+      authorize?.()
       this.combatRuntime.spawn(combatId, {
         startAtTick: this.combatSubTicks.resumeTickForCombat(combatId, events),
       })
@@ -5143,10 +5265,11 @@ export class SimulationRuntime {
         // 非阻塞：AI 增強敘事仍走 in-memory NarrativeEvent，不寫 EventLog
         const ambient = this.ambientNarrator
         if (ambient) {
+          const generation = this.backgroundGeneration
           void ambient
             .narrateWorldEvent(event)
             .then((res) => {
-              if (res.source !== 'ai') return
+              if (res.source !== 'ai' || this.backgroundPaused || generation !== this.backgroundGeneration) return
               const enhanced: NarrativeEvent = {
                 sequence: this.lastSequence + 0.5,
                 tick: nextTick,
@@ -6116,6 +6239,7 @@ export class SimulationRuntime {
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
     const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
+    if (committed.length) this.playerWorld?.markDirty()
     recordPhase('append-events')
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
@@ -6598,7 +6722,7 @@ export class SimulationRuntime {
 
   private collectRecentNpcFreeformActionKinds(limit: number): Map<string, NpcFreeformActionKind[]> {
     const out = new Map<string, NpcFreeformActionKind[]>()
-    for (const event of this.store.readRecentEvents(limit)) {
+    for (const event of this.store.readRecentEventsExcludingTypes(limit, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)) {
       if (event.eventType !== 'NPC_FREEFORM_ACTION_PROPOSED') continue
       const data = (event.payload as { data?: Record<string, unknown> })?.data
       if (!data || data.accepted !== true) continue
@@ -7183,14 +7307,17 @@ export class SimulationRuntime {
         this.eventEngine.hydrate(restored, this.currentTick)
       }
     }
-    for (const event of this.store.readRecentEvents(RECENT_EVENTS_BUFFER * 4)) {
+    for (const event of this.store.readRecentEventsExcludingTypes(RECENT_EVENTS_BUFFER * 4, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)) {
       const narrative = readNarrativeFromAnyEvent(event, event.tick ?? 0)
       if (!narrative) continue
       this.pushRecent(narrative)
     }
   }
 
-  private async runDeferredHydration(): Promise<void> {
+  private async runDeferredHydration(generation: number): Promise<void> {
+    const authorize = () => {
+      if (generation !== this.deferredHydrationGeneration) throw new DeferredHydrationCancelled()
+    }
     const batches: ReadonlyArray<{
       label: string
       eventTypes: readonly string[]
@@ -7222,7 +7349,7 @@ export class SimulationRuntime {
           this.constructionProjects.hydrateFromLifeExpansion(this.lifeExpansion)
         },
       },
-      { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events) },
+      { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events, authorize) },
       { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
       { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
       { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
@@ -7239,18 +7366,28 @@ export class SimulationRuntime {
     ]
 
     await this.yieldToEventLoop()
+    authorize()
     for (const batch of batches) {
+      authorize()
       const events = this.store.readEventsByTypes(batch.eventTypes)
+      authorize()
       batch.apply(events)
       console.log(`[boot] deferred hydration complete: ${batch.label} (${events.length} events)`)
       await this.yieldToEventLoop()
+      authorize()
     }
 
+    authorize()
     this.hydrateNpcEngineFromProjectionFacts()
+    authorize()
     this.hydrateAreaEngineFromProjectionFacts()
+    authorize()
     this.hydrateBuildingRuntimeFromProjectionFacts()
+    authorize()
     this.hydrateWorldStateFromProjectionFacts()
+    authorize()
     this.reinitializePreviousProjectionCounts()
+    authorize()
     this.deferredHydrationState = 'complete'
     console.log('[boot] deferred large-log hydration fully complete')
   }
@@ -7561,6 +7698,7 @@ function readAcceptedNpcInteraction(payload: unknown): {
  * `LivingWorldEventPayload` { actorType, data, narration } shape.
  */
 function readNarrativeFromAnyEvent(ev: Event, fallbackTick: number): NarrativeEvent | null {
+  if ((PLAYER_WORLD_EVENT_TYPES as readonly string[]).includes(ev.eventType)) return null
   const tick = typeof ev.tick === 'number' ? ev.tick : fallbackTick
 
   if (
@@ -7836,3 +7974,4 @@ function signedTraceDelta(value: number): string {
   const rounded = Math.round(value * 100) / 100
   return rounded >= 0 ? `+${rounded}` : String(rounded)
 }
+

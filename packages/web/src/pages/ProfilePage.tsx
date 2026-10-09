@@ -15,7 +15,7 @@ type Banner = { kind: 'success' | 'error'; message: string }
 
 export function ProfilePage() {
   const { t, locale, setLocale, supportedLocales, localeLabel } = useI18n()
-  const { account, token, applyAccount, logout } = useAuth()
+  const { account, accountId, applyAccount, logout, sessionRevoked } = useAuth()
 
   const [nickname, setNickname] = useState<string>('')
   const [avatar, setAvatar] = useState<string>('tide')
@@ -37,13 +37,13 @@ export function ProfilePage() {
   }, [account])
 
   useEffect(() => {
-    if (!token) return
+    if (!accountId) return
     let cancelled = false
     api
-      .profile(token)
+      .profile(accountId)
       .then((res) => {
         if (cancelled) return
-        setPresets(res.avatarPresets)
+        setPresets(AVATAR_PRESETS); applyAccount(res.profile)
       })
       .catch(() => {
         // server preset fetch is just a hint; the local default still works
@@ -51,10 +51,10 @@ export function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [accountId])
 
-  if (!token || !account) {
-    return <Navigate to="/account" replace />
+  if (!accountId || !account) {
+    return <Navigate to="/game" replace />
   }
 
   const onSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -63,11 +63,11 @@ export function ProfilePage() {
     setProfileSaving(true)
     try {
       const trimmed = nickname.trim()
-      const res = await api.updateProfile(token, {
+      const res = await api.updateProfile(accountId, {
         nickname: trimmed.length > 0 ? trimmed : null,
         avatar,
       })
-      applyAccount(res.account)
+      applyAccount(res.profile)
       setProfileBanner({ kind: 'success', message: t('profile.saved') })
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('profile.errorGeneric')
@@ -80,7 +80,7 @@ export function ProfilePage() {
   const onChangePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setPasswordBanner(null)
-    if (newPassword.length < 8) {
+    if (newPassword.length < 12 || newPassword.length > 200) {
       setPasswordBanner({ kind: 'error', message: t('profile.password.tooShort') })
       return
     }
@@ -90,7 +90,8 @@ export function ProfilePage() {
     }
     setPasswordSaving(true)
     try {
-      await api.changePassword(token, currentPassword, newPassword)
+      await api.changePassword(accountId, currentPassword, newPassword)
+      sessionRevoked()
       setCurrentPassword('')
       setNewPassword('')
       setNewPasswordConfirm('')
@@ -104,6 +105,7 @@ export function ProfilePage() {
         setPasswordBanner({ kind: 'error', message: t('profile.errorGeneric') })
       }
     } finally {
+      setCurrentPassword(''); setNewPassword(''); setNewPasswordConfirm('')
       setPasswordSaving(false)
     }
   }
@@ -141,14 +143,14 @@ export function ProfilePage() {
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
-              to="/admin/world"
+              to="/game/admin/world"
               className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
             >
               <span aria-hidden="true">◎</span>
               {t('nav.gmWorld')}
             </Link>
             <Link
-              to="/settings"
+              to="/game/settings"
               className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
             >
               <span aria-hidden="true">⚙</span>
@@ -156,7 +158,7 @@ export function ProfilePage() {
             </Link>
             {account.role === 'admin' && (
               <Link
-                to="/admin"
+                to="/game/admin"
                 className="gi-touch px-4 text-[11px] font-display uppercase tracking-tightest text-ember-300 border border-ember-700 hover:border-ember-500 hover:bg-ember-500/10 rounded-sharp transition-colors flex items-center gap-2"
               >
                 <span aria-hidden="true">✶</span>
@@ -238,7 +240,8 @@ export function ProfilePage() {
           <input
             type="password"
             required
-            minLength={8}
+            minLength={12}
+            maxLength={200}
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
@@ -250,7 +253,8 @@ export function ProfilePage() {
           <input
             type="password"
             required
-            minLength={8}
+            minLength={12}
+            maxLength={200}
             autoComplete="new-password"
             value={newPasswordConfirm}
             onChange={(e) => setNewPasswordConfirm(e.target.value)}
@@ -307,11 +311,12 @@ export function ProfilePage() {
           {t('profile.sessionHeading')}
         </h2>
         <div className="text-sm text-ground-300">
-          {t('account.signedInAs', { email: account.email })}
+          {account.email ? t('account.signedInAs', { email: account.email }) : `${account.displayName} · #${account.accountId}`}
+          {account.username && <p>{account.username}</p>}
         </div>
         <button
           type="button"
-          onClick={logout}
+          onClick={() => { void logout().catch(() => {}) }}
           className="gi-touch self-start px-4 text-[11px] font-display uppercase tracking-tightest border border-rust-600 text-rust-400 hover:bg-rust-500/10 transition-colors rounded-sharp"
         >
           {t('account.logout')}

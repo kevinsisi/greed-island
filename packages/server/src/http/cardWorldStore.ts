@@ -183,7 +183,7 @@ export class CardWorldStore {
     const tx = this.db.transaction(() => {
       const drop = this.getDrop(input.dropId)
       if (!drop) throw new CardWorldError('DROP_NOT_FOUND', 'Drop not found.')
-      if (drop.state !== 'available') {
+      if (drop.state !== 'available' || drop.expires_at_tick <= input.currentTick) {
         throw new CardWorldError('DROP_UNAVAILABLE', 'Drop is no longer available.')
       }
       const storeDeadline = input.currentTick + SIXTY_SECOND_RULE_TICKS
@@ -219,6 +219,9 @@ export class CardWorldStore {
       if (!drop) throw new CardWorldError('DROP_NOT_FOUND', 'Drop not found.')
       if (drop.state !== 'held' || drop.holder_account_id !== input.accountId) {
         throw new CardWorldError('NOT_HOLDING', 'You are not holding this card.')
+      }
+      if (drop.store_deadline_tick === null || drop.store_deadline_tick <= input.currentTick) {
+        throw new CardWorldError('DROP_UNAVAILABLE', 'The sixty-second deadline has passed.')
       }
       let slotIndex: number
       if (input.slotType === 'sequencing') {
@@ -279,6 +282,9 @@ export class CardWorldStore {
       if (!drop) throw new CardWorldError('DROP_NOT_FOUND', 'Drop not found.')
       if (drop.state !== 'held' || drop.holder_account_id !== input.accountId) {
         throw new CardWorldError('NOT_HOLDING', 'You are not holding this card.')
+      }
+      if (drop.store_deadline_tick === null || drop.store_deadline_tick <= input.currentTick) {
+        throw new CardWorldError('DROP_UNAVAILABLE', 'The sixty-second deadline has passed.')
       }
       this.db
         .prepare(

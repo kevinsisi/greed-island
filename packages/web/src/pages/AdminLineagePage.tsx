@@ -11,16 +11,16 @@ type LoadState =
   | { kind: 'error'; message: string }
 
 export function AdminLineagePage() {
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [state, setState] = useState<LoadState>({ kind: 'idle' })
   const [advancing, setAdvancing] = useState(false)
   const [advanceMessage, setAdvanceMessage] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     setState({ kind: 'loading' })
     try {
-      const data = await api.adminLineage(token)
+      const data = await api.adminLineage(accountId)
       setState({ kind: 'ready', data })
     } catch (err) {
       const message =
@@ -31,7 +31,7 @@ export function AdminLineagePage() {
             : '載入失敗'
       setState({ kind: 'error', message })
     }
-  }, [token])
+  }, [accountId])
 
   useEffect(() => {
     void refresh()
@@ -39,11 +39,11 @@ export function AdminLineagePage() {
 
   const advanceTicks = useCallback(
     async (ticks: number) => {
-      if (!token) return
+      if (!accountId) return
       setAdvancing(true)
       setAdvanceMessage(null)
       try {
-        const result = await api.adminSimAdvance(token, ticks)
+        const result = await api.adminSimAdvance(accountId, ticks)
         setAdvanceMessage(
           `已推進 ${result.advancedTicks} ticks（${result.beforeTick} → ${result.afterTick}），耗時 ${result.elapsedMs} ms${result.capped ? '（已封頂）' : ''}`
         )
@@ -54,10 +54,10 @@ export function AdminLineagePage() {
         setAdvancing(false)
       }
     },
-    [token, refresh]
+    [accountId, refresh]
   )
 
-  if (!token || !account) {
+  if (!accountId || !account) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader eyebrow="GM 工具" title="家族樹" description="觀察家戶結構與世代關係" />
@@ -83,7 +83,7 @@ export function AdminLineagePage() {
         description="觀察家戶結構與世代關係。可使用時間加速器跳過實際等待時間。"
         actions={
           <Link
-            to="/admin/npcs"
+            to="/game/admin/npcs"
             className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
           >
             回到 NPC 儀表板

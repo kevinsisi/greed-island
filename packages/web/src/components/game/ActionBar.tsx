@@ -1,38 +1,43 @@
 import { useCallback, useState } from 'react'
 import { api, type PlayerNeedsState } from '../../api/client'
+import { usePlayerWallet } from '../../state/usePlayerWallet'
+import { canSpendWallet, type WalletReadState } from '../../state/walletRead'
+import { WalletSpendButton, WalletStatus } from './WalletStatus'
 
 const EAT_GOLD_COST = 10
 
 type ActionBarProps = {
-  token: string | null
+  accountId: number | null
   currentDistrictName: string | null
   canEnter: boolean
   onEnterArea: () => void
   onEatSuccess?: (needs: PlayerNeedsState) => void
 }
 
-export function ActionBar({ token, currentDistrictName, canEnter, onEnterArea, onEatSuccess }: ActionBarProps) {
+export function ActionBar({ accountId, currentDistrictName, canEnter, onEnterArea, onEatSuccess }: ActionBarProps) {
   const [eating, setEating] = useState(false)
   const [eatError, setEatError] = useState<string | null>(null)
+  const { read: walletRead, refresh: refreshWallet } = usePlayerWallet(accountId)
 
   const handleEat = useCallback(async () => {
-    if (!token || eating) return
+    if (!accountId || eating || !canSpendWallet(walletRead, EAT_GOLD_COST)) return
     setEating(true)
     setEatError(null)
     try {
-      const result = await api.eatRation(token)
+      const result = await api.eatRation(accountId)
       if (result.accepted) onEatSuccess?.(result.needs)
+      await refreshWallet()
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message ?? '進食失敗'
       setEatError(msg.includes('INSUFFICIENT_GOLD') ? `金幣不足（需 ${EAT_GOLD_COST} 枚）` : msg)
     } finally {
       setEating(false)
     }
-  }, [token, eating, onEatSuccess])
+  }, [accountId, eating, onEatSuccess, walletRead, refreshWallet])
 
   // Inline on all breakpoints — MobileTabBar (z-30, fixed bottom-0) already occupies the
   // bottom of the screen; a second fixed bar at z-20 is fully covered and unreachable.
-  return (
+  return <>
     <div
       className="flex items-stretch h-14 gap-2 px-0 py-2 border-t border-ground-700"
       role="toolbar"
@@ -42,26 +47,29 @@ export function ActionBar({ token, currentDistrictName, canEnter, onEnterArea, o
         canEnter={canEnter}
         currentDistrictName={currentDistrictName}
         onEnterArea={onEnterArea}
-        token={token}
+        accountId={accountId}
         eating={eating}
         eatError={eatError}
         onEat={handleEat}
+        walletRead={walletRead}
       />
     </div>
-  )
+    {accountId && walletRead.status !== 'ready' && <p className="mt-1"><WalletStatus read={walletRead} /></p>}
+  </>
 }
 
 type ActionButtonsProps = {
   canEnter: boolean
   currentDistrictName: string | null
   onEnterArea: () => void
-  token: string | null
+  accountId: number | null
   eating: boolean
   eatError: string | null
   onEat: () => void
+  walletRead: WalletReadState
 }
 
-function ActionButtons({ canEnter, currentDistrictName, onEnterArea, token, eating, eatError, onEat }: ActionButtonsProps) {
+function ActionButtons({ canEnter, currentDistrictName, onEnterArea, accountId, eating, eatError, onEat, walletRead }: ActionButtonsProps) {
   return (
     <>
       {/* 進入區域 */}
@@ -80,11 +88,12 @@ function ActionButtons({ canEnter, currentDistrictName, onEnterArea, token, eati
       </button>
 
       {/* 進食 */}
-      {token && (
-        <button
-          type="button"
+      {accountId && (
+        <WalletSpendButton
           onClick={onEat}
-          disabled={eating}
+          busy={eating}
+          read={walletRead}
+          amount={EAT_GOLD_COST}
           title={eatError ?? undefined}
           className="gi-touch w-16 sm:w-20 flex flex-col items-center justify-center gap-0 border border-ground-600 rounded-sharp bg-ground-900 text-ground-300 hover:bg-ember-500/10 hover:border-ember-700 hover:text-ember-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -94,7 +103,7 @@ function ActionButtons({ canEnter, currentDistrictName, onEnterArea, token, eati
           <span className="font-data text-[10px] tabular-nums leading-tight text-ground-500">
             −{EAT_GOLD_COST}金
           </span>
-        </button>
+        </WalletSpendButton>
       )}
 
       {/* … placeholder */}

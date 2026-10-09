@@ -1,0 +1,9 @@
+# Preserve existing views inside the sole canonical game
+
+The reduced client wildcard route is superseded. Existing profile, password, account administration, hub/area/building, card/codex, history, social/trade, ecology/market/property and GM/settings surfaces remain concrete routes under `/game/*`; original bookmarks redirect to matching routes. There is no OriginalApp/JWT fallback, alternate multiplayer account or game-mode chooser.
+
+This serves WORLD_CAPABILITIES Part I Actor/Command/Event Reality and the existing player-integration work. One AuthProvider owns the cookie profile, numeric account identity and admitted canonical player stream. Legacy presentation APIs use credentials:include and expected-ID assertions rather than bearer credentials. Email remains nullable. Identity changes remount subordinate views so private caches cannot survive into another account.
+
+Existing world data must come from the same runtime's reviewed read DTOs, never illustrative fixture fallback. Detailed area/hub player markers are derived from the canonical snapshot. Area cell clicks plan bounded direction intents through the same client; localStorage positions and client-coordinate publication are removed without deleting historical stored data. Public world chat is restored as a canonical event/projection, across regions, with escaped text and sender-region labels. Prior room chat history remains explicitly preserved pending staged mapping.
+
+This is frontend integration, not evidence that every legacy API family is mounted or every mechanic's new spatial policy is complete. Indoor NPC/building interactions require a reviewed canonical door/interaction rule or typed interior entry. Same-cookie authorization, reviewed public/self-only DTOs, event/rule boundaries, preserved progress, pinned-dependency build and real browser CI are release gates. No live data/import/deployment is performed here.

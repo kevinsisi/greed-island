@@ -73,6 +73,13 @@ export class PlayerJobsStore {
     initializePlayerJobsSchema(db)
   }
 
+  /** Read existing state only. Entry/command paths own wallet initialization. */
+  peekWallet(accountId: number): WalletRecord | null {
+    const row = this.db.prepare('SELECT * FROM player_wallet WHERE account_id = ?')
+      .get(accountId) as WalletRow | undefined
+    return row ? toWalletRecord(row) : null
+  }
+
   getWallet(accountId: number): WalletRecord {
     const row = this.db
       .prepare('SELECT * FROM player_wallet WHERE account_id = ?')

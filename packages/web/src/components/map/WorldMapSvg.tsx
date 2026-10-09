@@ -12,7 +12,7 @@
 //   pins a quest marker, busiest ward glows). Legible on a phone.
 //   Ember #f39c20 warm light / tide #4db8c8 water.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   DISTRICTS,
   DISTRICT_IDS,
@@ -291,6 +291,7 @@ export interface WorldMapSvgProps {
   constructionActivities?: MapConstructionActivity[]
   ecologyByTile?: readonly HubEcologySummary[]
   controlsEnabled?: boolean
+  authoritativeTileId?: string | null
   focusDistrictId?: DistrictId | null
 }
 
@@ -301,15 +302,16 @@ export function WorldMapSvg({
   locale,
   playerName,
   onAreaEnter,
-  onPositionChange,
+  onPositionChange: _onPositionChange,
   areaOverlays = [],
   activeDistrictIds,
   constructionActivities = [],
   controlsEnabled = true,
+  authoritativeTileId = null,
   focusDistrictId = null,
 }: WorldMapSvgProps) {
   const [hoveredDistrict, setHoveredDistrict] = useState<DistrictId | null>(null)
-  const [playerDistrictId, setPlayerDistrictId] = useState<DistrictId | null>(loadHubPlayerDistrict)
+  const playerDistrictId: DistrictId | null = DISTRICT_IDS.find(id => id === authoritativeTileId) ?? null
 
   const activeSet = useMemo(
     () => (activeDistrictIds ? new Set<DistrictId>(activeDistrictIds) : null),
@@ -346,20 +348,16 @@ export function WorldMapSvg({
     return best
   }, [npcsByDistrict, isActiveDistrict])
 
-  useEffect(() => {
-    if (!onPositionChange) return
-    onPositionChange({ x: SEED.t_dimai[0], y: SEED.t_dimai[1], z: 0 })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+
 
   const handleDistrictClick = useCallback(
     (id: DistrictId) => {
       if (!isActiveDistrict(id)) return
-      if (controlsEnabled) { setPlayerDistrictId(id); saveHubPlayerDistrict(id) }
+
       onAreaEnter(id)
-      if (onPositionChange) onPositionChange({ x: SEED[id][0], y: SEED[id][1], z: 0 })
+
     },
-    [isActiveDistrict, controlsEnabled, onAreaEnter, onPositionChange],
+    [isActiveDistrict, controlsEnabled, onAreaEnter],
   )
 
   // Streets: main avenues from the core to each ward + a ring joining neighbours.
@@ -610,20 +608,4 @@ export function WorldMapSvg({
       </svg>
     </div>
   )
-}
-
-// ── Player district persistence ───────────────────────────────────────────────
-
-const HUB_POS_KEY = 'gi:hubPos:v2'
-function loadHubPlayerDistrict(): DistrictId | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(HUB_POS_KEY)
-    if (raw && isDistrict(raw as DistrictId)) return raw as DistrictId
-  } catch { /* storage unavailable */ }
-  return null
-}
-function saveHubPlayerDistrict(id: DistrictId): void {
-  if (typeof window === 'undefined') return
-  try { window.localStorage.setItem(HUB_POS_KEY, id) } catch { /* quota */ }
 }

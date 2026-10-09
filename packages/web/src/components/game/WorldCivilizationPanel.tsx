@@ -54,7 +54,7 @@ export function WorldCivilizationPanel({ snapshot }: { snapshot: WorldCivilizati
                 <li key={tech.techId} className="rounded-sharp border border-ground-800 bg-ground-900/70 p-2">
                   <div className="text-[12px] font-semibold text-ground-100">{tech.title}</div>
                   <p className="mt-1 text-[10px] text-ground-500">
-                    {domainLabel(tech.domain)} · 來自 {tech.evidenceCount} 個世界事件證據
+                    {domainLabel(tech.domain)} · {tech.evidenceCount === null ? '事件證據資料未公開' : `來自 ${tech.evidenceCount} 個世界事件證據`}
                   </p>
                 </li>
               ))}

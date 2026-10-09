@@ -16,7 +16,7 @@ type Status = 'idle' | 'pending' | 'friend'
 
 export function NearbyPlayers({ tileId, tileName }: { tileId: string; tileName: string }) {
   const { t } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [players, setPlayers] = useState<ServerNearbyPlayer[]>([])
   const [statusByPeer, setStatusByPeer] = useState<Record<number, Status>>({})
   const [active, setActive] = useState<ServerNearbyPlayer | null>(null)
@@ -24,17 +24,15 @@ export function NearbyPlayers({ tileId, tileName }: { tileId: string; tileName: 
   const navigate = useNavigate()
 
   const refresh = useCallback(async () => {
-    if (!token) {
+    if (!accountId) {
       setPlayers([])
       return
     }
     try {
-      // post our presence first so the server knows we're here
-      await api.socialPresence(token, tileId)
-      const r = await api.socialNearby(token, tileId)
+      const r = await api.socialNearby(accountId, tileId)
       setPlayers(r.players)
-      const friends = await api.socialFriends(token)
-      const requests = await api.socialFriendRequests(token)
+      const friends = await api.socialFriends(accountId)
+      const requests = await api.socialFriendRequests(accountId)
       const next: Record<number, Status> = {}
       for (const f of friends.friends) {
         const peerId = peerIdOf(f, account?.id ?? -1)
@@ -52,7 +50,7 @@ export function NearbyPlayers({ tileId, tileName }: { tileId: string; tileName: 
         setError(err.message)
       }
     }
-  }, [token, tileId, account?.id])
+  }, [accountId, tileId, account?.id])
 
   useEffect(() => {
     void refresh()
@@ -62,26 +60,26 @@ export function NearbyPlayers({ tileId, tileName }: { tileId: string; tileName: 
 
   const handleAddFriend = useCallback(
     async (peerId: number) => {
-      if (!token) return
+      if (!accountId) return
       try {
-        await api.socialFriendRequest(token, peerId)
+        await api.socialFriendRequest(accountId, peerId)
         setStatusByPeer((prev) => ({ ...prev, [peerId]: 'pending' }))
       } catch (err) {
         if (err instanceof ApiError) setError(err.message)
       }
     },
-    [token]
+    [accountId]
   )
 
   const handleMessage = useCallback(
     (peerId: number) => {
-      navigate(`/social?peer=${peerId}`)
+      navigate(`/game/social?peer=${peerId}`)
       setActive(null)
     },
     [navigate]
   )
 
-  if (!token || !account) return null
+  if (!accountId || !account) return null
 
   return (
     <section className="flex flex-col gap-3">
@@ -245,18 +243,8 @@ function peerIdOf(f: ServerFriendDto, myId: number): number | null {
 // Peer presence hook — used by AreaPage to keep the player's last-seen
 // tile fresh and not just on initial mount. Exported here so the page
 // can stay lean.
-export function usePresenceTouch(tileId: string | null, position?: { x: number; y: number; z: number } | null): void {
-  const { token } = useAuth()
-  useEffect(() => {
-    if (!token || !tileId) return
-    void api.socialPresence(token, tileId, position).catch(() => {
-      // ignore — best effort
-    })
-    const timer = window.setInterval(() => {
-      void api.socialPresence(token, tileId, position).catch(() => undefined)
-    }, PRESENCE_REFRESH_MS)
-    return () => window.clearInterval(timer)
-  }, [token, tileId, position?.x, position?.y, position?.z])
+export function usePresenceTouch(_tileId: string | null, _position?: { x: number; y: number; z: number } | null): void {
+  // Canonical SSE owns presence; legacy detailed views never publish positions.
 }
 
 // Re-export for type narrowing in tests/devtools.

@@ -1,0 +1,122 @@
+import { describe, expect, it, vi } from 'vitest'
+import { TickFanout } from './sync.js'
+
+describe('TickFanout pure coalescing (not network load testing)', () => {
+  it('coalesces 500 command dirty marks into one callback per each of 50 listeners', () => {
+    const fanout = new TickFanout()
+    const listeners = Array.from({ length: 50 }, () => vi.fn())
+    listeners.forEach(listener => fanout.subscribe(listener))
+    for (let command = 0; command < 500; command++) fanout.markDirty()
+    expect(listeners.every(listener => listener.mock.calls.length === 0)).toBe(true)
+    expect(fanout.flush(1)).toBe(true)
+    expect(listeners.reduce((total, listener) => total + listener.mock.calls.length, 0)).toBe(50)
+    expect(fanout.flush(1)).toBe(false)
+    expect(fanout.flush(2)).toBe(false)
+    expect(listeners.every(listener => listener.mock.calls.length === 1)).toBe(true)
+  })
+
+  it('preserves dirty marks made after a flush when the same or stale tick is retried', () => {
+    const fanout = new TickFanout()
+    const listener = vi.fn()
+    fanout.subscribe(listener)
+    fanout.markDirty()
+    fanout.flush(5)
+    fanout.markDirty()
+    expect(fanout.flush(5)).toBe(false)
+    expect(fanout.flush(4)).toBe(false)
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(fanout.flush(6)).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(fanout.flush(7)).toBe(false)
+  })
+
+  it('does not consume an idle tick before dirty work arrives', () => {
+    const fanout = new TickFanout()
+    const listener = vi.fn()
+    fanout.subscribe(listener)
+    expect(fanout.flush(0)).toBe(false)
+    fanout.markDirty()
+    expect(fanout.flush(0)).toBe(true)
+    expect(listener).toHaveBeenCalledOnce()
+  })
+
+  it('keeps work dirtied inside callbacks for the next tick and rejects nested flushes', () => {
+    const fanout = new TickFanout()
+    const nestedResults: boolean[] = []
+    const listener = vi.fn(() => {
+      fanout.markDirty()
+      nestedResults.push(fanout.flush(2))
+    })
+    fanout.subscribe(listener)
+    fanout.markDirty()
+    expect(fanout.flush(1)).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(fanout.flush(1)).toBe(false)
+    expect(fanout.flush(2)).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(nestedResults).toEqual([false, false])
+  })
+
+  it('isolates callback failures and still sends to later subscribers', () => {
+    const fanout = new TickFanout()
+    const failing = vi.fn(() => { throw new Error('closed stream') })
+    const healthy = vi.fn()
+    fanout.subscribe(failing)
+    fanout.subscribe(healthy)
+    fanout.markDirty()
+    expect(() => fanout.flush(1)).not.toThrow()
+    expect(failing).toHaveBeenCalledOnce()
+    expect(healthy).toHaveBeenCalledOnce()
+    fanout.markDirty()
+    expect(fanout.flush(2)).toBe(true)
+    expect(healthy).toHaveBeenCalledTimes(2)
+  })
+
+  it('never sends to a disposed listener, including disposal during another callback', () => {
+    const fanout = new TickFanout()
+    const disposed = vi.fn()
+    const dispose = fanout.subscribe(disposed)
+    dispose()
+    dispose()
+    const later = vi.fn()
+    let disposeLater = () => {}
+    fanout.subscribe(() => disposeLater())
+    disposeLater = fanout.subscribe(later)
+    fanout.markDirty()
+    fanout.flush(1)
+    fanout.markDirty()
+    fanout.flush(2)
+    expect(disposed).not.toHaveBeenCalled()
+    expect(later).not.toHaveBeenCalled()
+  })
+
+  it('defers subscriptions added during a batch, with independent cleanup for repeated callbacks', () => {
+    const fanout = new TickFanout()
+    const later = vi.fn()
+    let added = false
+    fanout.subscribe(() => { if (!added) { added = true; fanout.subscribe(later) } })
+    const shared = vi.fn()
+    const unsubscribeFirst = fanout.subscribe(shared)
+    fanout.subscribe(shared)
+    fanout.markDirty()
+    fanout.flush(1)
+    expect(later).not.toHaveBeenCalled()
+    expect(shared).toHaveBeenCalledTimes(2)
+    unsubscribeFirst()
+    fanout.markDirty()
+    fanout.flush(2)
+    expect(later).toHaveBeenCalledOnce()
+    expect(shared).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not broadcast on subscribe or unsubscribe; initial snapshots belong to HTTP', () => {
+    const fanout = new TickFanout()
+    const listener = vi.fn()
+    const unsubscribe = fanout.subscribe(listener)
+    expect(fanout.flush(1)).toBe(false)
+    unsubscribe()
+    fanout.markDirty()
+    expect(fanout.flush(2)).toBe(true)
+    expect(listener).not.toHaveBeenCalled()
+  })
+})

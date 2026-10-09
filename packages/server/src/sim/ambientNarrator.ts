@@ -6,6 +6,7 @@
 //   3. 沒有 active Gemini key 時，回 fallback 靜態描述。
 //   4. 失敗（網路 / 解析）→ 也回 fallback，不 throw 給呼叫端。
 
+import { boundedSettlement, ProviderCancelled, withAbortSignal } from '../npcs/providerCancellation.js'
 import type { SettingsStore } from '../http/settings.js'
 import type { ActiveWorldEvent } from '../events/types.js'
 import { GeminiUnavailableError } from '../npcs/geminiClient.js'
@@ -73,6 +74,10 @@ const FALLBACK_BY_TILE: Readonly<Record<string, string>> = {
 const REGEX_FENCE = /```(?:[a-z]+)?\s*([\s\S]*?)```/i
 
 export class AmbientNarrator {
+  private active = true
+  private generation = 0
+  private controller = new AbortController()
+  private readonly operations = new Set<Promise<unknown>>()
   private readonly cache: Map<string, AmbientResult> = new Map()
   private readonly inflight: Map<string, Promise<AmbientResult>> = new Map()
   /** v0.15.1：每個 tile 上次被 getOrSchedule 呼叫的 tick；用來判斷「還有玩家在看」。 */
@@ -80,7 +85,24 @@ export class AmbientNarrator {
 
   constructor(private readonly settings: SettingsStore) {}
 
+  stop(): void { if (!this.active) return; this.active = false; this.generation += 1; this.controller.abort(); this.inflight.clear() }
+  start(): void { if (this.active) return; this.active = true; this.controller = new AbortController() }
+  waitForIdle(timeoutMs = 1000): Promise<boolean> { return boundedSettlement([...this.operations], timeoutMs) }
+  private track<T>(operation: Promise<T>): Promise<T> {
+    this.operations.add(operation)
+    void operation.then(() => this.operations.delete(operation), () => this.operations.delete(operation))
+    return operation
+  }
+  private authorize(generation: number, signal: AbortSignal): void { if (!this.active || signal.aborted || generation !== this.generation) throw new ProviderCancelled() }
+
+  /** Read an already generated result without registering a visitor or scheduling AI. */
+  peek(tileId: string): AmbientResult | null {
+    const cached = this.cache.get(tileId)
+    return cached ? { ...cached } : null
+  }
+
   getOrSchedule(ctx: AmbientContext, currentTick: number): AmbientResult {
+    if (!this.active) return this.cache.get(ctx.tileId) ?? this.fallbackOf(ctx, currentTick)
     this.lastRequestedTickByTile.set(ctx.tileId, currentTick)
     const cached = this.cache.get(ctx.tileId)
     if (cached && currentTick - cached.generatedAtTick < AMBIENT_REFRESH_TICKS) {
@@ -104,6 +126,7 @@ export class AmbientNarrator {
     currentTick: number,
     getContext: (tileId: string) => AmbientContext | null
   ): void {
+    if (!this.active) return
     if (this.settings.listActiveKeys().length === 0) return
     for (const [tileId, lastRequestedTick] of this.lastRequestedTickByTile) {
       if (currentTick - lastRequestedTick > RECENT_VISITOR_WINDOW_TICKS) continue
@@ -134,6 +157,7 @@ export class AmbientNarrator {
     allTileIds: readonly string[],
     getContext: (tileId: string) => AmbientContext | null
   ): void {
+    if (!this.active) return
     // 成本閘門：與 runRefresh 一致 —— 沒有任何 provider 就完全不花費。
     if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) return
     // 速率封頂：每 PERIOD tick 才動一次。
@@ -170,12 +194,14 @@ export class AmbientNarrator {
   }
 
   async refresh(ctx: AmbientContext, currentTick: number): Promise<AmbientResult> {
+    if (!this.active) return this.cache.get(ctx.tileId) ?? this.fallbackOf(ctx, currentTick)
     const key = ctx.tileId
     const inflight = this.inflight.get(key)
     if (inflight) return inflight
-    const promise = this.runRefresh(ctx, currentTick).finally(() => {
-      this.inflight.delete(key)
-    })
+    const generation = this.generation, signal = this.controller.signal
+    const promise = this.track(this.runRefresh(ctx, currentTick, generation, signal).finally(() => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key)
+    }))
     this.inflight.set(key, promise)
     return promise
   }
@@ -183,12 +209,18 @@ export class AmbientNarrator {
   async narrateWorldEvent(
     event: ActiveWorldEvent
   ): Promise<{ text: string; source: 'ai' | 'fallback'; aiError: string | null }> {
+    if (!this.active) return { text: event.text.zh, source: 'fallback', aiError: 'cancelled' }
+    return this.track(this.runWorldEvent(event, this.generation, this.controller.signal))
+  }
+  private async runWorldEvent(event: ActiveWorldEvent, generation: number, signal: AbortSignal): Promise<{ text: string; source: 'ai' | 'fallback'; aiError: string | null }> {
     const fallback = event.text.zh
+    this.authorize(generation, signal)
     if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) {
       return { text: fallback, source: 'fallback', aiError: 'no-provider' }
     }
     try {
-      const result = await generateWithProviders(this.settings, {
+      const result = await withAbortSignal(generateWithProviders(this.settings, {
+        signal,
         systemPrompt: [
           '你是《貪婪之島 / Tideway》世界的氛圍敘事員。世界觀：潮鳴市是被脈網覆蓋的港都。',
           '你只負責把一段世界事件的模板敘述改寫成更有故事感、更口語、不重複模板字的繁體中文。',
@@ -202,12 +234,14 @@ export class AmbientNarrator {
         userPrompt: `事件類型：${event.type}\n模板敘事：「${fallback}」`,
         temperature: 0.85,
         maxOutputTokens: 200
-      })
+      }), signal)
+      this.authorize(generation, signal)
       const trimmed = sanitizeOutput(result.text)
       if (!trimmed) return { text: fallback, source: 'fallback', aiError: 'empty' }
       console.log(`[ambient] worldEvent ${event.id} AI ok via ${result.provider}`)
       return { text: trimmed, source: 'ai', aiError: null }
     } catch (err) {
+      if (signal.aborted || generation !== this.generation || !this.active) return { text: fallback, source: 'fallback', aiError: 'cancelled' }
       const aiError =
         err instanceof AiUnavailableError || err instanceof GeminiUnavailableError
           ? err.message
@@ -219,7 +253,8 @@ export class AmbientNarrator {
     }
   }
 
-  private async runRefresh(ctx: AmbientContext, currentTick: number): Promise<AmbientResult> {
+  private async runRefresh(ctx: AmbientContext, currentTick: number, generation: number, signal: AbortSignal): Promise<AmbientResult> {
+    this.authorize(generation, signal)
     if (this.settings.listActiveKeys().length === 0 && !isOpenCodeConfigured(this.settings)) {
       const result = this.fallbackOf(ctx, currentTick)
       this.cache.set(ctx.tileId, result)
@@ -227,12 +262,14 @@ export class AmbientNarrator {
     }
     try {
       console.log(`[ambient] generating for ${ctx.tileId} (tick ${currentTick})`)
-      const providerResult = await generateWithProviders(this.settings, {
+      const providerResult = await withAbortSignal(generateWithProviders(this.settings, {
+        signal,
         systemPrompt: buildSystemPrompt(),
         userPrompt: buildUserPrompt(ctx),
         temperature: 0.9,
         maxOutputTokens: 200
-      })
+      }), signal)
+      this.authorize(generation, signal)
       const raw = providerResult.text
       const trimmed = sanitizeOutput(raw)
       if (!trimmed) {
@@ -252,6 +289,7 @@ export class AmbientNarrator {
       this.cache.set(ctx.tileId, result)
       return result
     } catch (err) {
+      if (signal.aborted || generation !== this.generation || !this.active) return { ...this.fallbackOf(ctx, currentTick), aiError: 'cancelled' }
       const aiError =
         err instanceof AiUnavailableError || err instanceof GeminiUnavailableError
           ? err.message

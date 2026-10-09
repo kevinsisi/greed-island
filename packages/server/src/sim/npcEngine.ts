@@ -99,6 +99,11 @@ const LAND_MASK_SERVER: Readonly<Record<string, readonly string[]>> = {
   ],
 }
 
+/** Defensive read-only terrain view shared by canonical player geometry. */
+export function getAreaTerrainMask(tileId: string): readonly string[] {
+  return Object.freeze([...(LAND_MASK_SERVER[tileId] ?? [])])
+}
+
 function isLandWalkable(tileId: string, col: number, row: number): boolean {
   const ch = LAND_MASK_SERVER[tileId]?.[row]?.[col]
   if (ch === undefined) return true // water tiles / unknown = walkable
@@ -2203,3 +2208,4 @@ function clamp(value: number, lo: number, hi: number): number {
 export const NPC_INTERACT_COOLDOWN_TICKS = INTERACT_COOLDOWN_TICKS
 export const NPC_PLAYER_DIALOG_HOLD_TICKS = PLAYER_DIALOG_HOLD_TICKS
 export const _TICKS_PER_HOUR = TICKS_PER_HOUR
+

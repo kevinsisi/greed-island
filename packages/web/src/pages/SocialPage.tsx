@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   api,
   ApiError,
-  socialStreamUrl,
   type ServerAllianceDto,
   type ServerConversationItem,
   type ServerFriendDto,
@@ -16,12 +15,13 @@ import { useAuth } from '../state/AuthContext'
 import { useI18n, type TranslationKey } from '../i18n'
 import { PageHeader } from '../components/common/PageHeader'
 import { useWorldState } from '../state/WorldStateContext'
+import { subscribeSocialStream } from '../state/socialStream'
 
 type Tab = 'friends' | 'requests' | 'messages' | 'alliance' | 'trade'
 
 export function SocialPage() {
   const { t } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [tab, setTab] = useState<Tab>('friends')
   const [friends, setFriends] = useState<ServerFriendDto[]>([])
   const [requests, setRequests] = useState<ServerFriendRequestList>({ incoming: [], outgoing: [] })
@@ -32,80 +32,62 @@ export function SocialPage() {
   const [allianceName, setAllianceName] = useState('')
   const [inviteId, setInviteId] = useState('')
   const [trades, setTrades] = useState<ServerTradeList>({ incoming: [], outgoing: [] })
+  const privateEpoch = useRef(0)
+  const ownerRef = useRef(accountId)
+  ownerRef.current = accountId
+  const [privateRevision, setPrivateRevision] = useState(0)
+  const clearPrivateState = useCallback(() => {
+    privateEpoch.current += 1
+    setPrivateRevision(value => value + 1)
+    setFriends([]); setRequests({ incoming: [], outgoing: [] }); setConversations([])
+    setAlliance(null); setOpenPeer(null); setTrades({ incoming: [], outgoing: [] })
+    setAllianceName(''); setInviteId('')
+  }, [])
 
   const loadAll = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
+    const ownEpoch = privateEpoch.current
     try {
       const [f, r, c, a, tr] = await Promise.all([
-        api.socialFriends(token),
-        api.socialFriendRequests(token),
-        api.socialConversations(token),
-        api.socialAlliance(token),
-        api.tradeList(token),
+        api.socialFriends(accountId),
+        api.socialFriendRequests(accountId),
+        api.socialConversations(accountId),
+        api.socialAlliance(accountId),
+        api.tradeList(accountId),
       ])
+      if (ownerRef.current !== accountId || privateEpoch.current !== ownEpoch) return
+      setError(null)
       setFriends(f.friends)
       setRequests(r)
       setConversations(c.conversations)
       setAlliance(a.alliance)
       setTrades(tr)
     } catch (err) {
-      surface(err, t, setError)
+      if (ownerRef.current === accountId && privateEpoch.current === ownEpoch) surface(err, t, setError)
     }
-  }, [token, t])
+  }, [accountId, t])
 
   useEffect(() => {
     void loadAll()
   }, [loadAll])
 
-  // SSE for live updates
+  // Cookie-only updates are scoped to the displayed owner and cleared on interruption.
   useEffect(() => {
-    if (!token) return
-    let stopped = false
-    let source: EventSource | null = null
-    let reconnect: number | null = null
-    const connect = () => {
-      if (stopped) return
-      // EventSource doesn't support custom headers, so the social
-      // stream accepts the JWT as a query parameter for SSE.
-      try {
-        source = new EventSource(`${socialStreamUrl()}?access_token=${encodeURIComponent(token)}`)
-      } catch {
-        return
-      }
-      const handler = (_e: MessageEvent) => {
-        // any social event refreshes the relevant slice
-        void loadAll()
-      }
-      ;[
-        'friend.request',
-        'friend.accepted',
-        'friend.rejected',
-        'friend.removed',
-        'message.new',
-        'presence.enter',
-        'presence.leave',
-        'alliance.invited',
-      ].forEach((name) => source?.addEventListener(name, handler as EventListener))
-      source.addEventListener('error', () => {
-        source?.close()
-        source = null
-        if (!stopped && reconnect === null) {
-          reconnect = window.setTimeout(() => {
-            reconnect = null
-            connect()
-          }, 5000)
-        }
-      })
-    }
-    connect()
-    return () => {
-      stopped = true
-      if (reconnect !== null) window.clearTimeout(reconnect)
-      source?.close()
-    }
-  }, [token, loadAll])
+    if (!accountId) return
+    const stop = subscribeSocialStream({
+      accountId,
+      refresh: () => { void loadAll() },
+      clearPrivateState: () => {
+        clearPrivateState()
+        setError('社交連線已中斷，正在重新確認資料。')
+      },
+      sessionInvalidated: () => window.dispatchEvent(new Event('greed-session-invalidated')),
+      revalidateSession: async () => (await api.profile(accountId)).profile.role === account?.role,
+    })
+    return () => { stop(); privateEpoch.current += 1 }
+  }, [accountId, account?.role, loadAll, clearPrivateState])
 
-  if (!token || !account) {
+  if (!accountId || !account) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader eyebrow={t('social.eyebrow')} title={t('social.title')} description={t('social.description')} />
@@ -160,7 +142,7 @@ export function SocialPage() {
           friends={friends}
           onRemove={async (id) => {
             try {
-              await api.socialFriendRemove(token, id)
+              await api.socialFriendRemove(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -178,7 +160,7 @@ export function SocialPage() {
           requests={requests}
           onAccept={async (id) => {
             try {
-              await api.socialFriendAccept(token, id)
+              await api.socialFriendAccept(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -186,7 +168,7 @@ export function SocialPage() {
           }}
           onReject={async (id) => {
             try {
-              await api.socialFriendReject(token, id)
+              await api.socialFriendReject(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -197,7 +179,8 @@ export function SocialPage() {
 
       {tab === 'messages' && (
         <MessagesPanel
-          token={token}
+          key={`${accountId}:${privateRevision}`}
+          accountId={accountId}
           myUserId={account.id}
           conversations={conversations}
           openPeer={openPeer}
@@ -212,7 +195,7 @@ export function SocialPage() {
           trades={trades}
           onAccept={async (id) => {
             try {
-              await api.tradeAccept(token, id)
+              await api.tradeAccept(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -220,7 +203,7 @@ export function SocialPage() {
           }}
           onReject={async (id) => {
             try {
-              await api.tradeReject(token, id)
+              await api.tradeReject(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -228,7 +211,7 @@ export function SocialPage() {
           }}
           onCancel={async (id) => {
             try {
-              await api.tradeCancel(token, id)
+              await api.tradeCancel(accountId, id)
               void loadAll()
             } catch (err) {
               surface(err, t, setError)
@@ -248,7 +231,7 @@ export function SocialPage() {
             const trimmed = allianceName.trim()
             if (trimmed.length < 2) return
             try {
-              const r = await api.socialAllianceCreate(token, trimmed)
+              const r = await api.socialAllianceCreate(accountId, trimmed)
               setAlliance(r.alliance)
               setAllianceName('')
             } catch (err) {
@@ -257,7 +240,7 @@ export function SocialPage() {
           }}
           onLeave={async () => {
             try {
-              await api.socialAllianceLeave(token)
+              await api.socialAllianceLeave(accountId)
               setAlliance(null)
             } catch (err) {
               surface(err, t, setError)
@@ -267,7 +250,7 @@ export function SocialPage() {
             const id = Number.parseInt(inviteId, 10)
             if (!Number.isFinite(id) || id <= 0) return
             try {
-              const r = await api.socialAllianceInvite(token, id)
+              const r = await api.socialAllianceInvite(accountId, id)
               setAlliance(r.alliance)
               setInviteId('')
             } catch (err) {
@@ -417,7 +400,7 @@ function RequestsPanel({
 }
 
 function MessagesPanel({
-  token,
+  accountId,
   myUserId,
   conversations,
   openPeer,
@@ -425,7 +408,7 @@ function MessagesPanel({
   onAfterChange,
   onError,
 }: {
-  token: string
+  accountId: number
   myUserId: number
   conversations: ServerConversationItem[]
   openPeer: ServerPublicAccount | null
@@ -448,7 +431,7 @@ function MessagesPanel({
       }
     }
     void api
-      .socialMessages(token, openPeer.id, 100)
+      .socialMessages(accountId, openPeer.id, 100)
       .then((r) => {
         if (!cancelled) setMessages(r.messages)
         void onAfterChange()
@@ -457,7 +440,7 @@ function MessagesPanel({
     return () => {
       cancelled = true
     }
-  }, [openPeer, token, onAfterChange, onError])
+  }, [openPeer, accountId, onAfterChange, onError])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -469,7 +452,7 @@ function MessagesPanel({
     if (trimmed.length === 0) return
     setBusy(true)
     try {
-      const r = await api.socialSendMessage(token, openPeer.id, trimmed)
+      const r = await api.socialSendMessage(accountId, openPeer.id, trimmed)
       setMessages((prev) => [...prev, r.message])
       setDraft('')
       void onAfterChange()
@@ -478,7 +461,7 @@ function MessagesPanel({
     } finally {
       setBusy(false)
     }
-  }, [openPeer, draft, token, onAfterChange, onError])
+  }, [openPeer, draft, accountId, onAfterChange, onError])
 
   if (openPeer) {
     return (

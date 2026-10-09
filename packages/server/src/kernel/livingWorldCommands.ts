@@ -1,3 +1,4 @@
+import { validateHarborBeaconEventData, type HarborBeaconEventData } from '../playerWorld/harborBeaconData.js'
 // Living-world domain command catalog. Every actor in the simulation
 // (NPC engine, area-state engine, building runtime, world-event engine,
 // weather/season cycle, player) expresses intent as a typed Command in
@@ -9,6 +10,7 @@
 // shape is similar across commands.
 
 import { hashCanonicalJson, toCanonicalJson } from './canonicalJson.js'
+import { validPlayerInterventionEffects } from './playerInterventionReceipt.js'
 import {
   DEFAULT_RULESET_VERSION,
   KERNEL_EVENT_VERSION,
@@ -17,6 +19,9 @@ import {
   type RuleRejection,
   type RuleResult
 } from './types.js'
+import { validateWorldChatEventData, type WorldChatEventData } from '../playerWorld/chat.js'
+import type { PlayerWorldEventData } from '../playerWorld/types.js'
+import { validatePlayerWorldEventData, validatePlayerBuildingEnteredData, validatePlayerBuildingExitedData } from '../playerWorld/eventData.js'
 import type { Animal } from '../ecosystem/species.js'
 import { SKILL_IDS } from '../config/world.js'
 import {
@@ -85,6 +90,18 @@ export const LIVING_WORLD_COMMAND_TYPES = [
   'RARE_WINDOW_OPEN',
   'RARE_WINDOW_CLOSE',
   'WORLD_TICK',
+  'PLAYER_HARBOR_CONTRIBUTED',
+  'HARBOR_BEACON_COLLECTION_OPENED',
+  'HARBOR_BEACON_TICKED',
+  'HARBOR_BEACON_COMPLETED',
+  'HARBOR_BEACON_REWARDED',
+  'HARBOR_BEACON_LEGACY_PROGRESS_RESTORED',
+  'PLAYER_WORLD_CHAT_POSTED',
+  'PLAYER_WORLD_ENTERED',
+  'PLAYER_WORLD_MOVED',
+  'PLAYER_REGION_TRANSITIONED',
+  'PLAYER_BUILDING_ENTERED',
+  'PLAYER_BUILDING_EXITED',
   'PLAYER_INTERVENE',
   'PLAYER_NPC_DIALOGUE',
   'PLAYER_ENERGY_SET',
@@ -1031,6 +1048,8 @@ export type PlayerIntervenecmd = Readonly<{
   message: string
   /** 一行敘事，給 catch-up summary / SSE listener 用 */
   narration: string
+  /** Server-derived committed result. Historical receipts may not contain it. */
+  effects?: import('./playerInterventionReceipt.js').PlayerInterventionEffects
 }>
 
 export type PlayerDialogIntent = 'greet' | 'ask' | 'trade'
@@ -1876,6 +1895,9 @@ export type PlayerPlayedCardCmd = Readonly<{
 }>
 
 export type LivingWorldCommandPayload =
+  | PlayerWorldEventData
+  | WorldChatEventData
+  | HarborBeaconEventData
   | NpcMoveCmd
   | NpcActivityChangeCmd
   | NpcStateRecordedCmd
@@ -2071,6 +2093,18 @@ export type LivingWorldEventDraft = EventDraft<LivingWorldEventPayload> &
 const VALIDATORS: Readonly<
   Record<LivingWorldCommandType, (payload: unknown) => string | null>
 > = {
+  PLAYER_HARBOR_CONTRIBUTED: p => validateHarborBeaconEventData('PLAYER_HARBOR_CONTRIBUTED', p),
+  HARBOR_BEACON_COLLECTION_OPENED: p => validateHarborBeaconEventData('HARBOR_BEACON_COLLECTION_OPENED', p),
+  HARBOR_BEACON_TICKED: p => validateHarborBeaconEventData('HARBOR_BEACON_TICKED', p),
+  HARBOR_BEACON_COMPLETED: p => validateHarborBeaconEventData('HARBOR_BEACON_COMPLETED', p),
+  HARBOR_BEACON_REWARDED: p => validateHarborBeaconEventData('HARBOR_BEACON_REWARDED', p),
+  HARBOR_BEACON_LEGACY_PROGRESS_RESTORED: p => validateHarborBeaconEventData('HARBOR_BEACON_LEGACY_PROGRESS_RESTORED', p),
+  PLAYER_WORLD_CHAT_POSTED: validateWorldChatEventData,
+  PLAYER_WORLD_ENTERED: validatePlayerWorldEventData,
+  PLAYER_WORLD_MOVED: validatePlayerWorldEventData,
+  PLAYER_REGION_TRANSITIONED: validatePlayerWorldEventData,
+  PLAYER_BUILDING_ENTERED: validatePlayerBuildingEnteredData,
+  PLAYER_BUILDING_EXITED: validatePlayerBuildingExitedData,
   NPC_MOVE: (p) => {
     if (!isRecord(p)) return 'payload must be object'
     if (typeof p.npcId !== 'string' || p.npcId.length === 0) return 'npcId required'
@@ -2664,6 +2698,7 @@ const VALIDATORS: Readonly<
     }
     if (typeof p.message !== 'string') return 'message required (can be empty string)'
     if (typeof p.narration !== 'string') return 'narration required'
+    if (p.effects !== undefined && !validPlayerInterventionEffects(p.effects, p.npcA, p.npcB)) return 'invalid server intervention receipt effects'
     return null
   },
   PLAYER_NPC_DIALOGUE: (p) => {
@@ -4133,3 +4168,4 @@ function isIntentOutcome(value: unknown): value is 'success' | 'failure' {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+

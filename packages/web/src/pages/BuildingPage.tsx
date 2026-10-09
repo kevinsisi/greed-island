@@ -6,14 +6,14 @@ import { useAuth } from '../state/AuthContext'
 import {
   api,
   type ServerBuildingView,
-  type ServerPlayerJob,
-  type ServerPlayerWallet,
   type ServerShift
 } from '../api/client'
 import { BuildingSvg } from '../components/map/BuildingSvg'
 import type { BuildingSceneNpc } from '../game/BuildingScene'
 import { NpcDialog } from '../components/game/NpcDialog'
 import type { NpcSummary } from '../state/types'
+import { usePlayerWallet } from '../state/usePlayerWallet'
+import { WalletStatus } from '../components/game/WalletStatus'
 
 const SHIFT_LABEL_ZH: Record<ServerShift, string> = {
   morning: '早班 (06–12)',
@@ -54,14 +54,14 @@ const ACTIVITY_LABEL: Record<string, string> = {
 export function BuildingPage() {
   const { buildingId = '' } = useParams<{ buildingId: string }>()
   const { t: _t, locale } = useI18n()
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const navigate = useNavigate()
   const { npcs } = useWorldState()
 
   const [view, setView] = useState<ServerBuildingView | null>(null)
-  const [wallet, setWallet] = useState<ServerPlayerWallet | null>(null)
-  const [jobs, setJobs] = useState<ServerPlayerJob[]>([])
-  const [currentShift, setCurrentShift] = useState<ServerShift | null>(null)
+  const { read: walletRead, refresh: refreshWallet } = usePlayerWallet(accountId)
+  const jobs = walletRead.response?.jobs ?? []
+  const currentShift = walletRead.response?.currentShift ?? null
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [activeNpc, setActiveNpc] = useState<NpcSummary | null>(null)
@@ -78,30 +78,9 @@ export function BuildingPage() {
     }
   }, [buildingId])
 
-  const refreshWallet = useCallback(async () => {
-    if (!token) {
-      setWallet(null)
-      setJobs([])
-      setCurrentShift(null)
-      return
-    }
-    try {
-      const r = await api.wallet(token)
-      setWallet(r.wallet)
-      setJobs(r.jobs)
-      setCurrentShift(r.currentShift)
-    } catch {
-      // ignore
-    }
-  }, [token])
-
   useEffect(() => {
     refreshBuilding()
   }, [refreshBuilding])
-
-  useEffect(() => {
-    refreshWallet()
-  }, [refreshWallet])
 
   // Poll occupants every 8s so NPCs entering / leaving show up
   useEffect(() => {
@@ -138,16 +117,16 @@ export function BuildingPage() {
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
-      if (!token) return
+      if (!accountId) return
       const npc = npcs.find((n) => n.id === npcId)
       if (npc) setActiveNpc(npc)
     },
-    [npcs, token]
+    [npcs, accountId]
   )
 
   const handleExit = useCallback(() => {
     if (!def) return
-    navigate(`/area/${def.tileId}`)
+    navigate(`/game/area/${def.tileId}`)
   }, [navigate, def])
 
   const flashMessage = useCallback((msg: string) => {
@@ -157,10 +136,10 @@ export function BuildingPage() {
 
   const apply = useCallback(
     async (shift: ServerShift) => {
-      if (!token || busy) return
+      if (!accountId || busy || walletRead.response === null) return
       setBusy(true)
       try {
-        await api.buildingApply(token, buildingId, shift)
+        await api.buildingApply(accountId, buildingId, shift)
         flashMessage(`已成功應徵 ${SHIFT_LABEL_ZH[shift]}！明天就可以來上班。`)
         await refreshWallet()
       } catch (err) {
@@ -169,44 +148,43 @@ export function BuildingPage() {
         setBusy(false)
       }
     },
-    [token, busy, buildingId, refreshWallet, flashMessage]
+    [accountId, busy, buildingId, refreshWallet, flashMessage, walletRead.response]
   )
 
   const work = useCallback(async () => {
-    if (!token || busy) return
+    if (!accountId || busy) return
     setBusy(true)
     try {
-      const r = await api.buildingWork(token, buildingId)
+      const r = await api.buildingWork(accountId, buildingId)
       flashMessage(`完成一輪工作！獲得 ${r.wage} 潮幣。`)
-      setWallet(r.wallet)
       await refreshWallet()
     } catch (err) {
       flashMessage(err instanceof Error ? err.message : '無法打卡')
     } finally {
       setBusy(false)
     }
-  }, [token, busy, buildingId, refreshWallet, flashMessage])
+  }, [accountId, busy, buildingId, refreshWallet, flashMessage])
 
   const rest = useCallback(async () => {
-    if (!token || busy) return
+    if (!accountId || busy) return
     setBusy(true)
     try {
-      const r = await api.buildingRest(token, buildingId)
+      await api.buildingRest(accountId, buildingId)
       flashMessage('在這裡休息了一陣，體力恢復了。')
-      setWallet(r.wallet)
+      await refreshWallet()
     } catch (err) {
       flashMessage(err instanceof Error ? err.message : '無法休息')
     } finally {
       setBusy(false)
     }
-  }, [token, busy, buildingId, flashMessage])
+  }, [accountId, busy, buildingId, flashMessage, refreshWallet])
 
   const quit = useCallback(
     async (shift: ServerShift) => {
-      if (!token || busy) return
+      if (!accountId || busy) return
       setBusy(true)
       try {
-        await api.buildingQuit(token, buildingId, shift)
+        await api.buildingQuit(accountId, buildingId, shift)
         flashMessage(`已辭去 ${SHIFT_LABEL_ZH[shift]}。`)
         await refreshWallet()
       } catch (err) {
@@ -215,7 +193,7 @@ export function BuildingPage() {
         setBusy(false)
       }
     },
-    [token, busy, buildingId, refreshWallet, flashMessage]
+    [accountId, busy, buildingId, refreshWallet, flashMessage]
   )
 
   if (error) {
@@ -234,7 +212,7 @@ export function BuildingPage() {
   }
 
   if (!def.enterable) {
-    return <Navigate to={`/area/${def.tileId}`} replace />
+    return <Navigate to={`/game/area/${def.tileId}`} replace />
   }
 
   const myJobs = jobs.filter((j) => j.buildingId === def.id)
@@ -244,7 +222,7 @@ export function BuildingPage() {
       {/* 頂部：返回 + 標題 */}
       <div className="flex items-center justify-between gap-2">
         <Link
-          to={`/area/${def.tileId}`}
+          to={`/game/area/${def.tileId}`}
           className="px-3 py-1.5 text-[11px] font-display uppercase tracking-tightest text-ground-200 bg-ground-900 border border-ground-700 hover:border-ember-600 hover:text-ember-400 rounded-sharp"
         >
           ← 離開
@@ -270,10 +248,10 @@ export function BuildingPage() {
         npcs={sceneNpcs}
         onNpcInteract={handleNpcInteract}
         onExit={handleExit}
-        controlsEnabled={!!token}
+        controlsEnabled={!!accountId}
       />
 
-      {!token && (
+      {!accountId && (
         <div className="gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
           登入後才能在室內移動、離開或互動；目前是只讀瀏覽模式。
         </div>
@@ -301,8 +279,8 @@ export function BuildingPage() {
                 <li key={occupant.npcId}>
                   <button
                     type="button"
-                    onClick={() => token && npc && setActiveNpc(npc)}
-                    disabled={!token}
+                    onClick={() => accountId && npc && setActiveNpc(npc)}
+                    disabled={!accountId}
                     className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-sharp border border-ground-700 hover:border-ember-600 transition-colors"
                     title={narration ?? ''}
                   >
@@ -366,7 +344,7 @@ export function BuildingPage() {
                     <>
                       <button
                         type="button"
-                        disabled={busy || !token || !isCurrentShift}
+                        disabled={busy || !accountId || !isCurrentShift}
                         onClick={work}
                         className={[
                           'px-2 py-1 text-[11px] rounded-sharp border',
@@ -380,7 +358,7 @@ export function BuildingPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={busy || !token}
+                        disabled={busy || !accountId}
                         onClick={() => quit(slot.shift)}
                         className="px-2 py-1 text-[11px] rounded-sharp bg-ground-800 hover:bg-rust-900 border border-ground-700 text-ground-200"
                       >
@@ -399,7 +377,7 @@ export function BuildingPage() {
                   ) : (
                     <button
                       type="button"
-                      disabled={busy || !token}
+                      disabled={busy || !accountId || walletRead.response === null}
                       onClick={() => apply(slot.shift)}
                       className="px-2 py-1 text-[11px] rounded-sharp bg-ember-600/20 hover:bg-ember-600/40 border border-ember-700 text-ember-200"
                     >
@@ -413,10 +391,10 @@ export function BuildingPage() {
         </div>
       )}
 
-      {def.restorative && token && (
+      {def.restorative && accountId && (
         <button
           type="button"
-          disabled={busy || !token}
+          disabled={busy || !accountId}
           onClick={rest}
           className="w-full px-3 py-2 text-[12px] rounded-sharp bg-ember-700/20 border border-ember-600 text-ember-200 hover:bg-ember-700/40"
         >
@@ -425,14 +403,9 @@ export function BuildingPage() {
       )}
 
       {/* 玩家錢包 */}
-      {wallet && (
+      {accountId !== null && (
         <div className="flex items-center justify-between gap-3 bg-ground-900/85 border border-ground-700 rounded-sharp px-3 py-2">
-          <div className="text-[11px] text-ground-400">
-            <span className="text-ember-400 font-bold mr-1">{wallet.gold}</span> 潮幣
-          </div>
-          <div className="text-[11px] text-ground-400">
-            體力 <span className="text-ground-100">{wallet.energy}</span> / 100
-          </div>
+          <WalletStatus read={walletRead} locale={locale} />
         </div>
       )}
 

@@ -28,7 +28,7 @@ for (const name of readdirSync(changesDir)) {
     continue
   }
   console.log(`\nvalidating: ${name}`)
-  const result = spawnSync('openspec', ['validate', name, '--strict'], {
+  const result = spawnSync('openspec', ['validate', name, '--type', 'change', '--strict', '--no-interactive'], {
     stdio: 'inherit',
     shell: true,
     cwd: root,

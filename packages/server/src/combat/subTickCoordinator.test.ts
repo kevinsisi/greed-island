@@ -352,3 +352,37 @@ describe('CombatSubTickCoordinator', () => {
     expect(coordinator.resumeTickForCombat('combat_live', events)).toBe(5)
   })
 })
+
+
+describe('trusted queued authorization fence', () => {
+  it('rejects revoked queued intent before damage and keeps its rejection replayable', () => {
+    const coordinator = new CombatSubTickCoordinator(); coordinator.projectEvent(initiateEvent()); coordinator.projectEvent(cardPlayEvent())
+    const authorize = vi.fn(() => false)
+    const events = coordinator.processTick({ combatId: 'combat_live', combatTick: 1, tick: 12, occurredAt: 1, authorizeCommand: authorize, commit: commitDrafts })
+    expect(authorize).toHaveBeenCalledOnce(); expect(events.map(event => event.eventType)).toEqual(['COMBAT_CARD_PLAY_REJECTED'])
+    expect(events[0]?.payload).toMatchObject({ reason: 'authorization_expired', actorId: 'actor_a' })
+    expect(coordinator.getCombatSnapshot('combat_live')?.actors.find(actor => actor.actorId === 'npc_target')?.hp).toBe(100)
+    expect(coordinator.pendingCount()).toBe(0)
+  })
+  it('keeps ownership and pending state on a failed commit so a retry reauthorizes again', () => {
+    const coordinator = new CombatSubTickCoordinator(); coordinator.projectEvent(initiateEvent()); coordinator.projectEvent(cardPlayEvent())
+    expect(coordinator.ownsPendingCommand('actor_a', 'combat_live', 'cmd_fire_1')).toBe(true)
+    expect(coordinator.ownsPendingCommand('other', 'combat_live', 'cmd_fire_1')).toBe(false)
+    const authorize = vi.fn(() => true)
+    expect(() => coordinator.processTick({ combatId: 'combat_live', combatTick: 1, tick: 12, occurredAt: 1, authorizeCommand: authorize, commit: () => { throw new Error('synthetic failure') } })).toThrow('synthetic failure')
+    expect(coordinator.pendingCount()).toBe(1)
+    const events = coordinator.processTick({ combatId: 'combat_live', combatTick: 1, tick: 12, occurredAt: 2, authorizeCommand: authorize, commit: commitDrafts })
+    expect(authorize).toHaveBeenCalledTimes(2); expect(events.some(event => event.eventType === 'COMBAT_DAMAGE')).toBe(true)
+  })
+})
+
+it('reauthorizes inside the actual transaction and never projects a failed outer commit', () => {
+  const coordinator = new CombatSubTickCoordinator(); coordinator.projectEvent(initiateEvent()); coordinator.projectEvent(cardPlayEvent())
+  let transaction = false
+  const afterCommit = vi.fn()
+  expect(() => coordinator.processTick({ combatId: 'combat_live', combatTick: 1, tick: 12, occurredAt: 1,
+    runInTransaction: operation => { transaction = true; try { operation(); throw new Error('outer commit failed') } finally { transaction = false } },
+    authorizeCommand: () => { expect(transaction).toBe(true); return true }, commit: commitDrafts, afterCommit })).toThrow('outer commit failed')
+  expect(afterCommit).not.toHaveBeenCalled(); expect(coordinator.pendingCount()).toBe(1)
+  expect(coordinator.getCombatSnapshot('combat_live')?.actors.find(actor => actor.actorId === 'npc_target')?.hp).toBe(100)
+})

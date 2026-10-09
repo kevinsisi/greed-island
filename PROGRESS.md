@@ -1,3 +1,118 @@
+## 2026-10-08 — Independent canonical intervention retry correction (source only)
+
+- Reproduced against frozen fa4231fc: identical same-tick mediate commits once but second reply claimed trust54 while persisted trust stayed52.
+- New typed receipts preserve original server-derived effects under the existing intent-based command ID. Replies distinguish original effects from currentRelations; historical missing results are explicitly unavailable. Other command/intent conflicts and transaction-time authorization stay enforced.
+- Final source-only regression run: 15 suites / 167 tests passed, including same-tick duplicate, intervening-threaten, historical receipt, forged result input and revoked transaction-time retry. Actual SQLite/private-store reopen regression is added but all three native test cases remain blocked before assertions by missing better-sqlite3 binding.
+- Exact full noEmit still reports only the existing missing bcryptjs declarations (three errors) and runtimeBudget.test.ts implicit-any dependency-drift error. No production build, real cookie, normal-UI E2E, publication, live AI or deployment proof is claimed. Frozen source/artifacts were not edited.
+- Consumer response contract is recorded in CANONICAL_GAMEPLAY_ADAPTERS.md; nullable effects and independently labeled current snapshot remain integration/UI gates.
+- This fixes same-tick identical typed-intent duplicates only. The existing command ID contains world tick, AI-classified intent and generated narration; later-tick or differently classified retries can be new commands. No general network-retry idempotency or new client request-ID API is claimed.
+
+## 2026-10-08 — Isolated settings credential-origin correction
+
+- Independent review reproduced a blocker: arbitrary edited provider origins
+  inherited the global Basic credential. Replacement snapshots a separate
+  trusted startup origin; absent/malformed/mismatched origin gets no header.
+  Same-origin path variants preserve intended auth; redirect:error and actual
+  upstream failures remain. No editable setting can change credential trust.
+- Supplemental source HTTP tests 25/25 passed with inert mocked provider/env
+  inputs, including the original 14 cases. Focused strict TS passed with the
+  existing temporary declaration. Re-review and startup config integration
+  remain gates; no live env secret inspection/provider call, push or deployment.
+
+## 2026-10-08 — Isolated canonical settings/GM administration candidate
+
+- Preserved SettingsPage provider/key APIs, AdminLineage simulation advance and
+  AdminCards art APIs via injected shared canonical authorization/store/runtime;
+  no AccountStore, JWT, identity/admin-reset route, bootstrap or Caddy edits.
+- Route-local parsers follow current-role authorization; context/Origin/session
+  are rechecked after body awaits and before commit. Private provider reads also
+  recheck current identity/role after network/JSON awaits.
+- Keys/errors fully redacted. Art replacement/removal archives old bytes privately
+  with bounded history and symlink/ID/signature checks; no old asset deletion.
+- Supplemental Node24 node:sqlite HTTP suite 14/14 passed; focused strict TS
+  passed with a temporary declaration. Native bcryptjs/better-sqlite3 dependencies
+  are unavailable. Full server check has only pre-existing missing bcryptjs and
+  runtimeBudget Vitest4 typing diagnostics. Exact native CI, full startup/browser
+  integration, main merge and L390 release remain required. No push or deployment.
+- Integration/route contract: docs/CANONICAL_ADMIN_SETTINGS.md.
+
+## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
+
+- 做了什麼：多人版 host/port/資料目錄/Origin 改 env 可設（`packages/server/src/multiplayer/config.ts`、`fixtureStorage.ts`、`http.ts`、`server.ts`）；帳號與 DB 持久化於 volume；新增 `deploy/l390/`（只含 multiplayer＋web，`/api/*`、`/card-images/*` 回 404，不部署主 server）。
+- 測試（Node 22.23.2）：server 182 files／1541 tests、web 41 files／382 tests 通過；新增 `http.file-sqlite.test.ts`（檔案型 SQLite＋50 人 HTTP/SSE＋第 51 人拒絕＋重連＋共同事件防重領＋重開 DB），1/1 通過。全套偶發 `npc.test.ts` 20ms 逾時 1 項（單檔連跑 3 次全過）。
+- 負載（模擬連線，非真人手機渲染）：Mac 本機 50 連線 5 分鐘 31550 請求 0 失敗，指令 p95 38ms、聊天送達 p95 126ms。L390 容器內（經 Caddy）30868 請求，失敗 742 全為 429 MOVE_RATE_LIMIT（同玩家同 tick 只能移動一次），其他錯誤 0，斷線 0；指令 p50/p95/p99=35/544/741ms，聊天 130/317/706ms。腳本 `packages/server/scripts/multiplayer-load.mjs`。
+- L390：`greed-island-l390-multiplayer-1`、`greed-island-l390-web-1` healthy；web 只綁 `127.0.0.1:28100`。`/healthz` 200、`/api/*` 404、`/mp-api/snapshot` 401。
+- 未做：GB10 Caddy 的 `greed.sisihome.org` 路由未改（仍 404）；L390 對外綁定（tailnet IP 或 tailscale serve）待 Kevin 決定；雙瀏覽器（手機＋桌機）實測；acceptor 驗收。
+- 已知風險：登入限流 20 次/IP/分鐘，經 Caddy 後全站共用；主 server 的 `forgot-password` 無登入回 reset token（`http/auth.ts:126-165`）仍在，公開入口不得代理 `/api/*`；npm audit 23 項未處理；舊站 hunter.sisihome.org（kevinhome）502，舊資料位置未確認。
+- L390 ssh 下 docker 拉映像會報 credsStore 'logon session does not exist'；建映像需在 L390 console 互動工作階段。
+
+## 2026-10-07 — 50 人房間規則與同步 @ v0.104.0（實作 checkpoint，承載待驗）
+
+- 使用者目標為同場景 50 人，且每個完成階段持續 commit/push。本轮以既有工具完成程式與純邏輯驗證；依賴安裝授權仍待回覆，沒有重試、換來源或繞過。
+- 事件持久化房間設定與名單，容量預設50、事件最低2人、收集300tick；新暫存房間可用 `--fixture-count 2..1000`，名單數不等於在線容量。重開依原事件與憑證名單，不補人／補資源，舊兩人事件可重播。
+- RoomPresence以不同身份計50席、每人最多2條stream、最後斷線保留10秒；本人返回不另佔席位，登出／session到期立即釋放。HTTP在SSEheaders前准入，滿房回409；cookie-only且無有效房間連線不能送遊戲指令。
+- 達最低人數開參與窗口，截止systemtick產生完成與所有參與者獎勵事件，含離線者；穩定領獎身份／projection去重。runtime保留transaction receipt與commit後投影；SQLite原子性本輪未執行驗證。
+- 指令只回ACK；普通狀態／presence通知每100ms tick至多一次，新stream直接收到完整初始快照。前端以SSE更新狀態，顯示滿房／本人保留席位、最低人數與截止倒數；名單限高捲動。NPC共享智能仍未接入。
+- 已通過：前端41 files／382 tests；後端純邏輯5 files／135 tests（domain59、fixtures38、presence18、sync8、fixtureLock12）。50/51席位、50貢獻者與50listener測試皆為記憶體測試，不能當成50網路客戶端負載證據。
+- `npm run build:web` 通過741 modules／11.65s，保留既有bundle／Browserslist提示；選定後端domain/runtime/fixtures/presence/sync與相關測試嚴格TypeScript通過。HTTP／entrypoint只做transpile語法檢查，未以此宣稱完整server typecheck。`openspec:check`通過、`git diff --check`通過。
+- 獨立唯讀review修正兩項P2：失敗准入恰好清除過期保留席位時仍需標記同步，以及自訂 `__proto__` 身份的移動限速記錄。皆有純邏輯回歸；最終review未留高信心重大問題。
+- **未驗：**完整server build、HTTP／SQLite transaction／重啟、兩個真瀏覽器多人流程與50session負載。HTTP/runtime tests已按新契約更新但未執行。本輪未啟動4179、未產生測試credentials、未重跑瀏覽器；先前離線登入圖僅屬v0.103.0證據。
+- 登入20次／IP／分鐘限制、scrypt、Origin與cookie政策維持；50人可分批登入後量測同時在線，集中登入容量另行決策。全量快照、持續tick事件及未壓縮歷史需量測傳輸／DB增長後再優化，不能預先承諾承載。
+- 版本root/server/web/lock同步0.104.0；僅功能分支 `feat/tideborn-3d-preview` 的實作checkpoint。未合併main、部署、操作正式帳號或世界；OpenSpec依hook保留本機。啟動與待驗契約見 `docs/MULTIPLAYER_LOCAL.md`。
+
+## 2026-10-07 — 本機多人切片 @ v0.103.0（實作 checkpoint，整合驗收受阻）
+
+- 使用者澄清要線上多玩家互動；停止擴充單人遭遇，先保留已推送的 v0.102.0。該版新手機反向分支驗收暫停，不宣稱已完成。
+- 新增 `/multiplayer-3d` 與獨立 `/mp-api` loopback 4179 服務。兩個隨機暫存帳號、HttpOnly session、真實 SSE snapshot；前端不掛原版 Auth/World，也不以 localStorage 或假玩家同步。啟動方式見 `docs/MULTIPLAYER_LOCAL.md`。
+- 已寫入：100ms server tick 移動限速／邊界／碰撞、房間聊天、兩個不同玩家在信標附近各投一物資、同一 transaction 完成並各發一獎勵。game command 與 init/tick system intent 均由純規則產生 Event；receipt與事件同交易，commit後才投影，sequence防重投影。相同和不同commandId防重領測試已寫。
+- UI：Babylon 獨立港口、snapshot 插值與在線角色、共享小地圖、桌機聊天／手機抽屜、斷線停操作。NPC 自主模擬明示尚未整合多人。
+- 已通過：全前端 41 files / 376 tests；後端 domain 26 + fixtureLock 12 = 38 tests；`npm run build:web` 741 modules、11.64s（既有 bundle/Browserslist 提示）；真實 scene 的 NullEngine 聚焦檢查包含無本機權威位移、短按／100ms節流、presence、快照插值、信標、pause/blur/hidden/dispose。獨立靜態 review 修復 crash 殘留鎖、聊天240字限制、手機面板遮搖桿。
+- 實際 Chrome 只驗證桌機／390×844 登入與離線畫面，scrollWidth=390。證據 `docs/evidence/multiplayer-offline-mobile.jpg`；Library `libfile_ad211f316f948191ab6d54fba35b13c7`。此圖不是多人連線成功證據。已確認可用 IAB 與 Chrome 獨立 browser，但尚未登入兩名玩家。
+- **尚未執行 HTTP／SQLite 整合與雙瀏覽器移動／聊天／合作／重連驗收。** 本機只有前端依賴；baseline server tests 因缺 better-sqlite3 無法收集。`npm run build:server` exit 2，缺 Express/bcrypt/JWT 等既有依賴／型別；完整診斷 `/tmp/greed-multiplayer-server-build.log`。新 HTTP/runtime tests 已寫，涵蓋雙session/SSE、concurrent、receipt rollback、重送與DB reopen，不能記成已通過。
+- 依賴安裝：離線補齊失敗（快取不足）；從 npm registry 補 lockfile 依賴的請求被 auto-review 拒絕，理由為原始評估要求不安裝套件、尚缺新授權。已提出明確許可問題，等待使用者回答；沒有改用其他 storage 或繞過安裝限制。
+- 正式站 auth reset token 暴露與 goods/replay 缺口仍待另行修復；本輪未掛這些入口，未讀正式秘密、建立正式帳號、操作正式 API／資料或部署，未新增交易／公會／PvP。4178 原預覽保留，未啟動4179，未干擾其他服務。
+- 分支 `feat/tideborn-3d-preview`；本輪以實作 checkpoint 推送，並非可交付的雙人驗收完成。CI只監聽main push／PR，功能分支push不觸發CI/CD。兩份OpenSpec保留本機，遵循既有保護hook不推送。
+
+## 2026-10-07 — 可重玩遭遇 @ v0.102.0（原型 v0.3.0）
+
+- 兩個可略過、每趟只結算一次的遭遇：林間藥草箱（回潮30能量+1刻印得1物資，或75HP守衛得3）；遺跡哨衛（渡風25能量+1刻印得2，或125HP守衛得5）。遭遇戰有12m震擊、2.5秒首輪預警；星火1秒備戰／冷卻，無瞬間連發。
+- 完成後回米拉準備下一趟，每物資換5護盾（上限40），安全選擇帶來一次性的額外刻印。NPC成長／信任／記憶與世界時間延續，長期選擇摘要獨立於8條短期記憶；確認清空才全重設。
+- 存檔相容舊v1各階段；結果與資源原子存同一份，舊runId／重複操作拒絕。多頁偵測外部修改後停止舊頁寫入；不是CAS或多人交易鎖。
+- 實際桌機瀏覽器：forestSafe刻印1→0/能量100→70/物資0→1，連點、刷新、再E不重領；NPCsummary和具體記憶可見。ruinFight125→100，受傷→倒下→回港保留3光種、森林已安全與物資1；回場戰勝後物資6，刷新維持。完成主線後下一趟連點仍只進第3趟，物資6→0、盾30、刻印2；NPC信任34、採集492、世界時間延續。第二分頁回港後，原頁顯示存檔更新並停寫。
+- 自動驗證：前端40檔366 tests全通過（原型95項）；npm run build:web通過737 modules/12.93s，既有bundle/Browserslist警告；openspec:check通過，原型仍tracker-only skip。實際scene/world的NullEngine聚焦驗證通過冷卻、攻擊時序、兩分支、碰撞、暫停/hidden/respawn、新run及dispose。server僅版本metadata，未跑server tests。
+- 已修實景鏡頭典型縮近人物遮滿畫面：3.5m開始淡出、2m全隱藏。手機反向分支及最終畫面驗收進行中；此checkpoint不宣稱已完成所有裝置驗證。
+- 功能分支feat/tideborn-3d-preview；只本機隔離原型，未合併main、建立正式帳號、呼叫正式API或部署；使用者127.0.0.1存檔未重設，QA使用localhost。OpenSpec文件遵循hook留本機。
+
+## 2026-10-07 — 鍵盤與鏡頭修正 @ v0.101.2（原型 v0.2.2）
+
+- 短按方向鍵加入單幀緩衝，避免 keydown/keyup 都落在兩幀間而漏讀；暫停、失焦、新局清除。鏡頭貼牆按射線命中距離退讓，近身時只淡出玩家模型。
+- 實際桌機 1280×720、localhost:4178，以原生鍵盤 W/A/S/D、E、1/2 和 Enter 完成接任務→三光種→石衛→渡風→晶核→回港交付；未注入座標或修改存檔。回潮實測生命 28→68。畫面 docs/evidence/tideborn-3d-keyboard-complete.jpg。
+- 前端38檔334 tests全通過；npm run build:web通過（735 modules，12.63s，既有chunk與Browserslist提示）。/tmp聚焦真實scene/world NullEngine驗證：8ms短按0.075m、長按250ms1.125m；pause/blur/newrun清除、閉門碰撞及開門通行；貼牆hit0.475m/camera0.125m不穿牆，離牆恢復8m及玩家可見。
+- 真實瀏覽器的典型貼牆視覺驗收將併入接續遭遇玩法驗收；不能把NullEngine當成瀏覽器畫面驗證。使用者127.0.0.1存檔、正式站與其他服務未操作。
+
+## 2026-10-07 — 3D 原型瀏覽器驗收 @ v0.101.1（未部署）
+
+- 第一 checkpoint `b8bf41e` 已成功 push 至 `origin/feat/tideborn-3d-preview`；原含 OpenSpec 的本機提交 `b37bf2f` 保留，規格僅留本機，沒有跳過／修改 hook 或 force push。
+- 實際瀏覽器：localhost:4178 獨立 origin，390×844 手機視窗，以觸控搖桿與可見按鈕完成「接委託→三光種→石衛→渡風開封印→晶核→回米拉交付」。沒有注入座標或改存檔。星火傷害與渡風開路均在畫面核對；中途倒下回港後，已取得光種與石衛剩餘 HP 保留。
+- 刷新→繼續遠征，仍顯示委託完成／3光種／石衛已擊退／晶核已取得／封印已開。之後在測試 origin 確認重開，恢復港口委託／0光種／未開封印。未操作使用者 127.0.0.1 origin 的重開或存檔。
+- 三張完整插畫在桌機圖鑑實際載入；手機完整地圖實測顯示正確狀態。NPC 見聞實測看到行動、技能、需求、記憶演進及米拉信任15。手機 DOM 實測：面板底544px、搖桿頂566px，未重疊，body scrollWidth=viewport=390。
+- 完成畫面：`docs/evidence/tideborn-3d-mobile-complete.jpg`；Library `libfile_c2bfcc4912808191811988894775b710` / file `file_000000006ff081f7bcaac23289a2da95`。此畫面為v0.2.0；v0.2.1僅修正開卡冊focus導致自動捲到下方。
+- 測試：前端38檔334 tests通過（含本原型63項），`npm run build:web`通過。此輪一行focus修正後再跑 `npm run build:web`，735 modules、12.90s，exit 0。瀏覽器圖鑑開啟位置已複驗；當時 console error log 為空。未跑本機server tests，server僅同步版本metadata。
+- 未逐項實测：回潮的真實瀏覽器治療、鍵盤完整遠征、所有鏡頭遮擋組合；回潮／資源限制由模型tests驗證，鏡頭ray/collision由NullEngine驗證。不能將手機完整loop等同這些項目全覆蓋。
+- CI未觸發：現有workflow只監聽main push/PR，這次只push功能分支，無PR、合併或部署。
+
+## 2026-10-07 — 3D 原型 checkpoint @ v0.101.0（功能分支，未部署）
+
+- 使用者先授權獨立 Babylon.js 可玩原型，再追加場景精修、地圖、NPC 自主發展與每張卡片美術；最新要求每個完成階段 commit/push。分支 `feat/tideborn-3d-preview`，不合併 main、不觸發正式部署。
+- `/prototype-3d` 獨立 lazy route；原 App 移到 `OriginalApp.tsx`，原路由/providers 保留。原型不載入 Auth/World provider，不呼叫正式 API。Vite 本機 `127.0.0.1:4178` 保留運行，未改其他服務。
+- 港口接任務→三枚光種/石衛→渡風開封印→晶核→回港交付；三張卡效果、鏡頭、碰撞、手機搖桿、死亡恢復、獨立存檔/確認新局。
+- 加入實際座標迷你地圖/全圖、四名 NPC 的本地目標/需求/技能/記憶/物資模擬、即時見聞側欄。記憶上限八筆、暫停與背景不補算；舊 v1 存檔保留進度。不是外部 LLM、自我訓練或持久背景 agent。
+- 三張原創生成卡圖已在瀏覽器圖鑑實際顯示；JPG 大小圖位於 public/prototype3d/cards，原圖在 artwork/source；Babylon 9.29.0 精確鎖版。
+- 已驗：`npm run build:web` 通過（735 modules，Vite 35.00s；chunk size warning）；前端 38 files / 334 tests 全通過（含模型/NPC 63 tests）；`npm run openspec:check` 通過（本 change 為 tracker-only，未跑 formal delta schema）。NullEngine 的碰撞/ray/render 與前景 tick/暫停/hidden/no-catch-up 由子代理聚焦驗證通過。
+- 瀏覽器已確認桌機場景、三張完整卡圖和地圖標記。工具曾有約 10 分鐘卡頓及 reset；已接回。完整遠征、最新手機面板修正、刷新/重開仍待瀏覽器驗收，不能以模型測試代替。使用者 127.0.0.1 存檔保留，測試使用 localhost 不同 origin。
+- 獨立 review 已修：人物碰撞代理、卡片操作後焦點回 canvas、封印互動施放渡風、手機見聞底緣讓出搖桿、sticky 關閉、地圖位置改圓點避免假朝向。
+- CI/CD：現有 CI 僅 main push 或 PR 觸發；Deploy Dev 限 main CI 成功。原始完整本機 checkpoint 為 b37bf2f；其 push 被 OpenSpec protection hook 拒絕。此分支从原基底另建，程式與美術相同、排除 openspec/ 變更，規格留在原本機分支。未改 hook、未 force push、未改寫原提交。
+
 ## 2026-07-13 — Handoff Snapshot @ v0.100.1 (清除線上每幀 console debug spam)
 
 - **背景**:線上 hunter.sisihome.org 頁面 console 每次 poll 都噴 `[gi:hub-traveller:react]` debug 物件 —— production 雜訊 + 每次序列化物件的無謂開銷(手機尤甚)。

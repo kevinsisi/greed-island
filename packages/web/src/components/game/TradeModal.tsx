@@ -20,7 +20,7 @@ export interface TradeModalProps {
 
 export function TradeModal({ targetUserId, targetName, onClose, onProposed }: TradeModalProps) {
   const { t } = useI18n()
-  const { token } = useAuth()
+  const { accountId } = useAuth()
   const { cards } = useWorldState()
   const [myCodex, setMyCodex] = useState<ServerCodexEntry[]>([])
   const [selectedCodexId, setSelectedCodexId] = useState<number | null>(null)
@@ -30,9 +30,9 @@ export function TradeModal({ targetUserId, targetName, onClose, onProposed }: Tr
 
   useEffect(() => {
     let cancelled = false
-    if (!token) return
+    if (!accountId) return
     api
-      .codex(token)
+      .codex(accountId)
       .then((r) => {
         if (cancelled) return
         setMyCodex(r.entries)
@@ -48,7 +48,7 @@ export function TradeModal({ targetUserId, targetName, onClose, onProposed }: Tr
     return () => {
       cancelled = true
     }
-  }, [token, selectedCodexId])
+  }, [accountId, selectedCodexId])
 
   const catalogById = useMemo(() => {
     const m = new Map<number, { name: string; rank: string }>()
@@ -57,7 +57,7 @@ export function TradeModal({ targetUserId, targetName, onClose, onProposed }: Tr
   }, [cards])
 
   const propose = useCallback(async () => {
-    if (!token) return
+    if (!accountId) return
     if (selectedCodexId === null) {
       setError(t('trade.offeredEmpty'))
       return
@@ -69,7 +69,7 @@ export function TradeModal({ targetUserId, targetName, onClose, onProposed }: Tr
     }
     setSubmitting(true)
     try {
-      await api.tradePropose(token, targetUserId, selectedCodexId, requested)
+      await api.tradePropose(accountId, targetUserId, selectedCodexId, requested)
       onProposed?.()
       onClose()
     } catch (err) {
@@ -78,7 +78,7 @@ export function TradeModal({ targetUserId, targetName, onClose, onProposed }: Tr
     } finally {
       setSubmitting(false)
     }
-  }, [token, selectedCodexId, requestedCard, targetUserId, onProposed, onClose, t])
+  }, [accountId, selectedCodexId, requestedCard, targetUserId, onProposed, onClose, t])
 
   return (
     <div

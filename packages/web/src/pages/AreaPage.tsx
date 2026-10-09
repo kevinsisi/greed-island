@@ -6,7 +6,9 @@ import { useAuth } from '../state/AuthContext'
 import { biomeLabel, loreFor } from '../state/areaLore'
 import { NpcDialog } from '../components/game/NpcDialog'
 import { CombatHud } from '../components/game/CombatHud'
-import { NearbyPlayers, usePresenceTouch } from '../components/game/NearbyPlayers'
+import { canonicalAreaPoint } from '../state/canonicalArea'
+import { useCanonicalAreaNavigation } from '../state/useCanonicalAreaNavigation'
+import { NearbyPlayers } from '../components/game/NearbyPlayers'
 import { useAreaCards } from '../components/game/CardDropPanel'
 import { AreaMapSvg } from '../components/map/AreaMapSvg'
 import {
@@ -73,7 +75,7 @@ const AREA_PEER_REFRESH_MS = 8_000
 export function AreaPage() {
   const { tileId = '' } = useParams<{ tileId: string }>()
   const { t, locale } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account, snapshot, status } = useAuth()
   const { map, npcs, events, world } = useWorldState()
   const weather = useMemo(
     () => normaliseWeather(typeof world.facts['weather'] === 'string' ? (world.facts['weather'] as string) : null),
@@ -93,7 +95,8 @@ export function AreaPage() {
   const [buildings, setBuildings] = useState<ServerBuildingView[]>([])
   const [nearbyBuildingId, setNearbyBuildingId] = useState<string | null>(null)
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
-  const [playerPosition, setPlayerPosition] = useState<{ tileId: string; x: number; y: number; z: number } | null>(null)
+  const authoritativePosition = canonicalAreaPoint(snapshot, tileId)
+  const moveTo = useCanonicalAreaNavigation(tileId, message => setActionFeedback({ ok: true, msg: message }))
   const [ecology, setEcology] = useState<AreaEcologyView | null>(null)
   const [animalCombatConfirm, setAnimalCombatConfirm] = useState<{ speciesId: string; animalId: string } | null>(null)
   const [animalCombatSession, setAnimalCombatSession] = useState<ServerCombatSession | null>(null)
@@ -162,23 +165,21 @@ export function AreaPage() {
   const lore = loreFor(tileId)
 
   useEffect(() => {
-    setPlayerPosition(null)
     setSubtitleDraft('')
     setSubtitleError(null)
     setOptimisticSubtitles([])
   }, [tileId])
 
-  usePresenceTouch(tile ? tileId : null, playerPosition?.tileId === tileId ? playerPosition : null)
 
   useEffect(() => {
-    if (!token || !tile) {
+    if (!accountId || !tile) {
       setNearbyPlayers([])
       return
     }
     let cancelled = false
     const refresh = () => {
       api
-        .socialNearby(token, tileId)
+        .socialNearby(accountId, tileId)
         .then((r) => {
           if (!cancelled) setNearbyPlayers(r.players)
         })
@@ -192,7 +193,7 @@ export function AreaPage() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [token, tile, tileId])
+  }, [accountId, tile, tileId])
 
   const tileNameById = useMemo(() => {
     const acc: Record<string, string> = {}
@@ -365,14 +366,14 @@ export function AreaPage() {
 
   const handleBuildingEnter = useCallback(
     (buildingId: string) => {
-      if (!token) return
-      navigate(`/building/${buildingId}`)
+      if (!accountId) return
+      navigate(`/game/building/${buildingId}`)
     },
-    [navigate, token]
+    [navigate, accountId]
   )
 
   const handleExit = useCallback(() => {
-    navigate('/')
+    navigate('/game')
   }, [navigate])
 
   const handleNearbyBuildingChange = useCallback((id: string | null) => {
@@ -386,7 +387,7 @@ export function AreaPage() {
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
-      if (!token) return
+      if (!accountId) return
       const npc = npcs.find((n) => n.id === npcId)
       if (!npc) return
       // v0.87.3 — race-window protection. Server already 410s, but blocking the
@@ -400,7 +401,7 @@ export function AreaPage() {
       }
       setActiveNpc(npc)
     },
-    [npcs, token]
+    [npcs, accountId]
   )
 
   // 從 AreaScene 接收當前在玩家身邊（INTERACT_RADIUS 內）的 NPC ids
@@ -427,7 +428,7 @@ export function AreaPage() {
   const handleSubtitleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (!token || subtitleRecipients.length === 0 || subtitleBusy) return
+      if (!accountId || subtitleRecipients.length === 0 || subtitleBusy) return
       const message = subtitleDraft.trim()
       if (!message) return
       setSubtitleBusy(true)
@@ -448,7 +449,7 @@ export function AreaPage() {
       try {
         const respondent = recipients[0]
         if (!respondent) return
-        const result = await api.npcLocalShout(token, {
+        const result = await api.npcLocalShout(accountId, {
           tileId,
           candidateNpcIds: recipients.map((npc) => npc.id),
           message,
@@ -483,7 +484,7 @@ export function AreaPage() {
         setSubtitleBusy(false)
       }
     },
-    [events, showFeedback, subtitleBusy, subtitleDraft, subtitleRecipients, token, world.tick]
+    [events, showFeedback, subtitleBusy, subtitleDraft, subtitleRecipients, accountId, world.tick]
   )
 
   const refreshEcology = useCallback(() => {
@@ -492,7 +493,7 @@ export function AreaPage() {
 
   const handleAnimalHunt = useCallback(
     (speciesId: string, animalId: string) => {
-      if (!token) {
+      if (!accountId) {
         showFeedback(false, '請先登入再狩獵')
         return
       }
@@ -502,7 +503,7 @@ export function AreaPage() {
         return
       }
       api
-        .playerAction(token, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
+        .playerAction(accountId, 'PLAYER_HUNTED_ANIMAL', { tileId, speciesId, animalId })
         .then((r) => {
           showFeedback(r.accepted, r.accepted ? `獵捕成功：${speciesId}` : (r.reason ?? `未能獵捕：${speciesId}`))
           if (r.accepted) refreshEcology()
@@ -512,38 +513,38 @@ export function AreaPage() {
           showFeedback(false, `動作失敗：${err?.message ?? '未知錯誤'}`)
         })
     },
-    [token, tileId, showFeedback, refreshEcology]
+    [accountId, tileId, showFeedback, refreshEcology]
   )
 
   const handleAnimalCombatConfirm = useCallback(async () => {
-    if (!token || !animalCombatConfirm) return
+    if (!accountId || !animalCombatConfirm) return
     setAnimalCombatConfirm(null)
     try {
-      const r = await api.combatInitiateAnimal(token, animalCombatConfirm.animalId, animalCombatConfirm.speciesId)
+      const r = await api.combatInitiateAnimal(accountId, animalCombatConfirm.animalId, animalCombatConfirm.speciesId)
       setAnimalCombatSession(r.session)
       setAnimalCombatHand(r.hand ?? null)
     } catch (err) {
       showFeedback(false, `無法發起戰鬥：${err instanceof Error ? err.message : '未知錯誤'}`)
     }
-  }, [token, animalCombatConfirm, showFeedback])
+  }, [accountId, animalCombatConfirm, showFeedback])
 
   const handleFish = useCallback(() => {
-    if (!token) return
+    if (!accountId) return
     api
-      .playerAction(token, 'PLAYER_FISHED', { tileId, quantity: 1 })
+      .playerAction(accountId, 'PLAYER_FISHED', { tileId, quantity: 1 })
       .then((r) => {
         showFeedback(r.accepted, r.accepted ? '捕魚成功' : (r.reason ?? '漁場無魚'))
         if (r.accepted) refreshEcology()
       })
       .catch(() => showFeedback(false, '動作失敗'))
-  }, [token, tileId, showFeedback, refreshEcology])
+  }, [accountId, tileId, showFeedback, refreshEcology])
 
   const toggleTab = useCallback((tab: DrawerTab) => {
     setDrawerTab((prev) => (prev === tab ? null : tab))
   }, [])
 
   if (!tile) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/game" replace />
   }
 
   return (
@@ -551,7 +552,7 @@ export function AreaPage() {
       {/* 上方 chrome：返回鈕 + 區域名稱（在地圖上方，不再蓋住地圖內容） */}
       <div className="px-2 py-2 flex items-center justify-between gap-2">
         <Link
-          to="/"
+          to="/game"
           className="gi-touch px-3 inline-flex items-center text-[11px] font-display uppercase tracking-tightest text-ground-200 bg-ground-900/85 border border-ground-700 hover:border-ember-600 hover:text-ember-400 rounded-sharp transition-colors"
         >
           {t('area.back')}
@@ -590,10 +591,11 @@ export function AreaPage() {
           onBuildingEnter={handleBuildingEnter}
           onExit={handleExit}
           onNearbyBuildingChange={handleNearbyBuildingChange}
-          onPositionChange={(pos) => setPlayerPosition({ tileId, ...pos })}
+          authoritativePosition={authoritativePosition}
+          onMoveDestination={moveTo}
           onAnimalHunt={handleAnimalHunt}
           onFish={handleFish}
-          controlsEnabled={!!token}
+          controlsEnabled={!!accountId && status === 'online' && snapshot?.tileId === tileId}
         />
         {allOutdoorOccupants.length > outdoorOccupants.length && (
           <div className="mt-1 px-2 text-[10px] text-ground-500 leading-snug">
@@ -638,13 +640,13 @@ export function AreaPage() {
           <input
             value={subtitleDraft}
             onChange={(event) => setSubtitleDraft(event.target.value)}
-            disabled={!token || subtitleRecipients.length === 0 || subtitleBusy}
+            disabled={!accountId || subtitleRecipients.length === 0 || subtitleBusy}
             placeholder={subtitleAudiencePlaceholder}
             className="min-w-0 flex-1 bg-ground-900 border border-ground-700 focus:border-cyan-500 rounded-sharp px-2 py-2 text-[13px] text-ground-100 placeholder:text-ground-600 outline-none disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={!token || subtitleRecipients.length === 0 || subtitleBusy || subtitleDraft.trim().length === 0}
+            disabled={!accountId || subtitleRecipients.length === 0 || subtitleBusy || subtitleDraft.trim().length === 0}
             className="gi-touch px-3 text-[11px] font-display uppercase tracking-tightest border border-cyan-600 text-cyan-200 hover:bg-cyan-500/10 rounded-sharp disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {subtitleBusy ? '發話中' : '發話'}
@@ -653,7 +655,7 @@ export function AreaPage() {
         {subtitleError && <div className="mt-1 text-[11px] text-rust-300">{subtitleError}</div>}
       </div>
 
-      {!token && (
+      {!accountId && (
         <div className="mt-2 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
           登入後才能移動、拾取紋卡、進入建築與互動；目前是只讀瀏覽模式。
         </div>
@@ -667,16 +669,16 @@ export function AreaPage() {
         <div className="min-h-[44px]">
           <button
             type="button"
-            disabled={!token || !nearbyBuilding?.def.enterable}
+            disabled={!accountId || !nearbyBuilding?.def.enterable}
             onClick={() => {
-              if (token && nearbyBuilding?.def.enterable) handleBuildingEnter(nearbyBuilding.def.id)
+              if (accountId && nearbyBuilding?.def.enterable) handleBuildingEnter(nearbyBuilding.def.id)
             }}
             className={[
               'gi-touch w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sharp bg-ember-600 hover:bg-ember-500 text-ground-950 font-display font-extrabold text-sm tracking-tightest transition-colors',
-              token && nearbyBuilding?.def.enterable ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              accountId && nearbyBuilding?.def.enterable ? 'opacity-100' : 'opacity-0 pointer-events-none'
             ].join(' ')}
-            aria-hidden={!token || !nearbyBuilding?.def.enterable}
-            tabIndex={token && nearbyBuilding?.def.enterable ? 0 : -1}
+            aria-hidden={!accountId || !nearbyBuilding?.def.enterable}
+            tabIndex={accountId && nearbyBuilding?.def.enterable ? 0 : -1}
           >
             <span aria-hidden="true">{nearbyBuilding?.def.placement.glyph ?? '▣'}</span>
             <span>進入 {nearbyBuilding?.def.nameZh ?? '建築'}</span>
@@ -732,7 +734,7 @@ export function AreaPage() {
                         可互動 NPC
                       </div>
                       <div className="mt-1 text-[12px] text-ground-100 leading-snug">
-                        {token
+                        {accountId
                           ? interactionReadyCount > 0
                             ? allOutdoorOccupants.length > outdoorOccupants.length
                               ? `此區有 ${allOutdoorOccupants.length} 位室外 NPC；街景目前顯示 ${outdoorOccupants.length} 位可互動代表。`
@@ -832,22 +834,22 @@ export function AreaPage() {
                           <button
                             key={npc.id}
                             type="button"
-                            disabled={!token}
+                            disabled={!accountId}
                             onClick={() =>
-                              token ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
+                              accountId ? setActiveNpc(npc) : handleInteractTooFar(npc.id)
                             }
                             className={[
                               'text-left flex items-center gap-3 px-2 py-2 rounded-sharp border transition-colors',
-                              token
+                              accountId
                                 ? 'border-ground-700 hover:border-ember-600 cursor-pointer'
                                 : 'border-ground-800 opacity-50 cursor-not-allowed'
                             ].join(' ')}
-                            title={!token ? '登入後才能互動' : '點擊對話'}
+                            title={!accountId ? '登入後才能互動' : '點擊對話'}
                           >
                             <span
                               className={[
                                 'w-9 h-9 inline-flex items-center justify-center rounded-full border bg-ground-900 text-[14px] font-display font-extrabold shrink-0',
-                                token
+                                accountId
                                   ? 'border-ember-600/60 text-ember-300'
                                   : 'border-ground-700 text-ground-500'
                               ].join(' ')}
@@ -899,7 +901,7 @@ export function AreaPage() {
                                   <span className="ml-2 text-ember-400 normal-case tracking-normal">
                                     · 身邊，可地圖點擊
                                   </span>
-                                ) : token ? (
+                                ) : accountId ? (
                                   <span className="ml-2 text-ground-400 normal-case tracking-normal">
                                     · 可點名字對話
                                   </span>

@@ -1,0 +1,8 @@
+- [x] Add strict unified config and read-only database readiness.
+- [x] Replace active main with the one canonical factory/lifecycle.
+- [x] Mount one auth/world boundary and authenticated safe map only.
+- [x] Add explicit disposable localhost fixture and integration regressions.
+- [x] Update L390 candidate and real routing assertions for /game.
+- [ ] Run focused checks and record exact remaining native/CI/cutover gates.
+- [x] Add source-only main→L390 workflow, local quiesced backup/rollback and structural contracts.
+- [ ] Correct identity allocator high-water, complete preservation adapters and pass exact native/browser/PowerShell/L390 release gates.

@@ -24,7 +24,7 @@ export function AreaCard({ tile, npcs }: AreaCardProps) {
 
   return (
     <Link
-      to={`/area/${tile.id}`}
+      to={`/game/area/${tile.id}`}
       className={`group relative overflow-hidden rounded-sharp border border-ground-700 bg-gradient-to-br ${BIOME_BG[tile.biome]} hover:border-ember-600 transition-colors p-5 flex flex-col gap-3 min-h-[200px]`}
     >
       <div className="flex items-start justify-between gap-3">

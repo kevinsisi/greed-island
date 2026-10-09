@@ -1,0 +1,57 @@
+# CANDIDATE ONLY. No live cutover until backup/import/admin/progress gates pass.
+name: greed-island-l390
+
+services:
+  multiplayer:
+    build:
+      context: ../..
+      dockerfile: packages/server/Dockerfile
+    image: greed-island-l390-multiplayer:${GREED_L390_IMAGE_TAG:-local}
+    # Reuse the existing backend container and internal port for ONE server.
+    command: ["node", "dist/server.js"]
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4179"
+      GREED_ISLAND_DB_PATH: /app/unified-data/greed-island.sqlite
+      GREED_ISLAND_ALLOWED_ORIGINS: ${GREED_ISLAND_ALLOWED_ORIGINS:?Exact browser HTTPS origin is required}
+      GREED_ISLAND_BUILD_SHA: ${GREED_L390_BUILD_SHA:-}
+      OPENCODE_CREDENTIAL_ORIGIN: ${OPENCODE_CREDENTIAL_ORIGIN:-}
+    volumes:
+      - canonical-data:/app/unified-data
+    expose:
+      - "4179"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4179/healthz').then(async r => {const h=await r.json(); process.exit(r.ok && h.ok && h.mode === 'unified' ? 0 : 1)}).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - l390
+
+  web:
+    build:
+      context: ../..
+      dockerfile: packages/web/Dockerfile
+    image: greed-island-l390-web:${GREED_L390_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      multiplayer:
+        condition: service_healthy
+    # Preserve the existing tailscale-serve -> loopback path. No public bind.
+    ports:
+      - "127.0.0.1:${GREED_L390_HOST_PORT:-28100}:80"
+    volumes:
+      - ./Caddyfile.l390:/etc/caddy/Caddyfile:ro
+    networks:
+      - l390
+
+networks:
+  l390:
+    driver: bridge
+
+volumes:
+  canonical-data:
+    external: true
+    name: ${GREED_L390_CANONICAL_VOLUME:?Owner-reviewed existing canonical DB volume is required}

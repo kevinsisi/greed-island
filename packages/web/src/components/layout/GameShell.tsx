@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { usePlayerWallet } from '../../state/usePlayerWallet'
+import { WalletStatus } from '../game/WalletStatus'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../state/AuthContext'
 import { useI18n, type TranslationKey } from '../../i18n'
@@ -9,6 +11,7 @@ import { Avatar } from '../common/Avatar'
 import { Icon, type IconName } from '../common/Icon'
 import { APP_VERSION } from '../../version'
 import { api, type ServerAccount } from '../../api/client'
+import { mobileNavigation } from './mobileNavigation'
 
 interface NavItem {
   to: string
@@ -23,39 +26,39 @@ interface NavItem {
 //   /admin    admin only (role management + issue password resets)
 // /account is the gate for guests and the sign-in / sign-out hub.
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',         labelKey: 'nav.hub',      icon: 'hub' },
-  { to: '/codex',    labelKey: 'nav.codex',    icon: 'codex' },
-  { to: '/timeline', labelKey: 'nav.timeline', icon: 'timeline' },
-  { to: '/ecology',  labelKey: 'nav.ecology',  icon: 'ecology' },
-  { to: '/market',   labelKey: 'nav.market',   icon: 'market' },
-  { to: '/properties', labelKey: 'nav.properties', icon: 'properties' },
-  { to: '/social',   labelKey: 'nav.social',   icon: 'social' },
+  { to: '/game',         labelKey: 'nav.hub',      icon: 'hub' },
+  { to: '/game/codex',    labelKey: 'nav.codex',    icon: 'codex' },
+  { to: '/game/timeline', labelKey: 'nav.timeline', icon: 'timeline' },
+  { to: '/game/ecology',  labelKey: 'nav.ecology',  icon: 'ecology' },
+  { to: '/game/market',   labelKey: 'nav.market',   icon: 'market' },
+  { to: '/game/properties', labelKey: 'nav.properties', icon: 'properties' },
+  { to: '/game/social',   labelKey: 'nav.social',   icon: 'social' },
   {
-    to: '/profile',
+    to: '/game/profile',
     labelKey: 'nav.profile',
     icon: 'profile',
     visibleWhen: (account) => account !== null,
   },
   {
-    to: '/account',
+    to: '/game',
     labelKey: 'nav.account',
     icon: 'account',
     visibleWhen: (account) => account === null,
   },
   {
-    to: '/admin/world',
+    to: '/game/admin/world',
     labelKey: 'nav.gmWorld',
     icon: 'gmWorld',
     visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
   },
   {
-    to: '/admin',
+    to: '/game/admin',
     labelKey: 'nav.admin',
     icon: 'admin',
     visibleWhen: (account) => account?.role === 'admin',
   },
   {
-    to: '/settings',
+    to: '/game/settings',
     labelKey: 'nav.settings',
     icon: 'settings',
     visibleWhen: (account) => account?.role === 'gm' || account?.role === 'admin',
@@ -64,19 +67,13 @@ const NAV_ITEMS: NavItem[] = [
 
 const RESOURCE_REFRESH_MS = 15_000
 
-type PlayerResourceSnapshot = Readonly<{
-  gold: number
-  energy: number
-  techniqueCount: number
-}>
-
 function visibleNavItems(account: ServerAccount | null): NavItem[] {
   return NAV_ITEMS.filter((item) => !item.visibleWhen || item.visibleWhen(account))
 }
 
 export function GameShell({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const isAreaRoute = location.pathname.startsWith('/area/')
+  const isAreaRoute = location.pathname.startsWith('/game/area/')
 
   return (
     <div className="min-h-full flex flex-col bg-ground-900 text-ground-100">
@@ -122,7 +119,7 @@ function Brandbar() {
         {account && <div className="hidden sm:flex"><PlayerResources /></div>}
         <LanguageToggle />
         <NavLink
-          to={account ? '/profile' : '/account'}
+          to={account ? '/game/profile' : '/game'}
           className={({ isActive }) =>
             [
               'gi-touch px-2 sm:px-3 inline-flex items-center gap-1 sm:gap-2 text-[11px] font-display uppercase tracking-tightest border rounded-sharp transition-colors',
@@ -158,27 +155,25 @@ function Brandbar() {
 }
 
 function PlayerResources() {
-  const { token } = useAuth()
-  const [resources, setResources] = useState<PlayerResourceSnapshot | null>(null)
+  const { accountId } = useAuth()
+  const { locale } = useI18n()
+  const { read } = usePlayerWallet(accountId)
+  const [techniqueCount, setTechniqueCount] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!token) {
-      setResources(null)
+    if (!accountId) {
+      setTechniqueCount(null)
       return
     }
     let cancelled = false
     const refresh = () => {
-      Promise.all([api.wallet(token), api.myTechniques(token)])
-        .then(([walletResponse, techniquesResponse]) => {
+      api.myTechniques(accountId)
+        .then(techniquesResponse => {
           if (cancelled) return
-          setResources({
-            gold: walletResponse.wallet.gold,
-            energy: walletResponse.wallet.energy,
-            techniqueCount: techniquesResponse.owned.reduce((sum, item) => sum + item.count, 0),
-          })
+          setTechniqueCount(techniquesResponse.owned.reduce((sum, item) => sum + item.count, 0))
         })
         .catch(() => {
-          if (!cancelled) setResources(null)
+          if (!cancelled) setTechniqueCount(null)
         })
     }
     refresh()
@@ -187,21 +182,16 @@ function PlayerResources() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [token])
+  }, [accountId])
 
-  if (!resources) return null
+  if (accountId === null) return null
 
   return (
     <div className="inline-flex items-center gap-2 text-[11px] font-body text-ground-300">
-      <span className="px-2 py-1 border border-ember-700/40 rounded-sharp bg-ember-500/5">
-        <span className="gi-data text-ember-400 text-[13px] font-semibold">{resources.gold.toLocaleString()}</span> 潮幣
-      </span>
-      <span className="px-2 py-1 border border-ground-700 rounded-sharp bg-ground-900/75">
-        體力 <span className="gi-data text-sand text-[13px]">{resources.energy}</span>/100
-      </span>
-      <span className="px-2 py-1 border border-ground-700 rounded-sharp bg-ground-900/75">
-        術式 <span className="gi-data text-moss-400 text-[13px] font-semibold">{resources.techniqueCount}</span>
-      </span>
+      <WalletStatus read={read} locale={locale} />
+      {techniqueCount !== null && <span className="px-2 py-1 border border-ground-700 rounded-sharp bg-ground-900/75">
+        術式 <span className="gi-data text-moss-400 text-[13px] font-semibold">{techniqueCount}</span>
+      </span>}
     </div>
   )
 }
@@ -316,7 +306,7 @@ function DesktopRail() {
         <NavLink
           key={item.to}
           to={item.to}
-          end={item.to === '/'}
+          end={item.to === '/game'}
           className={({ isActive }) =>
             [
               'group relative flex items-center gap-3 px-3 py-2.5 rounded-sharp border transition-all duration-200',
@@ -349,10 +339,6 @@ function DesktopRail() {
   )
 }
 
-// Primary 4 tabs always pinned; every other mobile entry lives behind "⋯ More".
-// Keep this at exactly 4 so the 5-column mobile bar never wraps into two rows.
-const PRIMARY_PATHS: string[] = ['/', '/codex', '/timeline', '/ecology']
-
 function MobileTabBar() {
   const { t } = useI18n()
   const { account } = useAuth()
@@ -360,18 +346,7 @@ function MobileTabBar() {
   const [moreOpen, setMoreOpen] = useState(false)
 
   const items = visibleNavItems(account ?? null)
-  const primaryItems = items.filter((item) => PRIMARY_PATHS.includes(item.to))
-  const profileItem = items.find((item) => item.to === '/profile' || item.to === '/account')
-  const overflowItems = items.filter(
-    (item) => !PRIMARY_PATHS.includes(item.to) && item.to !== '/profile' && item.to !== '/account'
-  )
-  const hasOverflow = overflowItems.length > 0
-  const moreItems: NavItem[] = hasOverflow
-    ? ([profileItem, ...overflowItems].filter(Boolean) as NavItem[])
-    : []
-  const moreActive = moreItems.some(
-    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
-  )
+  const { primaryItems, profileItem, hasOverflow, moreItems, moreActive } = mobileNavigation(items, location.pathname)
 
   const tabClass = (isActive: boolean) =>
     [
@@ -396,7 +371,7 @@ function MobileTabBar() {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/game'}
               onClick={() => setMoreOpen(false)}
               className={({ isActive }) =>
                 [
@@ -420,7 +395,7 @@ function MobileTabBar() {
             <li key={item.to}>
               <NavLink
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === '/game'}
                 onClick={() => setMoreOpen(false)}
                 className={({ isActive }) => tabClass(isActive)}
               >
@@ -434,7 +409,7 @@ function MobileTabBar() {
             {!hasOverflow && profileItem ? (
               <NavLink
                 to={profileItem.to}
-                end={profileItem.to === '/'}
+                end={profileItem.to === '/game'}
                 className={({ isActive }) => tabClass(isActive)}
               >
                 <Icon name={profileItem.icon} className="h-[22px] w-[22px]" />

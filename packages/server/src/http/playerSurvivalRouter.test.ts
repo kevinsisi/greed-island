@@ -1,5 +1,6 @@
+import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders, seedCookieTestAccount } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,7 +9,7 @@ import { createPlayerSurvivalRouter } from './playerSurvivalRouter.js'
 import { PlayerSurvivalProjection } from '../projections/playerSurvival.js'
 import { PLAYER_EAT_RATION_GOLD_COST, PLAYER_INITIAL_NOURISHMENT, PLAYER_INITIAL_VIGOR, PLAYER_STARVATION_THRESHOLD } from '../config/world.js'
 
-const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+const testDatabases: Database.Database[] = []
 let seq = 0
 
 function mockRuntime(proj: PlayerSurvivalProjection, tick = 100) {
@@ -53,6 +54,9 @@ function listen(app: ReturnType<typeof express>): Promise<Server> {
 }
 
 async function setup(opts: { tick?: number; gold?: number } = {}) {
+  const db = new Database(':memory:'); testDatabases.push(db)
+  seedCookieTestAccount(db, 42)
+  const authConfig = createCookieTestAuthorization(db)
   const proj = new PlayerSurvivalProjection()
   const jobs = mockJobs(opts.gold ?? 100)
   const runtime = mockRuntime(proj, opts.tick ?? 100)
@@ -62,12 +66,13 @@ async function setup(opts: { tick?: number; gold?: number } = {}) {
   const server = await listen(app)
   const port = (server.address() as AddressInfo).port
   const accountId = 42
-  const token = jwt.sign({ sub: accountId, email: 'test@example.com', role: 'player' }, authConfig.jwtSecret)
-  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+  const token = issueCookieTestSession(authConfig, { sub: accountId, email: 'test@example.com', role: 'player' })
+  const headers = { ...cookieTestHeaders(token), 'content-type': 'application/json' }
   return { port, headers, accountId, proj, jobs, server }
 }
 
 describe('playerSurvivalRouter', () => {
+  afterEach(() => { for (const db of testDatabases.splice(0)) db.close() })
   const servers: Server[] = []
   afterEach(() => servers.forEach((s) => s.close()))
 
@@ -78,34 +83,44 @@ describe('playerSurvivalRouter', () => {
     expect(res.status).toBe(401)
   })
 
-  it('GET /player/needs seeds state on first access', async () => {
+  it('GET /player/needs reads a pure initial state without a durable seed', async () => {
     const { port, headers, proj, accountId, server } = await setup({ tick: 50 })
     servers.push(server)
     expect(proj.getState(accountId)).toBeNull()
-    const res = await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
-    expect(res.status).toBe(200)
-    const body = await res.json() as { nourishment: number; vigor: number; collapsed: boolean; asOfTick: number }
-    expect(body.nourishment).toBe(PLAYER_INITIAL_NOURISHMENT)
-    expect(body.vigor).toBe(PLAYER_INITIAL_VIGOR)
-    expect(body.collapsed).toBe(false)
-    expect(proj.getState(accountId)).not.toBeNull()
+    for (let read = 0; read < 2; read++) {
+      const res = await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+      expect(res.status).toBe(200)
+      const body = await res.json() as { nourishment: number; vigor: number; collapsed: boolean; asOfTick: number }
+      expect(body.asOfTick).toBe(50)
+      expect(body.nourishment).toBe(PLAYER_INITIAL_NOURISHMENT)
+      expect(body.vigor).toBe(PLAYER_INITIAL_VIGOR)
+      expect(body.collapsed).toBe(false)
+      expect(proj.getState(accountId)).toBeNull()
+    }
   })
 
-  it('GET /player/needs returns reconcile-to-current-tick on subsequent reads', async () => {
+  it('POST /player/needs/reconcile durably seeds state and subsequent GET reads preserve it', async () => {
     const { port, headers, proj, accountId, server } = await setup({ tick: 7200 })
     servers.push(server)
-    // Seed first
-    await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
-    // Advance time: proj already has state from seed; on second read tick is same (mocked)
+    expect(proj.getState(accountId)).toBeNull()
+    const response = await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
+    expect(response.status).toBe(200)
     const state = proj.getState(accountId)
     expect(state).not.toBeNull()
     expect(state!.asOfTick).toBe(7200)
+    expect(await response.json()).toEqual(state)
+    for (let read = 0; read < 2; read++) {
+      const res = await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual(state)
+      expect(proj.getState(accountId)).toEqual(state)
+    }
   })
 
   it('POST /player/eat returns 401 when unauthenticated', async () => {
     const { port, server } = await setup()
     servers.push(server)
-    const res = await fetch(`http://127.0.0.1:${port}/player/eat`, { method: 'POST' })
+    const res = await fetch(`http://127.0.0.1:${port}/player/eat`, { method: 'POST', headers: { Origin: 'http://127.0.0.1:4178' } })
     expect(res.status).toBe(401)
   })
 
@@ -113,7 +128,7 @@ describe('playerSurvivalRouter', () => {
     const { port, headers, proj, accountId, jobs, server } = await setup({ tick: 100, gold: 50 })
     servers.push(server)
     // Seed state first
-    await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+    await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
     const goldBefore = jobs.getGold()
 
     const res = await fetch(`http://127.0.0.1:${port}/player/eat`, { method: 'POST', headers })
@@ -130,7 +145,7 @@ describe('playerSurvivalRouter', () => {
   it('POST /player/eat returns 402 when gold is insufficient', async () => {
     const { port, headers, server } = await setup({ tick: 100, gold: 0 })
     servers.push(server)
-    await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+    await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
     const res = await fetch(`http://127.0.0.1:${port}/player/eat`, { method: 'POST', headers })
     expect(res.status).toBe(402)
     const body = await res.json() as { error: string; goldRequired: number }

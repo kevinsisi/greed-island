@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import express from 'express'
-import jwt from 'jsonwebtoken'
+import { createCookieTestAuthorization, issueCookieTestSession, cookieTestHeaders } from './cookieTestFixtures.js'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
@@ -19,7 +19,7 @@ import { SimulationRuntime } from '../sim/runtime.js'
 describe('buildings router', () => {
   it('rejects multiple active jobs across buildings and shifts', async () => {
     const db = new Database(':memory:')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const accounts = new AccountStore(db, 4)
     const jobs = new PlayerJobsStore(db)
     const account = await accounts.createAccount('worker@example.test', 'hunter123')
@@ -38,11 +38,8 @@ describe('buildings router', () => {
 
     try {
       const address = server.address() as AddressInfo
-      const token = jwt.sign(
-        { sub: account.id, email: account.email, role: account.role },
-        authConfig.jwtSecret
-      )
-      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+      const token = issueCookieTestSession(authConfig, { sub: account.id, email: account.email, role: account.role })
+      const headers = { ...cookieTestHeaders(token), 'content-type': 'application/json' }
       const first = await fetch(`http://127.0.0.1:${address.port}/buildings/b_desert_workshop/apply`, {
         method: 'POST',
         headers,
@@ -66,7 +63,7 @@ describe('buildings router', () => {
 
   it('returns NPC-initiated in-progress construction sites for a tile', async () => {
     const db = new Database(':memory:')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const jobs = new PlayerJobsStore(db)
     const runtime = {
       getCurrentTick: () => 100,
@@ -115,7 +112,7 @@ describe('buildings router', () => {
 
   it('returns completed NPC-initiated construction projects as permanent buildings', async () => {
     const db = new Database(':memory:')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const jobs = new PlayerJobsStore(db)
     const runtime = {
       getCurrentTick: () => 120,
@@ -174,7 +171,7 @@ describe('buildings router', () => {
 
   it('returns constructed expansion buildings by id before they have occupants', async () => {
     const db = new Database(':memory:')
-    const authConfig: AuthConfig = { jwtSecret: 'test-secret', jwtExpiresIn: '1h' }
+    const authConfig: AuthConfig = createCookieTestAuthorization(db)
     const jobs = new PlayerJobsStore(db)
     const runtime = new SimulationRuntime(
       new SqliteEventStore(db),

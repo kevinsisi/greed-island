@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
+import type { AdminWorldReady, ServerAdminWorldSnapshot } from '../api/adminWorld'
+import { useAdminWorld } from '../state/useAdminWorld'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/common/PageHeader'
 import { useI18n, type TranslationKey } from '../i18n'
 import { useAuth } from '../state/AuthContext'
-import { useWorldState } from '../state/WorldStateContext'
 import { readSettlementRows, settlementStorageTotal, type SettlementRow } from './adminSettlementProjection'
 
 type FisheryDensityRow = Readonly<{
@@ -120,11 +122,11 @@ type PredatorHungerRow = Readonly<{
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 export function AdminWorldPage() {
-  const { t } = useI18n()
-  const { token, account } = useAuth()
-  const { world, map, source, liveConnected, refreshWorld } = useWorldState()
+  const { t, locale } = useI18n()
+  const { accountId, account } = useAuth()
+  const { read, refresh } = useAdminWorld()
 
-  if (!token || !account) {
+  if (!accountId || !account) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
@@ -150,6 +152,14 @@ export function AdminWorldPage() {
     )
   }
 
+  if (read.status !== 'ready') return <div className="flex flex-col gap-6"><PageHeader eyebrow={t('admin.world.eyebrow')} title={t('admin.world.title')} description={t('admin.world.description')} /><section className="gi-panel p-5 text-sm text-ground-300" role="status">{locale === 'zh' ? read.status === 'loading' ? '正在確認管理員世界資料…' : '管理員世界資料暫時不可用。' : read.status === 'loading' ? 'Checking operator world…' : 'Operator world is unavailable.'}<button type="button" onClick={() => void refresh()} className="gi-panel ml-3 px-3 py-1.5">{t('admin.world.refresh')}</button></section></div>
+  return <AdminWorldContent world={read.response} ready={read.response.operatorOverviewReady} refreshWorld={refresh} t={t} locale={locale} />
+}
+
+export function AdminWorldContent({ world, ready, refreshWorld, t, locale }: { world: ServerAdminWorldSnapshot; ready: AdminWorldReady; refreshWorld: () => Promise<void>; t: Translator; locale: 'zh' | 'en' }) {
+  // Region identifiers are genuine server values. No public-world/SSE fallback supplies private facts.
+  const tileNameById = new Map<string, string>()
+  const unavailable = locale === 'zh' ? '不可用' : 'Unavailable'
   const fisheryRows = readFisheryRows(world.facts)
   const goodsRows = readGoodsRows(world.facts)
   const logistics = readLogistics(world.facts)
@@ -165,7 +175,6 @@ export function AdminWorldPage() {
   const livestockRows = readLivestockRegistry(world.facts)
   const activeWorldEvents = readActiveWorldEvents(world.facts)
   const factionEcologyStances = readFactionEcologyStances(world.facts)
-  const tileNameById = new Map(map.tiles.map((tile) => [tile.id, tile.name]))
   const collapsedCount = fisheryRows.filter((row) => row.collapsed).length
   const totalHarvested = fisheryRows.reduce((sum, row) => sum + row.harvestedTotal, 0)
   const totalGoods = goodsRows.reduce((sum, row) => sum + row.quantity, 0)
@@ -194,7 +203,7 @@ export function AdminWorldPage() {
               {t('admin.world.refresh')}
             </button>
             <Link
-              to="/admin/npcs"
+              to="/game/admin/npcs"
               className="gi-panel px-3 py-1.5 text-xs font-display uppercase tracking-tightest text-ground-300 hover:text-ground-100"
             >
               {t('admin.npcs.link')}
@@ -205,16 +214,17 @@ export function AdminWorldPage() {
 
       <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3" aria-label={t('admin.world.summary')}>
         <StatCard label={t('admin.world.statTick')} value={world.tick} />
-        <StatCard label={t('admin.world.statSource')} value={source === 'server' ? t('admin.world.sourceServer') : t('admin.world.sourceFixture')} />
-        <StatCard label={t('admin.world.statConnection')} value={liveConnected ? t('admin.world.live') : t('admin.world.polling')} />
-        <StatCard label={t('admin.world.statFisheryRows')} value={fisheryRows.length} />
-        <StatCard label={t('admin.world.statGoodsRows')} value={goodsRows.length} />
-        <StatCard label={t('admin.world.statLogisticsRows')} value={logistics.transports.length} />
-        <StatCard label={t('admin.world.statProductionRows')} value={productionChains.processed.length} />
-        <StatCard label={t('admin.world.statMarketRows')} value={marketPrices.length} />
-        <StatCard label={t('admin.world.statSettlementRows')} value={settlementRows.length} />
+        <StatCard label={t('admin.world.statSource')} value={t('admin.world.sourceServer')} />
+        <StatCard label={t('admin.world.statConnection')} value={t('admin.world.polling')} />
+        <StatCard label={t('admin.world.statFisheryRows')} value={ready.fisheryDensity ? fisheryRows.length : unavailable} />
+        <StatCard label={t('admin.world.statGoodsRows')} value={ready.goodsInventory ? goodsRows.length : unavailable} />
+        <StatCard label={t('admin.world.statLogisticsRows')} value={ready.logistics ? logistics.transports.length : unavailable} />
+        <StatCard label={t('admin.world.statProductionRows')} value={ready.productionChains ? productionChains.processed.length : unavailable} />
+        <StatCard label={t('admin.world.statMarketRows')} value={ready.marketPrices ? marketPrices.length : unavailable} />
+        <StatCard label={t('admin.world.statSettlementRows')} value={ready.settlements ? settlementRows.length : unavailable} />
       </section>
 
+      <ProjectionSection available={ready.settlements} fields="settlements" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-teal-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -258,7 +268,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.fisheryDensity} fields="fisheryDensity" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-cyan-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -301,7 +313,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.goodsInventory} fields="goodsInventory" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-moss-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -348,7 +362,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.logistics} fields="logistics" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-5 border-amber-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -415,7 +431,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.productionChains} fields="productionChains" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-violet-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -462,7 +480,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.marketPrices} fields="marketPrices" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-rust-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -504,7 +524,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.animalPopulation} fields="animalPopulation" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-amber-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -558,7 +580,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.migrationRoutes} fields="migrationRoutes" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-emerald-700/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -611,7 +635,9 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
+      <ProjectionSection available={ready.predatorHunger} fields="predatorHunger" locale={locale}>
       <section className="gi-panel p-5 flex flex-col gap-4 border-red-900/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -654,6 +680,7 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
       <section className="gi-panel p-5 flex flex-col gap-4 border-emerald-900/30">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -666,11 +693,12 @@ export function AdminWorldPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-[11px] font-display uppercase tracking-tightest">
-            <Badge label="warned/extinct" value={extinctionWarnings.length} danger={extinctionWarnings.some(r => r.status === 'extinct')} />
-            <Badge label="pressured tiles" value={ecosystemRegions.length} />
+            <Badge label="warned/extinct" value={ready.extinctionWarnings ? extinctionWarnings.length : unavailable} danger={extinctionWarnings.some(r => r.status === 'extinct')} />
+            <Badge label="pressured tiles" value={ready.ecosystemRegions ? ecosystemRegions.length : unavailable} />
           </div>
         </div>
 
+        <ProjectionSection available={ready.extinctionWarnings} fields="extinctionWarnings" locale={locale}>
         {extinctionWarnings.length > 0 && (
           <div className="overflow-x-auto">
             <h3 className="text-[11px] uppercase tracking-tightest text-ground-500 mb-2">Species Status</h3>
@@ -699,6 +727,8 @@ export function AdminWorldPage() {
           </div>
         )}
 
+        </ProjectionSection>
+        <ProjectionSection available={ready.ecosystemRegions} fields="ecosystemRegions" locale={locale}>
         {ecosystemRegions.length > 0 && (
           <div className="overflow-x-auto">
             <h3 className="text-[11px] uppercase tracking-tightest text-ground-500 mb-2">Tile Pressure</h3>
@@ -727,7 +757,8 @@ export function AdminWorldPage() {
           </div>
         )}
 
-        {extinctionWarnings.length === 0 && ecosystemRegions.length === 0 && (
+        </ProjectionSection>
+        {ready.extinctionWarnings && ready.ecosystemRegions && extinctionWarnings.length === 0 && ecosystemRegions.length === 0 && (
           <div className="rounded-sharp border border-ground-800 bg-ground-950/40 p-4 text-sm text-ground-400 leading-relaxed">
             ✅ All species stable. No tile pressure recorded.
           </div>
@@ -735,6 +766,7 @@ export function AdminWorldPage() {
       </section>
 
       {/* Phase E3 — 馴養登記 */}
+      <ProjectionSection available={ready.livestockRegistry} fields="livestockRegistry" locale={locale}>
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ground-100">馴養登記 Livestock Registry</h2>
@@ -774,13 +806,15 @@ export function AdminWorldPage() {
           </div>
         )}
       </section>
+      </ProjectionSection>
 
       {/* Phase E4 — 神話生態 Mythic Ecology */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ground-100">神話生態 Mythic Ecology</h2>
-          <Badge label="active events" value={activeWorldEvents.length} />
+          <Badge label="active events" value={ready.activeWorldEvents ? activeWorldEvents.length : unavailable} />
         </div>
+        <ProjectionSection available={ready.activeWorldEvents} fields="activeWorldEvents" locale={locale}>
         {activeWorldEvents.length > 0 ? (
           <table className="w-full text-sm">
             <thead>
@@ -813,6 +847,8 @@ export function AdminWorldPage() {
             ✅ No active mythic events.
           </div>
         )}
+        </ProjectionSection>
+        <ProjectionSection available={ready.factionEcologyStances} fields="factionEcologyStances" locale={locale}>
         <h3 className="text-sm font-semibold text-ground-200 pt-2">Faction Ecology Stances</h3>
         <table className="w-full text-sm">
           <thead>
@@ -830,6 +866,7 @@ export function AdminWorldPage() {
             ))}
           </tbody>
         </table>
+        </ProjectionSection>
       </section>
     </div>
   )
@@ -1413,4 +1450,8 @@ function readFactionEcologyStances(facts: Record<string, unknown>): FactionEcolo
     const r = v as Record<string, unknown>
     return typeof r.factionId === 'string' && typeof r.ecologyStance === 'string'
   })
+}
+
+function ProjectionSection({ available, fields, locale, children }: { available: boolean; fields: string; locale: 'zh' | 'en'; children: ReactNode }) {
+  return available ? <>{children}</> : <section className="gi-panel p-5 text-sm text-ground-400" data-admin-projections={fields} role="status">{locale === 'zh' ? `${fields}：投影暫時不可用。` : `${fields}: projection unavailable.`}</section>
 }

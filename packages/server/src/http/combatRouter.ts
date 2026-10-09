@@ -16,7 +16,7 @@
 // 真正的 mutation 由 LivingWorldRuleEngine 編譯成 Event 寫進 EventLog；
 // CombatStore 是 SQLite 投影（projection）。
 
-import { Router, type Request, type Response } from 'express'
+import { Router, json, type Request, type Response } from 'express'
 import type Database from 'better-sqlite3'
 import { requireAuth, type AuthConfig } from './auth.js'
 import type { SimulationRuntime } from '../sim/runtime.js'
@@ -31,22 +31,50 @@ import {
   makeLivingWorldCommand,
   type LivingWorldActorType,
 } from '../kernel/livingWorldCommands.js'
+import { CanonicalGameplayAuthority, reauthorizeGameplayMutation, sendGameplayError } from './gameplayAuthority.js'
+import { assertExpectedAccountContext } from '../identity/authRouter.js'
+import { accountId } from '../identity/principal.js'
+import { PlayerWorldError } from '../playerWorld/types.js'
 import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 
+export type ManagedCombatRouter = Router & { closeStreams(): void }
 export function createCombatRouter(input: {
   store: CombatStore
   runtime: SimulationRuntime
   jobs: PlayerJobsStore
-  social: SocialStore
+  social?: Pick<SocialStore, 'getPlayerLocation'>
+  authority?: CanonicalGameplayAuthority
+  techniques?: Pick<TechniqueShopStore, 'listOwned'>
   authConfig: AuthConfig
   db: Database.Database
-}): Router {
-  const router = Router()
+}): ManagedCombatRouter {
+  const router = Router() as ManagedCombatRouter
+  const streams = new Set<() => void>(), accountStreamCounts = new Map<number, number>()
+  let stopped = false
+  router.closeStreams = () => { stopped = true; for (const close of [...streams]) close() }
   const auth = requireAuth(input.authConfig)
   const store = input.store
   // v0.90.0 — 術式卡 ↔ 戰鬥手牌：手牌由玩家持有的戰鬥型術式卡決定
   // （天際百貨購買），基本牌 TIDE_STRIKE / MEND 人人都有。
-  const techniques = new TechniqueShopStore(input.db)
+  const techniques = input.techniques ?? new TechniqueShopStore(input.db)
+  const playerLocation = (id: number) => {
+    if (!input.authority) return input.social?.getPlayerLocation(id) ?? null
+    const position = input.authority.requirePosition(id)
+    return { tile_id: position.tileId }
+  }
+  const spatial = (req: Request, res: Response, session?: import('../combat/combatStore.js').CombatSessionRow, allowFlee = false) => {
+    if (!reauthorizeGameplayMutation(input.authConfig, req, res, req.auth!.sub)) return false
+    if (!input.authority) return true
+    try {
+      const position = input.authority.requirePosition(req.auth!.sub)
+      if (session && !allowFlee) {
+        if (position.tileId !== session.tile_id) throw new PlayerWorldError(409, 'COMBAT_NOT_LOCAL', 'Combat is not in the canonical player region.')
+        if (session.enemy_type !== 'animal') input.authority.requireNearbyNpc(req.auth!.sub, session.npc_id)
+        else if (position.interior) throw Object.assign(new Error(), { code: 'BUILDING_EXIT_REQUIRED' })
+      }
+      return true
+    } catch (error) { sendGameplayError(res, error); return false }
+  }
   const handFor = (accountId: number): HandCardView[] =>
     computeHandLoadout(
       techniques.listOwned(accountId).filter((row) => row.count > 0).map((row) => row.card_id)
@@ -104,8 +132,11 @@ export function createCombatRouter(input: {
       return
     }
 
+    if (!spatial(req, res)) return
+    if (input.authority) { try { input.authority.requireNearbyNpc(accountId, targetNpcId) } catch (error) { sendGameplayError(res, error); return } }
     // 同 tile 才能戰鬥
-    const playerLoc = input.social.getPlayerLocation(accountId)
+    let playerLoc
+    try { playerLoc = playerLocation(accountId) } catch (error) { sendGameplayError(res, error); return }
     if (!playerLoc) {
       res.status(409).json({ error: 'PLAYER_LOCATION_UNKNOWN' })
       return
@@ -195,12 +226,15 @@ export function createCombatRouter(input: {
       return
     }
 
-    const playerLoc = input.social.getPlayerLocation(accountId)
+    let playerLoc
+    try { playerLoc = playerLocation(accountId) } catch (error) { sendGameplayError(res, error); return }
     if (!playerLoc) {
       res.status(409).json({ error: 'PLAYER_LOCATION_UNKNOWN' })
       return
     }
 
+    if (!spatial(req, res)) return
+    if (input.authority?.requirePosition(accountId).interior) { res.status(409).json({ error: 'BUILDING_EXIT_REQUIRED' }); return }
     // Verify the animal exists on the player's tile.
     const population = input.runtime.getAnimalPopulation()
     const animalRow = population.find(
@@ -288,6 +322,11 @@ export function createCombatRouter(input: {
       return
     }
 
+    if (!spatial(req, res, session)) return
+    const snapshot = input.runtime.getCombatSnapshot(combatId)
+    if (!snapshot?.actors.some(actor => actor.actorId === targetActorId) || !snapshot.actors.some(actor => actor.actorId === String(accountId))) {
+      res.status(400).json({ error: 'TARGET_NOT_IN_COMBAT' }); return
+    }
     // v0.90.0 — 只能施放自己持有的術式卡解鎖的戰鬥卡（+基本牌）。
     const allowed = allowedClassesFor(
       techniques.listOwned(accountId).filter((row) => row.count > 0).map((row) => row.card_id)
@@ -297,7 +336,19 @@ export function createCombatRouter(input: {
       return
     }
 
-    const result = input.runtime.submitCombatCardPlay({ accountId, combatId, cardClass, targetActorId })
+    const authorize = () => {
+      const current = input.authConfig.reauthorizeMutation(req)
+      if (current.sub !== accountId) throw Object.assign(new Error(), { code: 'ACCOUNT_CHANGED' })
+      if (input.authority) {
+        const currentPosition = input.authority.requirePosition(accountId), currentSession = store.getSession(combatId)
+        if (!currentSession || currentSession.player_account_id !== accountId || currentSession.state !== 'active' || currentPosition.tileId !== currentSession.tile_id) throw new Error('Combat context changed.')
+        if (currentSession.enemy_type !== 'animal') input.authority.requireNearbyNpc(accountId, currentSession.npc_id)
+        else if (currentPosition.interior) throw new Error('Outdoor animal combat requires exterior admission.')
+      }
+      const owned = allowedClassesFor(techniques.listOwned(accountId).filter(row => row.count > 0).map(row => row.card_id))
+      if (!owned.has(cardClass as never)) throw new Error('Combat card ownership changed.')
+    }
+    const result = input.runtime.submitCombatCardPlay({ accountId, combatId, cardClass, targetActorId, authorize })
     if (!result) {
       res.status(409).json({ error: 'CARD_PLAY_REJECTED' })
       return
@@ -326,6 +377,7 @@ export function createCombatRouter(input: {
       return
     }
 
+    if (!spatial(req, res, session, true)) return
     const cancelled = input.runtime.submitCombatCardCancel({ accountId, combatId, cancelCommandId })
     res.json({ cancelled, commandId: cancelCommandId })
   })
@@ -352,44 +404,48 @@ export function createCombatRouter(input: {
     res.json(snapshot)
   })
 
-  router.get('/combat/:id/stream', auth, (req: Request, res: Response) => {
-    const accountId = req.auth!.sub
-    const combatId = req.params.id ?? ''
-
-    const session = store.getSession(combatId)
-    if (!session) {
-      res.status(404).json({ error: 'COMBAT_NOT_FOUND' })
-      return
-    }
-    if (session.player_account_id !== accountId) {
-      res.status(403).json({ error: 'FORBIDDEN' })
-      return
-    }
-
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders?.()
-    res.write('retry: 5000\n\n')
-
-    const snapshot = input.runtime.getCombatSnapshot(combatId)
-    if (snapshot) sendCombatSseEvent(res, 'snapshot', snapshot)
-
-    const unsubscribe = input.runtime.subscribeCombatEvents(combatId, (ev, tickDigest) => {
-      sendCombatSseEvent(res, 'event', { eventType: ev.eventType, payload: ev.payload, tickDigest })
-    })
-
-    const keepalive = setInterval(() => { res.write(': keepalive\n\n') }, 25_000)
-
+  router.get('/combat/:id/stream', (req: Request, res: Response) => {
+    if (stopped) { res.status(503).json({ error: 'SERVER_CLOSING' }); return }
+    let current
+    try {
+      current = input.authConfig.resolve(req)
+      if (!current) throw Object.assign(new Error(), { code: 'UNAUTHORIZED' })
+      assertExpectedAccountContext(typeof req.query.expectedAccountId === 'string' ? req.query.expectedAccountId : undefined, { accountId: accountId(current.sub), role: current.role })
+    } catch (error) { sendGameplayError(res, error); return }
+    const account = current, combatId = req.params.id ?? '', session = store.getSession(combatId)
+    if (!session) { res.status(404).json({ error: 'COMBAT_NOT_FOUND' }); return }
+    if (session.player_account_id !== account.sub) { res.status(403).json({ error: 'FORBIDDEN' }); return }
+    if (streams.size >= 200 || (accountStreamCounts.get(account.sub) ?? 0) >= 4) { res.status(429).json({ error: 'STREAM_LIMIT' }); return }
+    const token = input.authConfig.token(req)
+    let ended = false, unsubscribe = () => {}, unwatch = () => {}
+    let keepalive: ReturnType<typeof setInterval> | undefined
     const cleanup = () => {
-      clearInterval(keepalive)
-      unsubscribe()
-      try { res.end() } catch { /* socket already closed */ }
+      if (ended) return; ended = true
+      if (keepalive) clearInterval(keepalive)
+      unsubscribe(); unwatch(); streams.delete(cleanup)
+      const count = (accountStreamCounts.get(account.sub) ?? 1) - 1
+      if (count) accountStreamCounts.set(account.sub, count); else accountStreamCounts.delete(account.sub)
+      req.off('close', cleanup); req.off('error', cleanup); res.off('error', cleanup); res.end()
     }
-
-    req.on('close', cleanup)
-    req.on('error', cleanup)
+    const valid = () => {
+      const principal = input.authConfig.authService.resolve(token)
+      if (!principal || principal.accountId !== account.sub || principal.role !== account.role || store.getSession(combatId)?.player_account_id !== account.sub) {
+        if (!ended) { try { res.write('event: session.invalidated\ndata: {"error":"UNAUTHORIZED"}\n\n') } finally { cleanup() } }
+        return false
+      }
+      return true
+    }
+    const write = (name: string, payload: unknown) => {
+      if (ended || !valid()) return
+      const frame = `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`
+      if (Buffer.byteLength(frame, 'utf8') > 128 * 1024 || !res.write(frame)) cleanup()
+    }
+    res.setHeader('Content-Type', 'text/event-stream'); res.setHeader('Cache-Control', 'no-cache, no-transform'); res.setHeader('Connection', 'keep-alive'); res.setHeader('X-Accel-Buffering', 'no'); res.flushHeaders?.()
+    streams.add(cleanup); accountStreamCounts.set(account.sub, (accountStreamCounts.get(account.sub) ?? 0) + 1); req.on('close', cleanup); req.on('error', cleanup); res.on('error', cleanup)
+    unsubscribe = input.runtime.subscribeCombatEvents(combatId, (ev, tickDigest) => write('event', { eventType: ev.eventType, payload: ev.payload, tickDigest }))
+    unwatch = input.authConfig.authService.onRevoked(id => { if (id === account.sub) valid() })
+    keepalive = setInterval(() => { if (!ended && valid() && !res.write(': keepalive\n\n')) cleanup() }, 5000)
+    const snapshot = input.runtime.getCombatSnapshot(combatId); if (snapshot) write('snapshot', snapshot)
   })
 
   // ── Phase B（回合制：一般戰鬥 + v0.90.0 術式卡牌戰鬥） ───────────────
@@ -418,8 +474,9 @@ export function createCombatRouter(input: {
       return
     }
 
+    if (!spatial(req, res, session, action === 'flee')) return
     // For NPC combats, verify the NPC still exists. Animal combats skip this check.
-    if (session.enemy_type !== 'animal') {
+    if (session.enemy_type !== 'animal' && action !== 'flee') {
       const profile = input.runtime.findProfile(session.npc_id)
       const npcSummary = input.runtime.getNpcs().find((n) => n.id === session.npc_id)
       if (!profile || !npcSummary) {
@@ -516,4 +573,18 @@ function toClientSession(s: import('../combat/combatStore.js').CombatSessionRow)
     enemyType: s.enemy_type,
     speciesId: s.species_id,
   }
+}
+
+
+/** Reviewed normal composition accepts the one attached jobs/technique/runtime authority. */
+export function createUnifiedCombatRouter(input: Omit<Parameters<typeof createCombatRouter>[0], 'social' | 'authority' | 'techniques'> & { techniques: Pick<TechniqueShopStore, 'listOwned'> }): ManagedCombatRouter {
+  const router = Router() as ManagedCombatRouter
+  router.use('/combat', json({ limit: 4096, strict: true }))
+  router.use('/combat', (req, res, next) => {
+    if (req.body !== undefined && Buffer.byteLength(JSON.stringify(req.body), 'utf8') > 4096) { res.status(413).json({ error: 'PAYLOAD_TOO_LARGE' }); return }
+    next()
+  })
+  const combat = createCombatRouter({ ...input, authority: new CanonicalGameplayAuthority(input.runtime) })
+  router.use(combat); router.closeStreams = () => combat.closeStreams()
+  return router
 }

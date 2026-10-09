@@ -16,10 +16,16 @@
 
 import type Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
+import { verifyStoredPassword } from '../identity/passwordVerifier.js'
+import type { AccountRole } from '../identity/principal.js'
 
 type DatabaseConnection = Database.Database
 
-export type AccountRole = 'player' | 'gm' | 'admin' | 'agent'
+export type { AccountRole } from '../identity/principal.js'
+
+/** Unified/import callers MUST use `none`; legacy startup stays opt-in compatible. */
+export type AdminBootstrapPolicy = 'legacy-first-account' | 'none'
+export type AccountStoreOptions = Readonly<{ adminBootstrap?: AdminBootstrapPolicy }>
 
 export const ACCOUNT_ROLES: readonly AccountRole[] = ['player', 'gm', 'admin', 'agent']
 
@@ -65,11 +71,15 @@ type AccountRow = Readonly<{
 }>
 
 export class AccountStore {
+  private readonly adminBootstrap: AdminBootstrapPolicy
+
   constructor(
     private readonly db: DatabaseConnection,
-    private readonly bcryptCost: number
+    private readonly bcryptCost: number,
+    options: AccountStoreOptions = {}
   ) {
-    initializeAccountSchema(db)
+    this.adminBootstrap = resolveAdminBootstrap(options)
+    initializeAccountSchema(db, options)
   }
 
   async createAccount(email: string, password: string): Promise<AccountRecord> {
@@ -81,7 +91,7 @@ export class AccountStore {
     const passwordHash = await bcrypt.hash(password, this.bcryptCost)
     const createdAt = Date.now()
     const isFirst = this.countAccounts() === 0
-    const role: AccountRole = isFirst ? 'admin' : 'player'
+    const role: AccountRole = isFirst && this.adminBootstrap === 'legacy-first-account' ? 'admin' : 'player'
     const result = this.db
       .prepare(
         'INSERT INTO accounts (email, password_hash, created_at, role, nickname, avatar) VALUES (?, ?, ?, ?, NULL, ?)'
@@ -107,14 +117,14 @@ export class AccountStore {
       await bcrypt.compare(password, '$2a$12$abcdefghijklmnopqrstuvabcdefghijklmnopqrstuvwxyz0123')
       return null
     }
-    const ok = await bcrypt.compare(password, account.passwordHash)
+    const ok = await verifyStoredPassword(password, account.passwordHash)
     return ok ? account : null
   }
 
   async verifyPasswordById(id: number, password: string): Promise<boolean> {
     const account = this.findById(id)
     if (!account) return false
-    return bcrypt.compare(password, account.passwordHash)
+    return verifyStoredPassword(password, account.passwordHash)
   }
 
   async updatePassword(id: number, newPassword: string): Promise<AccountRecord | null> {
@@ -243,7 +253,8 @@ export class AccountError extends Error {
   }
 }
 
-export function initializeAccountSchema(db: DatabaseConnection): void {
+export function initializeAccountSchema(db: DatabaseConnection, options: AccountStoreOptions = {}): void {
+  const adminBootstrap = resolveAdminBootstrap(options)
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -279,11 +290,19 @@ export function initializeAccountSchema(db: DatabaseConnection): void {
   // /settings + /admin pages have a controller on a fresh deploy.
   const hasAccounts = (db.prepare('SELECT COUNT(*) AS c FROM accounts').get() as { c: number }).c > 0
   const hasAdmin = (db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE role = 'admin'").get() as { c: number }).c > 0
-  if (hasAccounts && !hasAdmin) {
+  if (adminBootstrap === 'legacy-first-account' && hasAccounts && !hasAdmin) {
     db.exec(
       "UPDATE accounts SET role = 'admin' WHERE id = (SELECT MIN(id) FROM accounts)"
     )
   }
+}
+
+function resolveAdminBootstrap(options: AccountStoreOptions): AdminBootstrapPolicy {
+  const policy = options.adminBootstrap ?? 'legacy-first-account'
+  if (policy !== 'legacy-first-account' && policy !== 'none') {
+    throw new Error('Invalid account admin bootstrap policy.')
+  }
+  return policy
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -337,3 +356,4 @@ function rowToAccount(row: AccountRow): AccountRecord {
         : DEFAULT_AVATAR,
   }
 }
+

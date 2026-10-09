@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useWorldState } from '../state/WorldStateContext'
@@ -32,15 +32,13 @@ import {
 } from './hubPanelVisibility'
 import { SurvivalHud } from '../components/game/SurvivalHud'
 
-const HUB_TILE_ID = 'hub'
 const HUB_PRESENCE_REFRESH_MS = 8_000
 const SINCE_PANEL_DISMISSED_KEY = 'gi:hub:since-panel-dismissed:v1'
-type HubPosition = { x: number; y: number; z: number }
 
 export function HubPage() {
   const { t, locale } = useI18n()
   const { npcs, map, events, source, world } = useWorldState()
-  const { token, account } = useAuth()
+  const { accountId, account, snapshot } = useAuth()
 
   // v0.95.1: one-way latch — keeps Phaser canvas mounted through transient SSE errors
   const [hasServerWorld, setHasServerWorld] = useState(true)
@@ -73,7 +71,6 @@ export function HubPage() {
 
   const [areaStates, setAreaStates] = useState<ServerAreaState[]>([])
   const [nearbyPlayers, setNearbyPlayers] = useState<ServerNearbyPlayer[]>([])
-  const latestPositionRef = useRef<HubPosition | null>(null)
   const [showCivPanel, setShowCivPanel] = useState(false)
   // map-visual-language:浮層可收合(地圖是主畫面,面板讓路)。
   // 桌機預設收合,避免蓋住上排街區名;一鍵展開。手機另有底部事件列。
@@ -82,7 +79,7 @@ export function HubPage() {
 
   // ActionBar eat result — SurvivalHud picks up the change on next tick via polling
 
-  const isSignedIn = !!token
+  const isSignedIn = !!accountId
 
   // Area states for tile overlays (safety/economy/faction colours), polled every 30s
   useEffect(() => {
@@ -183,23 +180,21 @@ export function HubPage() {
   )
 
   const refreshHubPresence = useCallback(async () => {
-    if (!token) {
+    if (!accountId) {
       setNearbyPlayers([])
       return
     }
     try {
-      await api.socialPresence(token, HUB_TILE_ID, latestPositionRef.current)
-      const r = await api.socialNearby(token, HUB_TILE_ID)
+      const r = await api.socialNearby(accountId, snapshot?.tileId)
       setNearbyPlayers(r.players)
     } catch {
       setNearbyPlayers([])
     }
-  }, [token])
+  }, [accountId, snapshot?.tileId])
 
   useEffect(() => {
-    if (!token) {
+    if (!accountId) {
       setNearbyPlayers([])
-      latestPositionRef.current = null
       return
     }
     void refreshHubPresence()
@@ -207,16 +202,7 @@ export function HubPage() {
       void refreshHubPresence()
     }, HUB_PRESENCE_REFRESH_MS)
     return () => window.clearInterval(timer)
-  }, [refreshHubPresence, token])
-
-  const handleHubPositionChange = useCallback(
-    (pos: HubPosition) => {
-      const hadPosition = latestPositionRef.current !== null
-      latestPositionRef.current = pos
-      if (!hadPosition) void refreshHubPresence()
-    },
-    [refreshHubPresence],
-  )
+  }, [refreshHubPresence, accountId])
 
   const hudStrings = useMemo(
     () => ({ interact: t('hub.interactHint'), enterArea: t('hub.enterArea') }),
@@ -225,27 +211,27 @@ export function HubPage() {
 
   const handleAreaEnter = useCallback(
     (districtId: DistrictId) => {
-      if (!token) return
+      if (!accountId) return
       if (!isDistrict(districtId)) return
       if (!activeDistrictSet.has(districtId)) return
       setCurrentDistrict(districtId)
     },
-    [activeDistrictSet, token],
+    [activeDistrictSet, accountId],
   )
 
   const handleNpcInteract = useCallback(
     (npcId: string) => {
-      if (!token) return
+      if (!accountId) return
       const npc = npcs.find((n) => n.id === npcId)
       if (npc) setActiveNpc(npc)
     },
-    [npcs, token],
+    [npcs, accountId],
   )
 
   const handleOpenCurrentArea = useCallback(() => {
-    if (!token) return
-    if (currentDistrict) navigate(`/area/${currentDistrict}`)
-  }, [currentDistrict, navigate, token])
+    if (!accountId) return
+    if (currentDistrict) navigate(`/game/area/${currentDistrict}`)
+  }, [currentDistrict, navigate, accountId])
 
   const currentDef = currentDistrict ? DISTRICTS[currentDistrict] : null
   const currentName =
@@ -255,7 +241,7 @@ export function HubPage() {
         : currentDef.nameEn
       : null
 
-  const showWyg = shouldShowWhenYouWereGone(token, wygDismissed)
+  const showWyg = shouldShowWhenYouWereGone(accountId, wygDismissed)
 
   const phaserMap = hasServerWorld ? (
     <WorldMapSvg
@@ -266,12 +252,12 @@ export function HubPage() {
       hudStrings={hudStrings}
       onAreaEnter={handleAreaEnter}
       onNpcInteract={handleNpcInteract}
-      onPositionChange={handleHubPositionChange}
+      authoritativeTileId={snapshot?.tileId ?? null}
       areaOverlays={areaOverlays}
       activeDistrictIds={activeDistrictIds}
       constructionActivities={constructionActivities}
       ecologyByTile={ecologyByTile}
-      controlsEnabled={!!token}
+      controlsEnabled={!!accountId}
       focusDistrictId={focusDistrictId}
     />
   ) : (
@@ -304,9 +290,9 @@ export function HubPage() {
 
           {/* 桌機浮層:左上 = 生存 HUD + 世界現在(可收合) */}
           <div className="hidden sm:flex absolute top-2 left-2 z-30 w-[236px] flex-col gap-2 pointer-events-none">
-            {token && (
+            {accountId && (
               <div className="pointer-events-auto">
-                <SurvivalHud compact token={token} tick={world.tick} />
+                <SurvivalHud compact accountId={accountId} tick={world.tick} />
               </div>
             )}
             <div className="pointer-events-auto gi-panel px-2 py-2 flex flex-col gap-1 bg-ground-900/85 backdrop-blur-sm border border-ground-700 rounded-sharp">
@@ -384,14 +370,14 @@ export function HubPage() {
         <div className="w-full flex flex-col">
 
           {/* WhenYouWereGone — 地圖下方、HUD 上方，非彈窗 */}
-          {token && showWyg && (
-            <WhenYouWereGone token={token} onDismiss={dismissWyg} />
+          {accountId && showWyg && (
+            <WhenYouWereGone accountId={accountId} onDismiss={dismissWyg} />
           )}
 
           {/* 手機：SurvivalHud 緊貼地圖下（桌機在左上浮層） */}
-          {token && (
+          {accountId && (
             <div className="sm:hidden">
-              <SurvivalHud compact token={token} tick={world.tick} />
+              <SurvivalHud compact accountId={accountId} tick={world.tick} />
             </div>
           )}
 
@@ -408,7 +394,7 @@ export function HubPage() {
             <WorldCivilizationPanel snapshot={world.worldCivilization} />
           )}
 
-          {!token && (
+          {!accountId && (
             <div className="mt-3 mx-2 gi-panel border-ember-700/60 p-3 text-[12px] text-ground-300 leading-relaxed">
               登入後才能移動、進入街區與互動；目前是只讀瀏覽模式。
             </div>
@@ -423,9 +409,9 @@ export function HubPage() {
 
           {/* ActionBar — 手機固定底部 / 桌機嵌入地圖下方 */}
           <ActionBar
-            token={token}
+            accountId={accountId}
             currentDistrictName={currentName}
-            canEnter={canEnterArea(token, currentDistrict)}
+            canEnter={canEnterArea(accountId, currentDistrict)}
             onEnterArea={handleOpenCurrentArea}
           />
 

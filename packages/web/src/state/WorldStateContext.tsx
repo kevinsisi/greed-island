@@ -7,16 +7,9 @@ import {
   type ServerMap,
   type ServerNarrativeEvent,
   type ServerNpc,
+  type ServerDashboard,
   type ServerWorldSnapshot
 } from '../api/client'
-import {
-  fixtureCards,
-  fixtureDashboard,
-  fixtureEvents,
-  fixtureMap,
-  fixtureNpcs,
-  fixtureWorld
-} from './fixtures'
 import type {
   CardCatalogEntry,
   DashboardSummary,
@@ -40,7 +33,7 @@ interface WorldStateValue {
   events: EventSummary[]
   cards: CardCatalogEntry[]
   map: WorldMap
-  dashboard: DashboardSummary
+  dashboard: DashboardSummary | null
   worldEvents: ServerActiveWorldEvent[]
   liveConnected: boolean
   source: 'fixture' | 'server'
@@ -66,12 +59,13 @@ const VALID_BIOMES: readonly MapTile['biome'][] = [
 
 export function WorldStateProvider({ children }: { children: ReactNode }) {
   const { locale } = useI18n()
-  const { token } = useAuth()
-  // Long-lived poll/SSE handlers read the latest token without recreating
+  const { accountId } = useAuth()
+  // Long-lived poll/SSE handlers read the latest account identity without recreating
   // connections on login/logout.
-  const tokenRef = useRef<string | null>(token)
-  tokenRef.current = token
+  const accountIdRef = useRef<number | null>(accountId)
+  accountIdRef.current = accountId
 
+  const [serverDashboard, setServerDashboard] = useState<ServerDashboard | null>(null)
   const [serverWorld, setServerWorld] = useState<ServerWorldSnapshot | null>(null)
   const [serverNpcs, setServerNpcs] = useState<ServerNpc[] | null>(null)
   const [serverEvents, setServerEvents] = useState<ServerNarrativeEvent[] | null>(null)
@@ -127,14 +121,17 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     }
 
     const refreshNpcs = async (generation?: number) => {
-      const npcs = await resilientLoad(() => api.npcs(tokenRef.current))
-      if (!cancelled && (generation === undefined || isCurrentRefresh(generation))) setServerNpcs(npcs)
+      const expectedAccountId = accountIdRef.current
+      const npcs = await resilientLoad(() => api.npcs(expectedAccountId))
+      if (!cancelled && expectedAccountId === accountIdRef.current && (generation === undefined || isCurrentRefresh(generation))) setServerNpcs(npcs)
     }
 
     const refreshAll = () => refreshSingleFlight.run(async () => {
       const generation = refreshGuard.next()
+      const expectedAccountId = accountIdRef.current
       const requests = [
         refreshWorld(),
+        expectedAccountId === null ? Promise.resolve() : resilientLoad(() => api.dashboard(expectedAccountId)).then(next => { if (expectedAccountId === accountIdRef.current && isCurrentRefresh(generation)) setServerDashboard(next) }),
         refreshNpcs(generation),
         resilientLoad(() => api.events(RECENT_EVENT_LIMIT)).then((events) => {
           if (isCurrentRefresh(generation)) setServerEvents(events)
@@ -176,7 +173,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     const connect = () => {
       if (stopped) return
       try {
-        source = new EventSource(streamUrl())
+        source = new EventSource(streamUrl(), { withCredentials: true })
       } catch {
         return
       }
@@ -233,7 +230,7 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     api
-      .npcs(token)
+      .npcs(accountId)
       .then((npcs) => {
         if (!cancelled) setServerNpcs(npcs)
       })
@@ -243,62 +240,28 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [accountId])
 
-  const value = useMemo<WorldStateValue>(() => {
-    const usingServer = serverWorld !== null
+  const value = useMemo<WorldStateValue | null>(() => {
+    if (serverWorld === null || serverNpcs === null || serverEvents === null || serverCards === null || serverMap === null) return null
 
-    const world: WorldSnapshot = serverWorld
-      ? {
-          tick: serverWorld.tick,
-          lastSequence: serverWorld.lastSequence,
-          eventCount: serverWorld.eventCount,
-          npcCount: serverWorld.npcCount,
-          facts: serverWorld.facts,
-          worldCivilization: serverWorld.worldCivilization ?? { goals: [], technologies: [] },
-          worldConfig: normalizeWorldConfig(serverWorld.worldConfig),
-          generatedAt: serverWorld.generatedAt
-        }
-      : fixtureWorld
+    const world: WorldSnapshot = {
+      tick: serverWorld.tick, lastSequence: serverWorld.lastSequence, eventCount: serverWorld.eventCount,
+      npcCount: serverWorld.npcCount, facts: serverWorld.facts,
+      worldCivilization: serverWorld.worldCivilization ?? { goals: [], technologies: [] },
+      worldConfig: normalizeWorldConfig(serverWorld.worldConfig), generatedAt: serverWorld.generatedAt,
+    }
+    const events = serverEvents.map(toEventSummary)
+    const npcs = serverNpcs.map(n => toNpcSummary(n, locale)).filter(n => !n.deceased)
+    const cards = serverCards.entries.map(c => toCardEntry(c, locale))
+    const map = toWorldMap(serverMap)
 
-    const events: EventSummary[] =
-      serverEvents !== null
-        ? serverEvents.map(toEventSummary)
-        : fixtureEvents
-
-    // v0.87.3 — server already filters deceased from /api/npcs. Client filter
-    // here is defense in depth against an SSE/poll race window where a snapshot
-    // emitted before the death is rendered alongside the deceased projection.
-    const npcs: NpcSummary[] =
-      serverNpcs !== null
-        ? serverNpcs.map((n) => toNpcSummary(n, locale)).filter((n) => !n.deceased)
-        : fixtureNpcs
-
-    const cards: CardCatalogEntry[] =
-      serverCards !== null
-        ? serverCards.entries.map((c) => toCardEntry(c, locale))
-        : fixtureCards
-
-    const map: WorldMap = serverMap !== null ? toWorldMap(serverMap) : fixtureMap
-
-    const cardsOwned = cards.filter((c) => c.owned).length
-    const recentEvents = events.slice(0, 5)
-    const rareWindowOpen = Boolean(world.facts['rareWindowOpen']) || fixtureDashboard.rareWindowOpen
     const worldEvents: ServerActiveWorldEvent[] = (() => {
       const raw = world.facts['activeEvents']
       return Array.isArray(raw) ? (raw as ServerActiveWorldEvent[]) : []
     })()
 
-    const dashboard: DashboardSummary = usingServer
-      ? {
-          world,
-          cardsOwned,
-          cardsTotal: cards.length,
-          recentEvents,
-          rareWindowOpen,
-          ticksSinceLastVisit: 0
-        }
-      : { ...fixtureDashboard, world }
+    const dashboard: DashboardSummary | null = serverDashboard ? { ...serverDashboard, world, recentEvents: serverDashboard.recentEvents.map(toEventSummary) } : null
 
     return {
       world,
@@ -309,12 +272,13 @@ export function WorldStateProvider({ children }: { children: ReactNode }) {
       dashboard,
       worldEvents,
       liveConnected,
-      source: usingServer ? 'server' : 'fixture',
+      source: 'server',
       loadError,
       refreshWorld
     }
-  }, [serverWorld, serverNpcs, serverEvents, serverCards, serverMap, liveConnected, loadError, locale, refreshWorld])
+  }, [serverWorld, serverDashboard, serverNpcs, serverEvents, serverCards, serverMap, liveConnected, loadError, locale, refreshWorld])
 
+  if (!value) return <section className="gi-panel p-5" role={loadError ? 'alert' : 'status'}><p>{loadError || '正在取得伺服器世界資料…'}</p><p>資料未就緒時，這些世界檢視不會以示範資料代替。</p><button type="button" onClick={() => { void refreshWorld().catch(() => {}) }}>重新載入</button></section>
   return <WorldStateContext.Provider value={value}>{children}</WorldStateContext.Provider>
 }
 
@@ -330,11 +294,11 @@ function normalizeWorldConfig(
   config: ServerWorldSnapshot['worldConfig']
 ): WorldSnapshot['worldConfig'] {
   return {
-    tickDurationMs: config?.tickDurationMs ?? fixtureWorld.worldConfig.tickDurationMs,
-    ticksPerDay: config?.ticksPerDay ?? fixtureWorld.worldConfig.ticksPerDay,
-    timezone: config?.timezone ?? fixtureWorld.worldConfig.timezone,
+    tickDurationMs: config?.tickDurationMs ?? 5_000,
+    ticksPerDay: config?.ticksPerDay ?? 17_280,
+    timezone: config?.timezone ?? 'GMT+8',
     timezoneOffsetMinutes:
-      config?.timezoneOffsetMinutes ?? fixtureWorld.worldConfig.timezoneOffsetMinutes
+      config?.timezoneOffsetMinutes ?? 480
   }
 }
 

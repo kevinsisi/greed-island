@@ -50,7 +50,7 @@ interface NpcDialogProps {
 
 export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   const { t, locale } = useI18n()
-  const { token, account } = useAuth()
+  const { accountId, account } = useAuth()
   const [turns, setTurns] = useState<DialogTurn[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -103,10 +103,10 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   }, [turns.length])
 
   useEffect(() => {
-    if (!npcId || !token) return
+    if (!npcId || !accountId) return
     let cancelled = false
     const refreshHold = () => {
-      api.npcDialogHold(token, npcId).catch(() => {
+      api.npcDialogHold(accountId, npcId).catch(() => {
         if (!cancelled) {
           // Private dialog can continue, but world-presence hold may expire.
         }
@@ -118,13 +118,13 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [npcId, token])
+  }, [npcId, accountId])
 
   const refreshHistory = useCallback(async () => {
-    if (!npc || !token) return
+    if (!npc || !accountId) return
     setHistoryLoading(true)
     try {
-      const result = await api.npcHistory(token, npc.id, 20)
+      const result = await api.npcHistory(accountId, npc.id, 20)
       setHistory(result)
     } catch {
       setHistory({
@@ -143,11 +143,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     } finally {
       setHistoryLoading(false)
     }
-  }, [npc, token, trust, tier])
+  }, [npc, accountId, trust, tier])
 
   const sendMessage = useCallback(
     async (payload: { message?: string; intent?: NpcInteractIntent }) => {
-      if (!npc || !token || busy) return
+      if (!npc || !accountId || busy) return
       const trimmed = payload.message?.trim()
       if (!trimmed && !payload.intent) return
       setBusy(true)
@@ -156,7 +156,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
         const requestPayload: { message?: string; intent?: NpcInteractIntent } = {}
         if (trimmed) requestPayload.message = trimmed
         if (payload.intent) requestPayload.intent = payload.intent
-        const result = await api.npcInteract(token, npc.id, requestPayload)
+        const result = await api.npcInteract(accountId, npc.id, requestPayload)
         appendTurn(setTurns, trimmed ?? '', result)
         setTrust(result.relationship.trust)
         setTier(result.relationship.tier)
@@ -185,7 +185,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
         if (inputRef.current) inputRef.current.focus()
       }
     },
-    [npc, token, busy, showHistory, refreshHistory]
+    [npc, accountId, busy, showHistory, refreshHistory]
   )
 
   const handleSubmit = useCallback(
@@ -204,11 +204,11 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
   )
 
   const handleChallenge = useCallback(async () => {
-    if (!npc || !token || combatBusy) return
+    if (!npc || !accountId || combatBusy) return
     setCombatBusy(true)
     setError(null)
     try {
-      const r = await api.combatInitiate(token, npc.id)
+      const r = await api.combatInitiate(accountId, npc.id)
       setCombatSession(r.session)
       setCombatHand(r.hand ?? null)
       setCombatUsedCards(r.usedCardClasses ?? [])
@@ -223,14 +223,14 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     } finally {
       setCombatBusy(false)
     }
-  }, [npc, token, combatBusy])
+  }, [npc, accountId, combatBusy])
 
   // Fetch dynamic greet line per (player, npc) when dialog opens.
   useEffect(() => {
-    if (!npc || !token) return
+    if (!npc || !accountId) return
     let cancelled = false
     api
-      .npcGreet(token, npc.id)
+      .npcGreet(accountId, npc.id)
       .then((r) => {
         if (!cancelled) setDynamicGreet(r.greetLine)
       })
@@ -240,14 +240,14 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     return () => {
       cancelled = true
     }
-  }, [npc?.id, token])
+  }, [npc?.id, accountId])
 
   // On open, also check if there's an active combat with this NPC.
   useEffect(() => {
-    if (!npc || !token) return
+    if (!npc || !accountId) return
     let cancelled = false
     api
-      .combatActive(token)
+      .combatActive(accountId)
       .then((r) => {
         if (cancelled) return
         if (r.active && r.active.npcId === npc.id) {
@@ -262,7 +262,7 @@ export function NpcDialog({ npc, onClose }: NpcDialogProps) {
     return () => {
       cancelled = true
     }
-  }, [npc?.id, token])
+  }, [npc?.id, accountId])
 
   const handleToggleHistory = useCallback(() => {
     if (!showHistory) {

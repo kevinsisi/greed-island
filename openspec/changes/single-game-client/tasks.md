@@ -1,0 +1,6 @@
+- [x] Adapt canonical protocol/auth client and pure state tests.
+- [x] Replace page with one login, topology map, canonical peers/NPCs and explicit progress status.
+- [x] Rebuild renderer from canonical region geometry while preserving safe navigation/controls.
+- [x] Prepare single entrypoint without deleting legacy files or data.
+- [x] Run focused tests and type checks; obtain independent review.
+- [ ] Verify unified fixture browser CI and full repository checks before publication/cutover.
