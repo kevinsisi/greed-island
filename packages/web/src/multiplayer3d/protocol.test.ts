@@ -91,3 +91,16 @@ describe('single-game canonical protocol', () => {
     expect(crossingStatus({ ...atPortal, map: { ...atPortal.map, edges: [] } }, 't_central').ready).toBe(false)
   })
 })
+
+describe('authoritative terrain wire validation', () => {
+  it('accepts authored 15×10 glyphs and rejects malformed terrain', () => {
+    const snapshot = snapshotFixture(), terrain = Array.from({ length: 10 }, () => 'XXXXooooLPSs...')
+    // The complete glyph row is exactly 15 cells.
+    const valid = Array.from({ length: 10 }, () => 'XXXXooooLPSs...')
+    expect(valid[0]).toHaveLength(15)
+    expect(isPlayerWorldSnapshot({ ...snapshot, geometry: { ...snapshot.geometry, terrain: valid } })).toBe(true)
+    for (const bad of [[], terrain.slice(1), [...terrain.slice(1), '?'.repeat(15)], [...terrain.slice(1), 'L'.repeat(16)], 'not-a-mask']) {
+      expect(isPlayerWorldSnapshot({ ...snapshot, geometry: { ...snapshot.geometry, terrain: bad } })).toBe(false)
+    }
+  })
+})

@@ -67,6 +67,8 @@ export function isPlayerWorldSnapshot(value: unknown): value is PlayerWorldSnaps
     || !finite(g.movePerStep) || g.movePerStep <= 0 || !point(g.spawn) || !Array.isArray(g.obstacles) || !Array.isArray(g.portals)
     || !g.obstacles.every(o => record(o) && point(o) && finite(o.width) && o.width > 0 && finite(o.depth) && o.depth > 0 && (o.id === undefined || text(o.id)))
     || !g.portals.every(p => record(p) && point(p) && text(p.toTileId) && finite(p.radius) && p.radius > 0 && point(p.arrival))) return false
+  if (g.terrain !== undefined && (!Array.isArray(g.terrain) || g.terrain.length !== 10
+    || !g.terrain.every(row => typeof row === 'string' && /^[X.orpLPSs]{15}$/.test(row)))) return false
   const map = value.map
   if (!Array.isArray(map.regions) || !record(map.adjacency) || !Array.isArray(map.edges) || !record(map.regionOnlineCounts)
     || !map.regions.every(r => record(r) && text(r.id) && text(r.name) && finite(r.x) && finite(r.y) && text(r.biome)

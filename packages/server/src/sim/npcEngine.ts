@@ -17,6 +17,7 @@
 // hydrate：runtime 啟動時把 typed npc-state projection（或 legacy facts）
 // 透過 hydrate() 餵回。
 
+import { FRONTIER_TERRAIN } from './frontierTerrain.js'
 import type { NpcProfile } from '../npcs/types.js'
 import { TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_MINUTE, MOUNT_SPEED_MULTIPLIER, ROAD_TRAVEL_SPEED_MULTIPLIER } from '../config/world.js'
 import { MAP_ADJACENCY, TILE_NAME_BY_ID, nextStepTowards } from './mapGraph.js'
@@ -101,13 +102,13 @@ const LAND_MASK_SERVER: Readonly<Record<string, readonly string[]>> = {
 
 /** Defensive read-only terrain view shared by canonical player geometry. */
 export function getAreaTerrainMask(tileId: string): readonly string[] {
-  return Object.freeze([...(LAND_MASK_SERVER[tileId] ?? [])])
+  return Object.freeze([...(FRONTIER_TERRAIN[tileId] ?? LAND_MASK_SERVER[tileId] ?? [])])
 }
 
 function isLandWalkable(tileId: string, col: number, row: number): boolean {
-  const ch = LAND_MASK_SERVER[tileId]?.[row]?.[col]
+  const ch = (FRONTIER_TERRAIN[tileId] ?? LAND_MASK_SERVER[tileId])?.[row]?.[col]
   if (ch === undefined) return true // water tiles / unknown = walkable
-  return ch !== 'X'
+  return ch !== 'X' && ch !== '.'
 }
 
 export type NpcActivity =
@@ -339,6 +340,9 @@ const LABEL_WORK_PATTERN = /(work|review|prepare|whisper|gossip|intel|brewing|ap
 /** Per-tick context from the runtime — area resources / world facts that
  * personality-based decisioning can read. Optional：舊測試不傳就走 schedule */
 export type NpcTickContext = Readonly<{
+  /** Runtime-owned availability, never inferred from authored terrain. */
+  unlockedTileIds?: readonly string[]
+  generatedTileIds?: readonly string[]
   areaSafety: ReadonlyMap<string, number>
   areaEconomy: ReadonlyMap<string, number>
   weather: string
@@ -442,7 +446,9 @@ export class NpcEngine {
         : 'neutral'
     this.factions.set(profile.id, fac)
     // 初始 state — 等 hydrate 補上正確值
-    const initSub = initialSubTile(profile.id, profile.defaultLocation)
+    const initial = initialSubTile(profile.id, profile.defaultLocation)
+    const initSub = FRONTIER_TERRAIN[profile.defaultLocation]
+      ? frontierStep(profile.defaultLocation, initial, initial, this.getWalkableCellsForTile(profile.defaultLocation, [])) : initial
     const agent = initialAgentState(profile)
     this.state.set(profile.id, {
       tile: profile.defaultLocation,
@@ -689,8 +695,9 @@ export class NpcEngine {
         const s = this.state.get(id)
         if (!s) continue
         const target = dispersedSubAnchor(rank, total, walkable)
-        const subCol = stepToward(s.subCol, target.col)
-        const subRow = stepToward(s.subRow, target.row)
+        const next = FRONTIER_TERRAIN[tileId] ? frontierStep(tileId, { col: s.subCol, row: s.subRow }, target, walkable) : null
+        const subCol = next?.col ?? stepToward(s.subCol, target.col)
+        const subRow = next?.row ?? stepToward(s.subRow, target.row)
         if (subCol !== s.subCol || subRow !== s.subRow) {
           this.state.set(id, { ...s, subCol, subRow, lastActedTick: currentTick })
           dirty.add(id)
@@ -995,13 +1002,15 @@ function decideNextState(
     let subRow: number
     if (nextTile !== before.tile) {
       const entry = entrySubTile(profile.id, before.tile, nextTile, currentTick)
-      subCol = entry.col
-      subRow = entry.row
+      const safeEntry = FRONTIER_TERRAIN[nextTile] ? frontierStep(nextTile, entry, entry, walkableForTile(nextTile)) : entry
+      subCol = safeEntry.col
+      subRow = safeEntry.row
     } else {
       const walkable = walkableForTile(nextTile)
       const anchor = subAnchor(profile.id, nextTile, activity, currentTick, walkable)
-      subCol = stepToward(before.subCol, anchor.col)
-      subRow = stepToward(before.subRow, anchor.row)
+      const next = FRONTIER_TERRAIN[nextTile] ? frontierStep(nextTile, { col: before.subCol, row: before.subRow }, anchor, walkable) : null
+      subCol = next?.col ?? stepToward(before.subCol, anchor.col)
+      subRow = next?.row ?? stepToward(before.subRow, anchor.row)
     }
     // Use slot's building only when NPC is at the scheduled tile and not traveling
     const scheduledBuildingId = activity !== 'move' && nextTile === scheduleTarget ? slotBuildingId : null
@@ -1058,7 +1067,7 @@ function decideNextState(
     }
     const arrivedTile = before.travelRoute.toTile
     if (arrivedTile !== targetTile) {
-      const step = nextStepTowards(arrivedTile, targetTile)
+      const step = nextStepTowards(arrivedTile, targetTile, context?.unlockedTileIds, context?.generatedTileIds)
       if (step) {
         return finish(
           arrivedTile,
@@ -1080,7 +1089,7 @@ function decideNextState(
   let activity: NpcActivity
   let travelRoute: NonNullable<NpcRuntimeState['travelRoute']> | null = null
   if (before.tile !== targetTile) {
-    const step = nextStepTowards(before.tile, targetTile)
+    const step = nextStepTowards(before.tile, targetTile, context?.unlockedTileIds, context?.generatedTileIds)
     if (step) {
       nextTile = before.tile
       activity = 'move'
@@ -2209,3 +2218,31 @@ export const NPC_INTERACT_COOLDOWN_TICKS = INTERACT_COOLDOWN_TICKS
 export const NPC_PLAYER_DIALOG_HOLD_TICKS = PLAYER_DIALOG_HOLD_TICKS
 export const _TICKS_PER_HOUR = TICKS_PER_HOUR
 
+
+/** Cardinal BFS for authored frontier terrain: never cuts a rock corner or crosses deep water.
+ * Invalid legacy/entry coordinates are repaired to the nearest valid cell before movement.
+ */
+export function frontierStep(tileId: string, from: { col: number; row: number }, target: { col: number; row: number },
+  walkable: readonly { col: number; row: number }[]): { col: number; row: number } {
+  const valid = walkable.filter(p => isLandWalkable(tileId, p.col, p.row))
+  if (!valid.length) return from
+  const key = (p: { col: number; row: number }) => `${p.col},${p.row}`
+  const cells = new Map(valid.map(p => [key(p), p]))
+  const nearest = (point: { col: number; row: number }) => [...valid].sort((a, b) =>
+    Math.abs(a.col - point.col) + Math.abs(a.row - point.row) - Math.abs(b.col - point.col) - Math.abs(b.row - point.row)
+    || a.row - b.row || a.col - b.col)[0]!
+  const start = cells.get(key(from)) ?? nearest(from)
+  if (!cells.has(key(from))) return start
+  const goal = cells.get(key(target)) ?? nearest(target)
+  const queue = [{ point: start, first: start }], seen = new Set([key(start)])
+  for (let index = 0; index < queue.length; index++) {
+    const { point, first } = queue[index]!
+    if (key(point) === key(goal)) return first
+    for (const next of [{ col: point.col - 1, row: point.row }, { col: point.col + 1, row: point.row },
+      { col: point.col, row: point.row - 1 }, { col: point.col, row: point.row + 1 }]) {
+      if (!cells.has(key(next)) || seen.has(key(next))) continue
+      seen.add(key(next)); queue.push({ point: next, first: index === 0 ? next : first })
+    }
+  }
+  return start
+}

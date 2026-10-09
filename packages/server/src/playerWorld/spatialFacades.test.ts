@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { accountId } from '../identity/principal.js'
 import type { SqliteEventStore } from '../kernel/eventStore.js'
-import { getKnownMapEdges, getKnownMapRegions, getMapAdjacency } from '../sim/mapGraph.js'
+import { FRONTIER_ZONES, getKnownMapEdges, getKnownMapRegions, getMapAdjacency } from '../sim/mapGraph.js'
 import { canonicalWorldPointToGrid, canStand, getRegionGeometry, projectNpcPoint } from './geometry.js'
 import { PlayerWorldService } from './service.js'
 import { EventFixture } from './service.testSupport.js'
@@ -25,9 +25,13 @@ describe('canonical spatial read facades', () => {
       expect(pose.subCol).toBeCloseTo(col!, 12); expect(pose.subRow).toBeCloseTo(row!, 12); expect(pose.subZ).toBe(0)
     }
   })
-  it('keeps every existing authored grid region in canonical coordinates and refuses blocked/outside points', () => {
+  it('keeps all 12 authored regions, including frontiers, in canonical coordinates and refuses blocked/outside points', () => {
     const regions = getKnownMapRegions().flatMap(region => { const geometry = getRegionGeometry(region.id); return geometry ? [geometry] : [] })
-    expect(regions).toHaveLength(9)
+    expect(regions).toHaveLength(12)
+    for (const frontier of FRONTIER_ZONES) {
+      expect(regions.find(region => region.tileId === frontier.id)?.presentation).toBe('canonical-area-grid')
+      expect(getKnownMapRegions().find(region => region.id === frontier.id)?.available).toBe(false)
+    }
     for (const geometry of regions.filter(region => region.presentation === 'canonical-area-grid')) {
       expect(canonicalWorldPointToGrid(geometry.spawn, geometry)).toEqual({ subCol: geometry.spawn.x, subRow: geometry.spawn.z, subZ: 0 })
       expect(canonicalWorldPointToGrid({ x: geometry.minX - 1, z: geometry.minZ }, geometry)).toBeNull()

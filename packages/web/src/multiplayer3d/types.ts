@@ -57,6 +57,7 @@ export interface RegionGeometry {
   playerRadius: number
   movePerStep: number
   spawn: WorldPoint
+  terrain?: readonly string[]
   obstacles: Array<WorldPoint & { id?: string; width: number; depth: number }>
   portals: Array<WorldPoint & { toTileId: string; radius: number; arrival: WorldPoint }>
 }

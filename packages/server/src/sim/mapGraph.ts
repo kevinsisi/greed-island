@@ -134,10 +134,15 @@ export function getMapAdjacency(
     base.t_salt_marsh = EXPANSION_ADJACENCY.t_salt_marsh ?? []
   }
 
+  // Authored topology includes locked endpoints; a generated region does not
+  // grant access to those endpoints. Keep NPC pathfinding on the same available
+  // region set as player transitions and the public map snapshot.
+  const available = new Set(listMapTiles(unlockedTileIds, generatedTileIds).map(tile => tile.id))
   for (const zone of FRONTIER_ZONES) {
     if (!generated.has(zone.id)) continue
-    base[zone.id] = zone.adjacentTo
-    for (const neighborId of zone.adjacentTo) {
+    const neighbors = zone.adjacentTo.filter(neighborId => available.has(neighborId))
+    base[zone.id] = neighbors
+    for (const neighborId of neighbors) {
       const existing = base[neighborId] ?? []
       if (!existing.includes(zone.id)) {
         base[neighborId] = [...existing, zone.id]

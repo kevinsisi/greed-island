@@ -12,6 +12,7 @@ export type RegionGeometry = Readonly<{
   minX: number; maxX: number; minZ: number; maxZ: number
   playerRadius: number; movePerStep: number
   spawn: Point
+  terrain?: readonly string[]
   obstacles: readonly WorldObstacle[]
   portals: readonly RegionPortal[]
 }>
@@ -31,7 +32,7 @@ const COLLISION_EPSILON = 1e-7
 
 const geometryCache = new Map<string, ReadonlyMap<string, RegionGeometry>>()
 
-/** Same converter for existing authored regions; unsupported generated frontier masks fail closed. */
+/** Same converter for existing authored regions; authored frontiers included; unknown masks fail closed. */
 export function getRegionGeometry(tileId: string, unlockedBuildingIds: readonly string[] = []): RegionGeometry | null {
   const key = JSON.stringify([...new Set(unlockedBuildingIds)].sort())
   let geometries = geometryCache.get(key)
@@ -51,7 +52,7 @@ function buildKnownGeometries(unlockedBuildingIds: readonly string[]): ReadonlyM
     if (mask.length !== AREA_GRID_ROWS || mask.some(row => row.length !== AREA_GRID_COLUMNS)) continue
     const world: RegionGeometry = { tileId: region.id, presentation: 'canonical-area-grid',
       minX: -0.5, maxX: AREA_GRID_COLUMNS - 0.5, minZ: -0.5, maxZ: AREA_GRID_ROWS - 0.5,
-      playerRadius: AREA_PLAYER_RADIUS, movePerStep: AREA_MOVE_PER_STEP, spawn: { x: 7, z: 5 },
+      playerRadius: AREA_PLAYER_RADIUS, movePerStep: AREA_MOVE_PER_STEP, spawn: { x: 7, z: 5 }, terrain: mask,
       obstacles: [...mask.flatMap((row, z) => [...row].flatMap((cell, x) =>
         cell === 'X' || cell === '.' ? [{ id: `terrain-${x}-${z}`, x, z, width: 1, depth: 1 }] : [])),
         ...listBuildingsForTile(region.id, unlockedBuildingIds).map(building => ({ id: building.id,
@@ -119,6 +120,7 @@ export function reachableCells(world: RegionGeometry): Point[] {
   return queue
 }
 function freezeGeometry(world: RegionGeometry): RegionGeometry {
+  if (world.terrain) Object.freeze(world.terrain)
   Object.freeze(world.spawn)
   world.obstacles.forEach(obstacle => Object.freeze(obstacle)); Object.freeze(world.obstacles)
   world.portals.forEach(portal => { Object.freeze(portal.arrival); Object.freeze(portal) }); Object.freeze(world.portals)
