@@ -15,10 +15,12 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/server/package.json ./packages/server/package.json
 COPY packages/web/package.json ./packages/web/package.json
 
-RUN npm config set strict-ssl false \
-    && npm install -g npm@10.9.2
+RUN npm install -g npm@10.9.2
 RUN npm ci --workspaces --include-workspace-root
 
+# Web typechecking includes geometry tests that import canonical server types.
+# Keep the complete source dependency graph in the builder only.
+COPY packages/server/src ./packages/server/src
 COPY packages/web ./packages/web
 RUN npm run build -w @greed-island/web
 

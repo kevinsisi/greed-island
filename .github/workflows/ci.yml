@@ -132,3 +132,21 @@ jobs:
             *) echo 'Refusing to remove a path outside RUNNER_TEMP.'; exit 1 ;;
           esac
 
+
+  docker-packaging:
+    name: Build isolated production images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build server and web with normal TLS verification
+        run: |
+          set -euo pipefail
+          docker build -t greed-island-ci-server -f packages/server/Dockerfile .
+          docker build -t greed-island-ci-web -f packages/web/Dockerfile .
