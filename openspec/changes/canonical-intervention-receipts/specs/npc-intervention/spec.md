@@ -17,7 +17,16 @@ an explicit unavailable original result for historical receipts without effect d
 - AND currentRelations reflects the later state without pretending it was the original result
 
 ### Requirement: Bounded duplicate comparison preserves authorization
-Only validated server-derived PLAYER_INTERVENE effects MAY be ignored when comparing
-an existing receipt with a proposed retry. All original typed intent/envelope fields
+The endpoint SHALL limit ignored retry-comparison effects to validated server-derived
+PLAYER_INTERVENE effects. All original typed intent/envelope fields
 and other command types SHALL preserve conflict checks. Every retry SHALL require
 live account/Origin authorization inside the EventLog transaction.
+
+#### Scenario: A retry changes typed intent
+- WHEN a proposed retry changes an original typed intent or envelope field
+- THEN the endpoint SHALL preserve the command conflict check
+- AND only validated server-derived PLAYER_INTERVENE effects MAY be excluded from comparison
+
+#### Scenario: Retry authorization has expired
+- WHEN an existing receipt is retried without live account or allowed Origin authorization
+- THEN the EventLog transaction SHALL reject the retry without private-state writes

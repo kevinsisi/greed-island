@@ -87,24 +87,34 @@ describe('playerSurvivalRouter', () => {
     const { port, headers, proj, accountId, server } = await setup({ tick: 50 })
     servers.push(server)
     expect(proj.getState(accountId)).toBeNull()
-    const res = await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
-    expect(res.status).toBe(200)
-    const body = await res.json() as { nourishment: number; vigor: number; collapsed: boolean; asOfTick: number }
-    expect(body.nourishment).toBe(PLAYER_INITIAL_NOURISHMENT)
-    expect(body.vigor).toBe(PLAYER_INITIAL_VIGOR)
-    expect(body.collapsed).toBe(false)
-    expect(proj.getState(accountId)).toBeNull()
+    for (let read = 0; read < 2; read++) {
+      const res = await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+      expect(res.status).toBe(200)
+      const body = await res.json() as { nourishment: number; vigor: number; collapsed: boolean; asOfTick: number }
+      expect(body.asOfTick).toBe(50)
+      expect(body.nourishment).toBe(PLAYER_INITIAL_NOURISHMENT)
+      expect(body.vigor).toBe(PLAYER_INITIAL_VIGOR)
+      expect(body.collapsed).toBe(false)
+      expect(proj.getState(accountId)).toBeNull()
+    }
   })
 
-  it('GET /player/needs returns reconcile-to-current-tick on subsequent reads', async () => {
+  it('POST /player/needs/reconcile durably seeds state and subsequent GET reads preserve it', async () => {
     const { port, headers, proj, accountId, server } = await setup({ tick: 7200 })
     servers.push(server)
-    // Seed first
-    await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
-    // Advance time: proj already has state from seed; on second read tick is same (mocked)
+    expect(proj.getState(accountId)).toBeNull()
+    const response = await fetch(`http://127.0.0.1:${port}/player/needs/reconcile`, { method: 'POST', headers })
+    expect(response.status).toBe(200)
     const state = proj.getState(accountId)
     expect(state).not.toBeNull()
     expect(state!.asOfTick).toBe(7200)
+    expect(await response.json()).toEqual(state)
+    for (let read = 0; read < 2; read++) {
+      const res = await fetch(`http://127.0.0.1:${port}/player/needs`, { headers })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual(state)
+      expect(proj.getState(accountId)).toEqual(state)
+    }
   })
 
   it('POST /player/eat returns 401 when unauthenticated', async () => {
