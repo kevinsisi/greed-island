@@ -226,6 +226,12 @@ test('one cookie world preserves normal signup, chat, navigation and canonical c
       const state = await snapshot(pageA)
       expect(state.npcs.every(n => n.location === state.tileId && n.activity !== 'move')).toBe(true)
       await wait(async () => await pageA.locator('.mp-npcs li strong').count() === (await snapshot(pageA)).npcs.length)
+      // Other tests use fresh accounts on this same serial fixture server. Wait for
+      // their closed contexts' stream presence to settle before the exact count.
+      await wait(async () => {
+        const current = await snapshot(pageA)
+        return current.map.regionOnlineCounts[current.tileId] === 2
+      })
       const tab = await contextA.newPage(); await tab.goto('/game'); await ready(tab)
       const duplicate = await snapshot(tab)
       expect(duplicate.players.filter(p => p.accountId === idA).length).toBe(1)
@@ -268,6 +274,46 @@ test('one cookie world preserves normal signup, chat, navigation and canonical c
       await field(pageA, '#world-chat', 'cross-region-world-message'); await pageA.getByRole('button', { name: '傳送', exact: true }).click()
       await wait(async () => (await snapshot(pageB)).messages.some(m => m.accountId === idA && m.tileId === 't_central' && m.text === 'cross-region-world-message'))
     })
+    expect(forbiddenLegacyRequest).toBe(false)
+    expect(await pageA.evaluate(() => localStorage.getItem('gi.auth.token'))).toBeNull()
+  } finally {
+    const [probeA, probeB, cadenceA, cadenceB] = await Promise.all([probeSnapshotFromNode(pageA), probeSnapshotFromNode(pageB), measureRenderCadence(pageA), measureRenderCadence(pageB)])
+    markPhase(`A movement=${movementA.summary()};nodeSnapshotProbe=${probeA};renderCadence=${cadenceA}`)
+    markPhase(`B movement=${movementB.summary()};nodeSnapshotProbe=${probeB};renderCadence=${cadenceB}`)
+    movementA.dispose(); movementB.dispose()
+    await Promise.all([contextA.close(), contextB.close()])
+  }
+})
+
+// Independent of the earlier journey: seed through the real UI, never reuse another
+// test's account/session. The one-worker config keeps shared-fixture counts serial.
+test('shared-cookie account switch invalidates stale tab identity', async ({ browser }) => {
+  const accountA = credentials(), accountB = credentials()
+  const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } }), contextB = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  try {
+    await Promise.all([isolate(contextA), isolate(contextB)])
+    const pageA = await contextA.newPage(), pageB = await contextB.newPage()
+    let forbiddenLegacyRequest = false
+    for (const page of [pageA, pageB]) page.on('request', request => {
+      if (new URL(request.url()).pathname.startsWith('/mp-api')) forbiddenLegacyRequest = true
+    })
+    await phase('fresh UI registration for shared-cookie identity isolation', async () => {
+      await register(pageA, accountA); await register(pageB, accountB)
+    })
+    const idA = (await snapshot(pageA)).selfId, idB = (await snapshot(pageB)).selfId
+    expect(idA).not.toBe(idB)
+    await phase('independent identity setup crosses from dock to central', async () => {
+      expect((await snapshot(pageA)).tileId).toBe('t_dock')
+      // Fresh dock spawn is (0, -6); these unobstructed <=8-unit legs use
+      // the same real canvas path and unchanged per-arrival deadline.
+      for (const destination of [{ x: 0, z: 2 }, { x: 0, z: 10 }, { x: 0, z: 16 }]) { await ground(pageA, destination); await arrive(pageA, destination) }
+      await pageA.locator('#world-region').selectOption('t_central')
+      const cross = pageA.locator('.mp-actions .mp-primary'); await expect(cross).toBeEnabled(); await cross.click()
+      await wait(async () => (await snapshot(pageA)).tileId === 't_central')
+      await expect(pageA.locator('.mp-mission h1')).toHaveText('夜潮區')
+      expect((await snapshot(pageA)).selfId).toBe(idA)
+      expect((await snapshot(pageB)).tileId).toBe('t_dock')
+    })
     await phase('shared-cookie account switch invalidates stale tab identity', async () => {
       const tab = await contextA.newPage(); await tab.goto('/game'); await ready(tab)
       await tab.locator('.mp-logout').click(); await expect(tab.locator('.mp-login-backdrop')).toBeVisible()
@@ -276,15 +322,16 @@ test('one cookie world preserves normal signup, chat, navigation and canonical c
       await wait(async () => (await pageA.locator('.mp-self').innerText()).includes(`#${idB}`))
       await ready(pageA)
       expect((await snapshot(pageA)).players.filter(p => p.accountId === idB).length).toBe(1)
+      const switched = await snapshot(pageA), peer = await snapshot(pageB)
+      expect(switched.tileId).toBe('t_dock')
+      expect(switched.geometry).toEqual(peer.geometry)
+      await expect(pageA.locator('.mp-mission h1')).toHaveText('碼頭區')
+      await expect(pageA.locator('#world-region')).toHaveValue('t_dock')
       await tab.close()
     })
     expect(forbiddenLegacyRequest).toBe(false)
     expect(await pageA.evaluate(() => localStorage.getItem('gi.auth.token'))).toBeNull()
   } finally {
-    const [probeA, probeB, cadenceA, cadenceB] = await Promise.all([probeSnapshotFromNode(pageA), probeSnapshotFromNode(pageB), measureRenderCadence(pageA), measureRenderCadence(pageB)])
-    markPhase(`A movement=${movementA.summary()};nodeSnapshotProbe=${probeA};renderCadence=${cadenceA}`)
-    markPhase(`B movement=${movementB.summary()};nodeSnapshotProbe=${probeB};renderCadence=${cadenceB}`)
-    movementA.dispose(); movementB.dispose()
     await Promise.all([contextA.close(), contextB.close()])
   }
 })
