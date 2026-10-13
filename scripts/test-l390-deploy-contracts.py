@@ -83,6 +83,21 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn("$ErrorActionPreference = 'Stop'", deploy_script)
         self.assertIn('if ($code -ne 0) { throw', deploy_script)
 
+    def test_l390_package_artifact_explicitly_uploads_archive_and_manifest(self):
+        current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        package, _ = current.split('  syntax:\n', 1)
+        upload_step = package.split('      - name: Store code images only, never databases or account backups\n', 1)[1]
+        upload_step = upload_step.split('\n  syntax:\n', 1)[0]
+        self.assertIn('uses: actions/upload-artifact@v4', upload_step)
+        uploaded_paths = upload_step.split('          path: |\n', 1)[1].split('          if-no-files-found:', 1)[0]
+        self.assertEqual(uploaded_paths, '            artifacts/l390-package/images.tar\n            artifacts/l390-package/manifest.json\n')
+        self.assertIn('if-no-files-found: error', upload_step)
+
+        deploy = current.split('  deploy:\n', 1)[1]
+        run_scoped_path = 'l390-package-${{ github.run_id }}'
+        self.assertIn(f'path: {run_scoped_path}', deploy)
+        self.assertIn(f'\\{run_scoped_path}', deploy)
+
     def test_native_image_smoke_is_temporary_and_not_production(self):
         smoke = (ROOT / 'scripts/test-l390-image.mjs').read_text()
         self.assertIn('mkdtempSync', smoke)

@@ -83,7 +83,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: l390-package-${{ steps.current.outputs.sha }}
-          path: artifacts/l390-package/
+          path: |
+            artifacts/l390-package/images.tar
+            artifacts/l390-package/manifest.json
           if-no-files-found: error
           retention-days: 7
 
@@ -149,7 +151,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: l390-package-${{ needs.package.outputs.sha }}
-          path: l390-package
+          path: l390-package-${{ github.run_id }}
 
       - name: Quiesced local backup, exact images, readiness gates and rollout tests
         shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
@@ -157,7 +159,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $head = git -C "$env:GITHUB_WORKSPACE\source" rev-parse HEAD
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:DEPLOY_SHA) { throw 'Checkout SHA does not match successful current-main CI.' }
-          & "$env:GITHUB_WORKSPACE\source\scripts\deploy-l390.ps1" -DeployPath $env:L390_DEPLOY_PATH -SourcePath "$env:GITHUB_WORKSPACE\source" -PackagePath "$env:GITHUB_WORKSPACE\l390-package" -ExpectedSha $env:DEPLOY_SHA
+          & "$env:GITHUB_WORKSPACE\source\scripts\deploy-l390.ps1" -DeployPath $env:L390_DEPLOY_PATH -SourcePath "$env:GITHUB_WORKSPACE\source" -PackagePath "$env:GITHUB_WORKSPACE\l390-package-${{ github.run_id }}" -ExpectedSha $env:DEPLOY_SHA
 
       # Deliberately no upload-artifact here. User data, .env, local backups,
       # runner diagnostics and credentials never leave L390.

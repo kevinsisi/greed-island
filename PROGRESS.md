@@ -1,3 +1,21 @@
+## 2026-10-13 — L390 package manifest delivery fix (in review)
+
+- On run `38365791526`, the package job log says `actions/upload-artifact` matched
+  and uploaded two files. Downloading that exact artifact locally confirms both
+  `images.tar` and `manifest.json` are present; manifest SHA, image tags, archive
+  SHA256, app version, and both image revision labels match `abb6ec5`.
+- The L390 run nevertheless reported that its downloaded `l390-package` folder
+  lacked `manifest.json`. Cause is not proven from available evidence. Workflow
+  now explicitly uploads only `images.tar` and `manifest.json`, and downloads
+  into a run-ID-specific directory to avoid reusing a persistent runner path.
+- Added a contract assertion for the exact artifact file allowlist and matching
+  run-scoped download/deployer path. Did not weaken `deploy-l390.ps1` checks.
+- Local L390 contract tests: 11/11 passed. `npm run build:server` and
+  `npm run build:web` passed. Docker routing test failed locally because its
+  isolated Caddy containers did not become ready; the test cleaned up its
+  containers/network. No L390 host or deployment workflow was touched.
+- PR/CI status: pending.
+
 ## 2026-10-08 — Independent canonical intervention retry correction (source only)
 
 - Reproduced against frozen fa4231fc: identical same-tick mediate commits once but second reply claimed trust54 while persisted trust stayed52.
