@@ -65,6 +65,16 @@
   integration, main merge and L390 release remain required. No push or deployment.
 - Integration/route contract: docs/CANONICAL_ADMIN_SETTINGS.md.
 
+## 2026-10-14 — Multiplayer game responsive layout
+
+- Worktree/branch: `greed-island-mobile-ui` / `fix/mobile-game-layout`, based on `origin/main` at `fa9aab7`.
+- Changed only the multiplayer game presentation: mobile header/navigation wraps, mission/map use a compact single-column arrangement, beacon/player panels stay collapsed until opened, touch controls and status text use high-contrast surfaces, and action labels retain readable widths. Tablet and desktop retain their existing panel layout; selector width is protected at 768px and short desktop heights.
+- Added `e2e/mobile-layout.spec.ts` to the existing Playwright suite. It registers a disposable fixture user, checks document horizontal overflow and measures the selected region label against available selector width at 375×812, 390×844, 768×1024 and 1280×800.
+- Real Chrome Playwright suite: 3 tests passed. Layout assertions: scrollWidth 375/375, 390/390, 768/768, 1280/1280; selected label 100.5px fits in 175/190/176/176px. Screenshots: `packages/web/evidence/mobile-layout/{375x812,390x844,768x1024,1280x800}.png`.
+- Contrast, computed against the lightest white backing for translucent panels: `#f0e8d2` on `#102c28f5` effective `#193430` = 10.86:1; `#f0e8d2` on footer `#102c28ed` effective `#213b37` = 9.85:1; `#f0e8d2` on hint `#102c28ef` effective `#1f3935` = 10.10:1; `#dfc383` on `#102c28f5` effective `#193430` = 7.76:1; `#edca7e` on `#102c28f5` effective `#193430` = 8.44:1; selector `#eee5ca` on `#143b33` = 9.80:1; joystick center `#f0e8d2` on `#31564b` = 6.70:1. All exceed WCAG AA.
+- `npm run build:server && npm run build:web`: passed. Web Vitest: 57 files / 521 tests passed. Full `npm test`: 244 server files / 2,180 tests passed, 4 failed in `adminSettings.authorization` (2), `unifiedMountedFamilies` (1), and the SSE chunk-boundary case in `playerWorldRouter` (1); these are the path-alias/SSE failures documented in open PR#9, and were not changed here. No server files changed.
+- Not deployed; no L390, workflow, or server changes. CI / PR pending.
+
 ## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
 
 - 做了什麼：多人版 host/port/資料目錄/Origin 改 env 可設（`packages/server/src/multiplayer/config.ts`、`fixtureStorage.ts`、`http.ts`、`server.ts`）；帳號與 DB 持久化於 volume；新增 `deploy/l390/`（只含 multiplayer＋web，`/api/*`、`/card-images/*` 回 404，不部署主 server）。
