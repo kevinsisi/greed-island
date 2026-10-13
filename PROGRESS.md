@@ -1,20 +1,21 @@
 ## 2026-10-13 — L390 package manifest delivery fix (in review)
 
-- On run `38365791526`, the package job log says `actions/upload-artifact` matched
-  and uploaded two files. Downloading that exact artifact locally confirms both
-  `images.tar` and `manifest.json` are present; manifest SHA, image tags, archive
-  SHA256, app version, and both image revision labels match `abb6ec5`.
-- The L390 run nevertheless reported that its downloaded `l390-package` folder
-  lacked `manifest.json`. Cause is not proven from available evidence. Workflow
-  now explicitly uploads only `images.tar` and `manifest.json`, and downloads
-  into a run-ID-specific directory to avoid reusing a persistent runner path.
-- Added a contract assertion for the exact artifact file allowlist and matching
-  run-scoped download/deployer path. Did not weaken `deploy-l390.ps1` checks.
-- Local L390 contract tests: 11/11 passed. `npm run build:server` and
-  `npm run build:web` passed. Docker routing test failed locally because its
-  isolated Caddy containers did not become ready; the test cleaned up its
-  containers/network. No L390 host or deployment workflow was touched.
-- PR/CI status: pending.
+- Run `38365791526` package artifact locally contains both files, and its
+  manifest/archive digest matches. Read-only `certutil` on the leftover L390
+  archive returned `29fb572131bef0218631b7efcf10e0aff1b6a9b473dd5268169939e3a38aa699`,
+  which does not match manifest `edb78642e524c7fd88d9bf420e6640182ca0247aeafcfce716113f8e4b4d8be5`.
+  Therefore the runner's tar was not the complete byte-identical archive from
+  that artifact; why it differs is not established.
+- Follow-up changes split the image archive and manifest into separate artifacts,
+  download both into the same run-ID-specific directory, then list all downloaded
+  files and fail before deployment if `manifest.json` is absent.
+- Contract tests assert both artifact names/paths, shared download destination,
+  pre-deploy diagnostic, and process-scoped Bypass only in the self-hosted deploy
+  job. `deploy-l390.ps1` checks remain unchanged.
+- Follow-up local L390 contract tests: 11/11 passed; `npm run build:server`
+  passed. Prior `npm run build:web` passed. Routing test failed locally because
+  isolated Caddy containers did not become ready; test resources were cleaned.
+- PR #5 remains open; follow-up commit and CI status pending.
 
 ## 2026-10-08 — Independent canonical intervention retry correction (source only)
 
