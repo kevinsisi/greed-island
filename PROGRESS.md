@@ -1,3 +1,22 @@
+## 2026-10-13 — L390 package manifest delivery fix (in review)
+
+- Run `38365791526` package artifact locally contains both files, and its
+  manifest/archive digest matches. Read-only `certutil` on the leftover L390
+  archive returned `29fb572131bef0218631b7efcf10e0aff1b6a9b473dd5268169939e3a38aa699`,
+  which does not match manifest `edb78642e524c7fd88d9bf420e6640182ca0247aeafcfce716113f8e4b4d8be5`.
+  Therefore the runner's tar was not the complete byte-identical archive from
+  that artifact; why it differs is not established.
+- Follow-up changes split the image archive and manifest into separate artifacts,
+  download both into the same run-ID-specific directory, then list all downloaded
+  files and fail before deployment if `manifest.json` is absent.
+- Contract tests assert both artifact names/paths, shared download destination,
+  pre-deploy diagnostic, and process-scoped Bypass only in the self-hosted deploy
+  job. `deploy-l390.ps1` checks remain unchanged.
+- Follow-up local L390 contract tests: 11/11 passed; `npm run build:server`
+  passed. Prior `npm run build:web` passed. Routing test failed locally because
+  isolated Caddy containers did not become ready; test resources were cleaned.
+- PR #5 remains open; follow-up commit and CI status pending.
+
 ## 2026-10-08 — Independent canonical intervention retry correction (source only)
 
 - Reproduced against frozen fa4231fc: identical same-tick mediate commits once but second reply claimed trust54 while persisted trust stayed52.

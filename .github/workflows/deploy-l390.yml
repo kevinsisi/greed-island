@@ -79,11 +79,19 @@ jobs:
           (root / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
           PY
 
-      - name: Store code images only, never databases or account backups
+      - name: Store exact-SHA code image archive
         uses: actions/upload-artifact@v4
         with:
           name: l390-package-${{ steps.current.outputs.sha }}
-          path: artifacts/l390-package/
+          path: artifacts/l390-package/images.tar
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Store exact-SHA image manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: l390-manifest-${{ steps.current.outputs.sha }}
+          path: artifacts/l390-package/manifest.json
           if-no-files-found: error
           retention-days: 7
 
@@ -149,7 +157,23 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: l390-package-${{ needs.package.outputs.sha }}
-          path: l390-package
+          path: l390-package-${{ github.run_id }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: l390-manifest-${{ needs.package.outputs.sha }}
+          path: l390-package-${{ github.run_id }}
+
+      - name: Diagnose downloaded package files before deployment
+        shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE 'l390-package-${{ github.run_id }}'
+          $files = @(Get-ChildItem -Force -Recurse -ErrorAction SilentlyContinue $packagePath | Select-Object FullName,Length)
+          $files | Format-Table -AutoSize
+          if (-not (Test-Path -LiteralPath (Join-Path $packagePath 'manifest.json') -PathType Leaf)) {
+            throw "manifest.json is missing from $packagePath. Directory contents are listed above."
+          }
 
       - name: Quiesced local backup, exact images, readiness gates and rollout tests
         shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
@@ -157,7 +181,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $head = git -C "$env:GITHUB_WORKSPACE\source" rev-parse HEAD
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:DEPLOY_SHA) { throw 'Checkout SHA does not match successful current-main CI.' }
-          & "$env:GITHUB_WORKSPACE\source\scripts\deploy-l390.ps1" -DeployPath $env:L390_DEPLOY_PATH -SourcePath "$env:GITHUB_WORKSPACE\source" -PackagePath "$env:GITHUB_WORKSPACE\l390-package" -ExpectedSha $env:DEPLOY_SHA
+          & "$env:GITHUB_WORKSPACE\source\scripts\deploy-l390.ps1" -DeployPath $env:L390_DEPLOY_PATH -SourcePath "$env:GITHUB_WORKSPACE\source" -PackagePath "$env:GITHUB_WORKSPACE\l390-package-${{ github.run_id }}" -ExpectedSha $env:DEPLOY_SHA
 
       # Deliberately no upload-artifact here. User data, .env, local backups,
       # runner diagnostics and credentials never leave L390.

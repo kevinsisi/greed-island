@@ -71,8 +71,8 @@ class SourceDeploymentContracts(unittest.TestCase):
         expected = 'shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". \'{0}\'"'
         self.assertIn('runs-on: [self-hosted, Windows, X64, greed-island-l390]', deploy)
         shell_lines = [line.strip() for line in deploy.splitlines() if line.strip().startswith('shell:')]
-        self.assertEqual(shell_lines, [expected, expected])
-        self.assertEqual(current.count('-ExecutionPolicy Bypass'), 2)
+        self.assertEqual(shell_lines, [expected, expected, expected])
+        self.assertEqual(current.count('-ExecutionPolicy Bypass'), 3)
         self.assertNotIn('-ExecutionPolicy', before_deploy)
         self.assertNotIn('Set-ExecutionPolicy', current)
         self.assertNotIn('-Scope', current)
@@ -82,6 +82,37 @@ class SourceDeploymentContracts(unittest.TestCase):
         deploy_script = (ROOT / 'scripts/deploy-l390.ps1').read_text()
         self.assertIn("$ErrorActionPreference = 'Stop'", deploy_script)
         self.assertIn('if ($code -ne 0) { throw', deploy_script)
+
+    def test_l390_package_artifact_explicitly_uploads_archive_and_manifest(self):
+        current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        package, _ = current.split('  syntax:\n', 1)
+        archive_upload = package.split('      - name: Store exact-SHA code image archive\n', 1)[1]
+        archive_upload = archive_upload.split('\n      - name: Store exact-SHA image manifest\n', 1)[0]
+        self.assertIn('uses: actions/upload-artifact@v4', archive_upload)
+        self.assertIn('name: l390-package-${{ steps.current.outputs.sha }}', archive_upload)
+        self.assertIn('path: artifacts/l390-package/images.tar', archive_upload)
+        self.assertIn('if-no-files-found: error', archive_upload)
+
+        manifest_upload = package.split('      - name: Store exact-SHA image manifest\n', 1)[1]
+        self.assertIn('name: l390-manifest-${{ steps.current.outputs.sha }}', manifest_upload)
+        self.assertIn('path: artifacts/l390-package/manifest.json', manifest_upload)
+        self.assertIn('if-no-files-found: error', manifest_upload)
+
+        deploy = current.split('  deploy:\n', 1)[1]
+        run_scoped_path = 'l390-package-${{ github.run_id }}'
+        archive_download = deploy.split('name: l390-package-${{ needs.package.outputs.sha }}', 1)[1]
+        archive_download = archive_download.split('      - uses: actions/download-artifact@v4', 1)[0]
+        manifest_download = deploy.split('name: l390-manifest-${{ needs.package.outputs.sha }}', 1)[1]
+        manifest_download = manifest_download.split('      - name: Diagnose downloaded package files before deployment', 1)[0]
+        self.assertIn(f'path: {run_scoped_path}', archive_download)
+        self.assertIn(f'path: {run_scoped_path}', manifest_download)
+        diagnostic = deploy.split('      - name: Diagnose downloaded package files before deployment\n', 1)[1]
+        diagnostic = diagnostic.split('      - name: Quiesced local backup', 1)[0]
+        self.assertIn('shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass', diagnostic)
+        self.assertIn('Get-ChildItem -Force -Recurse', diagnostic)
+        self.assertIn('Select-Object FullName,Length', diagnostic)
+        self.assertIn("Join-Path $packagePath 'manifest.json'", diagnostic)
+        self.assertIn('Directory contents are listed above', diagnostic)
 
     def test_native_image_smoke_is_temporary_and_not_production(self):
         smoke = (ROOT / 'scripts/test-l390-image.mjs').read_text()
