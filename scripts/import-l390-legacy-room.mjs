@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 
-const USAGE = 'Usage: import-l390-legacy-room.mjs <inspect|plan|apply|verify> --source <directory> --namespace <id> (--canonical-db <existing-or-new-path> | --canonical <new-path>) [--dry-run] [--owner-selection none|<json-or-legacyId>] [--activate-accounts] [--plan-file <path>] [--canonical-volume <name> --legacy-volume <name> ... --receipt-output <path>]'
+const USAGE = 'Usage: import-l390-legacy-room.mjs <inspect|plan|apply|verify> --source <directory> --namespace <id> (--canonical-db <existing-or-new-path> | --canonical <new-path>) [--dry-run] [--owner-selection none|<json-or-legacyId>] [--owner-selection-index <n>] [--activate-accounts] [--plan-file <path>] [--canonical-volume <name> --legacy-volume <name> ... --receipt-output <path>]'
 
 function parseArguments(args) {
   const command = args[0]
@@ -12,7 +12,7 @@ function parseArguments(args) {
     const key = args[index]
     if (key === '--dry-run') { options.dryRun = true; continue }
     if (key === '--activate-accounts') { options.activateAccounts = true; continue }
-    if (!['--source', '--namespace', '--canonical-db', '--canonical', '--owner-selection', '--reviewed-links-file',
+    if (!['--source', '--namespace', '--canonical-db', '--canonical', '--owner-selection', '--owner-selection-index', '--reviewed-links-file',
       '--plan-file', '--receipt-output', '--canonical-volume', '--legacy-volume'].includes(key)) {
       throw new Error('INVALID_ARGUMENT')
     }
@@ -92,9 +92,16 @@ export async function runL390LegacyImportCli(args = process.argv.slice(2)) {
     const { applyL390LegacyImport, verifyL390LegacyImport } = await import('../packages/server/dist/migration/l390LegacyApply.js')
     if (command === 'apply') {
       if (!options.activateAccounts) throw new Error('ACTIVATE_ACCOUNTS_FLAG_REQUIRED')
-      if (!options['--owner-selection']) throw new Error('OWNER_SELECTION_REQUIRED')
+      const ownerId = options['--owner-selection']
+      const rawIndex = options['--owner-selection-index']
+      if (!!ownerId === !!rawIndex) throw new Error('EXACTLY_ONE_OWNER_SELECTION_REQUIRED')
+      const ownerSelectionIndex = rawIndex === undefined ? undefined : Number(rawIndex)
+      if (ownerSelectionIndex !== undefined && (!Number.isSafeInteger(ownerSelectionIndex) || ownerSelectionIndex < 0)) {
+        throw new Error('OWNER_SELECTION_INDEX_INVALID')
+      }
       report = await applyL390LegacyImport({ sourceDirectory: input.sourceDirectory, namespace: input.namespace,
-        canonicalPath: canonicalPathResolved, reviewPlan: plan, activateAccounts: true, ownerLegacyId: options['--owner-selection'] })
+        canonicalPath: canonicalPathResolved, reviewPlan: plan, activateAccounts: true,
+        ...(ownerId !== undefined ? { ownerLegacyId: ownerId } : { ownerSelectionIndex }) })
     } else {
       if (!options['--receipt-output'] || !options['--canonical-volume'] || !options['--legacy-volume']?.length) {
         throw new Error('VERIFY_RECEIPT_AND_VOLUME_ARGUMENTS_REQUIRED')

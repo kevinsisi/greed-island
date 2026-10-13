@@ -17,6 +17,7 @@ import {
   hashLegacyMappingDocument,
   hashLegacyProgressDocument,
   summarizeLegacySourceManifest,
+  summarizeOwnerCandidates,
   type LegacyMappingDigestDocument,
   type LegacyProgressDigestDocument,
 } from './l390LegacyReview.js'
@@ -32,7 +33,8 @@ export type L390ApplyInput = Readonly<{
   canonicalPath: string
   reviewPlan: unknown
   activateAccounts: boolean
-  ownerLegacyId: string
+  ownerLegacyId?: string
+  ownerSelectionIndex?: number
 }>
 export type L390VerifyInput = Readonly<{
   sourceDirectory: string
@@ -252,7 +254,7 @@ function verifyCanonicalDatabase(db: Database.Database, source: LegacyWorldSourc
   return {
     source: summarizeLegacySourceManifest(source.manifest),
     identities: { count: source.accounts.length, sourceRoleClaims: countRoles(source.accounts.map(account => account.role)), canonicalRoles: roles,
-      activeAccounts: source.accounts.length, activeAdmins: 1, ownerLegacyId: data.activation.ownerLegacyId },
+      activeAccounts: source.accounts.length, activeAdmins: 1, ownerSelection: summarizeOwnerCandidates(source.accounts) },
     progress: { roomPlayers: metrics.roomPlayers, supplies: { rows: metrics.suppliesRows, sum: metrics.suppliesSum },
       rewards: { rows: metrics.rewardsRows, sum: metrics.rewardsSum } },
     mappingDigest, progressPreservationDigest,
@@ -266,13 +268,29 @@ function prepareSource(input: {sourceDirectory:string;namespace:string}) {
   catch (error) { source.close?.(); throw error }
 }
 
+function resolveOwnerLegacyId(source: LegacyWorldSource, input: Pick<L390ApplyInput, 'ownerLegacyId' | 'ownerSelectionIndex'>): string {
+  const hasLegacyId = input.ownerLegacyId !== undefined, hasIndex = input.ownerSelectionIndex !== undefined
+  if (hasLegacyId === hasIndex) fail('EXACTLY_ONE_OWNER_SELECTION_REQUIRED')
+  const adminIds = source.accounts.filter(account => account.role === 'admin').map(account => account.id).sort((a, b) => a < b ? -1 : a > b ? 1 : 0)
+  if (hasLegacyId) {
+    const candidates = summarizeOwnerCandidates(source.accounts)
+    if (!Array.isArray(candidates)) fail('OWNER_SELECTION_INDEX_REQUIRED_FOR_OPAQUE_IDS')
+    if (!candidates.includes(input.ownerLegacyId!)) fail('OWNER_SELECTION_MUST_MATCH_LEGACY_ADMIN')
+    return input.ownerLegacyId!
+  }
+  const index = input.ownerSelectionIndex!
+  if (!Number.isSafeInteger(index) || index < 0 || index >= adminIds.length) fail('OWNER_SELECTION_INDEX_OUT_OF_RANGE')
+  return adminIds[index]!
+}
+
 /** Apply only to a new target file. The existing fixture/offline schema initializers are reused in memory. */
 export async function applyL390LegacyImport(input: L390ApplyInput) {
   if (!input.activateAccounts) fail('ACTIVATE_ACCOUNTS_FLAG_REQUIRED')
-  if (!input.ownerLegacyId?.trim()) fail('OWNER_SELECTION_REQUIRED')
+  if (input.ownerLegacyId !== undefined && !input.ownerLegacyId.trim()) fail('OWNER_SELECTION_REQUIRED')
   const canonicalPath = resolve(input.canonicalPath)
   const source = prepareSource(input)
   try {
+    const ownerLegacyId = resolveOwnerLegacyId(source, input)
     const reviewPlan = validatePlanFile(input.reviewPlan, source)
     const db = createCanonicalSchemaFixture()
     try {
@@ -280,7 +298,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
       const plan = planLegacyWorldStage({ source, target })
       if (!plan.canStage || plan.blockers.length) fail('CANONICAL_PLAN_BLOCKED')
       const { mappingDocument, progressDocument } = assertDigestsMatch(reviewPlan, source, target, plan)
-      assertMappingMatchesSource(source, mappingDocument, input.ownerLegacyId)
+      assertMappingMatchesSource(source, mappingDocument, ownerLegacyId)
       if (plan.identities.some(identity => identity.action !== 'create-disabled-player')) fail('FRESH_CANONICAL_TARGET_REQUIRED')
       if (existsSync(canonicalPath)) {
         const targetInfo = lstatSync(canonicalPath)
@@ -290,7 +308,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
         let existing: Database.Database | undefined
         try {
           existing = new Database(canonicalPath, { readonly: true, fileMustExist: true })
-          const verified = verifyCanonicalDatabase(existing, source, reviewPlan, input.ownerLegacyId)
+          const verified = verifyCanonicalDatabase(existing, source, reviewPlan, ownerLegacyId)
           return { applied: false, duplicate: true, reviewed: false, report: verified }
         } catch { fail('CANONICAL_TARGET_EXISTS_NONEMPTY') } finally { existing?.close() }
       }
@@ -303,7 +321,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
         progressPreservationDigest: reviewPlan.progressPreservationDigest,
         stagePlanDigest: plan.planDigest,
         baselineTargetFingerprint: target.fingerprint,
-        activation: { activateAccounts: true, ownerLegacyId: input.ownerLegacyId },
+        activation: { activateAccounts: true, ownerLegacyId },
       }
       const byLegacyId = new Map(source.accounts.map(account => [account.id, account]))
       // Do not call applyLegacyWorldStage here: its pending stage marker blocks unified boot
@@ -317,7 +335,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
           const account = byLegacyId.get(identity.legacyId)
           if (!account) fail('SOURCE_IDENTITY_CHANGED')
           const alias = normalizeLoginAlias({ kind: 'username', value: account.username })
-          const role = identity.legacyId === input.ownerLegacyId ? 'admin' : 'player'
+          const role = identity.legacyId === ownerLegacyId ? 'admin' : 'player'
           insertAccount.run(identity.accountId, account.passwordHash, role, account.name)
           insertAlias.run(alias.value, account.username, identity.accountId)
           insertProvenance.run(source.manifest.namespace, identity.legacyId, identity.accountId)
@@ -332,7 +350,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
       })
       transaction.immediate()
       assertIntegrityAndForeignKeys(db, 'CANONICAL')
-      const inMemoryReport = verifyCanonicalDatabase(db, source, reviewPlan, input.ownerLegacyId)
+      const inMemoryReport = verifyCanonicalDatabase(db, source, reviewPlan, ownerLegacyId)
       if (inMemoryReport.canonicalIntegrity !== 'ok') fail('CANONICAL_VERIFY_FAILED')
 
       let createdTarget = false
@@ -347,7 +365,7 @@ export async function applyL390LegacyImport(input: L390ApplyInput) {
         await db.backup(canonicalPath)
         const onDisk = new Database(canonicalPath, { readonly: true, fileMustExist: true })
         try {
-          const verified = verifyCanonicalDatabase(onDisk, source, reviewPlan, input.ownerLegacyId)
+          const verified = verifyCanonicalDatabase(onDisk, source, reviewPlan, ownerLegacyId)
           return { applied: true, duplicate: false, reviewed: false, report: verified }
         } finally { onDisk.close() }
       } catch (error) {

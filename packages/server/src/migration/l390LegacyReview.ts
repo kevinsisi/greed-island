@@ -21,6 +21,7 @@ const PROGRESS_DISPOSITIONS = {
 } as const
 const PROGRESS_FIELDS = Object.keys(PROGRESS_DISPOSITIONS) as Array<keyof typeof PROGRESS_DISPOSITIONS>
 const compareIds = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0
+const SAFE_OWNER_ID = /^(?:[0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 
 export type LegacyMappingDigestDocument = Readonly<{
   version: 1
@@ -70,6 +71,14 @@ export type L390LegacyReviewInput = Readonly<{
 }>
 
 type LoadedInputs = Readonly<{ source: LegacyWorldSource; target: CanonicalStageState }>
+
+export type OwnerCandidateSummary = readonly string[] | Readonly<{ opaque: true; count: number }>
+
+/** Only expose owner IDs whose syntax cannot be an account name or username. */
+export function summarizeOwnerCandidates(accounts: readonly Readonly<{ id: string; role: string }>[]): OwnerCandidateSummary {
+  const adminIds = accounts.filter(account => account.role === 'admin').map(account => account.id).sort(compareIds)
+  return adminIds.every(id => SAFE_OWNER_ID.test(id)) ? adminIds : { opaque: true, count: adminIds.length }
+}
 
 /** Canonical source and target inspection; both SQLite connections are read-only. */
 function withL390LegacyInputs<T>(input: L390LegacyReviewInput, callback: (loaded: LoadedInputs) => T): T {
@@ -251,6 +260,7 @@ export function planL390LegacyImport(input: L390LegacyReviewInput) {
         plannedMappingCount: mappingDocument.mappings.length,
         byAction: actionCounts,
         sourceRoleClaims: countRoles(source.accounts.map(account => account.role)),
+        ownerCandidates: summarizeOwnerCandidates(source.accounts),
       },
       progress: {
         roomPlayers: { count: source.roomState.players.length },

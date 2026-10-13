@@ -38,11 +38,26 @@ function backupSizedSourceFixture() {
   return { rawAccountsJson: JSON.stringify(accounts, null, 2), rows }
 }
 
-function fixture(options: { secondAdmin?: boolean; l390Backup?: boolean } = {}) {
+function replaceValue(value: unknown, from: string, to: string): unknown {
+  if (value === from) return to
+  if (Array.isArray(value)) return value.map(item => replaceValue(item, from, to))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, replaceValue(child, from, to)]))
+  return value
+}
+
+function fixture(options: { secondAdmin?: boolean; l390Backup?: boolean; safeAdminId?: string } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'greed-l390-apply-')); directories.push(directory)
   const sourceDirectory = join(directory, 'source'); mkdirSync(sourceDirectory)
   const sourceFixture = options.l390Backup ? backupSizedSourceFixture() : syntheticLegacySourceFixture()
   const accounts = JSON.parse(sourceFixture.rawAccountsJson) as Array<{ id: string; name: string; username: string; passwordHash: string; role: string }>
+  if (options.safeAdminId) {
+    const owner = accounts.find(account => account.role === 'admin')!
+    const previousId = owner.id; owner.id = options.safeAdminId
+    sourceFixture.rows = sourceFixture.rows.map(row => ({ ...row,
+      actor_id: row.actor_id === previousId ? options.safeAdminId! : row.actor_id,
+      payload_json: toCanonicalJson(replaceValue(JSON.parse(row.payload_json), previousId, options.safeAdminId!)),
+    }))
+  }
   if (options.secondAdmin) accounts.push({ id: 'legacy-admin-secondary', name: 'Synthetic Secondary Admin', username: 'secondary-admin',
     passwordHash: SYNTHETIC_LEGACY_HASH, role: 'admin' })
   const accountsPath = join(sourceDirectory, 'accounts.json'), roomPath = join(sourceDirectory, 'room.sqlite')
@@ -58,14 +73,17 @@ function fixture(options: { secondAdmin?: boolean; l390Backup?: boolean } = {}) 
   return { directory, sourceDirectory, accountsPath, roomPath, canonicalPath, accounts, namespace, reviewPlan }
 }
 
-function applyInput(value: ReturnType<typeof fixture>, options: { ownerLegacyId?: string; activateAccounts?: boolean; reviewPlan?: unknown } = {}) {
+function applyInput(value: ReturnType<typeof fixture>, options: { ownerLegacyId?: string; ownerSelectionIndex?: number; omitOwner?: boolean; activateAccounts?: boolean; reviewPlan?: unknown } = {}) {
+  const ownerSelection = options.omitOwner ? {} : options.ownerLegacyId !== undefined
+    ? { ownerLegacyId: options.ownerLegacyId }
+    : { ownerSelectionIndex: options.ownerSelectionIndex ?? 0 }
   return {
     sourceDirectory: value.sourceDirectory,
     namespace: value.namespace,
     canonicalPath: value.canonicalPath,
     reviewPlan: options.reviewPlan ?? value.reviewPlan,
     activateAccounts: options.activateAccounts ?? true,
-    ownerLegacyId: options.ownerLegacyId ?? 'legacy-owner',
+    ...ownerSelection,
   }
 }
 
@@ -128,7 +146,7 @@ describe('L390 reviewed canonical apply and verify', () => {
     writeFileSync(value.canonicalPath, 'not-a-database')
     await expect(applyL390LegacyImport(applyInput(value))).rejects.toThrow('CANONICAL_TARGET_EXISTS_NONEMPTY')
     const missingOwner = fixture()
-    await expect(applyL390LegacyImport(applyInput(missingOwner, { ownerLegacyId: '' }))).rejects.toThrow('OWNER_SELECTION_REQUIRED')
+    await expect(applyL390LegacyImport(applyInput(missingOwner, { omitOwner: true }))).rejects.toThrow('EXACTLY_ONE_OWNER_SELECTION_REQUIRED')
     const noActivation = fixture()
     await expect(applyL390LegacyImport(applyInput(noActivation, { activateAccounts: false }))).rejects.toThrow('ACTIVATE_ACCOUNTS_FLAG_REQUIRED')
     expect(() => readFileSync(missingOwner.canonicalPath)).toThrow()
@@ -137,7 +155,7 @@ describe('L390 reviewed canonical apply and verify', () => {
 
   it('does not promote any source admin other than the explicit owner and emits no credentials', async () => {
     const value = fixture({ secondAdmin: true })
-    const applied = await applyL390LegacyImport(applyInput(value, { ownerLegacyId: 'legacy-owner' }))
+    const applied = await applyL390LegacyImport(applyInput(value, { ownerSelectionIndex: 1 }))
     expect(applied.report.identities).toMatchObject({ count: 3, sourceRoleClaims: { admin: 2, player: 1 }, canonicalRoles: { admin: 1, player: 2 }, activeAdmins: 1 })
     const db = new Database(value.canonicalPath, { readonly: true, fileMustExist: true })
     try {
@@ -145,9 +163,18 @@ describe('L390 reviewed canonical apply and verify', () => {
         WHERE s.legacy_id='legacy-admin-secondary'`).get()).toEqual({ role: 'player' })
     } finally { db.close() }
     const output = JSON.stringify({ applied, verified: verifyL390LegacyImport(verifyInput(value)) })
-    for (const secret of [SYNTHETIC_LEGACY_HASH, 'secondary-admin', 'Synthetic Secondary Admin', 'password_hash', 'passwordHash']) {
+    for (const secret of [SYNTHETIC_LEGACY_HASH, 'secondary-admin', 'Synthetic Secondary Admin', 'legacy-owner', 'legacy-admin-secondary', 'password_hash', 'passwordHash']) {
       expect(output).not.toContain(secret)
     }
+  })
+
+  it('accepts an explicitly selected safe numeric legacy ID while plan output keeps unsafe IDs opaque', async () => {
+    const opaque = fixture()
+    expect(opaque.reviewPlan.identities.ownerCandidates).toEqual({ opaque: true, count: 1 })
+    const safe = fixture({ safeAdminId: '1042' })
+    expect(safe.reviewPlan.identities.ownerCandidates).toEqual(['1042'])
+    const applied = await applyL390LegacyImport(applyInput(safe, { ownerLegacyId: '1042' }))
+    expect(applied.report.identities.activeAdmins).toBe(1)
   })
 })
 
