@@ -1,13 +1,31 @@
-## 2026-10-13 — L390 legacy import task 4b + task 5 rehearsal
+## 2026-10-14 — Current main merged into legacy import branch
 
-- Worktree `feat/legacy-room-import` extends the inspect/plan CLI with apply/verify. Apply reuses the existing offline kernel → identity → unified-feature initializers in memory, then writes only a new canonical DB file; it requires `--activate-accounts` and explicit owner selection. Only the selected old admin becomes admin; imported accounts retain their password verifiers and are active. Current room progress is stored in one private EventLog record, not projected into gameplay. Verify checks both digests, SQLite/FK integrity, identities/roles, one active admin, 54 supplies/rewards fields / 50 reward recipients, and sums 4 / 50 before emitting `reviewed:true`.
-- Plan emits admin `legacyId`s only for numeric/UUID identifiers; otherwise it emits `{opaque:true,count}` and apply accepts `--owner-selection-index`. Synthetic tests cover both paths, startable DB boot, apply/verify, idempotency, digest mismatch, existing-target refusal, explicit activation, secondary-admin demotion, L390-sized counts, and secret-free output. CLI plan → apply → verify smoke passed; source files remained unchanged.
-- Verification: `npm run build:server` passed; focused migration tests passed 12/12; web suite passed 57 files / 521 tests. Final `npm run check` build passed; server suite had 3 failures / 2180 passed in 247 files. These are unchanged from `origin/main`: `adminSettings.authorization.test.ts` (2: `STORAGE_UNSAFE` instead of expected HTTP 200 / `HISTORY_FULL`) and `unifiedMountedFamilies.test.ts` (1: HTTP 409 instead of 200). A separate server-only run reproduced the same three. No tests were modified or skipped.
-- Task 5 final snapshot: created `greed-l390-mp-backup-20261013d` with the official `VACUUM INTO` command while only the old room service remained running; copied the four support files without printing their contents. c→d event rows: 4,743,418→4,810,881 (+67,463); both integrity checks `ok`, FK violations 0. Both snapshots: 54 players, supplies field rows 54 / sum 4, rewards field rows 54 / sum 50. Tool `rewards.count=50` means awarded/reward-claimed players (`awardedPlayerIds`), not non-null `RoomPlayer.rewards` fields; d has 50 positive/reward-claimed rows. Progress state hashes differ between c and d.
-- From commit `7728a91a18bf032dadf983e3f409706bf3ebc07c` archive SHA256 `c6a90eaa8173eabe7ca5ec66a023d3bbf80b893eeaf1aff2be8dfb537a5ac1ee`, built image `greed-island-l390-import:7728a91` (`04cfe988c27e`) and staged volume `greed-l390-canonical-20261013`. Plan/apply/verify d counts matched: 4 accounts (1 admin / 3 player), active admin 1, active accounts 4, 54 room players, supplies 54 fields / sum 4, rewards 50 recipients / sum 50. Both digests were identical across all three outputs; receipt `reviewed:true`, canonical/source integrity `ok`, FK violations 0. Receipt was copied to deploy path and hash-matched. `.env` was copied from `src-01382a4` on L390 without displaying its contents; required keys completed from `.env.example`. `docker compose config` passed: external canonical volume correct, web bind `127.0.0.1:28100→80`, origin nonempty.
-- Final canonical was not server-started. A read-only `inspectUnifiedDatabase` preflight as image UID 999 passed. The only server smoke was the earlier disposable container on `greed-l390-canonical-staged-20261013`; it returned `/healthz` 200, then auto-removed. That smoke appended 5 ticks and other runtime events to the staged volume; its receipt is pre-boot evidence and the strict verifier would reject a rerun after those events. The staging volume is retained as evidence.
-- Verify ran before the temporary server boot. After boot, the canonical DB had 5 `WORLD_TICK` rows and other runtime events; the current verifier rejects additional non-archive EventLog rows, so rerunning verify on this now-running-history snapshot would fail. The receipt remains the pre-boot verification result. No apply logic was changed for this finding.
-- No account/credential/claim contents were printed or manually inspected; the importer processed the source verifier bytes internally. Existing multiplayer/web containers, their image tags, the backup volume, and Caddy were not modified. Main worktree changes remain untouched. No push.
+### Current L390 deployment
+
+- Deploy L390 run `38383885432` succeeded on main `b2b75c4a7ad764d8216d9562573cab1bdba14892`; `/healthz` reported `buildSha=b2b75c4a…` and mode `unified`.
+- Current multiplayer/web services use canonical volume `greed-l390-canonical-20261013`. The world is running and EventLog has passed 2,400 rows; it is no longer an archive-only database.
+- PR #6 (`a9b43a4`) changed the smoke test to use `docker cp`. PR #7 (`b2b75c4`) stages Docker-visible files under `C:\l390-docker\greed-island-deploy\release\<sha前12碼>` and completes preflight before stopping services. No L390 system setting was changed.
+- Merging this branch into main and passing main CI triggers another Deploy L390 automatically. It reuses the existing canonical volume and causes a minutes-level restart; deployment does not invoke the import CLI.
+
+### Legacy import planning, apply and rehearsal
+
+- Offline CLI flow: `inspect` → `plan` → `apply` → `verify`. Apply requires explicit owner selection and account activation. Only the selected legacy admin maps to admin; imported player accounts become active. Room progress is preserved as a private archive event, not applied to live gameplay.
+- Plan emits admin `legacyId` only for numeric/UUID identifiers; opaque identifiers are represented as `{opaque:true,count}` and can be selected with `--owner-selection-index`.
+- Acceptor passed the inspect/plan, apply/verify, L390 rehearsal and pre-cutover review.
+- Snapshot `greed-l390-mp-backup-20261013d`: source EventLog rows 4,743,418 → 4,810,881; integrity `ok`; foreign-key violations 0.
+- Import verification: 4 accounts (1 admin, 3 players; all active), 54 room players, supplies sum 4, reward recipients 50. `mappingDigest=33a6a670…50d9`; `progressPreservationDigest=4222a233…eb5f`; plan/apply/verify digests matched.
+- Reward count semantics: 50 means awarded players (`awardedPlayerIds`); there are 54 non-null `RoomPlayer.rewards` rows, with sum 50.
+- The smoke run on `greed-l390-canonical-staged-20261013` appended runtime events; retain that volume as evidence, not as the live database. The production canonical volume is now running and accumulating events.
+- Current branch verification: `npm run build:server && npm run build:web` passed; focused migration tests passed 12/12; deploy-contract tests passed 10 with 1 Docker-only test skipped because the local Docker daemon was unavailable.
+- Full server suite: 2,180 passed, 4 failed across 247 files. Three are the known main failures: `adminSettings.authorization.test.ts` (2) and `unifiedMountedFamilies.test.ts` (1). The fourth was a malformed JSON parse in `playerWorldRouter.test.ts`; that file passed 16/16 when rerun alone, so this run did not establish a persistent failure. No tests were changed or skipped.
+
+### Remaining work
+
+1. Kevin to test external HTTPS from two physical devices and verify multiplayer.
+2. On 2026-10-21, recheck service health and ask Kevin before deleting `greed-l390-mp-backup-20261013`, `greed-l390-mp-backup-20261013b` and `greed-l390-canonical-staged-20261013`. Report to Brain after any deletion. Retain `greed-l390-mp-backup-20261013c`, `greed-l390-mp-backup-20261013d`, `greed-l390-mp-data` and `greed-l390-canonical-20261013`.
+3. Kevin decided not to perform a rollback rehearsal. Retain `greed-l390-mp-data`, the old Compose/`.env` files, `:local` images and the private backup directory as rollback materials.
+4. After this PR merges to main and CI passes, expect one automatic Deploy L390 and a minutes-level service restart.
+
 
 ## 2026-10-08 — Independent canonical intervention retry correction (source only)
 

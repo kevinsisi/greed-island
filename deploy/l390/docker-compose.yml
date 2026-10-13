@@ -4,7 +4,7 @@ name: greed-island-l390
 services:
   multiplayer:
     build:
-      context: ../..
+      context: ${GREED_L390_SOURCE_PATH:?Source checkout path is required}
       dockerfile: packages/server/Dockerfile
     image: greed-island-l390-multiplayer:${GREED_L390_IMAGE_TAG:-local}
     # Reuse the existing backend container and internal port for ONE server.
@@ -32,7 +32,7 @@ services:
 
   web:
     build:
-      context: ../..
+      context: ${GREED_L390_SOURCE_PATH:?Source checkout path is required}
       dockerfile: packages/web/Dockerfile
     image: greed-island-l390-web:${GREED_L390_IMAGE_TAG:-local}
     restart: unless-stopped

@@ -42,11 +42,44 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertNotIn('tar -x', self.script)
 
     def test_local_quiesced_backup_captures_complete_volumes(self):
-        self.assertIn('tar -czf /backup/volume-$index.tgz -C /data .', self.script)
-        self.assertIn('gzip -t /backup/volume-$index.tgz', self.script)
+        self.assertIn('tar -czf /tmp/volume-$index.tgz -C /data .', self.script)
+        self.assertIn('gzip -t /tmp/volume-$index.tgz', self.script)
+        self.assertIn('"type=volume,src=$name,dst=/data,readonly"', self.script)
+        self.assertIn("'cp',\"${container}:/tmp/volume-$index.tgz\",$archivePath", self.script)
         self.assertLess(self.script.index('$stopped = $true'), self.script.index('tar -czf'))
         self.assertIn('LocalApplicationData', self.script)
         self.assertNotIn('Set-Acl', self.script)
+        self.assertNotIn('type=bind,src=$backup', self.script)
+
+    def test_release_and_rollback_caddy_mount_only_use_deploypath_staging(self):
+        compose = (ROOT / 'deploy/l390/docker-compose.yml').read_text()
+        self.assertIn('./Caddyfile.l390:/etc/caddy/Caddyfile:ro', compose)
+        self.assertIn('${GREED_L390_SOURCE_PATH:?Source checkout path is required}', compose)
+        self.assertIn("$stagingRoot = Join-Path $DeployPath 'release'", self.script)
+        self.assertIn('$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)', self.script)
+        self.assertIn("$stagedCompose = Join-Path $stagingDirectory 'docker-compose.yml'", self.script)
+        self.assertIn("Copy-Item -LiteralPath $sourceConfig -Destination $stagedCompose -Force", self.script)
+        self.assertIn('$env:GREED_L390_SOURCE_PATH = $SourcePath', self.script)
+        self.assertIn('Compose-Arguments $stagedCompose', self.script)
+        self.assertIn("$caddyMount[0].source = $rollbackStagedCaddyfile", self.script)
+        self.assertIn("Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force", self.script)
+        self.assertNotIn("type=bind,src=$(Join-Path $SourcePath", self.script)
+        self.assertNotIn('$releaseEnv', self.script)
+        self.assertNotIn('$environmentText', self.script)
+
+    def test_daemon_host_path_preflights_finish_before_any_old_container_stops(self):
+        stop = self.script.index('$stopped = $true')
+        for marker in (
+            "$caddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',\"type=bind,src=$stagedCaddyfile",
+            "$caddyContainer = Invoke-Docker @('create'",
+            "$copyProbeContainer = Invoke-Docker @('create'",
+            "Invoke-Docker @('cp',\"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt\",$copyProbe)",
+            '$rollbackCaddyVersion = Invoke-Docker',
+        ):
+            self.assertLess(self.script.index(marker), stop, marker)
+        self.assertIn("finally {", self.script)
+        self.assertIn("'rm','-f',$copyProbeContainer", self.script)
+        self.assertIn('if ((Get-Content -Raw -LiteralPath $copyProbe) -cne', self.script)
 
     def test_trigger_and_target_contracts(self):
         legacy = (ROOT / '.github/workflows/deploy-dev.yml').read_text()
@@ -63,6 +96,56 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertNotIn('DOCKERHUB', current)
         deploy = current.split('  deploy:\n', 1)[1]
         self.assertNotIn('uses: actions/upload-artifact', deploy)
+
+    def test_process_scope_execution_policy_bypass_is_only_on_self_hosted_deploy(self):
+        current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        before_deploy, deploy = current.split('  deploy:\n', 1)
+        _, syntax = before_deploy.split('  syntax:\n', 1)
+        expected = 'shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". \'{0}\'"'
+        self.assertIn('runs-on: [self-hosted, Windows, X64, greed-island-l390]', deploy)
+        shell_lines = [line.strip() for line in deploy.splitlines() if line.strip().startswith('shell:')]
+        self.assertEqual(shell_lines, [expected, expected, expected])
+        self.assertEqual(current.count('-ExecutionPolicy Bypass'), 3)
+        self.assertNotIn('-ExecutionPolicy', before_deploy)
+        self.assertNotIn('Set-ExecutionPolicy', current)
+        self.assertNotIn('-Scope', current)
+        self.assertIn('shell: powershell\n', syntax)
+        self.assertNotIn('ExecutionPolicy Bypass', syntax)
+
+        deploy_script = (ROOT / 'scripts/deploy-l390.ps1').read_text()
+        self.assertIn("$ErrorActionPreference = 'Stop'", deploy_script)
+        self.assertIn('if ($code -ne 0) { throw', deploy_script)
+
+    def test_l390_package_artifact_explicitly_uploads_archive_and_manifest(self):
+        current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        package, _ = current.split('  syntax:\n', 1)
+        archive_upload = package.split('      - name: Store exact-SHA code image archive\n', 1)[1]
+        archive_upload = archive_upload.split('\n      - name: Store exact-SHA image manifest\n', 1)[0]
+        self.assertIn('uses: actions/upload-artifact@v4', archive_upload)
+        self.assertIn('name: l390-package-${{ steps.current.outputs.sha }}', archive_upload)
+        self.assertIn('path: artifacts/l390-package/images.tar', archive_upload)
+        self.assertIn('if-no-files-found: error', archive_upload)
+
+        manifest_upload = package.split('      - name: Store exact-SHA image manifest\n', 1)[1]
+        self.assertIn('name: l390-manifest-${{ steps.current.outputs.sha }}', manifest_upload)
+        self.assertIn('path: artifacts/l390-package/manifest.json', manifest_upload)
+        self.assertIn('if-no-files-found: error', manifest_upload)
+
+        deploy = current.split('  deploy:\n', 1)[1]
+        run_scoped_path = 'l390-package-${{ github.run_id }}'
+        archive_download = deploy.split('name: l390-package-${{ needs.package.outputs.sha }}', 1)[1]
+        archive_download = archive_download.split('      - uses: actions/download-artifact@v4', 1)[0]
+        manifest_download = deploy.split('name: l390-manifest-${{ needs.package.outputs.sha }}', 1)[1]
+        manifest_download = manifest_download.split('      - name: Diagnose downloaded package files before deployment', 1)[0]
+        self.assertIn(f'path: {run_scoped_path}', archive_download)
+        self.assertIn(f'path: {run_scoped_path}', manifest_download)
+        diagnostic = deploy.split('      - name: Diagnose downloaded package files before deployment\n', 1)[1]
+        diagnostic = diagnostic.split('      - name: Quiesced local backup', 1)[0]
+        self.assertIn('shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass', diagnostic)
+        self.assertIn('Get-ChildItem -Force -Recurse', diagnostic)
+        self.assertIn('Select-Object FullName,Length', diagnostic)
+        self.assertIn("Join-Path $packagePath 'manifest.json'", diagnostic)
+        self.assertIn('Directory contents are listed above', diagnostic)
 
     def test_native_image_smoke_is_temporary_and_not_production(self):
         smoke = (ROOT / 'scripts/test-l390-image.mjs').read_text()
@@ -86,6 +169,7 @@ class DockerVolumeContracts(unittest.TestCase):
         env = dict(os.environ)
         env['GREED_ISLAND_ALLOWED_ORIGINS'] = 'https://synthetic.example.test'
         env['GREED_L390_IMAGE_TAG'] = 'contract-test'
+        env['GREED_L390_SOURCE_PATH'] = str(ROOT)
         if volume is None:
             env.pop('GREED_L390_CANONICAL_VOLUME', None)
         else:
