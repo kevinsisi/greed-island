@@ -73,7 +73,7 @@
 - Real Chrome Playwright suite: 3 tests passed. Layout assertions: scrollWidth 375/375, 390/390, 768/768, 1280/1280; selected label 100.5px fits in 175/190/176/176px. Screenshots: `packages/web/evidence/mobile-layout/{375x812,390x844,768x1024,1280x800}.png`.
 - Contrast, computed against the lightest white backing for translucent panels: `#f0e8d2` on `#102c28f5` effective `#193430` = 10.86:1; `#f0e8d2` on footer `#102c28ed` effective `#213b37` = 9.85:1; `#f0e8d2` on hint `#102c28ef` effective `#1f3935` = 10.10:1; `#dfc383` on `#102c28f5` effective `#193430` = 7.76:1; `#edca7e` on `#102c28f5` effective `#193430` = 8.44:1; selector `#eee5ca` on `#143b33` = 9.80:1; joystick center `#f0e8d2` on `#31564b` = 6.70:1. All exceed WCAG AA.
 - `npm run build:server && npm run build:web`: passed. Web Vitest: 57 files / 521 tests passed. Full `npm test`: 244 server files / 2,180 tests passed, 4 failed in `adminSettings.authorization` (2), `unifiedMountedFamilies` (1), and the SSE chunk-boundary case in `playerWorldRouter` (1); these are the path-alias/SSE failures documented in open PR#9, and were not changed here. No server files changed.
-- Not deployed; no L390, workflow, or server changes. CI / PR pending.
+- PR #11 opened against `main` (not merged). CI run `38457684274`: Build/typecheck/test, multiplayer real-browser E2E, OpenSpec validation, and isolated production images all passed. Not deployed; no L390, workflow, or server changes.
 
 ## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
 
