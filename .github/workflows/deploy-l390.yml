@@ -124,7 +124,7 @@ jobs:
       DEPLOY_SHA: ${{ needs.package.outputs.sha }}
     steps:
       - name: Require a dedicated existing L390 path and Linux Docker access
-        shell: powershell
+        shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
         run: |
           $ErrorActionPreference = 'Stop'
           if (-not $env:L390_DEPLOY_PATH -or -not [IO.Path]::IsPathRooted($env:L390_DEPLOY_PATH) -or -not (Test-Path -LiteralPath $env:L390_DEPLOY_PATH -PathType Container)) {
@@ -152,7 +152,7 @@ jobs:
           path: l390-package
 
       - name: Quiesced local backup, exact images, readiness gates and rollout tests
-        shell: powershell
+        shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
         run: |
           $ErrorActionPreference = 'Stop'
           $head = git -C "$env:GITHUB_WORKSPACE\source" rev-parse HEAD

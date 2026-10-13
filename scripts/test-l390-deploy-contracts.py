@@ -64,6 +64,25 @@ class SourceDeploymentContracts(unittest.TestCase):
         deploy = current.split('  deploy:\n', 1)[1]
         self.assertNotIn('uses: actions/upload-artifact', deploy)
 
+    def test_process_scope_execution_policy_bypass_is_only_on_self_hosted_deploy(self):
+        current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        before_deploy, deploy = current.split('  deploy:\n', 1)
+        _, syntax = before_deploy.split('  syntax:\n', 1)
+        expected = 'shell: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". \'{0}\'"'
+        self.assertIn('runs-on: [self-hosted, Windows, X64, greed-island-l390]', deploy)
+        shell_lines = [line.strip() for line in deploy.splitlines() if line.strip().startswith('shell:')]
+        self.assertEqual(shell_lines, [expected, expected])
+        self.assertEqual(current.count('-ExecutionPolicy Bypass'), 2)
+        self.assertNotIn('-ExecutionPolicy', before_deploy)
+        self.assertNotIn('Set-ExecutionPolicy', current)
+        self.assertNotIn('-Scope', current)
+        self.assertIn('shell: powershell\n', syntax)
+        self.assertNotIn('ExecutionPolicy Bypass', syntax)
+
+        deploy_script = (ROOT / 'scripts/deploy-l390.ps1').read_text()
+        self.assertIn("$ErrorActionPreference = 'Stop'", deploy_script)
+        self.assertIn('if ($code -ne 0) { throw', deploy_script)
+
     def test_native_image_smoke_is_temporary_and_not_production(self):
         smoke = (ROOT / 'scripts/test-l390-image.mjs').read_text()
         self.assertIn('mkdtempSync', smoke)
