@@ -28,6 +28,68 @@ class SourceDeploymentContracts(unittest.TestCase):
         env_gate = self.script.index('Test-Path -LiteralPath $activeEnvFile -PathType Leaf')
         self.assertLess(env_gate, self.script.index('$stopped = $true'))
 
+    def test_unified_upgrade_uses_compose_environment_file_without_working_dir_env(self):
+        before_stop = self.script.split('$stopped = $true', 1)[0]
+        label = "$activeEnvLabel = [string]$backend.Config.Labels.'com.docker.compose.project.environment_file'"
+        legacy_detection = "$isLegacyRoom = @($backend.Config.Cmd) -contains 'dist/multiplayer/server.js'"
+        legacy_fallback = "if ($isLegacyRoom) { $activeEnvFile = Join-Path $activeDirectory '.env' }"
+        unified_fallback = 'else { $activeEnvFile = $envFile }'
+        active_gate = 'Test-Path -LiteralPath $activeEnvFile -PathType Leaf'
+        self.assertIn(legacy_detection, before_stop)
+        self.assertIn(label, before_stop)
+        self.assertIn(legacy_fallback, before_stop)
+        self.assertIn(unified_fallback, before_stop)
+        self.assertLess(before_stop.index(label), before_stop.index(active_gate))
+        self.assertLess(before_stop.index(active_gate), before_stop.index("$activeResolved = Invoke-Docker"))
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')", before_stop)
+        self.assertIn('$env:GREED_L390_SOURCE_PATH = $SourcePath', before_stop)
+        self.assertLess(before_stop.index('$env:GREED_L390_SOURCE_PATH = $SourcePath'), before_stop.index("$activeResolved = Invoke-Docker"))
+        self.assertIn('$activeResolved.services.multiplayer.image -cne $backend.Config.Image', before_stop)
+        self.assertIn('$activeResolved.services.web.image -cne $web.Config.Image', before_stop)
+        self.assertIn('$activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousImageTag', before_stop)
+        self.assertIn("$env:GREED_L390_IMAGE_TAG = $previousImageTag", before_stop)
+        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousImageTag", before_stop)
+        self.assertIn("$activeEnvFile = (Resolve-Path -LiteralPath $activeEnvFile).Path", before_stop)
+        new_config = before_stop.index('$newResolved = Invoke-Docker')
+        active_values_restored = before_stop.index('$env:GREED_L390_IMAGE_TAG = $previousImageTag', new_config)
+        self.assertLess(new_config, active_values_restored)
+        self.assertIn("@('--env-file',$activeEnvFile,'stop','--timeout','30','multiplayer','web')", self.script)
+        self.assertIn("Copy-Item -LiteralPath $envFile -Destination (Join-Path $backup 'source.env')", self.script)
+        self.assertNotIn("if (-not (Test-Path -LiteralPath (Join-Path $activeDirectory '.env')", before_stop)
+        rollout_start = self.script.index("Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')")
+        candidate_tag = self.script.rindex('$env:GREED_L390_IMAGE_TAG = $ExpectedSha', 0, rollout_start)
+        self.assertLess(self.script.index('$stopped = $true'), candidate_tag)
+        self.assertLess(candidate_tag, rollout_start)
+
+    def test_unified_rollback_reuses_the_preserved_prior_release_compose_and_env(self):
+        rollback = self.script.split("if ($stopped) {", 1)[1]
+        self.assertIn("$activeEnvLabel = [string]$backend.Config.Labels.'com.docker.compose.project.environment_file'", self.script)
+        self.assertIn("$env:GREED_L390_IMAGE_TAG = $previousImageTag", rollback)
+        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousImageTag", rollback)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')", rollback)
+        self.assertIn("$activeResolved.services.multiplayer.image = $backend.Image", self.script)
+        self.assertIn("Write-Json $activeResolved $rollbackConfig", self.script)
+        self.assertNotIn('$rollbackImageOverride', self.script)
+
+        before_stop = self.script.split('$stopped = $true', 1)[0]
+        self.assertIn('$activeCaddySource = [string]$caddyMount[0].source', before_stop)
+        self.assertIn('type=bind,src=$activeCaddySource,dst=/etc/caddy/Caddyfile,readonly', before_stop)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')", before_stop)
+        self.assertIn("$stagingDirectory = Join-Path $stagingRoot ($ExpectedSha.Substring(0,12) + '-' + $deploymentId)", before_stop)
+        self.assertNotIn('Remove-Item -LiteralPath $stagingDirectory', self.script)
+
+    def test_each_deploy_attempt_uses_a_distinct_release_directory_even_for_same_sha(self):
+        self.assertIn("$deploymentId = [Guid]::NewGuid().ToString('N')", self.script)
+        self.assertIn("$stagingDirectory = Join-Path $stagingRoot ($ExpectedSha.Substring(0,12) + '-' + $deploymentId)", self.script)
+        self.assertIn("$stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $ExpectedSha.Substring(0,12) + '-' + $deploymentId", self.script)
+        self.assertNotIn("$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)", self.script)
+        before_stop = self.script.split('$stopped = $true', 1)[0]
+        self.assertIn('if ($previousImageTag -ceq $ExpectedSha)', before_stop)
+        self.assertIn('$loadedBackendId -cne $backend.Image -or $loadedWebId -cne $web.Image', before_stop)
+        self.assertIn("Invoke-Docker @('tag',$backend.Image,$backend.Config.Image)", before_stop)
+        self.assertIn("Invoke-Docker @('tag',$web.Image,$web.Config.Image)", before_stop)
+        self.assertIn('Refusing to stop the active stack.', before_stop)
+
     def test_readonly_volume_and_database_checks_precede_stop(self):
         for marker in ["'volume','inspect',$canonicalVolume", 'inspectUnifiedDatabase(c.databasePath)', "'--network','none'"]:
             self.assertLess(self.script.index(marker), self.script.index('$stopped = $true'))
@@ -56,7 +118,7 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn('./Caddyfile.l390:/etc/caddy/Caddyfile:ro', compose)
         self.assertIn('${GREED_L390_SOURCE_PATH:?Source checkout path is required}', compose)
         self.assertIn("$stagingRoot = Join-Path $DeployPath 'release'", self.script)
-        self.assertIn('$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)', self.script)
+        self.assertIn("$stagingDirectory = Join-Path $stagingRoot ($ExpectedSha.Substring(0,12) + '-' + $deploymentId)", self.script)
         self.assertIn("$stagedCompose = Join-Path $stagingDirectory 'docker-compose.yml'", self.script)
         self.assertIn("Copy-Item -LiteralPath $sourceConfig -Destination $stagedCompose -Force", self.script)
         self.assertIn('$env:GREED_L390_SOURCE_PATH = $SourcePath', self.script)
@@ -74,6 +136,7 @@ class SourceDeploymentContracts(unittest.TestCase):
             "$caddyContainer = Invoke-Docker @('create'",
             "$copyProbeContainer = Invoke-Docker @('create'",
             "Invoke-Docker @('cp',\"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt\",$copyProbe)",
+            '$activeCaddyVersion = Invoke-Docker',
             '$rollbackCaddyVersion = Invoke-Docker',
         ):
             self.assertLess(self.script.index(marker), stop, marker)
