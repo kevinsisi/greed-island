@@ -1,7 +1,12 @@
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
+import { existsSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { normalizeLoginAlias } from '../identity/principal.js'
+import { migrateIdentitySchema } from '../identity/schema.js'
 import { toCanonicalJson } from '../kernel/canonicalJson.js'
+import { initializeKernelSchema } from '../kernel/eventStore.js'
+import { initializeUnifiedFeatureSchema } from '../bootstrap/featureSchema.js'
 import { digest, readLegacyWorldSourceFiles, type LegacySourceManifest, type LegacyWorldSource } from './legacyWorldSource.js'
 import { readCanonicalStageState } from './legacyWorldImport.js'
 import { planLegacyWorldStage, type CanonicalStageState, type LegacyWorldStagePlan, type ReviewedIdentityLink, type StageOwnerSelection } from './legacyWorldPlan.js'
@@ -71,19 +76,32 @@ function withL390LegacyInputs<T>(input: L390LegacyReviewInput, callback: (loaded
   if (!input.sourceDirectory.trim() || !input.canonicalDatabasePath.trim()) throw new Error('SOURCE_AND_CANONICAL_PATH_REQUIRED')
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(input.namespace)) throw new Error('INVALID_NAMESPACE')
   const source = readLegacyWorldSourceFiles({
-    accountsPath: `${input.sourceDirectory}/accounts.json`,
-    roomPath: `${input.sourceDirectory}/room.sqlite`,
+    accountsPath: join(input.sourceDirectory, 'accounts.json'),
+    roomPath: join(input.sourceDirectory, 'room.sqlite'),
     namespace: input.namespace,
   })
   let canonical: Database.Database | undefined
   try {
-    canonical = new Database(input.canonicalDatabasePath, { readonly: true, fileMustExist: true })
+    const canonicalExistsAndHasData = existsSync(input.canonicalDatabasePath) && statSync(input.canonicalDatabasePath).size > 0
+    canonical = canonicalExistsAndHasData
+      ? new Database(input.canonicalDatabasePath, { readonly: true, fileMustExist: true })
+      : createCanonicalSchemaFixture()
     const target = readCanonicalStageState(canonical)
     return callback({ source, target })
   } finally {
-    canonical?.close()
-    source.close?.()
+    try { canonical?.close() } finally { source.close?.() }
   }
+}
+
+/** Reuses existing offline/fixture schema initializers without creating the requested target path. */
+export function createCanonicalSchemaFixture(): Database.Database {
+  const db = new Database(':memory:')
+  try {
+    initializeKernelSchema(db)
+    migrateIdentitySchema(db)
+    initializeUnifiedFeatureSchema(db)
+    return db
+  } catch (error) { db.close(); throw error }
 }
 
 export function buildLegacyMappingDigestDocument(source: LegacyWorldSource, plan: LegacyWorldStagePlan): LegacyMappingDigestDocument {
@@ -123,9 +141,9 @@ export function hashLegacyMappingDocument(document: LegacyMappingDigestDocument)
 export function buildLegacyProgressDigestDocument(
   source: LegacyWorldSource,
   mappingDigest: string,
-  plan: LegacyWorldStagePlan,
+  identities: readonly Readonly<{ legacyId: string; accountId: number }>[],
 ): LegacyProgressDigestDocument {
-  const canonicalIds = new Map(plan.identities.map(identity => [identity.legacyId, identity.accountId]))
+  const canonicalIds = new Map(identities.map(identity => [identity.legacyId, identity.accountId]))
   const players = source.roomState.players.map(player => ({
     legacyId: player.id,
     canonicalAccountId: canonicalIds.get(player.id) ?? null,
@@ -189,7 +207,7 @@ export function inspectL390LegacySource(input: L390LegacyReviewInput) {
   return withL390LegacyInputs(input, ({ source, target }) => ({
     version: 1,
     mode: 'inspect' as const,
-    source: safeManifestSummary(source.manifest),
+    source: summarizeLegacySourceManifest(source.manifest),
     sourceRoles: countRoles(source.accounts.map(account => account.role)),
     roomPlayers: source.roomState.players.length,
     canonicalTarget: {
@@ -212,7 +230,7 @@ export function planL390LegacyImport(input: L390LegacyReviewInput) {
     })
     const mappingDocument = buildLegacyMappingDigestDocument(source, plan)
     const mappingDigest = hashLegacyMappingDocument(mappingDocument)
-    const progressDocument = buildLegacyProgressDigestDocument(source, mappingDigest, plan)
+    const progressDocument = buildLegacyProgressDigestDocument(source, mappingDigest, plan.identities)
     const progressPreservationDigest = hashLegacyProgressDocument(progressDocument)
     const actionCounts = countValues(plan.identities.map(identity => identity.action))
     const blockerCounts = countValues(plan.blockers.map(blocker => blocker.code))
@@ -221,7 +239,7 @@ export function planL390LegacyImport(input: L390LegacyReviewInput) {
     return {
       version: 1,
       mode: 'dry-run' as const,
-      source: safeManifestSummary(source.manifest),
+      source: summarizeLegacySourceManifest(source.manifest),
       canonicalTarget: {
         accountCount: target.accounts.length,
         accountIdHighWaterMark: target.accountIdHighWaterMark,
@@ -237,11 +255,12 @@ export function planL390LegacyImport(input: L390LegacyReviewInput) {
       progress: {
         roomPlayers: { count: source.roomState.players.length },
         supplies: { count: supplies.length, sum: sum(supplies) },
-        rewards: { count: rewards.length, sum: sum(rewards) },
+        rewards: { count: source.roomState.awardedPlayerIds.length, sum: sum(rewards) },
       },
       mappingDigest,
       progressPreservationDigest,
       plan: {
+        stagePlanDigest: plan.planDigest,
         canStage: plan.canStage,
         blockers: blockerCounts,
         activationBlockers: [...plan.activationBlockers],
@@ -254,7 +273,7 @@ export function planL390LegacyImport(input: L390LegacyReviewInput) {
   })
 }
 
-function safeManifestSummary(manifest: LegacySourceManifest) {
+export function summarizeLegacySourceManifest(manifest: LegacySourceManifest) {
   return {
     version: manifest.version,
     namespace: manifest.namespace,

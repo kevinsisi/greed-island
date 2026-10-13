@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -56,7 +56,7 @@ describe('L390 legacy inspect/plan dry-run', () => {
       const stagePlan = planLegacyWorldStage({ source: actualSource, target: readCanonicalStageState(canonical) })
       const realMapping = buildLegacyMappingDigestDocument(actualSource, stagePlan)
       expect(hashLegacyMappingDocument({ ...realMapping, mappings: [...realMapping.mappings].reverse() })).toBe(hashLegacyMappingDocument(realMapping))
-      const progress = buildLegacyProgressDigestDocument(actualSource, hashLegacyMappingDocument(realMapping), stagePlan)
+      const progress = buildLegacyProgressDigestDocument(actualSource, hashLegacyMappingDocument(realMapping), stagePlan.identities)
       expect(hashLegacyProgressDocument({ ...progress, players: [...progress.players].reverse() })).toBe(hashLegacyProgressDocument(progress))
     } finally { canonical.close() }
   })
@@ -86,7 +86,7 @@ describe('L390 legacy inspect/plan dry-run', () => {
     try {
       const stagePlan = planLegacyWorldStage({ source: actualSource, target: readCanonicalStageState(canonical) })
       const mappingDigest = hashLegacyMappingDocument(buildLegacyMappingDigestDocument(actualSource, stagePlan))
-      const document = buildLegacyProgressDigestDocument(actualSource, mappingDigest, stagePlan)
+      const document = buildLegacyProgressDigestDocument(actualSource, mappingDigest, stagePlan.identities)
       const mutations: Array<(doc: Mutable<typeof document>) => void> = [
         doc => { doc.sourceDigest = 'a'.repeat(64) }, doc => { doc.mappingDigest = 'b'.repeat(64) },
         doc => { doc.tick += 1 }, doc => { doc.players[0]!.legacyId += '-changed' },
@@ -124,7 +124,7 @@ describe('L390 legacy inspect/plan dry-run', () => {
     try {
       const stagePlan = planLegacyWorldStage({ source: actualSource, target: readCanonicalStageState(canonical) })
       const mapping = buildLegacyMappingDigestDocument(actualSource, stagePlan)
-      const progress = buildLegacyProgressDigestDocument(actualSource, hashLegacyMappingDocument(mapping), stagePlan)
+      const progress = buildLegacyProgressDigestDocument(actualSource, hashLegacyMappingDocument(mapping), stagePlan.identities)
       const missingMappingField = clone(mapping) as unknown as { mappings: Array<Record<string, unknown>> }
       delete missingMappingField.mappings[0]!.normalizedUsername
       expect(() => hashLegacyMappingDocument(missingMappingField as unknown as typeof mapping)).toThrow('MAPPING_DOCUMENT_INVALID')
@@ -152,5 +152,10 @@ describe('L390 legacy inspect/plan dry-run', () => {
     expect(report.progress).toMatchObject({ roomPlayers: { count: 2 }, supplies: { count: 2 }, rewards: { count: 2 } })
     expect(readdirSync(value.directory).sort()).toEqual(entriesBefore)
     for (const path of paths) expect(sha256(readFileSync(path))).toBe(before.get(path))
+    const futureTarget = join(value.directory, 'future-canonical.sqlite')
+    const futurePlan = planL390LegacyImport({ ...value.input, canonicalDatabasePath: futureTarget })
+    const secondFuturePlan = planL390LegacyImport({ ...value.input, canonicalDatabasePath: join(value.directory, 'second-future.sqlite') })
+    expect(futurePlan.canonicalTarget.fingerprint).toBe(secondFuturePlan.canonicalTarget.fingerprint)
+    expect(existsSync(futureTarget)).toBe(false)
   })
 })
