@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { once } from 'node:events'
@@ -18,7 +18,7 @@ afterEach(async () => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'greed-mounted-families-')); directories.push(directory)
+  const directory = mkdtempSync(join(realpathSync(tmpdir()), 'greed-mounted-families-')); directories.push(directory)
   const databasePath = join(directory, 'canonical.sqlite'), seed = new Database(databasePath)
   initializeKernelSchema(seed); migrateIdentitySchema(seed); initializeUnifiedFeatureSchema(seed)
   seed.prepare("INSERT INTO accounts(email,password_hash,password_scheme,created_at,role,status) VALUES(NULL,?,'scrypt-v1',0,'admin','active')").run(`scrypt-v1:${'0'.repeat(32)}:${'0'.repeat(64)}`)

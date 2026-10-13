@@ -58,9 +58,17 @@ async function setup(autoFlush = true, broadParentParser = false) {
 async function waitFor(check: () => boolean) { for (let tries = 0; tries < 100; tries += 1) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 5)) }; throw new Error('Test condition timed out.') }
 async function firstSnapshot(response: Response) {
   const reader = response.body!.getReader(), decoder = new TextDecoder(); let text = ''
-  for (;;) { const read = await reader.read(); if (read.done) throw new Error('Snapshot stream closed early.'); text += decoder.decode(read.value)
-    const frames = text.split('\n\n'), frame = frames.find(frame => frame.split('\n').includes('event: snapshot'))
-    if (frame) { const data = frame.split('\n').find(line => line.startsWith('data: ')); return { snapshot: JSON.parse(data!.slice(6)), reader } }
+  for (;;) {
+    const read = await reader.read()
+    if (read.done) { decoder.decode(); throw new Error('Snapshot stream closed early.') }
+    text += decoder.decode(read.value, { stream: true })
+    let end: number
+    while ((end = text.indexOf('\n\n')) >= 0) {
+      const frame = text.slice(0, end); text = text.slice(end + 2)
+      if (!frame.split('\n').includes('event: snapshot')) continue
+      const data = frame.split('\n').find(line => line.startsWith('data: '))
+      if (data) return { snapshot: JSON.parse(data.slice(6)), reader }
+    }
   }
 }
 async function snapshotMatching(reader: ReadableStreamDefaultReader<Uint8Array>, matches: (snapshot: PlayerWorldSnapshot) => boolean) {
@@ -158,6 +166,22 @@ describe('canonical stream setup cleanup', () => {
 
 
 describe('bounded canonical stream frames', () => {
+  it('waits for a complete snapshot frame across split UTF-8 chunks', async () => {
+    const expected = { tick: 3, label: '潮位', tail: 'x'.repeat(20_000) }
+    const encoded = new TextEncoder().encode(`id: 3\nevent: snapshot\ndata: ${JSON.stringify(expected)}\n\n`)
+    const chinese = new TextEncoder().encode('潮')
+    const chineseOffset = encoded.findIndex((byte, index) => byte === chinese[0] && encoded[index + 1] === chinese[1] && encoded[index + 2] === chinese[2])
+    const splitAt = chineseOffset + 1
+    expect(encoded.byteLength).toBeGreaterThan(16 * 1024)
+    expect(chineseOffset).toBeGreaterThan(0)
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(encoded.slice(0, splitAt)); controller.enqueue(encoded.slice(splitAt)); controller.close() },
+    }))
+    const parsed = await firstSnapshot(response)
+    expect(parsed.snapshot).toEqual(expected)
+    expect((await parsed.reader.read()).done).toBe(true)
+  })
+
   it('delivers a valid snapshot larger than socket high-water without closing a healthy reader', async () => {
     const harness = await setup(); harness.service.execute(alice, body('join', 'enter', {}))
     vi.spyOn(harness.source, 'getNpcs').mockReturnValue(Array.from({ length: 150 }, (_, index) => ({
