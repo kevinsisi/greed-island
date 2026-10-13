@@ -93,7 +93,20 @@ foreach ($image in @($backendImage,$webImage)) {
   if ($metadata.Config.Labels.'org.opencontainers.image.revision' -cne $ExpectedSha) { throw 'Loaded image revision does not equal CI SHA.' }
 }
 
-[void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$(Join-Path $SourcePath 'scripts\test-l390-image.mjs'),dst=/app/l390-smoke.mjs,readonly",'--entrypoint','node',$backendImage,'/app/l390-smoke.mjs') 120)
+$smokeContainer = $null; $smokeFailure = $null
+try {
+  $smokeContainer = Invoke-Docker @('create','--network','none','--entrypoint','node',$backendImage,'/app/l390-smoke.mjs') 120
+  [void](Invoke-Docker @('cp',(Join-Path $SourcePath 'scripts\test-l390-image.mjs'),"${smokeContainer}:/app/l390-smoke.mjs") 120)
+  [void](Invoke-Docker @('start','-a',$smokeContainer) 120)
+} catch {
+  $smokeFailure = $_
+  throw
+} finally {
+  if ($smokeContainer) {
+    try { [void](Invoke-Docker @('rm','-f',$smokeContainer) 30) }
+    catch { if (-not $smokeFailure) { throw } }
+  }
+}
 $backend = Get-Container 'multiplayer'; $web = Get-Container 'web'
 if ($backend.State.Status -ne 'running' -or $web.State.Status -ne 'running') { throw 'Existing L390 stack must be running before a controlled cutover.' }
 $activeConfigFiles = $backend.Config.Labels.'com.docker.compose.project.config_files'
