@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { migrateIdentitySchema } from '../identity/schema.js'
+import { toCanonicalJson } from '../kernel/canonicalJson.js'
 import { SqliteEventStore } from '../kernel/eventStore.js'
 import { syntheticLegacySourceFixture } from './legacyWorld.testSupport.js'
 import { readCanonicalStageState } from './legacyWorldImport.js'
@@ -21,6 +22,11 @@ function files() {
   const directory = mkdtempSync(join(tmpdir(), 'greed-l390-review-')); directories.push(directory)
   const sourceDirectory = join(directory, 'source'); mkdirSync(sourceDirectory)
   const fixture = syntheticLegacySourceFixture()
+  const lastRow = fixture.rows.at(-1)!
+  fixture.rows.push({ ...lastRow, sequence: lastRow.sequence + 1, event_id: 'synthetic-review-chat', event_type: 'MP_CHAT', occurred_at: 301,
+    actor_id: 'legacy-owner', command_id: 'synthetic-review-chat-command', tick: lastRow.tick ?? 300,
+    payload_json: toCanonicalJson({ id: 'synthetic-review-message', playerId: 'legacy-owner', name: 'Fixture Owner', text: 'synthetic private chat', tick: lastRow.tick ?? 300 }),
+    deterministic_key: 'synthetic-review-chat-key' })
   const accountsPath = join(sourceDirectory, 'accounts.json'), roomPath = join(sourceDirectory, 'room.sqlite')
   writeFileSync(accountsPath, fixture.rawAccountsJson)
   const sourceDb = new Database(roomPath); new SqliteEventStore(sourceDb)
@@ -92,7 +98,9 @@ describe('L390 legacy inspect/plan dry-run', () => {
         doc => { doc.room.config.maxOnlinePlayers += 1 }, doc => { doc.room.config.minParticipants += 1 },
         doc => { doc.room.config.participationWindowTicks += 1 }, doc => { doc.room.completed = !doc.room.completed },
         doc => { doc.room.closesAtTick = doc.room.closesAtTick === null ? 1 : doc.room.closesAtTick + 1 },
-        doc => { doc.room.messages = [{ id: 'message', playerId: 'legacy-player', name: 'Fixture', text: 'synthetic', tick: 1 }] },
+        doc => { doc.room.messages[0]!.id += '-changed' }, doc => { doc.room.messages[0]!.playerId += '-changed' },
+        doc => { doc.room.messages[0]!.name += '-changed' }, doc => { doc.room.messages[0]!.text += '-changed' },
+        doc => { doc.room.messages[0]!.tick += 1 },
       ]
       for (const mutate of mutations) {
         const changed = clone(document) as Mutable<typeof document>; mutate(changed)
@@ -139,7 +147,7 @@ describe('L390 legacy inspect/plan dry-run', () => {
     const json = JSON.stringify({ report, inspected })
     for (const secret of [
       'Source Owner', 'Source Player', 'kevin950805', 'retained-user', canonicalHash,
-      'fixture-owner@example.test', 'passwordHash', 'payload_json',
+      'fixture-owner@example.test', 'passwordHash', 'payload_json', 'synthetic private chat',
     ]) expect(json).not.toContain(secret)
     expect(report.progress).toMatchObject({ roomPlayers: { count: 2 }, supplies: { count: 2 }, rewards: { count: 2 } })
     expect(readdirSync(value.directory).sort()).toEqual(entriesBefore)
