@@ -32,6 +32,15 @@ $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $ExpectedSha.Su
 $backup = Join-Path $backupRoot $stamp
 New-Item -ItemType Directory -Path $backup | Out-Null
 $diagnostic = Join-Path $backup 'docker-diagnostics.log'
+$stagingRoot = Join-Path $DeployPath 'release'
+New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)
+New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
+$stagedCaddyfile = Join-Path $stagingDirectory 'Caddyfile.l390'
+Copy-Item -LiteralPath (Join-Path $SourcePath 'deploy\l390\Caddyfile.l390') -Destination $stagedCaddyfile -Force
+$sourceConfig = Join-Path $SourcePath 'deploy\l390\docker-compose.yml'
+$stagedCompose = Join-Path $stagingDirectory 'docker-compose.yml'
+Copy-Item -LiteralPath $sourceConfig -Destination $stagedCompose -Force
 
 # Correct Windows argv quoting and bounded native processes. Capture diagnostics
 # locally only; never print a resolved Compose environment or account data.
@@ -93,6 +102,43 @@ foreach ($image in @($backendImage,$webImage)) {
   if ($metadata.Config.Labels.'org.opencontainers.image.revision' -cne $ExpectedSha) { throw 'Loaded image revision does not equal CI SHA.' }
 }
 
+# Probe the exact daemon-visible release path without reading the mounted file.
+$caddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$stagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
+Write-Host "Staged Caddyfile bind preflight: $caddyVersion"
+$caddyContainer = $null; $caddyFailure = $null
+try {
+  $caddyContainer = Invoke-Docker @('create','--network','none','--entrypoint','caddy',$webImage,'validate','--config','/tmp/Caddyfile.l390','--adapter','caddyfile') 120
+  [void](Invoke-Docker @('cp',$stagedCaddyfile,"${caddyContainer}:/tmp/Caddyfile.l390") 120)
+  [void](Invoke-Docker @('start','-a',$caddyContainer) 120)
+} catch {
+  $caddyFailure = $_
+  throw
+} finally {
+  if ($caddyContainer) {
+    try { [void](Invoke-Docker @('rm','-f',$caddyContainer) 30) }
+    catch { if (-not $caddyFailure) { throw } }
+  }
+}
+
+# Verify docker cp can write back to the private backup directory before downtime.
+$copyProbe = Join-Path $backup 'docker-cp-preflight.txt'
+$copyProbeContainer = $null; $copyProbeFailure = $null
+try {
+  $copyProbeContainer = Invoke-Docker @('create','--network','none','--entrypoint','sh',$backendImage,'-c',"printf 'l390-docker-cp-preflight\n' > /tmp/l390-docker-cp-preflight.txt") 120
+  [void](Invoke-Docker @('start','-a',$copyProbeContainer) 120)
+  [void](Invoke-Docker @('cp',"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt",$copyProbe) 120)
+  if ((Get-Content -Raw -LiteralPath $copyProbe) -cne "l390-docker-cp-preflight`n") { throw 'Private backup docker cp preflight content mismatch.' }
+} catch {
+  $copyProbeFailure = $_
+  throw
+} finally {
+  if ($copyProbeContainer) {
+    try { [void](Invoke-Docker @('rm','-f',$copyProbeContainer) 30) }
+    catch { if (-not $copyProbeFailure) { throw } }
+  }
+  Remove-Item -LiteralPath $copyProbe -Force -ErrorAction SilentlyContinue
+}
+
 $smokeContainer = $null; $smokeFailure = $null
 try {
   $smokeContainer = Invoke-Docker @('create','--network','none','--entrypoint','node',$backendImage,'/app/l390-smoke.mjs') 120
@@ -118,9 +164,9 @@ if (-not (Test-Path -LiteralPath $activeConfig -PathType Leaf) -or -not (Test-Pa
 $activeEnvFile = Join-Path $activeDirectory '.env'
 if (-not (Test-Path -LiteralPath $activeEnvFile -PathType Leaf)) { throw 'The currently active stack .env must exist before any stop.' }
 $activeResolved = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')) | ConvertFrom-Json
-$sourceConfig = Join-Path $SourcePath 'deploy\l390\docker-compose.yml'
 $env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
-$newResolved = Invoke-Docker (Compose-Arguments $sourceConfig @('--env-file',$envFile,'config','--format','json')) | ConvertFrom-Json
+$env:GREED_L390_SOURCE_PATH = $SourcePath
+$newResolved = Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'config','--format','json')) | ConvertFrom-Json
 $volume = $newResolved.volumes.'canonical-data'
 if ($volume.external -ne $true -or -not $volume.name) { throw 'An owner-selected existing external canonical volume is required.' }
 $canonicalVolume = [string]$volume.name
@@ -138,8 +184,6 @@ $origin = ($origins -split "[,\n]")[0].Trim()
 # migration/import or first-signup owner fallback inside the image.
 $probe = "import {resolveUnifiedConfig} from './dist/bootstrap/unifiedConfig.js'; import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; const c=resolveUnifiedConfig(); inspectUnifiedDatabase(c.databasePath);"
 [void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env','HOST=0.0.0.0','--env','PORT=4179','--env','GREED_ISLAND_DB_PATH=/probe/greed-island.sqlite','--env',"GREED_ISLAND_ALLOWED_ORIGINS=$origins",'--env',"GREED_ISLAND_BUILD_SHA=$ExpectedSha",'--entrypoint','node',$backendImage,'--input-type=module','-e',$probe) 300)
-[void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$(Join-Path $SourcePath 'deploy\l390\Caddyfile.l390'),dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'validate','--config','/etc/caddy/Caddyfile','--adapter','caddyfile'))
-
 $oldVolumes = @($backend.Mounts | Where-Object { $_.Type -eq 'volume' } | ForEach-Object { $_.Name })
 $isLegacyRoom = @($backend.Config.Cmd) -contains 'dist/multiplayer/server.js'
 if ($isLegacyRoom) {
@@ -165,10 +209,15 @@ if (-not $isLegacyRoom) {
 $rollbackConfig = Join-Path $backup 'rollback-compose.json'
 $activeResolved.services.multiplayer.image = $backend.Image
 $activeResolved.services.web.image = $web.Image
+$rollbackCaddyfile = Join-Path $backup 'Caddyfile.l390'
+$rollbackStagedCaddyfile = Join-Path $stagingDirectory 'rollback-Caddyfile.l390'
 $caddyMount = @($activeResolved.services.web.volumes | Where-Object { $_.type -eq 'bind' -and $_.target -eq '/etc/caddy/Caddyfile' })
 if ($caddyMount.Count -ne 1) { throw 'Existing Caddy bind mount must be explicit.' }
-Copy-Item -LiteralPath $caddyMount[0].source -Destination (Join-Path $backup 'Caddyfile.l390')
-$caddyMount[0].source = Join-Path $backup 'Caddyfile.l390'
+Copy-Item -LiteralPath $caddyMount[0].source -Destination $rollbackCaddyfile -Force
+Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force
+$rollbackCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$rollbackStagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
+Write-Host "Staged rollback Caddyfile bind preflight: $rollbackCaddyVersion"
+$caddyMount[0].source = $rollbackStagedCaddyfile
 Write-Json $activeResolved $rollbackConfig
 [IO.File]::WriteAllText((Join-Path $backup '.env'),'',([Text.UTF8Encoding]::new($false)))
 $rollbackModel = Invoke-Docker (Compose-Arguments $rollbackConfig @('config','--format','json')) | ConvertFrom-Json
@@ -211,29 +260,39 @@ function Await-Health([bool]$Unified, [int]$Seconds=180) {
   throw 'Health verification timed out.'
 }
 
-$stopped = $false; $release = Join-Path $DeployPath ("releases\"+$ExpectedSha+"-"+$stamp)
+$stopped = $false; $release = $stagingDirectory
 try {
   $stopped = $true
   [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',(Join-Path $activeDirectory '.env'),'stop','--timeout','30','multiplayer','web')) 120)
   $index = 0; $volumeBackups = @()
   foreach ($name in $allVolumes) {
     # Entire quiesced volume, including every SQLite WAL/SHM and account file.
-    $container = "greed-l390-backup-$stamp-$index"
-    try { [void](Invoke-Docker @('run','--rm','--name',$container,'--network','none','--mount',"type=volume,src=$name,dst=/data,readonly",'--mount',"type=bind,src=$backup,dst=/backup",'--entrypoint','sh',$backendImage,'-c',"tar -czf /backup/volume-$index.tgz -C /data . && gzip -t /backup/volume-$index.tgz") 600) }
-    finally { try { [void](Invoke-Docker @('rm','-f',$container) 30) } catch { } }
+    $container = $null; $archiveFailure = $null; $archivePath = Join-Path $backup ("volume-$index.tgz")
+    try {
+      $container = Invoke-Docker @('create','--name',"greed-l390-backup-$stamp-$index",'--network','none','--mount',"type=volume,src=$name,dst=/data,readonly",'--entrypoint','sh',$backendImage,'-c',"tar -czf /tmp/volume-$index.tgz -C /data . && gzip -t /tmp/volume-$index.tgz") 120
+      [void](Invoke-Docker @('start','-a',$container) 600)
+      [void](Invoke-Docker @('cp',"${container}:/tmp/volume-$index.tgz",$archivePath) 120)
+    } catch {
+      $archiveFailure = $_
+      Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+      throw
+    } finally {
+      if ($container) {
+        try { [void](Invoke-Docker @('rm','-f',$container) 30) }
+        catch {
+          if (-not $archiveFailure) {
+            Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+            throw
+          }
+        }
+      }
+    }
     $snapshotPath = Join-Path $backup ("volume-$index.tgz")
     $volumeBackups += @{ volume=$name; file="volume-$index.tgz"; sha256=(Get-FileHash -LiteralPath $snapshotPath -Algorithm SHA256).Hash.ToLowerInvariant(); bytes=(Get-Item -LiteralPath $snapshotPath).Length }
     $index++
   }
   Write-Json $volumeBackups (Join-Path $backup 'volume-manifest.json')
-  New-Item -ItemType Directory -Path $release | Out-Null
-  Copy-Item -Path (Join-Path $SourcePath '*') -Destination $release -Recurse
-  $releaseDirectory = Join-Path $release 'deploy\l390'
-  $releaseConfig = Join-Path $releaseDirectory 'docker-compose.yml'
-  $releaseEnv = Join-Path $releaseDirectory '.env'
-  $environmentText = "GREED_ISLAND_ALLOWED_ORIGINS=$origins`nGREED_L390_CANONICAL_VOLUME=$canonicalVolume`nGREED_L390_HOST_PORT=$publishedPort`nGREED_L390_IMAGE_TAG=$ExpectedSha`nGREED_L390_BUILD_SHA=$ExpectedSha`n"
-  [IO.File]::WriteAllText($releaseEnv,$environmentText,([Text.UTF8Encoding]::new($false)))
-  [void](Invoke-Docker (Compose-Arguments $releaseConfig @('--env-file',$releaseEnv,'up','-d','--no-build','--pull','never')) 180)
+  [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) 180)
   Await-Health $true
   $health = (Request '/healthz').body | ConvertFrom-Json
   if ($health.buildSha -cne $ExpectedSha -or $health.version -cne $manifest.appVersion) { throw 'Running health does not match the exact CI SHA/version.' }
@@ -255,7 +314,7 @@ try {
   $failure = $_
   if ($stopped) {
     try {
-      [void](Invoke-Docker (Compose-Arguments (Join-Path $release 'deploy\l390\docker-compose.yml') @('stop','--timeout','30','multiplayer','web')) 120)
+      [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'stop','--timeout','30','multiplayer','web')) 120)
     } catch { }
     if (-not $rollbackCompatible) { throw 'Rollout failed and old DB/schema compatibility is unproven. Containers remain stopped; owner-reviewed local restore is required. No automatic database restore was attempted.' }
     try {
