@@ -42,11 +42,44 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertNotIn('tar -x', self.script)
 
     def test_local_quiesced_backup_captures_complete_volumes(self):
-        self.assertIn('tar -czf /backup/volume-$index.tgz -C /data .', self.script)
-        self.assertIn('gzip -t /backup/volume-$index.tgz', self.script)
+        self.assertIn('tar -czf /tmp/volume-$index.tgz -C /data .', self.script)
+        self.assertIn('gzip -t /tmp/volume-$index.tgz', self.script)
+        self.assertIn('"type=volume,src=$name,dst=/data,readonly"', self.script)
+        self.assertIn("'cp',\"${container}:/tmp/volume-$index.tgz\",$archivePath", self.script)
         self.assertLess(self.script.index('$stopped = $true'), self.script.index('tar -czf'))
         self.assertIn('LocalApplicationData', self.script)
         self.assertNotIn('Set-Acl', self.script)
+        self.assertNotIn('type=bind,src=$backup', self.script)
+
+    def test_release_and_rollback_caddy_mount_only_use_deploypath_staging(self):
+        compose = (ROOT / 'deploy/l390/docker-compose.yml').read_text()
+        self.assertIn('./Caddyfile.l390:/etc/caddy/Caddyfile:ro', compose)
+        self.assertIn('${GREED_L390_SOURCE_PATH:?Source checkout path is required}', compose)
+        self.assertIn("$stagingRoot = Join-Path $DeployPath 'release'", self.script)
+        self.assertIn('$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)', self.script)
+        self.assertIn("$stagedCompose = Join-Path $stagingDirectory 'docker-compose.yml'", self.script)
+        self.assertIn("Copy-Item -LiteralPath $sourceConfig -Destination $stagedCompose -Force", self.script)
+        self.assertIn('$env:GREED_L390_SOURCE_PATH = $SourcePath', self.script)
+        self.assertIn('Compose-Arguments $stagedCompose', self.script)
+        self.assertIn("$caddyMount[0].source = $rollbackStagedCaddyfile", self.script)
+        self.assertIn("Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force", self.script)
+        self.assertNotIn("type=bind,src=$(Join-Path $SourcePath", self.script)
+        self.assertNotIn('$releaseEnv', self.script)
+        self.assertNotIn('$environmentText', self.script)
+
+    def test_daemon_host_path_preflights_finish_before_any_old_container_stops(self):
+        stop = self.script.index('$stopped = $true')
+        for marker in (
+            "$caddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',\"type=bind,src=$stagedCaddyfile",
+            "$caddyContainer = Invoke-Docker @('create'",
+            "$copyProbeContainer = Invoke-Docker @('create'",
+            "Invoke-Docker @('cp',\"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt\",$copyProbe)",
+            '$rollbackCaddyVersion = Invoke-Docker',
+        ):
+            self.assertLess(self.script.index(marker), stop, marker)
+        self.assertIn("finally {", self.script)
+        self.assertIn("'rm','-f',$copyProbeContainer", self.script)
+        self.assertIn('if ((Get-Content -Raw -LiteralPath $copyProbe) -cne', self.script)
 
     def test_trigger_and_target_contracts(self):
         legacy = (ROOT / '.github/workflows/deploy-dev.yml').read_text()
@@ -136,6 +169,7 @@ class DockerVolumeContracts(unittest.TestCase):
         env = dict(os.environ)
         env['GREED_ISLAND_ALLOWED_ORIGINS'] = 'https://synthetic.example.test'
         env['GREED_L390_IMAGE_TAG'] = 'contract-test'
+        env['GREED_L390_SOURCE_PATH'] = str(ROOT)
         if volume is None:
             env.pop('GREED_L390_CANONICAL_VOLUME', None)
         else:
