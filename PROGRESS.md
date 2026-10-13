@@ -1,21 +1,31 @@
-## 2026-10-13 — L390 package manifest delivery fix (in review)
+## 2026-10-14 — Current main merged into legacy import branch
 
-- Run `38365791526` package artifact locally contains both files, and its
-  manifest/archive digest matches. Read-only `certutil` on the leftover L390
-  archive returned `29fb572131bef0218631b7efcf10e0aff1b6a9b473dd5268169939e3a38aa699`,
-  which does not match manifest `edb78642e524c7fd88d9bf420e6640182ca0247aeafcfce716113f8e4b4d8be5`.
-  Therefore the runner's tar was not the complete byte-identical archive from
-  that artifact; why it differs is not established.
-- Follow-up changes split the image archive and manifest into separate artifacts,
-  download both into the same run-ID-specific directory, then list all downloaded
-  files and fail before deployment if `manifest.json` is absent.
-- Contract tests assert both artifact names/paths, shared download destination,
-  pre-deploy diagnostic, and process-scoped Bypass only in the self-hosted deploy
-  job. `deploy-l390.ps1` checks remain unchanged.
-- Follow-up local L390 contract tests: 11/11 passed; `npm run build:server`
-  passed. Prior `npm run build:web` passed. Routing test failed locally because
-  isolated Caddy containers did not become ready; test resources were cleaned.
-- PR #5 remains open; follow-up commit and CI status pending.
+### Current L390 deployment
+
+- Deploy L390 run `38383885432` succeeded on main `b2b75c4a7ad764d8216d9562573cab1bdba14892`; `/healthz` reported `buildSha=b2b75c4a…` and mode `unified`.
+- Current multiplayer/web services use canonical volume `greed-l390-canonical-20261013`. The world is running and EventLog has passed 2,400 rows; it is no longer an archive-only database.
+- PR #6 (`a9b43a4`) changed the smoke test to use `docker cp`. PR #7 (`b2b75c4`) stages Docker-visible files under `C:\l390-docker\greed-island-deploy\release\<sha前12碼>` and completes preflight before stopping services. No L390 system setting was changed.
+- Merging this branch into main and passing main CI triggers another Deploy L390 automatically. It reuses the existing canonical volume and causes a minutes-level restart; deployment does not invoke the import CLI.
+
+### Legacy import planning, apply and rehearsal
+
+- Offline CLI flow: `inspect` → `plan` → `apply` → `verify`. Apply requires explicit owner selection and account activation. Only the selected legacy admin maps to admin; imported player accounts become active. Room progress is preserved as a private archive event, not applied to live gameplay.
+- Plan emits admin `legacyId` only for numeric/UUID identifiers; opaque identifiers are represented as `{opaque:true,count}` and can be selected with `--owner-selection-index`.
+- Acceptor passed the inspect/plan, apply/verify, L390 rehearsal and pre-cutover review.
+- Snapshot `greed-l390-mp-backup-20261013d`: source EventLog rows 4,743,418 → 4,810,881; integrity `ok`; foreign-key violations 0.
+- Import verification: 4 accounts (1 admin, 3 players; all active), 54 room players, supplies sum 4, reward recipients 50. `mappingDigest=33a6a670…50d9`; `progressPreservationDigest=4222a233…eb5f`; plan/apply/verify digests matched.
+- Reward count semantics: 50 means awarded players (`awardedPlayerIds`); there are 54 non-null `RoomPlayer.rewards` rows, with sum 50.
+- The smoke run on `greed-l390-canonical-staged-20261013` appended runtime events; retain that volume as evidence, not as the live database. The production canonical volume is now running and accumulating events.
+- Current branch verification: `npm run build:server && npm run build:web` passed; focused migration tests passed 12/12; deploy-contract tests passed 10 with 1 Docker-only test skipped because the local Docker daemon was unavailable.
+- Full server suite: 2,180 passed, 4 failed across 247 files. Three are the known main failures: `adminSettings.authorization.test.ts` (2) and `unifiedMountedFamilies.test.ts` (1). The fourth was a malformed JSON parse in `playerWorldRouter.test.ts`; that file passed 16/16 when rerun alone, so this run did not establish a persistent failure. No tests were changed or skipped.
+
+### Remaining work
+
+1. Kevin to test external HTTPS from two physical devices and verify multiplayer.
+2. On 2026-10-21, recheck service health and ask Kevin before deleting `greed-l390-mp-backup-20261013`, `greed-l390-mp-backup-20261013b` and `greed-l390-canonical-staged-20261013`. Report to Brain after any deletion. Retain `greed-l390-mp-backup-20261013c`, `greed-l390-mp-backup-20261013d`, `greed-l390-mp-data` and `greed-l390-canonical-20261013`.
+3. Kevin decided not to perform a rollback rehearsal. Retain `greed-l390-mp-data`, the old Compose/`.env` files, `:local` images and the private backup directory as rollback materials.
+4. After this PR merges to main and CI passes, expect one automatic Deploy L390 and a minutes-level service restart.
+
 
 ## 2026-10-08 — Independent canonical intervention retry correction (source only)
 
