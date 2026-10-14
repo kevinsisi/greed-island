@@ -9,7 +9,7 @@ import { loadCardCatalog } from '../cards/loader.js'
 import { loadNpcProfiles } from '../npcs/loader.js'
 import { NpcStateProjection } from '../projections/npcState.js'
 import { SimulationRuntime } from './runtime.js'
-import { NPC_SUBCELL_SNAPSHOT_INTERVAL_TICKS, NpcStateSnapshotThrottle } from './npcStateSnapshotThrottle.js'
+import { NPC_MINOR_SNAPSHOT_INTERVAL_TICKS, NpcStateSnapshotThrottle } from './npcStateSnapshotThrottle.js'
 import type { NpcRuntimeState } from './npcEngine.js'
 
 const NPC_ID = 'central.exchange.shen_ruo_yun'
@@ -101,9 +101,9 @@ const importantStateChanges: Array<[string, Partial<NpcRuntimeState>]> = [
   ['faction', { faction: 'tide_hunters' }],
 ]
 
-describe('NPC_STATE_RECORDED subcell snapshot throttle', () => {
+describe('NPC_STATE_RECORDED minor snapshot throttle', () => {
   it('coalesces subcell-only changes for four ticks and writes again on the fifth tick', () => {
-    expect(NPC_SUBCELL_SNAPSHOT_INTERVAL_TICKS).toBe(5)
+    expect(NPC_MINOR_SNAPSHOT_INTERVAL_TICKS).toBe(5)
     const throttle = new NpcStateSnapshotThrottle()
     let previous = state()
     throttle.recordPersisted(NPC_ID, 0)
@@ -115,8 +115,6 @@ describe('NPC_STATE_RECORDED subcell snapshot throttle', () => {
         subCol: 5 + tick,
         subRow: 4 + (tick % 2),
         subZ: tick % 2,
-        mood: 60 + tick * 0.05,
-        health: 80 + tick * 0.05,
       })
       if (throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: next }, tick)) {
         writtenTicks.push(tick)
@@ -147,11 +145,51 @@ describe('NPC_STATE_RECORDED subcell snapshot throttle', () => {
     expect(throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: next }, 1)).toBe(true)
   })
 
-  it('does not throttle a lastActedTick-only change', () => {
+  it('throttles lastActedTick-only changes to one write per five ticks', () => {
+    const throttle = new NpcStateSnapshotThrottle()
+    let previous = state()
+    throttle.recordPersisted(NPC_ID, 0)
+    const writtenTicks: number[] = []
+    for (let tick = 1; tick <= 10; tick += 1) {
+      const next = { ...previous, lastActedTick: tick }
+      if (throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: next }, tick)) {
+        writtenTicks.push(tick)
+        throttle.recordPersisted(NPC_ID, tick)
+      }
+      previous = next
+    }
+    expect(writtenTicks).toEqual([5, 10])
+  })
+
+  it.each([
+    ['mood', (base: NpcRuntimeState, amount: number) => ({ ...base, mood: base.mood + amount })],
+    ['health', (base: NpcRuntimeState, amount: number) => ({ ...base, health: base.health + amount })],
+  ])('throttles %s fractional-only changes and writes at the five-tick boundary', (_field, update) => {
+    const throttle = new NpcStateSnapshotThrottle()
+    let previous = state()
+    throttle.recordPersisted(NPC_ID, 0)
+    const writtenTicks: number[] = []
+    for (let tick = 1; tick <= 5; tick += 1) {
+      const next = update(previous, 0.05)
+      expect(Math.round(next.mood)).toBe(Math.round(previous.mood))
+      expect(Math.round(next.health)).toBe(Math.round(previous.health))
+      if (throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: next }, tick)) {
+        writtenTicks.push(tick)
+        throttle.recordPersisted(NPC_ID, tick)
+      }
+      previous = next
+    }
+    expect(writtenTicks).toEqual([5])
+  })
+
+  it.each([
+    ['mood', (base: NpcRuntimeState) => ({ ...base, mood: base.mood + 1 })],
+    ['health', (base: NpcRuntimeState) => ({ ...base, health: base.health - 1 })],
+  ])('writes an integer %s change immediately without another field changing', (_field, update) => {
     const throttle = new NpcStateSnapshotThrottle()
     const previous = state()
     throttle.recordPersisted(NPC_ID, 0)
-    expect(throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: { ...previous, lastActedTick: 1 } }, 1)).toBe(true)
+    expect(throttle.shouldPersist({ npcId: NPC_ID, previousState: previous, state: update(previous) }, 1)).toBe(true)
   })
 
   it('keeps player-dialog state snapshots immediate while subcell writes are rate-limited', () => {
@@ -217,6 +255,7 @@ describe('NPC_STATE_RECORDED subcell snapshot throttle', () => {
       [...latestWritten.entries()].sort(([left], [right]) => left.localeCompare(right)),
     )
     const reduction = 1 - throttled.stateEventCount / baseline.stateEventCount
-    console.log(`[npc-state-throttle] ticks=1000 baseline=${baseline.stateEventCount} throttled=${throttled.stateEventCount} reduction=${(reduction * 100).toFixed(1)}% subcellCandidates=${throttled.throttleDiagnostics.subcellOnlyCandidateCount} coalesced=${throttled.throttleDiagnostics.suppressedSubcellSnapshotCount} interactions=${interactions.length} retaliations=${retaliations.length}`)
+    expect(reduction).toBeGreaterThanOrEqual(0.60)
+    console.log(`[npc-state-throttle] ticks=1000 baseline=${baseline.stateEventCount} throttled=${throttled.stateEventCount} reduction=${(reduction * 100).toFixed(1)}% minorCandidates=${throttled.throttleDiagnostics.minorOnlyCandidateCount} coalesced=${throttled.throttleDiagnostics.suppressedMinorSnapshotCount} interactions=${interactions.length} retaliations=${retaliations.length}`)
   })
 })
