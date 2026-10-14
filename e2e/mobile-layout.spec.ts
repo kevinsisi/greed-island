@@ -173,6 +173,89 @@ async function saveEvidence(page: Page, name: string) {
   return path
 }
 
+async function steerJoystick(page: Page, horizontal: number, vertical: number, durationMs: number) {
+  const rect = await page.locator('.mp-stick').boundingBox()
+  if (!rect) throw new Error('Joystick is not visible.')
+  const start = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  const target = {
+    x: start.x + Math.max(-1, Math.min(1, horizontal)) * (rect.width / 2 - 5),
+    y: start.y - Math.max(-1, Math.min(1, vertical)) * (rect.height / 2 - 5),
+  }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(target.x, target.y, { steps: 6 })
+  await page.waitForTimeout(durationMs)
+  await page.mouse.up()
+  await page.waitForTimeout(250)
+}
+
+async function readAccountPosition(page: Page) {
+  await page.getByRole('button', { name: '帳號卡' }).click()
+  const text = await page.locator('.mp-account-drawer p').textContent()
+  await page.getByRole('button', { name: '帳號卡' }).click()
+  const match = text?.match(/帳號 #(\d+) · (-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)/)
+  if (!match) throw new Error(`Could not read account position: ${text}`)
+  const tileId = await page.evaluate(async () => {
+    const response = await fetch('/api/world/snapshot')
+    const world = await response.json()
+    return world.tileId as string
+  })
+  return { accountId: Number(match[1]), x: Number(match[2]), z: Number(match[3]), tileId, text }
+}
+
+async function readServerPosition(page: Page) {
+  return page.evaluate(async () => {
+    const response = await fetch('/api/world/snapshot')
+    const world = await response.json()
+    const self = world.players.find((player: { accountId: number }) => player.accountId === world.selfId)
+    return { x: self.x as number, z: self.z as number, tileId: world.tileId as string }
+  })
+}
+
+async function steerAxisTo(page: Page, axis: 'x' | 'z', target: number) {
+  let position = await readServerPosition(page)
+  for (let index = 0; index < 64; index++) {
+    const delta = target - position[axis]
+    if (Math.abs(delta) <= .12) return position
+    const strength = Math.sign(delta) * Math.min(1, Math.max(.15, Math.abs(delta) / .4))
+    await steerJoystick(page, axis === 'x' ? strength : 0, axis === 'z' ? strength : 0, 125)
+    position = await readServerPosition(page)
+  }
+  throw new Error(`Could not steer ${axis} to ${target}; last position=${JSON.stringify(position)}`)
+}
+
+async function canvasPixelMetrics(page: Page) {
+  // Hide DOM overlays only during capture so the screenshot measures the actual WebGL canvas.
+  const overlayMask = await page.addStyleTag({ content: '.mp3d > :not(.mp-canvas){visibility:hidden!important}' })
+  const png = await page.locator('.mp-canvas').screenshot({ animations: 'disabled' })
+  await overlayMask.evaluate(element => element.remove())
+  return page.evaluate(async encoded => {
+    const image = new Image()
+    image.src = `data:image/png;base64,${encoded}`
+    await image.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width; canvas.height = image.height
+    const context = canvas.getContext('2d')!
+    context.drawImage(image, 0, 0)
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+    const left = Math.floor(canvas.width * .32), right = Math.ceil(canvas.width * .68)
+    const top = Math.floor(canvas.height * .08), bottom = Math.floor(canvas.height * .86)
+    const colors = new Set<string>()
+    let highEdges = 0, comparisons = 0
+    const luminance = (x: number, y: number) => {
+      const i = (y * canvas.width + x) * 4
+      return .2126 * pixels[i]! + .7152 * pixels[i + 1]! + .0722 * pixels[i + 2]!
+    }
+    for (let y = top; y < bottom; y += 2) for (let x = left; x < right; x += 2) {
+      const i = (y * canvas.width + x) * 4
+      colors.add(`${pixels[i]! >> 4},${pixels[i + 1]! >> 4},${pixels[i + 2]! >> 4}`)
+      if (x + 2 < right) { if (Math.abs(luminance(x + 2, y) - luminance(x, y)) > 20) highEdges++; comparisons++ }
+      if (y + 2 < bottom) { if (Math.abs(luminance(x, y + 2) - luminance(x, y)) > 20) highEdges++; comparisons++ }
+    }
+    return { width: canvas.width, height: canvas.height, quantizedColors: colors.size, highEdges, comparisons, edgeRatio: highEdges / comparisons }
+  }, png.toString('base64'))
+}
+
 async function auditMobileUi(page: Page) {
   return page.evaluate(() => {
     const visible = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' }
@@ -334,6 +417,138 @@ test('mobile readable text and visible button centers meet touch requirements', 
   }
   await page.setViewportSize({ width: 375, height: 812 })
   await saveEvidence(page, 'd-readable-controls.png')
+})
+
+test('edge camera keeps the actor visible and renders scene detail at mobile and desktop sizes', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await register(page)
+  const canvas = page.locator('.mp-canvas')
+  const baselineCamera = await canvas.evaluate(el => ({
+    cameraDistance: Number(el.getAttribute('data-camera-distance')),
+    playerVisibility: Number(el.getAttribute('data-player-visibility')),
+    obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+    orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+  }))
+  // Use a clear western/southern aisle to approach the wall, regardless of the fixture account's start point.
+  await steerAxisTo(page, 'x', -3)
+  await steerAxisTo(page, 'z', 4.2)
+  await steerAxisTo(page, 'x', 4.4)
+  await steerAxisTo(page, 'z', 10)
+  const accountPosition = await readAccountPosition(page)
+  expect(accountPosition.tileId, 'account drawer confirms dock tile').toBe('t_dock')
+  expect(accountPosition.x, `before turn x=${accountPosition.x}`).toBeGreaterThanOrEqual(3.4)
+  expect(accountPosition.x, `before turn x=${accountPosition.x}`).toBeLessThanOrEqual(4.6)
+  expect(accountPosition.z, `before turn z=${accountPosition.z}`).toBeGreaterThanOrEqual(9.2)
+  expect(accountPosition.z, `before turn z=${accountPosition.z}`).toBeLessThanOrEqual(10.8)
+  await steerJoystick(page, -.4, .4, 100)
+  const position = await readAccountPosition(page)
+  expect(position.tileId, 'edge diagnostic stays in dock').toBe('t_dock')
+  expect(position.x, `camera test x=${position.x}`).toBeGreaterThanOrEqual(3.0)
+  expect(position.x, `camera test x=${position.x}`).toBeLessThanOrEqual(4.6)
+  expect(position.z, `camera test z=${position.z}`).toBeGreaterThanOrEqual(9)
+  expect(position.z, `camera test z=${position.z}`).toBeLessThanOrEqual(11.5)
+
+  await page.getByRole('button', { name: '重置鏡頭' }).click()
+  await page.waitForTimeout(250)
+  const firstCamera = await canvas.evaluate(el => ({
+    cameraDistance: Number(el.getAttribute('data-camera-distance')),
+    playerVisibility: Number(el.getAttribute('data-player-visibility')),
+    obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+    orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+  }))
+  console.log(`[mobile-layout] edge-camera 375 camera=${JSON.stringify(firstCamera)} account=${JSON.stringify(position)}`)
+  await canvas.screenshot({ path: testInfo.outputPath('camera-canvas-375.png') })
+  const phonePixels = await canvasPixelMetrics(page)
+  expect(phonePixels.quantizedColors, '375x812 canvas color variation').toBeGreaterThan(30)
+  expect(phonePixels.edgeRatio, '375x812 scene has non-gradient edges').toBeGreaterThan(.009)
+  expect(firstCamera.obstructed, `camera should meet a blocker at x=${position.x}, z=${position.z}`).toBe(true)
+  expect(firstCamera.cameraDistance, 'blocked camera stays at least four units away').toBeGreaterThanOrEqual(4)
+  expect(firstCamera.playerVisibility, 'blocked camera never fully hides the player').toBeGreaterThanOrEqual(.6)
+  expect(firstCamera.orbitOffset, 'blocked camera moves around the wall').not.toBe(0)
+  await saveEvidence(page, 'camera-blocked-after.png')
+
+  const viewports = [
+    { width: 393, height: 852 },
+    { width: 430, height: 932 },
+    { width: 1280, height: 800 },
+  ]
+  const results = [{ width: 375, height: 812, ...firstCamera, ...phonePixels }]
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    await page.waitForTimeout(180)
+    await page.getByRole('button', { name: '重置鏡頭' }).click()
+    await page.waitForTimeout(250)
+    const camera = await canvas.evaluate(el => ({
+      cameraDistance: Number(el.getAttribute('data-camera-distance')),
+      playerVisibility: Number(el.getAttribute('data-player-visibility')),
+      obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+      orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+    }))
+    expect(camera.obstructed, `${viewport.width}x${viewport.height}: ray is obstructed`).toBe(true)
+    expect(camera.cameraDistance, `${viewport.width}x${viewport.height}: safe camera distance`).toBeGreaterThanOrEqual(4)
+    expect(camera.playerVisibility, `${viewport.width}x${viewport.height}: player is visible`).toBeGreaterThanOrEqual(.6)
+    expect(camera.orbitOffset, `${viewport.width}x${viewport.height}: camera orbits around the blocker`).not.toBe(0)
+    const pixels = await canvasPixelMetrics(page)
+    expect(pixels.quantizedColors, `${viewport.width}x${viewport.height}: canvas color variation`).toBeGreaterThan(30)
+    expect(pixels.edgeRatio, `${viewport.width}x${viewport.height}: rendered scene detail`).toBeGreaterThan(.009)
+    results.push({ ...viewport, ...camera, ...pixels })
+  }
+  expect(baselineCamera.cameraDistance, 'unobstructed camera distance remains unchanged').toBeCloseTo(8, 1)
+  expect(baselineCamera.playerVisibility, 'unobstructed player visibility remains unchanged').toBe(1)
+  expect(baselineCamera.obstructed, 'spawn camera is unobstructed').toBe(false)
+
+  // Turning the camera behind the wall is a second obstruction route, separate from recenter.
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.waitForTimeout(180)
+  await page.mouse.move(250, 420)
+  await page.mouse.down()
+  await page.mouse.move(110, 420, { steps: 10 })
+  await page.waitForTimeout(300)
+  await page.mouse.up()
+  await page.waitForTimeout(250)
+  let alternateCamera = await canvas.evaluate(el => ({
+    cameraDistance: Number(el.getAttribute('data-camera-distance')),
+    playerVisibility: Number(el.getAttribute('data-player-visibility')),
+    obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+    orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+  }))
+  expect(alternateCamera.cameraDistance, 'dragged camera remains outside its minimum').toBeGreaterThanOrEqual(4)
+  expect(alternateCamera.playerVisibility, 'dragging behind a wall does not hide the player').toBeGreaterThanOrEqual(.6)
+  if (alternateCamera.obstructed) expect(alternateCamera.orbitOffset, 'dragged camera has a clear orbit').not.toBe(0)
+  let alternatePixels = await canvasPixelMetrics(page)
+  expect(alternatePixels.edgeRatio, 'dragged view remains more than fog gradient').toBeGreaterThan(.009)
+
+  // A page reload recreates the camera at defaults without resetting server position.
+  const positionBeforeReload = await readServerPosition(page)
+  await page.reload()
+  await expect(page.locator('.mp-connection')).toHaveText('世界已連線', { timeout: 20_000 })
+  await expect(page.locator('.mp-scene-loading')).toHaveCount(0, { timeout: 20_000 })
+  let recoveredCamera = await canvas.evaluate(el => ({
+    cameraDistance: Number(el.getAttribute('data-camera-distance')),
+    playerVisibility: Number(el.getAttribute('data-player-visibility')),
+    obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+    orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+  }))
+  expect(recoveredCamera.cameraDistance, 'reload camera starts at its default distance').toBeCloseTo(8, 1)
+  expect(recoveredCamera.playerVisibility, 'reload restores full player visibility').toBe(1)
+  expect(recoveredCamera.obstructed, 'reload starts without the old camera hit').toBe(false)
+  expect(await readServerPosition(page), 'reload preserves server-owned player position').toEqual(positionBeforeReload)
+  await page.getByRole('button', { name: '重置鏡頭' }).click()
+  await steerJoystick(page, 1, -1, 2_500)
+  await steerJoystick(page, 0, 1, 2_500)
+  recoveredCamera = await canvas.evaluate(el => ({
+    cameraDistance: Number(el.getAttribute('data-camera-distance')),
+    playerVisibility: Number(el.getAttribute('data-player-visibility')),
+    obstructed: el.getAttribute('data-camera-obstructed') === 'true',
+    orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
+  }))
+  expect(recoveredCamera.cameraDistance, 'opposite then up leaves a valid camera distance').toBeGreaterThanOrEqual(4)
+  expect(recoveredCamera.playerVisibility, 'opposite then up does not hide the player').toBeGreaterThanOrEqual(.6)
+  if (recoveredCamera.obstructed) expect(recoveredCamera.orbitOffset, 'opposite then up camera has a clear orbit').not.toBe(0)
+  alternatePixels = await canvasPixelMetrics(page)
+  expect(alternatePixels.edgeRatio, 'opposite then up does not return to fog-only view').toBeGreaterThan(.009)
+  console.log(`[mobile-layout] edge-camera alternate blocked=${alternateCamera.obstructed} camera=${JSON.stringify(alternateCamera)} recovery=${JSON.stringify(recoveredCamera)} alternatePixels=${alternatePixels.edgeRatio.toFixed(4)}`)
+  console.log(`[mobile-layout] edge-camera account=${position.accountId} position=${position.x.toFixed(2)},${position.z.toFixed(2)} baselineDistance=${baselineCamera.cameraDistance} baselineVisibility=${baselineCamera.playerVisibility} results=${JSON.stringify(results)}`)
 })
 
 test('mobile menu contains all account routes and opens no more than 40 percent over the scene', async ({ page }) => {
