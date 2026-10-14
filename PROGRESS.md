@@ -1,11 +1,11 @@
 ## 2026-10-14 — PR #11 mobile scene-first layout rework
 
 - Mobile `<768px` now keeps the 3D scene exposed behind a 48px header and five icon touch targets; scene details, map, beacon, travellers/NPC chat and account information share one dismissible bottom drawer. Menu navigation contains world overview, profile, codex, social/trading, account recovery and logout. Desktop panel/navigation presentation remains in place.
-- `e2e/mobile-layout.spec.ts`: all 7 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; build and web tests pass. CI is pending the pushed commit.
+- `e2e/mobile-layout.spec.ts`: all 7 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; build and web tests pass. The first CI run `38488752223` exposed that `aria-hidden` on the desktop `display:contents` wrapper hid world chat from role queries; desktop wrapper is now exposed and the desktop test asserts the chat input/send button are visible. Follow-up CI is pending.
 - Measured canvas visibility (closed / lowest open drawer): 375×812 **86.3% / 50%**; 393×852 **86.3% / 50%**; 430×932 **87.5% / 45%**. Menu open **65%**. Header **48px**. Horizontal scroll: none at all tested sizes. Desktop 1280×800 selector width **218px**, label **100.5/176px**.
 - `beacon action is hit-testable at its center on mobile`: center `elementFromPoint` is the action button; screenshot `packages/web/evidence/mobile-layout/a-beacon-button-center.png`.
 - `NPC chat input is clickable, editable, readable and unobscured`: center hit succeeds, fill/readback succeeds, font **16px**; screenshot `packages/web/evidence/mobile-layout/b-npc-chat-input.png`.
-- `two-second full joystick deflection moves the server-persisted account position by at least one unit`: final run **3.5,-5.9 → -3.8,-5.9**, delta **7.30**; no server changes; screenshot `packages/web/evidence/mobile-layout/c-joystick-two-seconds.png`.
+- `two-second full joystick deflection moves the server-persisted account position by at least one unit`: final run **-3.8,-5.9 → 3.7,-5.9**, delta **7.50**; no server changes; screenshot `packages/web/evidence/mobile-layout/c-joystick-two-seconds.png`.
 - `mobile readable text and visible button centers meet touch requirements`: readable text ≥14px, visible buttons ≥44×44px with hit-test center, version hidden; screenshot `packages/web/evidence/mobile-layout/d-readable-controls.png`. Menu screenshot: `packages/web/evidence/mobile-layout/e-mobile-menu.png`.
 
 ## 2026-10-14 — Current main merged into legacy import branch

@@ -32,6 +32,8 @@ test('game layout stays within viewport and the region choice fits at phone, tab
   const page = await context.newPage()
   try {
     await register(page)
+    await expect(page.getByRole('textbox', { name: '世界聊天訊息' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '傳送', exact: true })).toBeVisible()
     for (const size of sizes) {
       await test.step(`${size.name} viewport`, async () => {
         await page.setViewportSize({ width: size.width, height: size.height })
