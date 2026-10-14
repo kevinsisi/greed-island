@@ -159,7 +159,8 @@
   .mp3d .mp-camera-reset{width:44px;height:44px;min-height:44px;padding:0;font-size:22px;line-height:1;background:#102c28df}
   .mp-touch{left:8px;right:auto;bottom:calc(72px + env(safe-area-inset-bottom));z-index:4}
   .mp3d .mp-stick{width:108px;height:108px;background:#102c28a8;border-color:#f0e8d2aa}
-  .mp3d .mp-stick>small{font-size:14px;left:0;bottom:0;padding:2px 5px;background:#102c28a8}
+  .mp3d .mp-stick>small{font-size:14px;left:0;bottom:0;padding:2px 5px;background:#102c28f5}
+  .mp3d button:disabled{opacity:1;color:#b8c7b2;background:#143832;border-color:#9eb09a}
   .mp-feedback{left:8px;right:60px;bottom:calc(180px + env(safe-area-inset-bottom));font-size:14px}
   .mp-offline{top:56px;left:8px;right:8px;width:auto;max-height:35dvh;overflow:auto}
   .mp-offline span,.mp-offline strong{font-size:14px;line-height:1.5}

@@ -101,10 +101,40 @@ async function saveEvidence(page: Page, name: string) {
 async function auditMobileUi(page: Page) {
   return page.evaluate(() => {
     const visible = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' }
+    const rgb = (value: string) => {
+      const values = value.match(/[\d.]+/g)?.map(Number)
+      return values && values.length >= 3 ? [values[0]!, values[1]!, values[2]!, values[3] ?? 1] as const : null
+    }
+    const composite = (front: readonly number[], back: readonly number[]) => front.map((value, index) => value * front[3]! + back[index]! * (1 - front[3]!))
+    const luminance = (color: readonly number[]) => {
+      const channel = (value: number) => { const c = value / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4 }
+      return .2126 * channel(color[0]!) + .7152 * channel(color[1]!) + .0722 * channel(color[2]!)
+    }
+    const root = document.querySelector('.mp3d')
+    const textElements = [...document.querySelectorAll('body *')].filter(el => visible(el) && [...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim()))
+    const lowContrast = textElements.flatMap(el => {
+      const chain: Element[] = []
+      for (let node: Element | null = el; node; node = node.parentElement) { chain.push(node); if (node === root) break }
+      chain.reverse()
+      let background = [20, 59, 54, 1]
+      let opacity = 1
+      for (const node of chain) {
+        const style = getComputedStyle(node)
+        const layer = rgb(style.backgroundColor)
+        if (layer) background = composite(layer, background)
+        opacity *= Number(style.opacity)
+      }
+      const foreground = rgb(getComputedStyle(el).color)
+      if (!foreground) return []
+      const effective = composite([foreground[0]!, foreground[1]!, foreground[2]!, foreground[3]! * opacity], background)
+      const values = [luminance(effective), luminance(background)].sort((a, b) => b - a)
+      const ratio = (values[0]! + .05) / (values[1]! + .05)
+      return ratio < 4.5 ? [{ text: el.textContent?.trim().slice(0, 30), ratio: Number(ratio.toFixed(2)) }] : []
+    })
     const buttons = [...document.querySelectorAll('button')].filter(visible)
     const misses = buttons.flatMap(button => { const r = button.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === button && r.width >= 44 && r.height >= 44 ? [] : [button.textContent?.trim() || button.getAttribute('aria-label') || 'unnamed'] })
-    const smallText = [...document.querySelectorAll('body *')].filter(visible).filter(el => [...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim())).flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); return size < 14 && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
-    return { misses, smallText }
+    const smallText = textElements.flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); return size < 14 && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
+    return { misses, smallText, lowContrast }
   })
 }
 
@@ -126,6 +156,7 @@ test('mobile scene stays exposed with every drawer closed or open at 375, 393 an
       const audit = await auditMobileUi(page)
       expect(audit.misses, `${size.name} ${name}: every visible button target`).toEqual([])
       expect(audit.smallText, `${size.name} ${name}: every visible text is >=14px`).toEqual([])
+      expect(audit.lowContrast, `${size.name} ${name}: visible text contrast >=4.5:1`).toEqual([])
       console.log(`[mobile-layout] drawer size=${size.name} type=${name} canvasVisible=${(open * 100).toFixed(1)}%`)
       if (size.width === 375 && name === 'mission') await page.screenshot({ path: testInfo.outputPath(`mobile-open-${name}.png`) })
       await page.locator('.mp-drawer-scrim').click({ position: { x: 1, y: 35 } })
@@ -240,6 +271,7 @@ test('mobile menu contains all account routes and opens no more than 40 percent 
   const audit = await auditMobileUi(page)
   expect(audit.misses).toEqual([])
   expect(audit.smallText).toEqual([])
+  expect(audit.lowContrast).toEqual([])
   await saveEvidence(page, 'e-mobile-menu.png')
   console.log(`[mobile-layout] menu canvasVisible=${(ratio * 100).toFixed(1)}% items=${required.length}`)
   await page.locator('.mp-menu-scrim').click({ position: { x: 1, y: 35 } })
