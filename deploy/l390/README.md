@@ -89,3 +89,4 @@ IDs rather than assuming a mutable .env still describes the previous stack.
 After deployment verification succeeds, the deployer keeps the two newest
 timestamped local backup folders. Failed deployments and rollback do not clean
 up backups.
+The multiplayer service allows a 4GB V8 heap for large startup event-log replay.
