@@ -28,13 +28,14 @@ foreach ($rule in (Get-Acl -LiteralPath $backupRoot).Access) {
     if ($trustedSids -notcontains $sid) { throw 'Backup directory ACL needs an owner review before secret-bearing local snapshots are allowed. No ACL is changed here.' }
   }
 }
-$stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $ExpectedSha.Substring(0,12)
+$deploymentId = [Guid]::NewGuid().ToString('N')
+$stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $ExpectedSha.Substring(0,12) + '-' + $deploymentId
 $backup = Join-Path $backupRoot $stamp
 New-Item -ItemType Directory -Path $backup | Out-Null
 $diagnostic = Join-Path $backup 'docker-diagnostics.log'
 $stagingRoot = Join-Path $DeployPath 'release'
 New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
-$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)
+$stagingDirectory = Join-Path $stagingRoot ($ExpectedSha.Substring(0,12) + '-' + $deploymentId)
 New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 $stagedCaddyfile = Join-Path $stagingDirectory 'Caddyfile.l390'
 Copy-Item -LiteralPath (Join-Path $SourcePath 'deploy\l390\Caddyfile.l390') -Destination $stagedCaddyfile -Force
@@ -159,14 +160,69 @@ $activeConfigFiles = $backend.Config.Labels.'com.docker.compose.project.config_f
 if (-not $activeConfigFiles -or $activeConfigFiles.Contains(',')) { throw 'Current stack must have one verified Compose file; review multi-file deployments explicitly.' }
 $activeConfig = [IO.Path]::GetFullPath($activeConfigFiles)
 $activeDirectory = Split-Path -Parent $activeConfig
+$isLegacyRoom = @($backend.Config.Cmd) -contains 'dist/multiplayer/server.js'
 $envFile = Join-Path $DeployPath 'deploy\l390\.env'
 if (-not (Test-Path -LiteralPath $activeConfig -PathType Leaf) -or -not (Test-Path -LiteralPath $envFile -PathType Leaf)) { throw 'Existing active Compose configuration and dedicated L390 .env are required.' }
-$activeEnvFile = Join-Path $activeDirectory '.env'
-if (-not (Test-Path -LiteralPath $activeEnvFile -PathType Leaf)) { throw 'The currently active stack .env must exist before any stop.' }
-$activeResolved = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')) | ConvertFrom-Json
-$env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
+
+# The active Unified stack is staged under DeployPath and deliberately has no
+# .env beside its Compose file. Prefer Compose's recorded env-file label; only
+# legacy stacks fall back to the old working-directory .env.
+$activeEnvFile = $null
+$activeEnvLabel = [string]$backend.Config.Labels.'com.docker.compose.project.environment_file'
+if (-not [string]::IsNullOrWhiteSpace($activeEnvLabel)) {
+  $activeEnvFile = $activeEnvLabel.Trim()
+  if (-not [IO.Path]::IsPathRooted($activeEnvFile)) { $activeEnvFile = Join-Path $activeDirectory $activeEnvFile }
+}
+if (-not $activeEnvFile -or -not (Test-Path -LiteralPath $activeEnvFile -PathType Leaf)) {
+  if ($isLegacyRoom) { $activeEnvFile = Join-Path $activeDirectory '.env' }
+  else { $activeEnvFile = $envFile }
+}
+if (-not [IO.Path]::IsPathRooted($activeEnvFile) -or -not (Test-Path -LiteralPath $activeEnvFile -PathType Leaf)) { throw 'The active stack environment file must exist before any stop.' }
+$activeEnvFile = (Resolve-Path -LiteralPath $activeEnvFile).Path
+
+# The active release Compose file requires this interpolation even for
+# config/stop. Unified rollback also needs its previous exact image tag.
 $env:GREED_L390_SOURCE_PATH = $SourcePath
+$previousImageTag = $null
+if (-not $isLegacyRoom) {
+  $backendImageReference = [string]$backend.Config.Image
+  $webImageReference = [string]$web.Config.Image
+  $backendTagSeparator = $backendImageReference.LastIndexOf(':')
+  $webTagSeparator = $webImageReference.LastIndexOf(':')
+  if ($backendTagSeparator -lt 0 -or $webTagSeparator -lt 0) { throw 'Unified rollback requires tagged prior images.' }
+  $previousBackendTag = $backendImageReference.Substring($backendTagSeparator + 1)
+  $previousWebTag = $webImageReference.Substring($webTagSeparator + 1)
+  if ($previousBackendTag -cnotmatch '^[a-f0-9]{40}$' -or $previousWebTag -cne $previousBackendTag) { throw 'Unified rollback requires matching exact-SHA prior image tags.' }
+  $previousImageTag = $previousBackendTag
+  $env:GREED_L390_IMAGE_TAG = $previousImageTag
+  $env:GREED_L390_BUILD_SHA = $previousImageTag
+  if ($previousImageTag -ceq $ExpectedSha) {
+    $loadedBackendId = (Invoke-Docker @('image','inspect',$backendImage) | ConvertFrom-Json)[0].Id
+    $loadedWebId = (Invoke-Docker @('image','inspect',$webImage) | ConvertFrom-Json)[0].Id
+    if ($loadedBackendId -cne $backend.Image -or $loadedWebId -cne $web.Image) {
+      try {
+        [void](Invoke-Docker @('tag',$backend.Image,$backend.Config.Image) 30)
+        [void](Invoke-Docker @('tag',$web.Image,$web.Config.Image) 30)
+      } catch { throw 'Same-SHA package differs from the running image and prior tags could not be restored. No old container was stopped.' }
+      throw 'Same-SHA package differs from the running image; prior image tags were restored. Refusing to stop the active stack.'
+    }
+  }
+}
+$activeResolved = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')) | ConvertFrom-Json
+if (-not $isLegacyRoom -and (
+    $activeResolved.services.multiplayer.image -cne $backend.Config.Image -or
+    $activeResolved.services.web.image -cne $web.Config.Image -or
+    $activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousImageTag)) {
+  throw 'Active release Compose/env does not resolve to the currently running Unified images and SHA.'
+}
+$env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
 $newResolved = Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'config','--format','json')) | ConvertFrom-Json
+if (-not $isLegacyRoom) {
+  # Restore active-stack interpolation values for all remaining active-config
+  # preflights and the stop command. Candidate values are set again for rollout.
+  $env:GREED_L390_IMAGE_TAG = $previousImageTag
+  $env:GREED_L390_BUILD_SHA = $previousImageTag
+}
 $volume = $newResolved.volumes.'canonical-data'
 if ($volume.external -ne $true -or -not $volume.name) { throw 'An owner-selected existing external canonical volume is required.' }
 $canonicalVolume = [string]$volume.name
@@ -185,7 +241,6 @@ $origin = ($origins -split "[,\n]")[0].Trim()
 $probe = "import {resolveUnifiedConfig} from './dist/bootstrap/unifiedConfig.js'; import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; const c=resolveUnifiedConfig(); inspectUnifiedDatabase(c.databasePath);"
 [void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env','HOST=0.0.0.0','--env','PORT=4179','--env','GREED_ISLAND_DB_PATH=/probe/greed-island.sqlite','--env',"GREED_ISLAND_ALLOWED_ORIGINS=$origins",'--env',"GREED_ISLAND_BUILD_SHA=$ExpectedSha",'--entrypoint','node',$backendImage,'--input-type=module','-e',$probe) 300)
 $oldVolumes = @($backend.Mounts | Where-Object { $_.Type -eq 'volume' } | ForEach-Object { $_.Name })
-$isLegacyRoom = @($backend.Config.Cmd) -contains 'dist/multiplayer/server.js'
 if ($isLegacyRoom) {
   if ($oldVolumes -contains $canonicalVolume) { throw 'First cutover must use a separately staged canonical volume; legacy source stays untouched.' }
   $reviewPath = Join-Path $DeployPath 'deploy\l390\unified-cutover-review.json'
@@ -213,6 +268,9 @@ $rollbackCaddyfile = Join-Path $backup 'Caddyfile.l390'
 $rollbackStagedCaddyfile = Join-Path $stagingDirectory 'rollback-Caddyfile.l390'
 $caddyMount = @($activeResolved.services.web.volumes | Where-Object { $_.type -eq 'bind' -and $_.target -eq '/etc/caddy/Caddyfile' })
 if ($caddyMount.Count -ne 1) { throw 'Existing Caddy bind mount must be explicit.' }
+$activeCaddySource = [string]$caddyMount[0].source
+$activeCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$activeCaddySource,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
+Write-Host "Active release Caddy bind preflight: $activeCaddyVersion"
 Copy-Item -LiteralPath $caddyMount[0].source -Destination $rollbackCaddyfile -Force
 Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force
 $rollbackCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$rollbackStagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
@@ -223,6 +281,8 @@ Write-Json $activeResolved $rollbackConfig
 $rollbackModel = Invoke-Docker (Compose-Arguments $rollbackConfig @('config','--format','json')) | ConvertFrom-Json
 if ($rollbackModel.services.multiplayer.image -cne $backend.Image -or $rollbackModel.services.web.image -cne $web.Image) { throw 'Captured rollback model must round-trip with the exact prior images.' }
 [void](Invoke-Docker @('save',$backend.Image,$web.Image,'-o',(Join-Path $backup 'prior-images.tar')) 600)
+# Keep the candidate environment for audit. Unified rollback uses the active
+# release Compose file plus activeEnvFile; legacy rollback uses activeResolved.
 Copy-Item -LiteralPath $envFile -Destination (Join-Path $backup 'source.env')
 Write-Json @{ sha=$ExpectedSha; priorBackendImage=$backend.Image; priorWebImage=$web.Image; canonicalVolume=$canonicalVolume; legacyVolumes=$oldVolumes; rollbackDatabaseCompatible=$rollbackCompatible } (Join-Path $backup 'rollout.json')
 
@@ -263,7 +323,7 @@ function Await-Health([bool]$Unified, [int]$Seconds=180) {
 $stopped = $false; $release = $stagingDirectory
 try {
   $stopped = $true
-  [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',(Join-Path $activeDirectory '.env'),'stop','--timeout','30','multiplayer','web')) 120)
+  [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'stop','--timeout','30','multiplayer','web')) 120)
   $index = 0; $volumeBackups = @()
   foreach ($name in $allVolumes) {
     # Entire quiesced volume, including every SQLite WAL/SHM and account file.
@@ -292,6 +352,8 @@ try {
     $index++
   }
   Write-Json $volumeBackups (Join-Path $backup 'volume-manifest.json')
+  $env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
+  $env:GREED_L390_SOURCE_PATH = $SourcePath
   [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) 180)
   Await-Health $true
   $health = (Request '/healthz').body | ConvertFrom-Json
@@ -318,7 +380,16 @@ try {
     } catch { }
     if (-not $rollbackCompatible) { throw 'Rollout failed and old DB/schema compatibility is unproven. Containers remain stopped; owner-reviewed local restore is required. No automatic database restore was attempted.' }
     try {
-      [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) 180)
+      if ($isLegacyRoom) {
+        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) 180)
+      } else {
+        # Use the still-preserved prior release Compose file and its recorded
+        # environment file. Same-SHA image-ID drift is rejected before stop.
+        $env:GREED_L390_IMAGE_TAG = $previousImageTag
+        $env:GREED_L390_BUILD_SHA = $previousImageTag
+        $env:GREED_L390_SOURCE_PATH = $SourcePath
+        [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) 180)
+      }
       Await-Health (-not $isLegacyRoom) 120
       if ((Get-Container 'multiplayer').Image -cne $backend.Image -or (Get-Container 'web').Image -cne $web.Image) { throw 'Rollback image identity mismatch.' }
       Write-Host 'Prior images/config restored and verified. Databases were never restored or overwritten.'

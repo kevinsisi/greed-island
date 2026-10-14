@@ -8,6 +8,7 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode'
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh'
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder'
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder'
 import { CreateIcoSphere } from '@babylonjs/core/Meshes/Builders/icoSphereBuilder'
@@ -27,6 +28,8 @@ const CAMERA_HEIGHT = 1.3
 const DEFAULT_DISTANCE = 8
 const DEFAULT_PITCH = 0.55
 const LOOK_SENSITIVITY = 0.005
+const CAMERA_OBSTRUCTED_MIN_DISTANCE = 4
+const OBSTRUCTED_PLAYER_VISIBILITY_MIN = 0.6
 const DIRECTION_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'])
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -227,6 +230,7 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
   let pitch = DEFAULT_PITCH
   let distance = DEFAULT_DISTANCE
   let cameraDistance = distance
+  let cameraDiagnosticKey = ''
   let ready = false
   let disposed = false
   let lastFrame = performance.now()
@@ -495,6 +499,11 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
         }
       }
     } else {
+      delete canvas.dataset.cameraDistance
+      delete canvas.dataset.playerVisibility
+      delete canvas.dataset.cameraObstructed
+      delete canvas.dataset.cameraOrbitOffset
+      cameraDiagnosticKey = ''
       clearNavigation()
       for (const player of players.values()) { player.root.dispose(); player.npcMaterial?.dispose() }
       players.clear()
@@ -575,15 +584,48 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     if (selfVisual) {
       if (controls.recenter) { yaw = selfVisual.root.rotation.y; pitch = DEFAULT_PITCH; distance = DEFAULT_DISTANCE; controls.recenter = false }
       const target = selfVisual.root.position.add(new Vector3(0, CAMERA_HEIGHT, 0))
-      const direction = new Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch))
-      const hit = scene.pickWithRay(new Ray(target, direction, distance), mesh => region?.blockers.has(mesh as Mesh) ?? false)
-      const safeDistance = hit?.hit ? Math.max(camera.minZ + 0.02, hit.distance - 0.35) : distance
+      const directionAt = (angle: number) => new Vector3(-Math.sin(angle) * Math.cos(pitch), Math.sin(pitch), -Math.cos(angle) * Math.cos(pitch))
+      let direction = directionAt(yaw)
+      const isCameraBlocker = (mesh: AbstractMesh) => region?.blockers.has(mesh as Mesh) ?? false
+      const hit = scene.pickWithRay(new Ray(target, direction, distance), isCameraBlocker)
+      let orbitOffset = 0
+      let safeDistance = distance
+      if (hit?.hit) {
+        safeDistance = Math.max(CAMERA_OBSTRUCTED_MIN_DISTANCE, hit.distance - 0.35)
+        // Keep the selected camera radius and step around the blocked side of the dock wall.
+        for (const offset of [0.6, -0.6, 1.2, -1.2, 1.8, -1.8, Math.PI]) {
+          const candidate = directionAt(yaw + offset)
+          const candidateHit = scene.pickWithRay(new Ray(target, candidate, distance), isCameraBlocker)
+          if (!candidateHit?.hit) {
+            direction = candidate
+            orbitOffset = offset
+            safeDistance = distance
+            break
+          }
+        }
+      }
       cameraDistance = safeDistance < cameraDistance ? safeDistance : cameraDistance + (safeDistance - cameraDistance) * Math.min(1, delta * 6)
+      if (hit?.hit) cameraDistance = Math.max(CAMERA_OBSTRUCTED_MIN_DISTANCE, cameraDistance)
       camera.position.copyFrom(target.add(direction.scale(cameraDistance)))
       camera.setTarget(target)
-      const visibility = clamp((cameraDistance - 2) / 1.5, 0, 1)
+      const distanceVisibility = clamp((cameraDistance - 2) / 1.5, 0, 1)
+      const visibility = hit?.hit ? Math.max(OBSTRUCTED_PLAYER_VISIBILITY_MIN, distanceVisibility) : distanceVisibility
       for (const item of selfVisual.meshes) item.mesh.visibility = item.visibility * visibility
+      // Read-only frame diagnostics used by browser acceptance and field reproduction.
+      const diagnosticKey = `${cameraDistance.toFixed(3)}:${visibility.toFixed(3)}:${hit?.hit === true}:${orbitOffset.toFixed(2)}`
+      if (diagnosticKey !== cameraDiagnosticKey) {
+        cameraDiagnosticKey = diagnosticKey
+        canvas.dataset.cameraDistance = cameraDistance.toFixed(3)
+        canvas.dataset.playerVisibility = visibility.toFixed(3)
+        canvas.dataset.cameraObstructed = String(hit?.hit === true)
+        canvas.dataset.cameraOrbitOffset = orbitOffset.toFixed(2)
+      }
     } else if (snapshot) {
+      delete canvas.dataset.cameraDistance
+      delete canvas.dataset.playerVisibility
+      delete canvas.dataset.cameraObstructed
+      delete canvas.dataset.cameraOrbitOffset
+      cameraDiagnosticKey = ''
       const center = new Vector3((snapshot.geometry.minX + snapshot.geometry.maxX) / 2, 0, (snapshot.geometry.minZ + snapshot.geometry.maxZ) / 2)
       camera.position.copyFrom(center.add(new Vector3(0, 18, -18)))
       camera.setTarget(center)
@@ -626,4 +668,3 @@ export function createMultiplayerScene(canvas: HTMLCanvasElement, options: Multi
     engine.dispose()
   } }
 }
-
