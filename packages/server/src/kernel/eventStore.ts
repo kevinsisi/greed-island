@@ -38,6 +38,7 @@ type RejectionRow = Readonly<{
 }>
 
 const MAX_TICK_WINDOW_MERGE_ROWS = 50_000
+const MAX_FACT_KEYS_PER_LATEST_QUERY = 500
 
 export type RejectedCommandAuditRecord = Readonly<{
   rejectionId: number
@@ -321,6 +322,27 @@ export class SqliteEventStore {
       facts[key] = payload.value
     }
     return facts
+  }
+
+  /** Latest legacy FACT_SET events for selected fact keys, retaining sequence for projection merge. */
+  readLatestFactEvents(keys: readonly string[]): Event[] {
+    const uniqueKeys = [...new Set(keys.filter((key) => key.length > 0))]
+    if (uniqueKeys.length === 0) return []
+    const rows: EventRow[] = []
+    for (let offset = 0; offset < uniqueKeys.length; offset += MAX_FACT_KEYS_PER_LATEST_QUERY) {
+      const batch = uniqueKeys.slice(offset, offset + MAX_FACT_KEYS_PER_LATEST_QUERY)
+      const placeholders = batch.map(() => '?').join(',')
+      rows.push(...(this.db.prepare(`
+        SELECT e.* FROM event_log e JOIN (
+          SELECT MAX(sequence) AS sequence FROM event_log
+          WHERE event_type = 'FACT_SET'
+            AND json_extract(payload_json, '$.key') IN (${placeholders})
+          GROUP BY json_extract(payload_json, '$.key')
+        ) latest ON e.sequence = latest.sequence
+        ORDER BY e.sequence ASC
+      `).all(...batch) as EventRow[]))
+    }
+    return rows.map(rowToEvent)
   }
 
   countEvents(): number {

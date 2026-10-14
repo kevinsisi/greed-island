@@ -1,4 +1,4 @@
-import { hashCanonicalJson } from '../kernel/canonicalJson.js'
+import { cloneCanonical, hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
 
 export type NpcStateSnapshot = Readonly<{
@@ -17,6 +17,13 @@ export type NpcStateSnapshot = Readonly<{
     expiresAtTick: number
     reason: string
   } | null
+  intentOverride?: {
+    targetTile: string
+    expiresAtTick: number
+    intentType: string
+    urgency: number
+    reason: string
+  } | null
   travelRoute?: {
     fromTile: string
     toTile: string
@@ -24,6 +31,8 @@ export type NpcStateSnapshot = Readonly<{
     startedAtTick: number
   } | null
   agent?: unknown
+  homeTileOverride?: string
+  scheduledBuildingId?: string | null
 }>
 
 export type NpcStateRow = Readonly<{
@@ -48,10 +57,14 @@ export const NPC_STATE_BOOT_EVENT_TYPES = [
 
 export class NpcStateProjection {
   private rows = new Map<string, NpcStateRow>()
+  // Runtime-only overlay for current memory states whose log snapshot is throttled.
+  // rebuildFromEvents always clears it, so replay remains EventLog-defined.
+  private volatileRows = new Map<string, NpcStateRow>()
   private lastProductiveActions = new Map<string, NpcLastProductiveAction>()
 
   rebuildFromEvents(events: readonly Event[]): void {
     this.rows = new Map()
+    this.volatileRows = new Map()
     this.lastProductiveActions = new Map()
     for (const event of events) this.project(event)
   }
@@ -60,10 +73,10 @@ export class NpcStateProjection {
     if (event.eventType === NPC_STATE_RECORDED) {
       const row = rowFromEvent(event)
       if (!row) return
-      const previous = this.rows.get(row.npcId)
-      if (!previous || previous.sequence <= row.sequence) {
-        this.rows.set(row.npcId, row)
-      }
+      this.projectStateRow(row)
+    } else if (event.eventType === 'FACT_SET') {
+      const row = legacyNpcStateRowFromEvent(event)
+      if (row) this.projectStateRow(row)
     } else if (event.eventType === NPC_PRODUCTIVE_ACTION) {
       const productive = productiveActionFromEvent(event)
       if (productive) {
@@ -73,7 +86,18 @@ export class NpcStateProjection {
   }
 
   getByNpcId(npcId: string): NpcStateRow | null {
-    return this.rows.get(npcId) ?? null
+    return this.volatileRows.get(npcId) ?? this.rows.get(npcId) ?? null
+  }
+
+  /** Update the live runtime view without pretending an EventLog row was committed. */
+  projectVolatileState(npcId: string, state: NpcStateSnapshot, tick: number): void {
+    const previous = this.getByNpcId(npcId)
+    this.volatileRows.set(npcId, {
+      npcId,
+      recordedAtTick: tick,
+      sequence: previous?.sequence ?? 0,
+      state: cloneCanonical(state),
+    })
   }
 
   getLastProductiveAction(npcId: string): NpcLastProductiveAction | null {
@@ -81,11 +105,21 @@ export class NpcStateProjection {
   }
 
   getAll(): readonly NpcStateRow[] {
-    return [...this.rows.values()].sort((a, b) => a.npcId.localeCompare(b.npcId))
+    const rows = new Map(this.rows)
+    for (const [npcId, row] of this.volatileRows) rows.set(npcId, row)
+    return [...rows.values()].sort((a, b) => a.npcId.localeCompare(b.npcId))
   }
 
   canonicalHash(): string {
     return hashCanonicalJson(this.getAll())
+  }
+
+  private projectStateRow(row: NpcStateRow): void {
+    const previous = this.getByNpcId(row.npcId)
+    if (!previous || previous.sequence <= row.sequence) {
+      this.rows.set(row.npcId, row)
+      this.volatileRows.delete(row.npcId)
+    }
   }
 }
 
@@ -100,6 +134,19 @@ function rowFromEvent(event: Event): NpcStateRow | null {
     recordedAtTick: typeof event.tick === 'number' ? event.tick : 0,
     sequence: event.sequence,
     state: p.state as NpcStateSnapshot,
+  }
+}
+
+function legacyNpcStateRowFromEvent(event: Event): NpcStateRow | null {
+  const payload = event.payload as { key?: unknown; value?: unknown } | null
+  if (typeof payload?.key !== 'string' || !payload.key.startsWith('npc.state.')) return null
+  const npcId = payload.key.slice('npc.state.'.length)
+  if (!npcId || !payload.value || typeof payload.value !== 'object' || Array.isArray(payload.value)) return null
+  return {
+    npcId,
+    recordedAtTick: typeof event.tick === 'number' ? event.tick : 0,
+    sequence: event.sequence,
+    state: payload.value as NpcStateSnapshot,
   }
 }
 

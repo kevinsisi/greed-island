@@ -266,6 +266,8 @@ export type ProductiveActionMetric = 'infrastructure' | 'knowledge' | 'economy' 
 
 export type NpcStateChange = Readonly<{
   npcId: string
+  /** Previous in-memory state; runtime persistence policy uses this without changing simulation decisions. */
+  previousState?: NpcRuntimeState
   state: NpcRuntimeState
 }>
 
@@ -568,6 +570,11 @@ export class NpcEngine {
       ...(typeof rawRecord.homeTileOverride === 'string' && rawRecord.homeTileOverride.length > 0
         ? { homeTileOverride: rawRecord.homeTileOverride }
         : {}),
+      ...(typeof rawRecord.scheduledBuildingId === 'string'
+        ? { scheduledBuildingId: rawRecord.scheduledBuildingId }
+        : rawRecord.scheduledBuildingId === null
+          ? { scheduledBuildingId: null }
+          : {}),
     }
     this.state.set(npcId, next)
   }
@@ -841,7 +848,7 @@ export class NpcEngine {
       if (!final) continue
       // 比對 tick 開始與結束狀態：完全沒變就不要 emit FactSet
       if (start && statesEqual(start, final)) continue
-      changedStates.push({ npcId: id, state: final })
+      changedStates.push({ npcId: id, ...(start ? { previousState: start } : {}), state: final })
     }
 
     return { events, changedStates }
@@ -876,7 +883,7 @@ export class NpcEngine {
         agent: withSocialAgentTask(before.agent, tile, mode, currentTick)
       }
       this.state.set(npcId, next)
-      changes.push({ npcId, state: next })
+      changes.push({ npcId, previousState: before, state: next })
     }
     return changes
   }
@@ -905,7 +912,7 @@ export class NpcEngine {
       agent: withPlayerDialogTask(before.agent, before.tile, currentTick, expiresAtTick)
     }
     this.state.set(npcId, next)
-    return { npcId, state: next }
+    return { npcId, previousState: before, state: next }
   }
 
   /** v0.51.0：Intention Layer 設定最高優先級 tile 目標。覆蓋 personalityOverride 與 schedule。 */
