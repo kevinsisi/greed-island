@@ -143,6 +143,7 @@ test('mobile traveller drawer keeps the first NPC row fully inside the scroll vi
   expect(boxes.rowTop, `first NPC row ${boxes.firstNpc} starts at list row boundary`).toBeGreaterThanOrEqual(boxes.listTop)
   expect(boxes.rowBottom, `first NPC row ${boxes.firstNpc} is fully visible in list`).toBeLessThanOrEqual(boxes.listBottom)
   expect(boxes.rowBottom, `first NPC row ${boxes.firstNpc} is fully visible in drawer`).toBeLessThanOrEqual(boxes.drawerBottom)
+  await saveEvidence(page, 'f-mobile-first-npc-row.png')
   console.log(`[mobile-layout] first-npc row=${boxes.firstNpc} top=${boxes.rowTop.toFixed(1)} bottom=${boxes.rowBottom.toFixed(1)} list=${boxes.listTop.toFixed(1)}..${boxes.listBottom.toFixed(1)} drawer=${boxes.drawerTop.toFixed(1)}..${boxes.drawerBottom.toFixed(1)}`)
 })
 
