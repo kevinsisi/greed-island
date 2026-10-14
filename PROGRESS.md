@@ -1,3 +1,14 @@
+## 2026-10-14 — L390 部署時間線與資料止血
+
+- 部署時間線：PR#10 `811c713` Unified→Unified 升級路徑 → PR#11 `767d290` 手機版面＋相機避障（Deploy `38534579909` 成功）→ PR#9 `1996ebe` server 測試修復（Deploy `38540215572` 失敗）→ PR#12 `a87f47d` startup health（Deploy `38550595267` 成功）→ PR#14 `9d1c44a`（含 PR#13 節流，Deploy `38585186419` 成功）。
+- PR#9 部署事故：multiplayer 重建後 healthcheck unhealthy；EventLog 約 80 萬筆、`start_period=30s`、deploy 等待 120–180s 不足；回滾驗證失敗，web 容器停在 `Created`，網站 502 數分鐘；手動 `docker start greed-island-l390-web-1` 後恢復。（L390 唯讀查詢，10/14，無 repo 內原文檔）
+- PR#12 修法：`start_period=600s`、`$StartupWaitSeconds=900`；`scripts/test-l390-deploy-contracts.py` 有 18 個 `def test_`。
+- 最近 50,000 筆 EventLog：`NPC_STATE_RECORDED` 33,873 筆（67.75%、約 6.2 筆／秒）；總量約 9.1 筆／秒。（L390 唯讀查詢，10/14，無 repo 內原文檔）
+- PR#13：僅子格、`lastActedTick`、mood／health 小數變化（整數值不變）每 NPC 每 5 tick 最多寫一次，常數 `NPC_MINOR_SNAPSHOT_INTERVAL_TICKS=5`；1,000 tick fixture 36,829→13,380（減少 63.7%）。（本機測試 fixture 實測，非 L390 查詢；無 repo 內原文檔）
+- PR#14：EventLog 超過 20,000 筆時讀每 NPC 最新 typed 快照，使用既有索引，無 DDL；修復 typed-only NPC 重啟回 profile 預設。800,000 筆 fixture 查詢 72.226 ms、啟動增加 70.28 ms（出處：`PROGRESS.md:17`）。
+- 已知取捨：最新次要狀態可能尚未落盤；重啟後 `lastActedTick`／子格／mood、health 小數位最多落後 4 tick（20 秒）。Deploy L390 workflow 有 PowerShell 5.1 AST 語法解析 job，但該 job 不執行腳本；run `38585186419` 解析 job 成功。
+- Deploy run `38585186419` 後查詢：main `9d1c44a` 已部署；healthz `buildSha=9d1c44ac…`、容器 healthy、帳號 4、EventLog 1,047,622 筆、世界 tick 20329。README 23:xx 後續讀值約 tick 20370；EventLog 只增不減。（L390 唯讀查詢，10/14，無 repo 內原文檔）
+
 ## 2026-10-14 — NPC state restore on large EventLogs
 
 - Replacement branch `fix/npc-large-log-restore` starts at PR#13 head `e6eda0104d0aedf90ba1fcdca15d72645d42c610`. It restores the latest typed NPC state per actor in the >20,000-event boot path, loads latest legacy `npc.state.*` facts through the existing fact-key index, and chooses the greater EventLog sequence when both exist. Deferred hydration still excludes the complete `NPC_STATE_RECORDED` history.
@@ -6,8 +17,8 @@
 - Local file-backed SQLite measurements: 200,000 typed rows + 50 legacy facts returned 50+50 rows; typed query 20.890 ms; legacy query 0.698 ms; constructor boot 9.45 ms before / 30.60 ms after (+21.16 ms). 800,000 typed rows + 50 legacy facts returned 50+50 rows; typed query 72.226 ms; legacy query 0.734 ms; constructor boot 9.94 ms before / 80.22 ms after (+70.28 ms). Plans use `idx_event_type_actor_sequence` and `idx_event_log_fact_key_sequence`; typed query does not load the 800,000 rows or scan the EventLog table.
 - Read-only diagnostic `npcstate.js` is at `/private/tmp/claude-501/-Users-kevin-Documents-Projects-private-codebase-greed-island/2441d2c6-a82c-4c66-84f0-b228a1a99725/scratchpad/npcstate.js`. It calls unauthenticated `GET /api/npcs` on loopback, prints all API-visible NPC rows, and hashes the sorted rows. Fixture self-test returned 2 rows and SHA-256 `d9a541ce1b60e5dc535cfb1e21c8292f3eb5131b16de9a85609aa6a1c0f4405b`.
 - Version is `0.104.1`. `npm run build:server`, full server suite (2 workers: 2,211 passed / 0 failed), web suite (521 passed / 0 failed), and the repo's existing `openspec:check` pass. The first full server run had one transient loopback `fetch failed` in `buildingsRouter.test.ts`; that file passed 4/4 alone and the subsequent full run passed 2,211/2,211. The change proposal/spec is stored in the central OpenSpec workspace; the repo-local OpenSpec path was rejected by the pre-push guard because its metadata was detected as a copy of an archived OpenSpec file. The guard was not bypassed.
-- PR#14 is Ready against `main`, head `7b5f8e6`, CI run `38578007924` all four jobs green after rerunning the failed E2E job. The initial attempt hit the joystick shortfall in `edge camera keeps the actor visible...`; retry passed. It includes PR#13's commits as the replacement; PR#13 remains open for Kevin to close. No deployment occurred.
-- No local Docker daemon, L390, production DB, or production HTTP service was accessed. No deployment occurred; GitHub CI ran its isolated image-build job.
+- PR#14 merge, deployment and current service state are recorded in the first section; PR#13 is included in PR#14 and closed.
+- During implementation, no local Docker daemon, L390, production DB, or production HTTP service was accessed.
 
 ## 2026-10-14 — PR #11 mobile scene-first layout rework
 
