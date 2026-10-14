@@ -26,7 +26,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      # An ~800k-event cold boot can spend 2–3+ minutes in replay/deferred hydration,
+      # which can temporarily block /healthz on the event loop.
+      start_period: 600s
     networks:
       - l390
 

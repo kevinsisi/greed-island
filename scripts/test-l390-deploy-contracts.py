@@ -6,6 +6,7 @@ PowerShell AST parsing is a separate hosted Windows workflow job.
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import unittest
@@ -17,6 +18,34 @@ ROOT = Path(__file__).resolve().parents[1]
 class SourceDeploymentContracts(unittest.TestCase):
     def setUp(self):
         self.script = (ROOT / 'scripts/deploy-l390.ps1').read_text()
+
+    def test_multiplayer_healthcheck_start_period_is_at_least_ten_minutes(self):
+        compose = (ROOT / 'deploy/l390/docker-compose.yml').read_text()
+        multiplayer = compose.split('  multiplayer:\n', 1)[1].split('\n  web:\n', 1)[0]
+        healthcheck = multiplayer.split('    healthcheck:\n', 1)[1].split('\n    networks:\n', 1)[0]
+        self.assertIn('800k-event cold boot', healthcheck)
+        self.assertIn('deferred hydration', healthcheck)
+        match = re.search(r'(?m)^\s+start_period:\s*(\d+)\s*([smh]?)\s*$', healthcheck)
+        self.assertIsNotNone(match, 'multiplayer healthcheck must declare start_period')
+        amount, unit = int(match.group(1)), match.group(2)
+        seconds = amount * {'': 1, 's': 1, 'm': 60, 'h': 3600}[unit]
+        self.assertGreaterEqual(seconds, 600)
+
+    def test_startup_and_rollback_health_waits_are_at_least_fifteen_minutes(self):
+        match = re.search(r'(?m)^\$StartupWaitSeconds\s*=\s*(\d+)\s*$', self.script)
+        self.assertIsNotNone(match, '$StartupWaitSeconds must be the centralized named wait bound')
+        self.assertGreaterEqual(int(match.group(1)), 900)
+
+        self.assertRegex(
+            self.script,
+            r'(?m)^function Await-Health\(\[bool\]\$Unified,\s*\[int\]\$Seconds=\$StartupWaitSeconds\)',
+        )
+        self.assertIn('Await-Health $true', self.script)
+        self.assertIn("Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
+        self.assertIn("Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
+        self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
+        self.assertIn('$process.WaitForExit($TimeoutSeconds * 1000)', self.script)
 
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
@@ -100,7 +129,7 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn("Write-Json $activeResolved $rollbackConfig", self.script)
         self.assertIn("Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')", self.script)
         self.assertIn('if (-not $rollbackCompatible)', self.script)
-        self.assertIn('Await-Health (-not $isLegacyRoom) 120', self.script)
+        self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertNotIn('tar -x', self.script)
 
     def test_local_quiesced_backup_captures_complete_volumes(self):

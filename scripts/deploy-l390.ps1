@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $project = 'greed-island-l390'
+$StartupWaitSeconds = 900
 if ($ExpectedSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Exact successful current-main SHA is required.' }
 foreach ($path in @($DeployPath, $SourcePath, $PackagePath)) {
   if (-not [IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Container)) { throw 'Every deployment path must already exist and be absolute.' }
@@ -302,7 +303,7 @@ function Request([string]$Path, [string]$Method='GET', [string]$Origin='') {
     finally { $response.Dispose() }
   } finally { $message.Dispose() }
 }
-function Await-Health([bool]$Unified, [int]$Seconds=180) {
+function Await-Health([bool]$Unified, [int]$Seconds=$StartupWaitSeconds) {
   $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
   do {
     try {
@@ -354,7 +355,7 @@ try {
   Write-Json $volumeBackups (Join-Path $backup 'volume-manifest.json')
   $env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
   $env:GREED_L390_SOURCE_PATH = $SourcePath
-  [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) 180)
+  [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
   Await-Health $true
   $health = (Request '/healthz').body | ConvertFrom-Json
   if ($health.buildSha -cne $ExpectedSha -or $health.version -cne $manifest.appVersion) { throw 'Running health does not match the exact CI SHA/version.' }
@@ -381,16 +382,16 @@ try {
     if (-not $rollbackCompatible) { throw 'Rollout failed and old DB/schema compatibility is unproven. Containers remain stopped; owner-reviewed local restore is required. No automatic database restore was attempted.' }
     try {
       if ($isLegacyRoom) {
-        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) 180)
+        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
       } else {
         # Use the still-preserved prior release Compose file and its recorded
         # environment file. Same-SHA image-ID drift is rejected before stop.
         $env:GREED_L390_IMAGE_TAG = $previousImageTag
         $env:GREED_L390_BUILD_SHA = $previousImageTag
         $env:GREED_L390_SOURCE_PATH = $SourcePath
-        [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) 180)
+        [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
       }
-      Await-Health (-not $isLegacyRoom) 120
+      Await-Health (-not $isLegacyRoom) $StartupWaitSeconds
       if ((Get-Container 'multiplayer').Image -cne $backend.Image -or (Get-Container 'web').Image -cne $web.Image) { throw 'Rollback image identity mismatch.' }
       Write-Host 'Prior images/config restored and verified. Databases were never restored or overwritten.'
     } catch { throw 'Rollback verification failed. Owner action is required; private local backups remain intact.' }
