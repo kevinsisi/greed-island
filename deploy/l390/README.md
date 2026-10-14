@@ -86,3 +86,4 @@ are never uploaded. Source/data readiness failure occurs before stopping any
 old container. A partial-stop failure enters the same protected rollback path;
 rollback uses a validated captured resolved Compose model and exact prior image
 IDs rather than assuming a mutable .env still describes the previous stack.
+The multiplayer service allows a 4GB V8 heap for large startup event-log replay.

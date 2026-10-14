@@ -47,6 +47,12 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertIn('$process.WaitForExit($TimeoutSeconds * 1000)', self.script)
 
+    def test_multiplayer_replay_has_four_gigabyte_v8_heap(self):
+        compose = (ROOT / 'deploy/l390/docker-compose.yml').read_text()
+        multiplayer = compose.split('  multiplayer:\n', 1)[1].split('\n  web:\n', 1)[0]
+        self.assertIn("# startup-replay-heap: event-log replay can exceed V8's default 2GB heap.", multiplayer)
+        self.assertRegex(multiplayer, r'(?m)^\s+NODE_OPTIONS:\s*--max-old-space-size=4096\s*$')
+
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
         stop = self.script.index("'stop','--timeout','30','multiplayer','web'", marker)
