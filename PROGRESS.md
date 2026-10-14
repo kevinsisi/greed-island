@@ -4,9 +4,11 @@
 - PR#9 部署事故：multiplayer 重建後 healthcheck unhealthy；EventLog 約 80 萬筆、`start_period=30s`、deploy 等待 120–180s 不足；回滾驗證失敗，web 容器停在 `Created`，網站 502 數分鐘；手動 `docker start greed-island-l390-web-1` 後恢復。（L390 唯讀查詢，10/14，無 repo 內原文檔）
 - PR#12 修法：`start_period=600s`、`$StartupWaitSeconds=900`；`scripts/test-l390-deploy-contracts.py` 有 18 個 `def test_`。
 - 最近 50,000 筆 EventLog：`NPC_STATE_RECORDED` 33,873 筆（67.75%、約 6.2 筆／秒）；總量約 9.1 筆／秒。（L390 唯讀查詢，10/14，無 repo 內原文檔）
-- PR#13：僅子格、`lastActedTick`、mood／health 小數變化（整數值不變）每 NPC 每 5 tick 最多寫一次，常數 `NPC_MINOR_SNAPSHOT_INTERVAL_TICKS=5`；1,000 tick fixture 36,829→13,380（減少 63.7%）。（本機測試 fixture 實測，非 L390 查詢；無 repo 內原文檔）
+- PR#13 初版：僅子格、`lastActedTick`、mood／health 小數變化（整數值不變）每 NPC 每 5 tick 最多寫一次，1,000 tick fixture 36,829→13,380（減少 63.7%）。（本機測試 fixture 實測，非 L390 查詢；無 repo 內原文檔）本次將間隔調為 20 tick。
+- Clock fact 節流：有同 tick typed `WORLD_TICK` draft 時，在同一個 atomic append 中省略重複的 `FACT_SET world.tick`；若 typed tick 沒通過 validation／hard cap，保留 fact fallback。clock fact 仍加入 in-memory logical history，避免改變 tick planner 的 history window。
+- C＋D(20) 1,000 tick fixture：`NPC_STATE_RECORDED` 13,380→8,751；`FACT_SET` 2,395→1,395；NPC live state 每 tick 相同，projection 確定性單 NPC fixture 非次要欄位每 tick 相同。（本機測試 fixture，非 L390 查詢）
 - PR#14：EventLog 超過 20,000 筆時讀每 NPC 最新 typed 快照，使用既有索引，無 DDL；修復 typed-only NPC 重啟回 profile 預設。800,000 筆 fixture 查詢 72.226 ms、啟動增加 70.28 ms（出處：`PROGRESS.md:17`）。
-- 已知取捨：最新次要狀態可能尚未落盤；重啟後 `lastActedTick`／子格／mood、health 小數位最多落後 4 tick（20 秒）。Deploy L390 workflow 有 PowerShell 5.1 AST 語法解析 job，但該 job 不執行腳本；run `38585186419` 解析 job 成功。
+- 已知取捨：最新次要狀態可能尚未落盤；重啟後 `lastActedTick`／子格／mood、health 小數位最多落後 19 tick（95 秒，間隔 20 tick）。Deploy L390 workflow 有 PowerShell 5.1 AST 語法解析 job，但該 job 不執行腳本；run `38585186419` 解析 job 成功。
 - Deploy run `38585186419` 後查詢：main `9d1c44a` 已部署；healthz `buildSha=9d1c44ac…`、容器 healthy、帳號 4、EventLog 1,047,622 筆、世界 tick 20329。README 23:xx 後續讀值約 tick 20370；EventLog 只增不減。（L390 唯讀查詢，10/14，無 repo 內原文檔）
 
 ## 2026-10-14 — NPC state restore on large EventLogs

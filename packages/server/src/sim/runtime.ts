@@ -2873,7 +2873,7 @@ export class SimulationRuntime {
     const plannedProductionRecipeIds = new Set<string>()
     const submittedAt = Date.now()
 
-    stateDrafts.push(this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick))
+    const tickFactDraft = this.factSetDraft(FACT_TICK, nextTick, SIM_ACTOR_WORLD, nextTick)
     commands.push(
       makeLivingWorldCommand(
         'WORLD_TICK',
@@ -6274,12 +6274,20 @@ export class SimulationRuntime {
     }
     recordPhase('rule-evaluation')
 
-    // Append in one transaction. Normal state snapshots stay before typed events;
+    // Append in one transaction. WORLD_TICK is the durable tick record when its
+    // accepted typed draft is present; retain the legacy fact as a fallback if
+    // command validation or the hard cap prevented that event from being drafted.
+    const committedStateDrafts = this.shouldPersistTickFact(typedDrafts)
+      ? [tickFactDraft, ...stateDrafts]
+      : stateDrafts
+    // Normal state snapshots stay before typed events;
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
-    const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
+    const committed = this.store.appendEvents([...committedStateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
     this.appendLogicalWorldDrafts(
-      [...stateDrafts, ...logicalTypedDrafts, ...postAcceptedStateDrafts],
+      // Keep the clock fact in the in-memory logical history even when its
+      // durable duplicate is omitted, so tick planners observe the same context.
+      [tickFactDraft, ...stateDrafts, ...logicalTypedDrafts, ...postAcceptedStateDrafts],
       committed,
     )
     if (committed.length) this.playerWorld?.markDirty()
@@ -6509,6 +6517,10 @@ export class SimulationRuntime {
       eventId: `event_${deterministicKey.slice(0, 32)}`,
       deterministicKey
     }
+  }
+
+  private shouldPersistTickFact(typedDrafts: readonly EventDraft[]): boolean {
+    return !typedDrafts.some((draft) => draft.eventType === 'WORLD_TICK')
   }
 
   private deriveRelationshipScore(profile: NpcProfile): number {
