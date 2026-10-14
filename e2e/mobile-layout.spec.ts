@@ -445,22 +445,26 @@ test('edge camera keeps the actor visible and renders scene detail at mobile and
     obstructed: el.getAttribute('data-camera-obstructed') === 'true',
     orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
   }))
-  // Reach the wall with real joystick input and stop from authoritative server coordinates.
-  await holdJoystickUntil(page, 'x', 4.1)
+  // Approach from the west aisle so the dock wall cannot stop north/south movement.
+  await holdJoystickUntil(page, 'x', -3)
+  await holdJoystickUntil(page, 'z', 4.2)
+  await holdJoystickUntil(page, 'x', 3.5)
+  await holdJoystickUntil(page, 'z', 10.4)
+  // Acknowledge/snapshot latency can let one more server movement step arrive after the pointer stops.
   await holdJoystickUntil(page, 'z', 10.4)
   const accountPosition = await readAccountPosition(page)
   expect(accountPosition.tileId, 'account drawer confirms dock tile').toBe('t_dock')
   expect(accountPosition.x, `before turn x=${accountPosition.x}`).toBeGreaterThanOrEqual(3.4)
   expect(accountPosition.x, `before turn x=${accountPosition.x}`).toBeLessThanOrEqual(4.6)
   expect(accountPosition.z, `before turn z=${accountPosition.z}`).toBeGreaterThanOrEqual(9.2)
-  expect(accountPosition.z, `before turn z=${accountPosition.z}`).toBeLessThanOrEqual(10.8)
+  expect(accountPosition.z, `before turn z=${accountPosition.z}`).toBeLessThanOrEqual(11.8)
   await steerJoystick(page, -.4, .4, 100)
   const position = await readAccountPosition(page)
   expect(position.tileId, 'edge diagnostic stays in dock').toBe('t_dock')
   expect(position.x, `camera test x=${position.x}`).toBeGreaterThanOrEqual(3.0)
   expect(position.x, `camera test x=${position.x}`).toBeLessThanOrEqual(4.6)
   expect(position.z, `camera test z=${position.z}`).toBeGreaterThanOrEqual(9)
-  expect(position.z, `camera test z=${position.z}`).toBeLessThanOrEqual(11.5)
+  expect(position.z, `camera test z=${position.z}`).toBeLessThanOrEqual(12.2)
 
   await page.getByRole('button', { name: '重置鏡頭' }).click()
   await page.waitForTimeout(250)
