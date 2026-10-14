@@ -1,4 +1,4 @@
-import { hashCanonicalJson } from '../kernel/canonicalJson.js'
+import { cloneCanonical, hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { Event } from '../kernel/types.js'
 
 export type NpcStateSnapshot = Readonly<{
@@ -48,10 +48,14 @@ export const NPC_STATE_BOOT_EVENT_TYPES = [
 
 export class NpcStateProjection {
   private rows = new Map<string, NpcStateRow>()
+  // Runtime-only overlay for current memory states whose log snapshot is throttled.
+  // rebuildFromEvents always clears it, so replay remains EventLog-defined.
+  private volatileRows = new Map<string, NpcStateRow>()
   private lastProductiveActions = new Map<string, NpcLastProductiveAction>()
 
   rebuildFromEvents(events: readonly Event[]): void {
     this.rows = new Map()
+    this.volatileRows = new Map()
     this.lastProductiveActions = new Map()
     for (const event of events) this.project(event)
   }
@@ -60,9 +64,10 @@ export class NpcStateProjection {
     if (event.eventType === NPC_STATE_RECORDED) {
       const row = rowFromEvent(event)
       if (!row) return
-      const previous = this.rows.get(row.npcId)
+      const previous = this.getByNpcId(row.npcId)
       if (!previous || previous.sequence <= row.sequence) {
         this.rows.set(row.npcId, row)
+        this.volatileRows.delete(row.npcId)
       }
     } else if (event.eventType === NPC_PRODUCTIVE_ACTION) {
       const productive = productiveActionFromEvent(event)
@@ -73,7 +78,18 @@ export class NpcStateProjection {
   }
 
   getByNpcId(npcId: string): NpcStateRow | null {
-    return this.rows.get(npcId) ?? null
+    return this.volatileRows.get(npcId) ?? this.rows.get(npcId) ?? null
+  }
+
+  /** Update the live runtime view without pretending an EventLog row was committed. */
+  projectVolatileState(npcId: string, state: NpcStateSnapshot, tick: number): void {
+    const previous = this.getByNpcId(npcId)
+    this.volatileRows.set(npcId, {
+      npcId,
+      recordedAtTick: tick,
+      sequence: previous?.sequence ?? 0,
+      state: cloneCanonical(state),
+    })
   }
 
   getLastProductiveAction(npcId: string): NpcLastProductiveAction | null {
@@ -81,7 +97,9 @@ export class NpcStateProjection {
   }
 
   getAll(): readonly NpcStateRow[] {
-    return [...this.rows.values()].sort((a, b) => a.npcId.localeCompare(b.npcId))
+    const rows = new Map(this.rows)
+    for (const [npcId, row] of this.volatileRows) rows.set(npcId, row)
+    return [...rows.values()].sort((a, b) => a.npcId.localeCompare(b.npcId))
   }
 
   canonicalHash(): string {

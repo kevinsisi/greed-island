@@ -26,7 +26,7 @@ import {
   type EventDraft,
   type FactSetPayload
 } from '../kernel/types.js'
-import { hashCanonicalJson } from '../kernel/canonicalJson.js'
+import { cloneCanonical, hashCanonicalJson } from '../kernel/canonicalJson.js'
 import {
   COMMAND_SET_FACT,
   EVENT_FACT_SET,
@@ -227,6 +227,7 @@ import {
 } from './cityLife.js'
 import { ConstructionProjectsProjection, visibleAutonomousConstructionProjects, type ConstructionProjectRow } from '../projections/constructionProjects.js'
 import { NpcStateProjection, NPC_STATE_BOOT_EVENT_TYPES } from '../projections/npcState.js'
+import { NpcStateSnapshotThrottle } from './npcStateSnapshotThrottle.js'
 import { AnimalPopulationProjection, filterWildPopulation, type AnimalPopulationRow } from '../projections/animalPopulation.js'
 import { LivestockRegistryProjection } from '../projections/livestockRegistry.js'
 import { PlayerCivilizationProjection } from '../projections/playerCivilization.js'
@@ -637,6 +638,7 @@ class DeferredHydrationCancelled extends Error {}
 
 const RECENT_EVENTS_BUFFER = 200
 const WORLD_HISTORY_EXCLUDED_EVENT_TYPES = [...PLAYER_WORLD_EVENT_TYPES, LEGACY_ARCHIVE_EVENT_TYPE]
+const LOGICAL_WORLD_HISTORY_BUFFER = 420
 
 export class SimulationRuntime {
   private currentTick = 0
@@ -645,6 +647,10 @@ export class SimulationRuntime {
   private rareWindowOpen = false
   private rareWindowClosesAtTick = 0
   private readonly recentEvents: NarrativeEvent[] = []
+  // Recent logical history retains throttled NPC snapshot events in memory so
+  // bounded gameplay-history queries see the same window as the durable log.
+  private logicalWorldHistory: Event[] = []
+  private logicalWorldSequence = 0
   private npcSnapshotCache: { tick: number; lastSequence: number; includeDeceased: SimNpcState[]; living: SimNpcState[] } | null = null
   private worldSnapshotCache: { tick: number; lastSequence: number; snapshot: WorldSnapshot } | null = null
   private readonly listeners = new Set<Listener>()
@@ -766,7 +772,8 @@ export class SimulationRuntime {
     private readonly store: SqliteEventStore,
     private readonly profiles: readonly NpcProfile[],
     private readonly cards: CardCatalog,
-    private readonly tickDurationMs: number = TICK_DURATION_MS
+    private readonly tickDurationMs: number = TICK_DURATION_MS,
+    private readonly npcStateSnapshotThrottle: NpcStateSnapshotThrottle = new NpcStateSnapshotThrottle()
   ) {
     this.combatRuntime = new CombatRuntime({
       onTick: (input) => this.processCombatSubTick(input),
@@ -778,6 +785,11 @@ export class SimulationRuntime {
     this.npcLineageProjection = new NpcLineageProjection(profiles)
     this.bornNpcsProjection = new BornNpcsProjection(new Set(profiles.map((p) => p.id)))
     this.validateScheduleBuildingIds(profiles)
+    this.logicalWorldSequence = this.store.countEvents()
+    this.logicalWorldHistory = this.store.readRecentEventsExcludingTypes(
+      LOGICAL_WORLD_HISTORY_BUFFER,
+      WORLD_HISTORY_EXCLUDED_EVENT_TYPES,
+    )
     this.hydrateFromEventLog()
     this.playerWorld = new PlayerWorldService(this.store, {
       getGeometry: tileId => getRegionGeometry(tileId, this.lifeExpansion.unlockedBuildingIds),
@@ -2183,6 +2195,8 @@ export class SimulationRuntime {
     if (committed.length > 0) {
       this.lastSequence = committed[committed.length - 1]!.sequence
       this.eventCount += committed.length
+      this.npcStateSnapshotThrottle.recordPersisted(change.npcId, this.currentTick)
+      this.appendLogicalWorldEvents(committed)
     }
     return {
       npcId: change.npcId,
@@ -2447,7 +2461,7 @@ export class SimulationRuntime {
 
   private collectWorldCivilizationEvidence(limit = 250): WorldCivilizationEvidence[] {
     const evidence: WorldCivilizationEvidence[] = []
-    for (const ev of this.store.readRecentEventsExcludingTypes(limit, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)) {
+    for (const ev of this.readRecentLogicalWorldEvents(limit)) {
       if (!WORLD_CIVILIZATION_EVIDENCE_EVENT_TYPES.has(ev.eventType)) continue
       const data = (ev.payload as { data?: Record<string, unknown> })?.data ?? {}
       const domain = inferWorldCivilizationDomain(ev.eventType, data)
@@ -2502,6 +2516,7 @@ export class SimulationRuntime {
     committed: readonly Event[],
     options: { projectCombatSubTicks?: boolean } = {}
   ): void {
+    this.appendLogicalWorldEvents(committed)
     this.playerWorld?.markDirty()
     // PlayerWorldService already projected these complete position facts after commit.
     // Do not fan high-frequency bookkeeping into unrelated NPC stores or narrative SSE.
@@ -2556,7 +2571,7 @@ export class SimulationRuntime {
       this.playerNpcRelationshipProjection.apply(ev)
       this.playerRelationshipActionProjection.project(ev)
       this.playerSurvivalProjection.project(ev)
-      this.npcStateProjection.project(ev)
+      this.projectCommittedNpcState(ev)
       this.animalPopulationProjection.project(ev)
       this.animalMigrationProjection.project(ev)
       this.predatorHungerProjection.project(ev)
@@ -2852,6 +2867,8 @@ export class SimulationRuntime {
     //      relationship projection, and offline catch-up summary.
     const stateDrafts: EventDraft[] = []
     const commands: LivingWorldCommand[] = []
+    const subcellThrottledNpcIds = new Set<string>()
+    const subcellThrottledCommands = new Set<LivingWorldCommand>()
     const plannedRouteIds = new Set<string>()
     const plannedProductionRecipeIds = new Set<string>()
     const submittedAt = Date.now()
@@ -3654,9 +3671,11 @@ export class SimulationRuntime {
     // NPC_STATE_RECORDED events + NpcStateProjection. Legacy npc.state.*
     // FACT_SET facts remain boot fallback for pre-migration event logs.
     for (const change of npcResult.changedStates) {
-      commands.push(
-        this.makeNpcStateRecordedCommand(change, nextTick, submittedAt)
-      )
+      const command = this.makeNpcStateRecordedCommand(change, nextTick, submittedAt)
+      commands.push(command)
+      if (!this.npcStateSnapshotThrottle.shouldPersist(change, nextTick)) {
+        subcellThrottledCommands.add(command)
+      }
     }
 
     // ---- BuildingRuntime：reconcile 室內 NPC 狀態 ----
@@ -5744,6 +5763,7 @@ export class SimulationRuntime {
 
     // ---- Compile commands → typed event drafts via the Rule Engine ----
     const typedDrafts: EventDraft[] = []
+    const logicalTypedDrafts: EventDraft[] = []
     const postAcceptedStateDrafts: EventDraft[] = []
     const postAcceptedCommands: LivingWorldCommand[] = []
 
@@ -5767,7 +5787,10 @@ export class SimulationRuntime {
         )
         const result = this.livingWorldRuleEngine.evaluate(command)
         if (result.accepted) {
-          for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+          for (const draft of result.events) {
+            logicalTypedDrafts.push(draft as EventDraft)
+            typedDrafts.push(draft as EventDraft)
+          }
         } else {
           console.warn(
             `[sim] rule engine rejected ${result.rejection.commandType} ` +
@@ -5790,7 +5813,15 @@ export class SimulationRuntime {
     for (const cmd of acceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
-        for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        const isSubcellThrottledState = subcellThrottledCommands.has(cmd)
+        for (const draft of result.events) {
+          logicalTypedDrafts.push(draft as EventDraft)
+          if (!isSubcellThrottledState) typedDrafts.push(draft as EventDraft)
+        }
+        if (isSubcellThrottledState) {
+          const npcId = (cmd.payload as { npcId?: unknown }).npcId
+          if (typeof npcId === 'string') subcellThrottledNpcIds.add(npcId)
+        }
         if (cmd.commandType === 'CONSTRUCTION_INITIATE') {
           const payload = cmd.payload as {
             npcId: string
@@ -6197,7 +6228,10 @@ export class SimulationRuntime {
     for (const cmd of postAcceptedCommands) {
       const result = this.livingWorldRuleEngine.evaluate(cmd)
       if (result.accepted) {
-        for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+        for (const draft of result.events) {
+          logicalTypedDrafts.push(draft as EventDraft)
+          typedDrafts.push(draft as EventDraft)
+        }
         if (cmd.commandType === 'NPC_OBSERVED_SKILL') {
           // Phase 3 §37.3 — also track from seeder-produced skill observations.
           const nsoPayload = cmd.payload as { npcId: string; skillId: string }
@@ -6230,7 +6264,10 @@ export class SimulationRuntime {
         if (normCmd) {
           const result = this.livingWorldRuleEngine.evaluate(normCmd)
           if (result.accepted) {
-            for (const draft of result.events) typedDrafts.push(draft as EventDraft)
+            for (const draft of result.events) {
+              logicalTypedDrafts.push(draft as EventDraft)
+              typedDrafts.push(draft as EventDraft)
+            }
           }
         }
       }
@@ -6241,6 +6278,10 @@ export class SimulationRuntime {
     // state that depends on an accepted typed command (for example NPC social
     // active-task metadata) is appended after the accepted event draft.
     const committed = this.store.appendEvents([...stateDrafts, ...typedDrafts, ...postAcceptedStateDrafts])
+    this.appendLogicalWorldDrafts(
+      [...stateDrafts, ...logicalTypedDrafts, ...postAcceptedStateDrafts],
+      committed,
+    )
     if (committed.length) this.playerWorld?.markDirty()
     recordPhase('append-events')
     if (committed.length > 0) {
@@ -6259,7 +6300,7 @@ export class SimulationRuntime {
         this.activeRuleOperatorsProjection.project(ev)
         this.playerRelationshipActionProjection.project(ev)
         this.npcIncapacitationProjection.project(ev)
-        this.npcStateProjection.project(ev)
+        this.projectCommittedNpcState(ev)
         this.animalPopulationProjection.project(ev)
         this.animalMigrationProjection.project(ev)
         this.predatorHungerProjection.project(ev)
@@ -6337,6 +6378,13 @@ export class SimulationRuntime {
       recordPhase('projection-fanout')
     }
 
+    // Preserve the live NPC view consumed by later simulation planners even
+    // when its sub-cell snapshot was not appended to the durable EventLog.
+    for (const npcId of subcellThrottledNpcIds) {
+      const state = this.npcEngine.getState(npcId)
+      if (state) this.npcStateProjection.projectVolatileState(npcId, state, nextTick)
+    }
+
     this.currentTick = nextTick
 
     for (const tl of this.tickListeners) {
@@ -6379,6 +6427,42 @@ export class SimulationRuntime {
         narration: null
       }
     )
+  }
+
+  private projectCommittedNpcState(event: Event): void {
+    this.npcStateProjection.project(event)
+    if (event.eventType !== 'NPC_STATE_RECORDED') return
+    const data = (event.payload as { data?: { npcId?: unknown } } | null)?.data
+    if (typeof data?.npcId === 'string') {
+      this.npcStateSnapshotThrottle.recordPersisted(data.npcId, event.tick ?? this.currentTick)
+    }
+  }
+
+  private appendLogicalWorldDrafts(drafts: readonly EventDraft[], committed: readonly Event[]): void {
+    const committedById = new Map(committed.map(event => [event.eventId, event]))
+    const logicalEvents = drafts.map(draft => committedById.get(draft.eventId)
+      ?? ({ ...draft, sequence: 0 } as Event))
+    this.appendLogicalWorldEvents(logicalEvents)
+  }
+
+  private appendLogicalWorldEvents(events: readonly Event[]): void {
+    for (const event of events) {
+      if ((WORLD_HISTORY_EXCLUDED_EVENT_TYPES as readonly string[]).includes(event.eventType)) continue
+      this.logicalWorldSequence += 1
+      this.logicalWorldHistory.push(cloneCanonical({ ...event, sequence: this.logicalWorldSequence }))
+    }
+    if (this.logicalWorldHistory.length > LOGICAL_WORLD_HISTORY_BUFFER) {
+      this.logicalWorldHistory.splice(0, this.logicalWorldHistory.length - LOGICAL_WORLD_HISTORY_BUFFER)
+    }
+  }
+
+  private readRecentLogicalWorldEvents(limit: number): Event[] {
+    // A few pure collector tests construct a prototype-only runtime with a fake store.
+    if (!Array.isArray(this.logicalWorldHistory)) {
+      return this.store.readRecentEventsExcludingTypes(limit, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)
+    }
+    const safeLimit = Math.max(1, Math.min(LOGICAL_WORLD_HISTORY_BUFFER, Math.floor(limit)))
+    return this.logicalWorldHistory.slice(-safeLimit)
   }
 
   private factSetDraft(
@@ -6724,7 +6808,7 @@ export class SimulationRuntime {
 
   private collectRecentNpcFreeformActionKinds(limit: number): Map<string, NpcFreeformActionKind[]> {
     const out = new Map<string, NpcFreeformActionKind[]>()
-    for (const event of this.store.readRecentEventsExcludingTypes(limit, WORLD_HISTORY_EXCLUDED_EVENT_TYPES)) {
+    for (const event of this.readRecentLogicalWorldEvents(limit)) {
       if (event.eventType !== 'NPC_FREEFORM_ACTION_PROPOSED') continue
       const data = (event.payload as { data?: Record<string, unknown> })?.data
       if (!data || data.accepted !== true) continue
@@ -7976,4 +8060,3 @@ function signedTraceDelta(value: number): string {
   const rounded = Math.round(value * 100) / 100
   return rounded >= 0 ? `+${rounded}` : String(rounded)
 }
-
