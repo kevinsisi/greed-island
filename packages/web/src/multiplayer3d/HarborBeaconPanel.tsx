@@ -3,11 +3,12 @@ import { beaconRemainingSeconds, harborContributionStatus, harborProgressText } 
 import type { createWorldClient } from './client'
 import type { PlayerWorldSnapshot } from './types'
 
-export function HarborBeaconPanel({ snapshot, online, client, stopMovement }: {
+export function HarborBeaconPanel({ snapshot, online, client, stopMovement, open }: {
   snapshot: PlayerWorldSnapshot
   online: boolean
   client: ReturnType<typeof createWorldClient> | null
   stopMovement: () => void
+  open?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -39,7 +40,7 @@ export function HarborBeaconPanel({ snapshot, online, client, stopMovement }: {
       setError(cause instanceof Error ? cause.message : '物資交付未完成。')
     }
   }
-  return <details className="mp-beacon-panel" aria-label="港口共同點燈">
+  return <details className="mp-beacon-panel" open={open} aria-label="港口共同點燈">
     <summary>港口共同點燈 · {beacon.completed ? '已完成' : beacon.phase === 'collecting' ? '收集中' : '等待加入'}</summary>
     <div className="mp-beacon-body">
     <p>{beacon.completed ? '燈塔已點亮，參與者的徽記以伺服器保存結果為準。' : `每位旅人交付 1 份物資，至少 ${beacon.required} 位加入後，開啟 ${beacon.participationWindowTicks * beacon.tickMs / 1000} 秒收集。`}</p>

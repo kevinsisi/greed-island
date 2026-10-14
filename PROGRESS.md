@@ -1,3 +1,33 @@
+## 2026-10-14 — PR #11 mobile scene-first layout rework
+
+- Mobile `<768px` now keeps the 3D scene exposed behind a 48px header and five icon touch targets; scene details, map, beacon, travellers/NPC chat and account information share one dismissible bottom drawer. Menu navigation contains world overview, profile, codex, social/trading, account recovery and logout. Desktop panel/navigation presentation remains in place.
+- `e2e/mobile-layout.spec.ts`: all 7 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; `auditMobileUi` checks all visible text at **≥4.5:1** contrast, **≥14px** font and visible button centers/44px targets. `npm run build:web` and web tests pass (57 files / 521 tests). The first CI run `38488752223` exposed that `aria-hidden` on the desktop `display:contents` wrapper hid world chat from role queries; desktop wrapper is now exposed and the desktop test asserts the chat input/send button are visible. Follow-up CI runs `38489878912` and `38490787759` passed all 4 jobs; browser E2E passed 9 tests.
+- `e2e/mobile-layout.spec.ts`: all 10 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; `auditMobileUi` checks text contrast at **≥4.5:1**, body text at **≥14px** (tool labels ≥12px), and visible button centers/44px targets. `npm run build:web` and web tests pass (57 files / 521 tests). The first CI run `38488752223` exposed that `aria-hidden` on the desktop `display:contents` wrapper hid world chat from role queries; desktop wrapper is now exposed and the desktop test asserts the chat input/send button are visible. Follow-up CI runs `38489878912` and `38490787759` passed all 4 jobs; browser E2E passed 9 tests.
+- Measured canvas visibility (closed / lowest open drawer): 375×812 **86.3% / 50%**; 393×852 **86.3% / 50%**; 430×932 **87.5% / 45%**. Menu open **65%**. Header **48px**. Horizontal scroll: none at all tested sizes. Desktop 1280×800 selector width **218px**, label **100.5/176px** before desktop restoration.
+- `beacon action is hit-testable at its center on mobile`: center `elementFromPoint` is the action button; screenshot `packages/web/evidence/mobile-layout/a-beacon-button-center.png`.
+- `NPC chat input is clickable, editable, readable and unobscured`: center hit succeeds, fill/readback succeeds, font **16px**; screenshot `packages/web/evidence/mobile-layout/b-npc-chat-input.png`.
+- `two-second full joystick deflection moves the server-persisted account position by at least one unit`: latest run **3.7,-5.9 → -3.9,-5.9**, delta **7.60**; no server changes; screenshot `packages/web/evidence/mobile-layout/c-joystick-two-seconds.png`.
+- `mobile readable text and visible button centers meet touch requirements`: readable text ≥14px, visible buttons ≥44×44px with hit-test center, version hidden; screenshot `packages/web/evidence/mobile-layout/d-readable-controls.png`. Menu screenshot: `packages/web/evidence/mobile-layout/e-mobile-menu.png`.
+
+## 2026-10-14 — PR #11 desktop and mobile follow-up
+
+- Screenshots compare `origin/main@811c713` before and `fix/mobile-game-layout` after at 1280×800: `packages/web/evidence/mobile-layout/desktop-1280-before.png` and `desktop-1280-after.png`. Reset text is `重置鏡頭` in both. Map SVG rect is **1104,124–1240,231** and selector rect **1104,231–1240,275** in both; overlap **0px²**. Selector client width **134px**; label **92.2/93.4px**.
+- `origin/main@811c713` also had a panel-level `overflow-y:auto` around inner list scrollers. The follow-up removes the parent desktop scroll so player, NPC and message list chains each have **1** `overflow-y:auto/scroll` container. The origin/main screenshot uses overlay scrollbars, so no visible scrollbar difference in the paired images.
+- Mobile bottom labels: `說明／地圖／點燈／旅人／帳號`; each **2 characters**, **12px**, **44px** button height, **0px** horizontal overflow at 375/393/430px.
+- First NPC list item fits fully in the open drawer: row **y=566.7–604.7**, list **566.7–626.7**, drawer **388.7–746.0**; screenshot `packages/web/evidence/mobile-layout/f-mobile-first-npc-row.png`.
+- `desktop 1280x800 keeps reset text and places the region selector below the map image`: reset text visible; map/selector overlap **0px²**; each list scroll chain count **1**.
+- `mobile bottom tool buttons show two-character labels without clipping at 375, 393 and 430px`: all five labels fit, **0px** scroll overflow, min height **44px**.
+- `mobile traveller drawer keeps the first NPC row fully inside the scroll viewport`: first item starts **178.0px** below drawer top and is fully within the list viewport.
+- `e2e/mobile-layout.spec.ts`: **10/10 passed**; existing mobile canvas checks remain 375 **86.3%/50%**, 393 **86.3%/50%**, 430 **87.5%/45%** (closed/open minimum). CI for this follow-up is pending.
+
+## 2026-10-14 — PR #11 dock camera obstruction fix
+
+- Camera handling uses a **4-unit minimum when blocked**, tries nearby orbit angles to find an unobstructed ray, and keeps obstructed player visibility at **≥0.6**. No-hit camera distance and fade formula remain unchanged. Canvas read-only diagnostics: `data-camera-distance`, `data-player-visibility`, `data-camera-obstructed`, `data-camera-orbit-offset`.
+- Before: account #5 at **x=3.896,z=10.512**; ray hit `region-obstacle-1` at **2.036**, camera distance **1.686**, player visibility **0**, `isContextLost=false`, canvas/backing/viewport **375×812**; drawElements **5,076**. Screenshot `packages/web/evidence/mobile-layout/camera-blocked-before.png`.
+- After: local E2E account #4 at **x=3.80,z=10.30**; blocker ray selects orbit offset **0.60**, camera distance **8**, player visibility **1**. Pixel edge ratios: 375 **0.0391**, 393 **0.0377**, 430 **0.0343**, 1280 **0.0153**. Screenshot `packages/web/evidence/mobile-layout/camera-blocked-after.png`.
+- Reload after the obstruction restored distance **8**, visibility **1** and no hit; opposite/up joystick motion and dragging the camera toward the wall kept the player visible. Drag case selected orbit offset **-0.60**.
+- `edge camera keeps the actor visible and renders scene detail at mobile and desktop sizes`: local focused pass at 375/393/430/1280, with position read from the server. Test approaches the dock wall from the west aisle. GitHub CI run `38519584578` passed all four jobs, including all **13 real-browser E2E tests**; `npm run build:web` and web tests (57 files / 521 tests) passed. PR#11 remains open for review; not merged.
+
 ## 2026-10-14 — Current main merged into legacy import branch
 
 ### Current L390 deployment
@@ -64,6 +94,16 @@
   runtimeBudget Vitest4 typing diagnostics. Exact native CI, full startup/browser
   integration, main merge and L390 release remain required. No push or deployment.
 - Integration/route contract: docs/CANONICAL_ADMIN_SETTINGS.md.
+
+## 2026-10-14 — Multiplayer game responsive layout
+
+- Worktree/branch: `greed-island-mobile-ui` / `fix/mobile-game-layout`, based on `origin/main` at `fa9aab7`.
+- Changed only the multiplayer game presentation: mobile header/navigation wraps, mission/map use a compact single-column arrangement, beacon/player panels stay collapsed until opened, touch controls and status text use high-contrast surfaces, and action labels retain readable widths. Tablet and desktop retain their existing panel layout; selector width is protected at 768px and short desktop heights.
+- Added `e2e/mobile-layout.spec.ts` to the existing Playwright suite. It registers a disposable fixture user, checks document horizontal overflow and measures the selected region label against available selector width at 375×812, 390×844, 768×1024 and 1280×800.
+- Real Chrome Playwright suite: 3 tests passed. Layout assertions: scrollWidth 375/375, 390/390, 768/768, 1280/1280; selected label 100.5px fits in 175/190/176/176px. Screenshots: `packages/web/evidence/mobile-layout/{375x812,390x844,768x1024,1280x800}.png`.
+- Contrast, computed against the lightest white backing for translucent panels: `#f0e8d2` on `#102c28f5` effective `#193430` = 10.86:1; `#f0e8d2` on footer `#102c28ed` effective `#213b37` = 9.85:1; `#f0e8d2` on hint `#102c28ef` effective `#1f3935` = 10.10:1; `#dfc383` on `#102c28f5` effective `#193430` = 7.76:1; `#edca7e` on `#102c28f5` effective `#193430` = 8.44:1; selector `#eee5ca` on `#143b33` = 9.80:1; joystick center `#f0e8d2` on `#31564b` = 6.70:1. All exceed WCAG AA.
+- `npm run build:server && npm run build:web`: passed. Web Vitest: 57 files / 521 tests passed. Full `npm test`: 244 server files / 2,180 tests passed, 4 failed in `adminSettings.authorization` (2), `unifiedMountedFamilies` (1), and the SSE chunk-boundary case in `playerWorldRouter` (1); these are the path-alias/SSE failures documented in open PR#9, and were not changed here. No server files changed.
+- PR #11 opened against `main` (not merged). CI run `38457684274`: Build/typecheck/test, multiplayer real-browser E2E, OpenSpec validation, and isolated production images all passed. Not deployed; no L390, workflow, or server changes.
 
 ## 2026-10-08 — 多人版容器化與 L390 驗收 @ v0.104.0 + a2c39fa（L390 已起容器，尚未對外）
 
