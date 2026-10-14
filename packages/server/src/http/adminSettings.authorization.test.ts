@@ -1,7 +1,7 @@
 import express from 'express'
 import { once } from 'node:events'
 import { request as httpRequest, type Server } from 'node:http'
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, existsSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import Database from 'better-sqlite3'
@@ -34,7 +34,7 @@ async function setup(options: { credentialOrigin?: string; server?: string; noDb
   const two = await auth.register({ kind: 'username', value: 'player-fixture-two' }, 'synthetic-fixture-password', origin)
   db.prepare("UPDATE accounts SET role='admin' WHERE id=?").run(one.principal.accountId)
   const authorization = createHttpAuthorization(auth)
-  const dataDir = mkdtempSync(join(tmpdir(), 'greed-admin-settings-')); directories.push(dataDir)
+  const dataDir = mkdtempSync(join(realpathSync(tmpdir()), 'greed-admin-settings-')); directories.push(dataDir)
   const values = new Map<string, string>(options.noDbServer ? [] : [['opencode_servers', options.server ?? 'http://provider.example.test']])
   const keys: ApiKeyRecord[] = [{ id: 1, key: 'inert-redaction-fixture', source: 'admin', status: 'active', lastError: 'inert-redaction-fixture', lastUsedAt: null, failureCount: 1, createdAt: 0 }]
   // No real SettingsStore/database/provider configuration is written by this fixture.
