@@ -7,7 +7,7 @@
 - Read-only diagnostic `npcstate.js` is at `/private/tmp/claude-501/-Users-kevin-Documents-Projects-private-codebase-greed-island/2441d2c6-a82c-4c66-84f0-b228a1a99725/scratchpad/npcstate.js`. It calls unauthenticated `GET /api/npcs` on loopback, prints all API-visible NPC rows, and hashes the sorted rows. Fixture self-test returned 2 rows and SHA-256 `d9a541ce1b60e5dc535cfb1e21c8292f3eb5131b16de9a85609aa6a1c0f4405b`.
 - Version is `0.104.1`. `npm run build:server`, full server suite (2 workers: 2,211 passed / 0 failed), web suite (521 passed / 0 failed), and the repo's existing `openspec:check` pass. The first full server run had one transient loopback `fetch failed` in `buildingsRouter.test.ts`; that file passed 4/4 alone and the subsequent full run passed 2,211/2,211. The change proposal/spec is stored in the central OpenSpec workspace; the repo-local OpenSpec path was rejected by the pre-push guard because its metadata was detected as a copy of an archived OpenSpec file. The guard was not bypassed.
 - PR#14 is Ready against `main`, head `7b5f8e6`, CI run `38578007924` all four jobs green after rerunning the failed E2E job. The initial attempt hit the joystick shortfall in `edge camera keeps the actor visible...`; retry passed. It includes PR#13's commits as the replacement; PR#13 remains open for Kevin to close. No deployment occurred.
-- No Docker, L390, production DB, or production HTTP service was accessed. No deployment occurred.
+- No local Docker daemon, L390, production DB, or production HTTP service was accessed. No deployment occurred; GitHub CI ran its isolated image-build job.
 
 ## 2026-10-14 — PR #11 mobile scene-first layout rework
 
