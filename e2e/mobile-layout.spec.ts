@@ -212,16 +212,32 @@ async function readServerPosition(page: Page) {
   })
 }
 
-async function steerAxisTo(page: Page, axis: 'x' | 'z', target: number) {
-  let position = await readServerPosition(page)
-  for (let index = 0; index < 64; index++) {
-    const delta = target - position[axis]
-    if (Math.abs(delta) <= .12) return position
-    const strength = Math.sign(delta) * Math.min(1, Math.max(.15, Math.abs(delta) / .4))
-    await steerJoystick(page, axis === 'x' ? strength : 0, axis === 'z' ? strength : 0, 125)
-    position = await readServerPosition(page)
+async function holdJoystickUntil(page: Page, axis: 'x' | 'z', targetValue: number, tolerance = .15) {
+  const initial = await readServerPosition(page)
+  if (Math.abs(initial[axis] - targetValue) <= tolerance) return initial
+  const direction = Math.sign(targetValue - initial[axis])
+  const rect = await page.locator('.mp-stick').boundingBox()
+  if (!rect) throw new Error('Joystick is not visible.')
+  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  const target = {
+    x: center.x + (axis === 'x' ? direction : 0) * (rect.width / 2 - 5),
+    y: center.y - (axis === 'z' ? direction : 0) * (rect.height / 2 - 5),
   }
-  throw new Error(`Could not steer ${axis} to ${target}; last position=${JSON.stringify(position)}`)
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  try {
+    await page.mouse.move(target.x, target.y)
+    let position = initial
+    for (let elapsed = 0; elapsed < 15_000; elapsed += 150) {
+      await page.waitForTimeout(150)
+      position = await readServerPosition(page)
+      if (direction > 0 ? position[axis] >= targetValue - tolerance : position[axis] <= targetValue + tolerance) return position
+    }
+    throw new Error(`Joystick missed ${axis}=${targetValue}; last position=${JSON.stringify(position)}`)
+  } finally {
+    await page.mouse.up()
+    await page.waitForTimeout(350)
+  }
 }
 
 async function canvasPixelMetrics(page: Page) {
@@ -429,11 +445,9 @@ test('edge camera keeps the actor visible and renders scene detail at mobile and
     obstructed: el.getAttribute('data-camera-obstructed') === 'true',
     orbitOffset: Number(el.getAttribute('data-camera-orbit-offset')),
   }))
-  // Use a clear western/southern aisle to approach the wall, regardless of the fixture account's start point.
-  await steerAxisTo(page, 'x', -3)
-  await steerAxisTo(page, 'z', 4.2)
-  await steerAxisTo(page, 'x', 4.4)
-  await steerAxisTo(page, 'z', 10)
+  // Reach the wall with real joystick input and stop from authoritative server coordinates.
+  await holdJoystickUntil(page, 'x', 4.1)
+  await holdJoystickUntil(page, 'z', 10.4)
   const accountPosition = await readAccountPosition(page)
   expect(accountPosition.tileId, 'account drawer confirms dock tile').toBe('t_dock')
   expect(accountPosition.x, `before turn x=${accountPosition.x}`).toBeGreaterThanOrEqual(3.4)

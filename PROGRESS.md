@@ -24,9 +24,9 @@
 
 - Camera handling uses a **4-unit minimum when blocked**, tries nearby orbit angles to find an unobstructed ray, and keeps obstructed player visibility at **≥0.6**. No-hit camera distance and fade formula remain unchanged. Canvas read-only diagnostics: `data-camera-distance`, `data-player-visibility`, `data-camera-obstructed`, `data-camera-orbit-offset`.
 - Before: account #5 at **x=3.896,z=10.512**; ray hit `region-obstacle-1` at **2.036**, camera distance **1.686**, player visibility **0**, `isContextLost=false`, canvas/backing/viewport **375×812**; drawElements **5,076**. Screenshot `packages/web/evidence/mobile-layout/camera-blocked-before.png`.
-- After: local E2E account #4 at **x=4.20,z=10.40**; camera distance **8**, visibility **1**, orbit offset **0.60**. Pixel edge ratios: 375 **0.0392**, 393 **0.0375**, 430 **0.0342**, 1280 **0.0151**. Screenshot `packages/web/evidence/mobile-layout/camera-blocked-after.png`.
-- Reload after the obstruction restored distance **8**, visibility **1** and no hit; after opposite/up joystick moves, visibility remained **1**.
-- `edge camera keeps the actor visible and renders scene detail at mobile and desktop sizes`: local pass at 375/393/430/1280; E2E suite **11/11 passed**. `npm run build:web` passed; web tests **57 files / 521 tests passed**. CI is pending this commit.
+- After: local E2E account #44 at **x=3.70,z=11.00**; blocker ray selects orbit offset **0.60**, camera distance **8**, player visibility **1**. Pixel edge ratios: 375 **0.0392**, 393 **0.0375**, 430 **0.0342**, 1280 **0.0204**. Screenshot `packages/web/evidence/mobile-layout/camera-blocked-after.png`.
+- Reload after the obstruction restored distance **8**, visibility **1** and no hit; opposite/up joystick motion and dragging the camera toward the wall kept the player visible. Drag case selected orbit offset **-0.60**.
+- `edge camera keeps the actor visible and renders scene detail at mobile and desktop sizes`: local pass at 375/393/430/1280; the mobile-layout E2E suite **11/11 passed** after adjusting joystick steering to stop at server-reported coordinates. `npm run build:web` passed; web tests **57 files / 521 tests passed**. CI run `38515431879` failed because the earlier steering loop timed out; the updated test is being pushed for a fresh run.
 
 ## 2026-10-14 — Current main merged into legacy import branch
 
