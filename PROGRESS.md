@@ -2,12 +2,12 @@
 
 - 部署時間線：PR#10 `811c713` Unified→Unified 升級路徑 → PR#11 `767d290` 手機版面＋相機避障（Deploy `38534579909` 成功）→ PR#9 `1996ebe` server 測試修復（Deploy `38540215572` 失敗）→ PR#12 `a87f47d` startup health（Deploy `38550595267` 成功）→ PR#14 `9d1c44a`（含 PR#13 節流，Deploy `38585186419` 成功）。
 - PR#9 部署事故：multiplayer 重建後 healthcheck unhealthy；EventLog 約 80 萬筆、`start_period=30s`、deploy 等待 120–180s 不足；回滾驗證失敗，web 容器停在 `Created`，網站 502 數分鐘；手動 `docker start greed-island-l390-web-1` 後恢復。
-- PR#12 修法：`start_period=600s`、`$StartupWaitSeconds=900`；deploy 契約測試 16 項。
+- PR#12 修法：`start_period=600s`、`$StartupWaitSeconds=900`；`scripts/test-l390-deploy-contracts.py` 有 18 個 `def test_`。
 - 最近 50,000 筆 EventLog：`NPC_STATE_RECORDED` 33,873 筆（67.75%、約 6.2 筆／秒）；總量約 9.1 筆／秒。
 - PR#13：僅子格、`lastActedTick`、mood／health 小數變化（整數值不變）每 NPC 每 5 tick 最多寫一次，常數 `NPC_MINOR_SNAPSHOT_INTERVAL_TICKS=5`；1,000 tick fixture 36,829→13,380（減少 63.7%）。
 - PR#14：EventLog 超過 20,000 筆時讀每 NPC 最新 typed 快照，使用既有索引，無 DDL；修復 typed-only NPC 重啟回 profile 預設。800,000 筆 fixture：查詢 72–123 ms、啟動增加 0.2–0.5 秒。
 - 已知取捨：最新次要狀態可能尚未落盤；重啟後 `lastActedTick`／子格／mood、health 小數位最多落後 4 tick（20 秒）。Deploy L390 workflow 有 PowerShell 5.1 AST 語法解析 job，但該 job 不執行腳本；run `38585186419` 解析 job 成功。
-- 現況：main `9d1c44a` 已部署；healthz `buildSha=9d1c44ac…`、容器 healthy、帳號 4、EventLog 1,047,622 筆、世界 tick 20329；EventLog 只增不減。
+- Deploy run `38585186419` 後查詢：main `9d1c44a` 已部署；healthz `buildSha=9d1c44ac…`、容器 healthy、帳號 4、EventLog 1,047,622 筆、世界 tick 20329。README 23:xx 後續讀值約 tick 20370；EventLog 只增不減。
 
 ## 2026-10-14 — NPC state restore on large EventLogs
 
