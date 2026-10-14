@@ -2,7 +2,7 @@ import { hashCanonicalJson } from '../kernel/canonicalJson.js'
 import type { NpcRuntimeState, NpcStateChange } from './npcEngine.js'
 
 /** Minor NPC snapshot changes are coalesced for this many world ticks. */
-export const NPC_MINOR_SNAPSHOT_INTERVAL_TICKS = 5
+export const NPC_MINOR_SNAPSHOT_INTERVAL_TICKS = 20
 
 /** In-memory write cadence for low-impact NPC position snapshots. Never persisted. */
 export class NpcStateSnapshotThrottle {
@@ -10,14 +10,15 @@ export class NpcStateSnapshotThrottle {
   private minorOnlyCandidateCount = 0
   private suppressedMinorSnapshotCount = 0
 
-  constructor(private readonly options: { enabled?: boolean } = {}) {}
+  constructor(private readonly options: { enabled?: boolean; intervalTicks?: number } = {}) {}
 
   shouldPersist(change: NpcStateChange, tick: number): boolean {
     if (this.options.enabled === false || !change.previousState || !isMinorOnlyChange(change.previousState, change.state)) return true
     this.minorOnlyCandidateCount += 1
     const lastPersistedTick = this.lastPersistedTickByNpc.get(change.npcId)
+    const intervalTicks = this.options.intervalTicks ?? NPC_MINOR_SNAPSHOT_INTERVAL_TICKS
     const shouldPersist = lastPersistedTick === undefined
-      || tick - lastPersistedTick >= NPC_MINOR_SNAPSHOT_INTERVAL_TICKS
+      || tick - lastPersistedTick >= intervalTicks
     if (!shouldPersist) this.suppressedMinorSnapshotCount += 1
     return shouldPersist
   }

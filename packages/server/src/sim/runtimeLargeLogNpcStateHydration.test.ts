@@ -15,7 +15,7 @@ type RuntimeInternals = {
     snapshotAll(): ReadonlyMap<string, NpcRuntimeState>
     hydrate(npcId: string, state: unknown): void
   }
-  npcStateProjection: { getByNpcId(npcId: string): { state: NpcRuntimeState } | null }
+  npcStateProjection: { getByNpcId(npcId: string): { state: NpcRuntimeState; recordedAtTick: number } | null }
 }
 
 type MeasuredEventStore = SqliteEventStore & {
@@ -56,7 +56,7 @@ function fillerDraft(sequence: number): EventDraft {
     eventType: 'NPC_TEST_FIXTURE_EVENT',
     occurredAt: sequence,
     actorId: 'fixture',
-    tick: 1002,
+    tick: 1019,
     payload: { ordinal: sequence },
     deterministicKey: `fixture-filler-${sequence}`,
     version: 1,
@@ -136,6 +136,7 @@ function createFixture(logSize: number) {
     legacyStateDraft(newerLegacyId, newerFact, 1003),
     snapshotDraft(newerTypedId, newerSnapshot, 1004),
   ])
+  store.appendEvents([fillerDraft(fillerCount + 2)])
 
   const reads = { fullLog: 0, latestTypedRows: 0, latestTypedCalls: 0, legacyRows: 0, legacyCalls: 0 }
   const measured = store as MeasuredEventStore
@@ -167,8 +168,9 @@ function restartAndRead(fixture: ReturnType<typeof createFixture>) {
   try {
     const internals = runtime as unknown as RuntimeInternals
     const state = internals.npcEngine.snapshotAll()
-    const projected = new Map([...fixture.expected.keys()].map(npcId => [npcId, internals.npcStateProjection.getByNpcId(npcId)?.state]))
-    return { state: new Map(state), projected, npcCount: state.size, currentTick: runtime.getCurrentTick() }
+    const projectedRows = new Map([...fixture.expected.keys()].map(npcId => [npcId, internals.npcStateProjection.getByNpcId(npcId)]))
+    const projected = new Map([...projectedRows].map(([npcId, row]) => [npcId, row?.state]))
+    return { state: new Map(state), projected, projectedRows, npcCount: state.size, currentTick: runtime.getCurrentTick() }
   } finally {
     runtime.stop()
   }
@@ -196,7 +198,11 @@ describe('large-log NPC state hydration', () => {
       for (const npcId of fixture.fixtureNpcIds) {
         const expectedState = fixture.expected.get(npcId)!
         expect(restarted.projected.get(npcId), `projection state for ${npcId}`).toEqual(expectedState)
-        expect(restarted.currentTick - expectedState.lastActedTick).toBeLessThanOrEqual(4)
+        const restartedState = restarted.state.get(npcId)!
+        expect(restartedState.tile, `tile for ${npcId}`).toBe(expectedState.tile)
+        expect(restartedState.activity, `activity for ${npcId}`).toBe(expectedState.activity)
+        expect(restarted.currentTick - restarted.projectedRows.get(npcId)!.recordedAtTick,
+          `snapshot age for ${npcId}`).toBeLessThanOrEqual(19)
       }
       expect(fixture.reads.fullLog).toBe(0)
       expect(fixture.reads.latestTypedCalls).toBeGreaterThan(0)
