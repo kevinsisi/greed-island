@@ -81,12 +81,69 @@ test('desktop 1280x800 keeps reset text and places the region selector below the
   const geometry = await page.evaluate(() => {
     const map = document.querySelector('.mp-map svg')!.getBoundingClientRect()
     const select = document.querySelector('#world-region')!.getBoundingClientRect()
+    const panel = document.querySelector('.mp-world-panel')!
     const overlapWidth = Math.max(0, Math.min(map.right, select.right) - Math.max(map.left, select.left))
     const overlapHeight = Math.max(0, Math.min(map.bottom, select.bottom) - Math.max(map.top, select.top))
-    return { map: { left: map.left, top: map.top, right: map.right, bottom: map.bottom }, select: { left: select.left, top: select.top, right: select.right, bottom: select.bottom }, overlapArea: overlapWidth * overlapHeight }
+    const scrollChains = ['.mp-players', '.mp-npcs', '.mp-messages'].map(selector => {
+      const list = panel.querySelector(selector)!
+      const overflow = []
+      for (let node: Element | null = list; node && panel.contains(node); node = node.parentElement) {
+        const value = getComputedStyle(node).overflowY
+        if (value === 'auto' || value === 'scroll') overflow.push(`${node.className}:${value}`)
+        if (node === panel) break
+      }
+      return { selector, count: overflow.length, overflow }
+    })
+    return { map: { left: map.left, top: map.top, right: map.right, bottom: map.bottom }, select: { left: select.left, top: select.top, right: select.right, bottom: select.bottom }, overlapArea: overlapWidth * overlapHeight, scrollChains }
   })
   expect(geometry.overlapArea, `map ${JSON.stringify(geometry.map)} / selector ${JSON.stringify(geometry.select)}`).toBe(0)
-  console.log(`[mobile-layout] desktop-reset visibleText=${await reset.evaluate(button => button.innerText)} mapBottom=${geometry.map.bottom.toFixed(1)} selectorTop=${geometry.select.top.toFixed(1)} overlap=${geometry.overlapArea}`)
+  expect(geometry.scrollChains, 'each desktop list has exactly one scrollable ancestor chain').toEqual([
+    { selector: '.mp-players', count: 1, overflow: ['mp-players:auto'] },
+    { selector: '.mp-npcs', count: 1, overflow: ['mp-npcs:auto'] },
+    { selector: '.mp-messages', count: 1, overflow: ['mp-messages:auto'] },
+  ])
+  console.log(`[mobile-layout] desktop-reset visibleText=${await reset.evaluate(button => button.innerText)} mapBottom=${geometry.map.bottom.toFixed(1)} selectorTop=${geometry.select.top.toFixed(1)} overlap=${geometry.overlapArea} scrollChainCounts=${geometry.scrollChains.map(chain => `${chain.selector}:${chain.count}`).join(',')}`)
+})
+
+test('mobile bottom tool buttons show two-character labels without clipping at 375, 393 and 430px', async ({ page }) => {
+  await mobilePage(page)
+  const expected = ['說明', '地圖', '點燈', '旅人', '帳號']
+  for (const size of sizes.filter(item => [375, 393, 430].includes(item.width))) {
+    await page.setViewportSize({ width: size.width, height: size.height })
+    const buttons = await page.locator('.mp-mobile-tools button').evaluateAll(elements => elements.map(button => {
+      const label = button.querySelector<HTMLElement>('.mp-tool-label')!
+      const style = getComputedStyle(label)
+      const rect = button.getBoundingClientRect()
+      return { label: label.innerText, fontSize: parseFloat(style.fontSize), whiteSpace: style.whiteSpace, scrollWidth: button.scrollWidth, clientWidth: button.clientWidth, height: rect.height }
+    }))
+    expect(buttons.map(button => button.label)).toEqual(expected)
+    for (const [index, button] of buttons.entries()) {
+      expect([...button.label].length, `${size.name} tool ${index} label length`).toBe(2)
+      expect(button.fontSize, `${size.name} tool ${button.label} font size`).toBeGreaterThanOrEqual(12)
+      expect(button.whiteSpace, `${size.name} tool ${button.label} no-wrap`).toBe('nowrap')
+      expect(button.scrollWidth, `${size.name} tool ${button.label} unclipped`).toBeLessThanOrEqual(button.clientWidth)
+      expect(button.height, `${size.name} tool ${button.label} touch height`).toBeGreaterThanOrEqual(44)
+    }
+    console.log(`[mobile-layout] tool-labels size=${size.name} labels=${buttons.map(button => button.label).join('/')} font=${Math.min(...buttons.map(button => button.fontSize))}px minHeight=${Math.min(...buttons.map(button => button.height))}px maxScroll=${Math.max(...buttons.map(button => button.scrollWidth - button.clientWidth))}`)
+  }
+})
+
+test('mobile traveller drawer keeps the first NPC row fully inside the scroll viewport', async ({ page }) => {
+  await mobilePage(page)
+  await page.getByRole('button', { name: '旅人與 NPC' }).click()
+  const firstNpc = page.locator('.mp-npcs li').first()
+  await expect(firstNpc).toBeVisible()
+  const boxes = await page.evaluate(() => {
+    const row = document.querySelector('.mp-npcs li')!.getBoundingClientRect()
+    const list = document.querySelector('.mp-npcs')!.getBoundingClientRect()
+    const drawer = document.querySelector('.mp-mobile-drawer')!.getBoundingClientRect()
+    return { rowTop: row.top, rowBottom: row.bottom, listTop: list.top, listBottom: list.bottom, drawerTop: drawer.top, drawerBottom: drawer.bottom, firstNpc: document.querySelector('.mp-npcs li')!.textContent?.trim() }
+  })
+  expect(boxes.rowTop, `first NPC row ${boxes.firstNpc} starts below drawer top`).toBeGreaterThanOrEqual(boxes.drawerTop)
+  expect(boxes.rowTop, `first NPC row ${boxes.firstNpc} starts at list row boundary`).toBeGreaterThanOrEqual(boxes.listTop)
+  expect(boxes.rowBottom, `first NPC row ${boxes.firstNpc} is fully visible in list`).toBeLessThanOrEqual(boxes.listBottom)
+  expect(boxes.rowBottom, `first NPC row ${boxes.firstNpc} is fully visible in drawer`).toBeLessThanOrEqual(boxes.drawerBottom)
+  console.log(`[mobile-layout] first-npc row=${boxes.firstNpc} top=${boxes.rowTop.toFixed(1)} bottom=${boxes.rowBottom.toFixed(1)} list=${boxes.listTop.toFixed(1)}..${boxes.listBottom.toFixed(1)} drawer=${boxes.drawerTop.toFixed(1)}..${boxes.drawerBottom.toFixed(1)}`)
 })
 
 async function mobilePage(page: Page) {
@@ -150,7 +207,7 @@ async function auditMobileUi(page: Page) {
     })
     const buttons = [...document.querySelectorAll('button')].filter(visible)
     const misses = buttons.flatMap(button => { const r = button.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === button && r.width >= 44 && r.height >= 44 ? [] : [button.textContent?.trim() || button.getAttribute('aria-label') || 'unnamed'] })
-    const smallText = textElements.flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); return size < 14 && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
+    const smallText = textElements.flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); const minimum = el.classList.contains('mp-tool-label') ? 12 : 14; return size < minimum && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
     return { misses, smallText, lowContrast }
   })
 }
@@ -264,7 +321,7 @@ test('mobile readable text and visible button centers meet touch requirements', 
       const visible = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' }
       const buttons = [...document.querySelectorAll('button')].filter(visible)
       const misses = buttons.flatMap(button => { const r = button.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === button && r.width >= 44 && r.height >= 44 ? [] : [button.textContent?.trim() || button.getAttribute('aria-label') || 'unnamed'] })
-      const smallText = [...document.querySelectorAll('body *')].filter(visible).filter(el => [...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim())).flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); return size < 14 && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
+      const smallText = [...document.querySelectorAll('body *')].filter(visible).filter(el => [...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim())).flatMap(el => { const size = parseFloat(getComputedStyle(el).fontSize); const minimum = el.classList.contains('mp-tool-label') ? 12 : 14; return size < minimum && !el.closest('.mp-authority,.mp-progress-note,.mp-controls-hint') ? [{ text: el.textContent?.trim().slice(0, 32), size }] : [] })
       const version = [...document.querySelectorAll('.mp-authority')].some(el => visible(el))
       return { viewport: innerWidth, scroll: document.documentElement.scrollWidth, misses, smallText, version }
     })

@@ -2,11 +2,23 @@
 
 - Mobile `<768px` now keeps the 3D scene exposed behind a 48px header and five icon touch targets; scene details, map, beacon, travellers/NPC chat and account information share one dismissible bottom drawer. Menu navigation contains world overview, profile, codex, social/trading, account recovery and logout. Desktop panel/navigation presentation remains in place.
 - `e2e/mobile-layout.spec.ts`: all 7 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; `auditMobileUi` checks all visible text at **≥4.5:1** contrast, **≥14px** font and visible button centers/44px targets. `npm run build:web` and web tests pass (57 files / 521 tests). The first CI run `38488752223` exposed that `aria-hidden` on the desktop `display:contents` wrapper hid world chat from role queries; desktop wrapper is now exposed and the desktop test asserts the chat input/send button are visible. Follow-up CI runs `38489878912` and `38490787759` passed all 4 jobs; browser E2E passed 9 tests.
-- Measured canvas visibility (closed / lowest open drawer): 375×812 **86.3% / 50%**; 393×852 **86.3% / 50%**; 430×932 **87.5% / 45%**. Menu open **65%**. Header **48px**. Horizontal scroll: none at all tested sizes. Desktop 1280×800 selector width **218px**, label **100.5/176px**.
+- `e2e/mobile-layout.spec.ts`: all 10 tests pass locally against `localhost:4178/game` using `mobile-qa-1014`; `auditMobileUi` checks text contrast at **≥4.5:1**, body text at **≥14px** (tool labels ≥12px), and visible button centers/44px targets. `npm run build:web` and web tests pass (57 files / 521 tests). The first CI run `38488752223` exposed that `aria-hidden` on the desktop `display:contents` wrapper hid world chat from role queries; desktop wrapper is now exposed and the desktop test asserts the chat input/send button are visible. Follow-up CI runs `38489878912` and `38490787759` passed all 4 jobs; browser E2E passed 9 tests.
+- Measured canvas visibility (closed / lowest open drawer): 375×812 **86.3% / 50%**; 393×852 **86.3% / 50%**; 430×932 **87.5% / 45%**. Menu open **65%**. Header **48px**. Horizontal scroll: none at all tested sizes. Desktop 1280×800 selector width **218px**, label **100.5/176px** before desktop restoration.
 - `beacon action is hit-testable at its center on mobile`: center `elementFromPoint` is the action button; screenshot `packages/web/evidence/mobile-layout/a-beacon-button-center.png`.
 - `NPC chat input is clickable, editable, readable and unobscured`: center hit succeeds, fill/readback succeeds, font **16px**; screenshot `packages/web/evidence/mobile-layout/b-npc-chat-input.png`.
 - `two-second full joystick deflection moves the server-persisted account position by at least one unit`: latest run **3.7,-5.9 → -3.9,-5.9**, delta **7.60**; no server changes; screenshot `packages/web/evidence/mobile-layout/c-joystick-two-seconds.png`.
 - `mobile readable text and visible button centers meet touch requirements`: readable text ≥14px, visible buttons ≥44×44px with hit-test center, version hidden; screenshot `packages/web/evidence/mobile-layout/d-readable-controls.png`. Menu screenshot: `packages/web/evidence/mobile-layout/e-mobile-menu.png`.
+
+## 2026-10-14 — PR #11 desktop and mobile follow-up
+
+- Screenshots compare `origin/main@811c713` before and `fix/mobile-game-layout` after at 1280×800: `packages/web/evidence/mobile-layout/desktop-1280-before.png` and `desktop-1280-after.png`. Reset text is `重置鏡頭` in both. Map SVG rect is **1104,124–1240,231** and selector rect **1104,231–1240,275** in both; overlap **0px²**.
+- `origin/main@811c713` also had a panel-level `overflow-y:auto` around inner list scrollers. The follow-up removes the parent desktop scroll so player, NPC and message list chains each have **1** `overflow-y:auto/scroll` container. The origin/main screenshot uses overlay scrollbars, so no visible scrollbar difference in the paired images.
+- Mobile bottom labels: `說明／地圖／點燈／旅人／帳號`; each **2 characters**, **12px**, **44px** button height, **0px** horizontal overflow at 375/393/430px.
+- First NPC list item fits fully in the open drawer: row **y=566.7–604.7**, list **566.7–642.7**, drawer **388.7–746.0**.
+- `desktop 1280x800 keeps reset text and places the region selector below the map image`: reset text visible; map/selector overlap **0px²**; each list scroll chain count **1**.
+- `mobile bottom tool buttons show two-character labels without clipping at 375, 393 and 430px`: all five labels fit, **0px** scroll overflow, min height **44px**.
+- `mobile traveller drawer keeps the first NPC row fully inside the scroll viewport`: first item starts **178.0px** below drawer top and is fully within the list viewport.
+- `e2e/mobile-layout.spec.ts`: **10/10 passed**; existing mobile canvas checks remain 375 **86.3%/50%**, 393 **86.3%/50%**, 430 **87.5%/45%** (closed/open minimum). CI for this follow-up is pending.
 
 ## 2026-10-14 — Current main merged into legacy import branch
 
