@@ -11,10 +11,10 @@
 
 ## 2026-10-14 — PR #11 desktop and mobile follow-up
 
-- Screenshots compare `origin/main@811c713` before and `fix/mobile-game-layout` after at 1280×800: `packages/web/evidence/mobile-layout/desktop-1280-before.png` and `desktop-1280-after.png`. Reset text is `重置鏡頭` in both. Map SVG rect is **1104,124–1240,231** and selector rect **1104,231–1240,275** in both; overlap **0px²**.
+- Screenshots compare `origin/main@811c713` before and `fix/mobile-game-layout` after at 1280×800: `packages/web/evidence/mobile-layout/desktop-1280-before.png` and `desktop-1280-after.png`. Reset text is `重置鏡頭` in both. Map SVG rect is **1104,124–1240,231** and selector rect **1104,231–1240,275** in both; overlap **0px²**. Selector client width **134px**; label **92.2/93.4px**.
 - `origin/main@811c713` also had a panel-level `overflow-y:auto` around inner list scrollers. The follow-up removes the parent desktop scroll so player, NPC and message list chains each have **1** `overflow-y:auto/scroll` container. The origin/main screenshot uses overlay scrollbars, so no visible scrollbar difference in the paired images.
 - Mobile bottom labels: `說明／地圖／點燈／旅人／帳號`; each **2 characters**, **12px**, **44px** button height, **0px** horizontal overflow at 375/393/430px.
-- First NPC list item fits fully in the open drawer: row **y=566.7–604.7**, list **566.7–642.7**, drawer **388.7–746.0**.
+- First NPC list item fits fully in the open drawer: row **y=566.7–604.7**, list **566.7–756.7**, drawer **388.7–746.0**.
 - `desktop 1280x800 keeps reset text and places the region selector below the map image`: reset text visible; map/selector overlap **0px²**; each list scroll chain count **1**.
 - `mobile bottom tool buttons show two-character labels without clipping at 375, 393 and 430px`: all five labels fit, **0px** scroll overflow, min height **44px**.
 - `mobile traveller drawer keeps the first NPC row fully inside the scroll viewport`: first item starts **178.0px** below drawer top and is fully within the list viewport.

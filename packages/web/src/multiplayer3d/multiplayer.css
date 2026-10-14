@@ -19,7 +19,7 @@
 @media(max-width:767px){.mp-map{width:112px}.mp-map select{font-size:10px;padding:3px}.mp-panel-toggle{top:285px}.mp-world-panel{top:335px;bottom:241px}.mp-progress-note{max-width:calc(100vw - 32px);font-size:8px}.mp-bottom{pointer-events:none}.mp-actions{bottom:128px}.mp-touch{bottom:142px}.mp-feedback{bottom:267px}}
 @media(max-width:767px) and (max-height:760px){.mp-world-panel{top:77px;bottom:241px;z-index:7}}
 .mp-world-panel .mp-players{flex:0 1 120px}.mp-world-panel .mp-panel-heading,.mp-world-panel .mp-chat-heading,.mp-world-panel .mp-npc-note{flex-shrink:0}.mp-world-panel .mp-npcs{min-height:60px}
-@media(min-width:1024px) and (max-height:800px){.mp-map select{padding-left:5.7px;padding-right:5.7px}.mp-world-panel{top:310px;bottom:150px}}
+@media(min-width:1024px) and (max-height:800px){.mp-map select{padding-left:5.3px;padding-right:5.3px}.mp-world-panel{top:310px;bottom:150px}}
 @media(min-width:768px){.mp-world-panel{overflow-y:hidden}}
 .mp-admin-recovery{padding:0 10px;font-size:11px!important}.mp-recovery-close{margin-top:16px;width:100%}.mp-recovery-target{font-size:13px;line-height:1.6}.mp-login>label{display:block;font-size:11px;margin:14px 0 8px}.mp-login>input{width:100%;min-height:44px;margin-bottom:8px}.mp-login>button{min-height:44px}.mp-login>small{overflow-wrap:anywhere}
 .mp-world-panel .mp-messages{min-height:90px;flex:0 1 150px}.mp-world-panel .mp-chat-form{flex-shrink:0;padding-bottom:8px}.mp-world-panel .mp-messages strong small{font-size:8px;color:#b8c7b2}
