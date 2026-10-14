@@ -425,10 +425,15 @@ retain both participants' `subCol` / `subRow` / `subZ` at the decision
 tick so the event carries evidence for the observed interaction.
 
 The current NPC engine keeps an in-memory `Map<npcId, NpcRuntimeState>`
-for performance. That map is a *cache*. On boot the runtime calls
-`hydrateFromEventLog` which reduces the entire EventLog and rebuilds
-the cache from `npc.state.<id>` FACT_SET facts. Replaying the same
-EventLog twice produces the same cache.
+for performance. That map is a *cache*. On boot, `NPC_STATE_RECORDED`
+events are the primary source and legacy `FACT_SET npc.state.<id>` facts
+remain a fallback. When both formats exist, the snapshot with the higher
+EventLog sequence wins. Small logs replay in sequence; large logs load only
+the latest typed row per actor and latest legacy fact per known NPC id
+(including matured dynamic NPCs after born-profile replay), so the runtime
+does not materialize the high-volume typed snapshot history.
+Replaying the same EventLog twice produces the same cache, except for the
+explicitly bounded PR#13 minor-snapshot interval.
 
 When a future implementation drops the legacy FACT_SET path entirely,
 NPC state MUST become a typed projection of `NPC_MOVE`,
@@ -561,10 +566,11 @@ Persistent facts (must survive restart, must replay deterministically):
   `RARE_WINDOW_OPEN/CLOSE` events
 - Active world events → FACT_SET `world.activeEvents` + typed
   `WORLD_EVENT_SPAWN/END` events
-- NPC state per NPC → FACT_SET `npc.state.<id>` (today; will become
-  typed-event projection later). Includes area sub-tile
-  (`subCol`, `subRow`) so the area-canvas rendering is fully
-  determined by the server.
+- NPC state per NPC → typed `NPC_STATE_RECORDED` EventLog snapshots,
+  with legacy `FACT_SET npc.state.<id>` fallback. Includes area sub-tile
+  (`subCol`, `subRow`) so the area-canvas rendering is fully determined
+  by the server. Snapshot conflicts resolve by sequence; large-log boot
+  reads latest-per-actor rows rather than replaying all state events.
 - Area state per tile (faction control + resources + recent local
   events) → FACT_SET `area.state.<tileId>` + typed `AREA_PRESSURE`
   events

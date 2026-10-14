@@ -570,6 +570,11 @@ export class NpcEngine {
       ...(typeof rawRecord.homeTileOverride === 'string' && rawRecord.homeTileOverride.length > 0
         ? { homeTileOverride: rawRecord.homeTileOverride }
         : {}),
+      ...(typeof rawRecord.scheduledBuildingId === 'string'
+        ? { scheduledBuildingId: rawRecord.scheduledBuildingId }
+        : rawRecord.scheduledBuildingId === null
+          ? { scheduledBuildingId: null }
+          : {}),
     }
     this.state.set(npcId, next)
   }

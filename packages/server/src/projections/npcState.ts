@@ -17,6 +17,13 @@ export type NpcStateSnapshot = Readonly<{
     expiresAtTick: number
     reason: string
   } | null
+  intentOverride?: {
+    targetTile: string
+    expiresAtTick: number
+    intentType: string
+    urgency: number
+    reason: string
+  } | null
   travelRoute?: {
     fromTile: string
     toTile: string
@@ -24,6 +31,8 @@ export type NpcStateSnapshot = Readonly<{
     startedAtTick: number
   } | null
   agent?: unknown
+  homeTileOverride?: string
+  scheduledBuildingId?: string | null
 }>
 
 export type NpcStateRow = Readonly<{
@@ -64,11 +73,10 @@ export class NpcStateProjection {
     if (event.eventType === NPC_STATE_RECORDED) {
       const row = rowFromEvent(event)
       if (!row) return
-      const previous = this.getByNpcId(row.npcId)
-      if (!previous || previous.sequence <= row.sequence) {
-        this.rows.set(row.npcId, row)
-        this.volatileRows.delete(row.npcId)
-      }
+      this.projectStateRow(row)
+    } else if (event.eventType === 'FACT_SET') {
+      const row = legacyNpcStateRowFromEvent(event)
+      if (row) this.projectStateRow(row)
     } else if (event.eventType === NPC_PRODUCTIVE_ACTION) {
       const productive = productiveActionFromEvent(event)
       if (productive) {
@@ -105,6 +113,14 @@ export class NpcStateProjection {
   canonicalHash(): string {
     return hashCanonicalJson(this.getAll())
   }
+
+  private projectStateRow(row: NpcStateRow): void {
+    const previous = this.getByNpcId(row.npcId)
+    if (!previous || previous.sequence <= row.sequence) {
+      this.rows.set(row.npcId, row)
+      this.volatileRows.delete(row.npcId)
+    }
+  }
 }
 
 function rowFromEvent(event: Event): NpcStateRow | null {
@@ -118,6 +134,19 @@ function rowFromEvent(event: Event): NpcStateRow | null {
     recordedAtTick: typeof event.tick === 'number' ? event.tick : 0,
     sequence: event.sequence,
     state: p.state as NpcStateSnapshot,
+  }
+}
+
+function legacyNpcStateRowFromEvent(event: Event): NpcStateRow | null {
+  const payload = event.payload as { key?: unknown; value?: unknown } | null
+  if (typeof payload?.key !== 'string' || !payload.key.startsWith('npc.state.')) return null
+  const npcId = payload.key.slice('npc.state.'.length)
+  if (!npcId || !payload.value || typeof payload.value !== 'object' || Array.isArray(payload.value)) return null
+  return {
+    npcId,
+    recordedAtTick: typeof event.tick === 'number' ? event.tick : 0,
+    sequence: event.sequence,
+    state: payload.value as NpcStateSnapshot,
   }
 }
 

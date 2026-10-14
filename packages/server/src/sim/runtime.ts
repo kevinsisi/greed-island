@@ -7274,6 +7274,17 @@ export class SimulationRuntime {
       this.lifeGoalsProjection.rebuildFromEvents(allEvents)
       this.playerSurvivalProjection.rebuildFromEvents(allEvents)
     } else {
+      // Keep the availability-first boot bounded: the SQL aggregate uses the
+      // (event_type, actor_id, sequence) index and returns one typed row per
+      // NPC, never the high-volume snapshot history. Legacy FACT_SET seeks use
+      // the existing fact-key/sequence index; projection merge is sequence-led.
+      const latestNpcStateEvents = this.store.readLatestEventsPerActor(['NPC_STATE_RECORDED'])
+      const latestLegacyNpcStateEvents = this.readLatestLegacyNpcStateEvents(
+        this.profiles.map((profile) => `${NPC_STATE_PREFIX}${profile.id}`),
+      )
+      this.npcStateProjection.rebuildFromEvents(
+        [...latestNpcStateEvents, ...latestLegacyNpcStateEvents].sort((a, b) => a.sequence - b.sequence),
+      )
       // Availability-first large-log boot: only rebuild projections required
       // for HTTP availability before any typed replay begins. On very large
       // local/live logs even the previously "small" typed subsets can still
@@ -7422,9 +7433,15 @@ export class SimulationRuntime {
         eventTypes: BORN_NPC_BOOT_EVENT_TYPES,
         apply: (events) => {
           this.bornNpcsProjection.rebuildFromEvents(events)
-          for (const profile of this.bornNpcsProjection.listMaturedProfiles()) {
+          const maturedProfiles = this.bornNpcsProjection.listMaturedProfiles()
+          for (const profile of maturedProfiles) {
             this.npcEngine.registerDynamicNpc(profile)
           }
+          // Dynamic NPCs were not present in the static-profile key list at
+          // constructor time. Preserve their indexed legacy fallback too.
+          for (const event of this.readLatestLegacyNpcStateEvents(
+            maturedProfiles.map((profile) => `${NPC_STATE_PREFIX}${profile.id}`),
+          )) this.npcStateProjection.project(event)
         },
       },
       {
@@ -7512,6 +7529,17 @@ export class SimulationRuntime {
       const projected = this.npcStateProjection.getByNpcId(profile.id)
       if (projected) this.npcEngine.hydrate(profile.id, projected.state)
     }
+  }
+
+  private readLatestLegacyNpcStateEvents(keys: readonly string[]): Event[] {
+    // A few focused runtime tests use minimal EventStore doubles predating this
+    // indexed reader; their legacy-value fallback remains covered separately.
+    const store = this.store as SqliteEventStore & {
+      readLatestFactEvents?: (factKeys: readonly string[]) => Event[]
+    }
+    return typeof store.readLatestFactEvents === 'function'
+      ? store.readLatestFactEvents(keys)
+      : []
   }
 
   private hydrateAreaEngineFromProjectionFacts(): void {
