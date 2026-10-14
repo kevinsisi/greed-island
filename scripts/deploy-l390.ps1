@@ -382,7 +382,7 @@ try {
     if (-not $rollbackCompatible) { throw 'Rollout failed and old DB/schema compatibility is unproven. Containers remain stopped; owner-reviewed local restore is required. No automatic database restore was attempted.' }
     try {
       if ($isLegacyRoom) {
-        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) 180)
+        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
       } else {
         # Use the still-preserved prior release Compose file and its recorded
         # environment file. Same-SHA image-ID drift is rejected before stop.

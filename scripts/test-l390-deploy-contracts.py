@@ -42,6 +42,7 @@ class SourceDeploymentContracts(unittest.TestCase):
         )
         self.assertIn('Await-Health $true', self.script)
         self.assertIn("Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
+        self.assertIn("Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
         self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
         self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertIn('$process.WaitForExit($TimeoutSeconds * 1000)', self.script)
