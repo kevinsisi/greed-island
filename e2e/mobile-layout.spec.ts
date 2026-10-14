@@ -72,6 +72,23 @@ test('game layout stays within viewport and the region choice fits at phone, tab
   }
 })
 
+test('desktop 1280x800 keeps reset text and places the region selector below the map image', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await register(page)
+  const reset = page.getByRole('button', { name: '重置鏡頭' })
+  await expect(reset).toBeVisible()
+  expect(await reset.evaluate(button => button.innerText)).toContain('重置鏡頭')
+  const geometry = await page.evaluate(() => {
+    const map = document.querySelector('.mp-map svg')!.getBoundingClientRect()
+    const select = document.querySelector('#world-region')!.getBoundingClientRect()
+    const overlapWidth = Math.max(0, Math.min(map.right, select.right) - Math.max(map.left, select.left))
+    const overlapHeight = Math.max(0, Math.min(map.bottom, select.bottom) - Math.max(map.top, select.top))
+    return { map: { left: map.left, top: map.top, right: map.right, bottom: map.bottom }, select: { left: select.left, top: select.top, right: select.right, bottom: select.bottom }, overlapArea: overlapWidth * overlapHeight }
+  })
+  expect(geometry.overlapArea, `map ${JSON.stringify(geometry.map)} / selector ${JSON.stringify(geometry.select)}`).toBe(0)
+  console.log(`[mobile-layout] desktop-reset visibleText=${await reset.evaluate(button => button.innerText)} mapBottom=${geometry.map.bottom.toFixed(1)} selectorTop=${geometry.select.top.toFixed(1)} overlap=${geometry.overlapArea}`)
+})
+
 async function mobilePage(page: Page) {
   await page.setViewportSize({ width: 375, height: 812 })
   await register(page)
