@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $project = 'greed-island-l390'
 $StartupWaitSeconds = 900
+$BackupRetentionCount = 2
 if ($ExpectedSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Exact successful current-main SHA is required.' }
 foreach ($path in @($DeployPath, $SourcePath, $PackagePath)) {
   if (-not [IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Container)) { throw 'Every deployment path must already exist and be absolute.' }
@@ -372,6 +373,19 @@ try {
   $oldPath = Request '/multiplayer-3d'
   if ($oldPath.status -ne 302 -or $oldPath.location -ne '/game' -or (Request '/game').status -ne 200) { throw 'Old game redirect must terminate in one hop.' }
   Write-Json @{ sha=$ExpectedSha; version=$health.version; release=$release; backup=$backup; status='verified'; verifiedAt=[DateTime]::UtcNow.ToString('o') } (Join-Path $DeployPath 'l390-active-release.json')
+  try {
+    $resolvedBackupRoot = (Resolve-Path -LiteralPath $backupRoot).Path.TrimEnd('\') + '\'
+    $retainedBackups = @(Get-ChildItem -LiteralPath $backupRoot -Directory | Where-Object { $_.Name -cmatch '^\d{8}T\d{6}Z-' } | Sort-Object -Property Name -Descending)
+    foreach ($oldBackup in ($retainedBackups | Select-Object -Skip $BackupRetentionCount)) {
+      $resolvedOldBackup = (Resolve-Path -LiteralPath $oldBackup.FullName).Path
+      if (-not $resolvedOldBackup.StartsWith($resolvedBackupRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a backup outside the backup root: $($oldBackup.FullName)"
+      }
+      Remove-Item -LiteralPath $resolvedOldBackup -Recurse -Force -ErrorAction Stop
+    }
+  } catch {
+    Write-Warning "Backup retention cleanup failed; deployment remains successful. $($_.Exception.Message)"
+  }
   Write-Host "Verified exact L390 SHA $ExpectedSha. Backups remain private and local."
 } catch {
   $failure = $_
