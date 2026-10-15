@@ -12,6 +12,9 @@ Set-StrictMode -Version Latest
 $project = 'greed-island-l390'
 $StartupWaitSeconds = 900
 $BackupRetentionCount = 2
+$ProbeNodeOptions = '--max-old-space-size=4096'
+# Database inspection replays 1.2M+ events and can take 200+ seconds.
+$DatabaseInspectionTimeoutSeconds = 900
 if ($ExpectedSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Exact successful current-main SHA is required.' }
 foreach ($path in @($DeployPath, $SourcePath, $PackagePath)) {
   if (-not [IO.Path]::IsPathRooted($path) -or -not (Test-Path -LiteralPath $path -PathType Container)) { throw 'Every deployment path must already exist and be absolute.' }
@@ -241,7 +244,7 @@ $origin = ($origins -split "[,\n]")[0].Trim()
 # Preflight occurs BEFORE any old container stops. There is no production init,
 # migration/import or first-signup owner fallback inside the image.
 $probe = "import {resolveUnifiedConfig} from './dist/bootstrap/unifiedConfig.js'; import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; const c=resolveUnifiedConfig(); inspectUnifiedDatabase(c.databasePath);"
-[void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env','HOST=0.0.0.0','--env','PORT=4179','--env','GREED_ISLAND_DB_PATH=/probe/greed-island.sqlite','--env',"GREED_ISLAND_ALLOWED_ORIGINS=$origins",'--env',"GREED_ISLAND_BUILD_SHA=$ExpectedSha",'--entrypoint','node',$backendImage,'--input-type=module','-e',$probe) 300)
+[void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env','NODE_OPTIONS=' + $ProbeNodeOptions,'--env','HOST=0.0.0.0','--env','PORT=4179','--env','GREED_ISLAND_DB_PATH=/probe/greed-island.sqlite','--env',"GREED_ISLAND_ALLOWED_ORIGINS=$origins",'--env',"GREED_ISLAND_BUILD_SHA=$ExpectedSha",'--entrypoint','node',$backendImage,'--input-type=module','-e',$probe) $DatabaseInspectionTimeoutSeconds)
 $oldVolumes = @($backend.Mounts | Where-Object { $_.Type -eq 'volume' } | ForEach-Object { $_.Name })
 if ($isLegacyRoom) {
   if ($oldVolumes -contains $canonicalVolume) { throw 'First cutover must use a separately staged canonical volume; legacy source stays untouched.' }
@@ -260,7 +263,7 @@ foreach ($name in $allVolumes) {
 # source volumes. A failure does not authorize a database restore.
 $rollbackCompatible = $isLegacyRoom
 if (-not $isLegacyRoom) {
-  try { [void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--entrypoint','node',$backend.Image,'--input-type=module','-e',"import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; inspectUnifiedDatabase('/probe/greed-island.sqlite');")); $rollbackCompatible = $true }
+  try { [void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env','NODE_OPTIONS=' + $ProbeNodeOptions,'--entrypoint','node',$backend.Image,'--input-type=module','-e',"import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; inspectUnifiedDatabase('/probe/greed-island.sqlite');") $DatabaseInspectionTimeoutSeconds); $rollbackCompatible = $true }
   catch { $rollbackCompatible = $false }
 }
 $rollbackConfig = Join-Path $backup 'rollback-compose.json'
