@@ -145,7 +145,7 @@ export class PlayerSurvivalProjection {
     return state ? reconcile(state, currentTick) : null
   }
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>): void {
     this.latestByAccount.clear()
     for (const ev of events) {
       this.project(ev)

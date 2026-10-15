@@ -107,7 +107,7 @@ export class WorldCivilizationProjection {
     }
   }
 
-  rebuild(events: readonly Pick<Event, 'eventType' | 'tick' | 'payload'>[]): void {
+  rebuild(events: Iterable<Pick<Event, 'eventType' | 'tick' | 'payload'>>): void {
     this.goals.clear()
     this.technologies.clear()
     for (const event of events) this.projectEvent(event)

@@ -16,7 +16,7 @@ export const PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES = ['NPC_FREEFORM_ACTION_PROP
 export class PlayerRelationshipActionProjection {
   private readonly byNpc = new Map<string, PlayerRelationshipActionView>()
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>): void {
     this.byNpc.clear()
     for (const event of events) this.project(event)
   }

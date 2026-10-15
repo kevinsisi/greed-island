@@ -32,7 +32,7 @@ import {
   EVENT_FACT_SET,
   KernelRuleEngine
 } from '../kernel/ruleEngine.js'
-import type { SqliteEventStore } from '../kernel/eventStore.js'
+import { streamEventsByTypes, type SqliteEventStore } from '../kernel/eventStore.js'
 import { createInitialWorldState } from '../kernel/reducer.js'
 import type { Command } from '../kernel/types.js'
 import {
@@ -1068,21 +1068,22 @@ export class SimulationRuntime {
 
   attachCombatStore(store: CombatStore): void {
     this.combatStore = store
-    const combatEvents = this.store.readEventsByTypes(COMBAT_BOOT_EVENT_TYPES)
-    if (
-      this.combatStore.hasProjectionRows() &&
-      (this.store.countEvents() > BOOT_PROJECTION_REBUILD_EVENT_LIMIT ||
-        !this.combatStore.canSafelyRebuildFromEvents(combatEvents))
-    ) {
+    const hasProjectionRows = this.combatStore.hasProjectionRows()
+    if (hasProjectionRows && this.store.countEvents() > BOOT_PROJECTION_REBUILD_EVENT_LIMIT) {
       console.warn('[boot] kept existing CombatStore projection; historical EventLog lacks full Phase B action snapshots')
       return
     }
-    this.combatStore.rebuildFromEvents(combatEvents)
+    const combatEvents = streamEventsByTypes(this.store, COMBAT_BOOT_EVENT_TYPES)
+    if (hasProjectionRows && !this.combatStore.canSafelyRebuildFromEvents(combatEvents)) {
+      console.warn('[boot] kept existing CombatStore projection; historical EventLog lacks full Phase B action snapshots')
+      return
+    }
+    this.combatStore.rebuildFromEvents(combatEvents, true)
   }
 
   attachPlayerJobsStore(store: PlayerJobsStore): void {
     this.playerJobsStore = store
-    for (const event of this.store.readEventsByTypes(PLAYER_JOBS_BOOT_EVENT_TYPES)) {
+    for (const event of streamEventsByTypes(this.store, PLAYER_JOBS_BOOT_EVENT_TYPES)) {
       this.playerJobsStore.projectEvent(event)
     }
   }
@@ -2798,7 +2799,7 @@ export class SimulationRuntime {
     })
   }
 
-  private hydrateCombatRuntimeFromEvents(events: readonly Event[], authorize?: () => void): void {
+  private hydrateCombatRuntimeFromEvents(events: Iterable<Event>, authorize?: () => void): void {
     authorize?.()
     this.combatSubTicks.rebuildFromEvents(events)
     for (const combatId of computeUnresolvedCombats(events)) {
@@ -7430,14 +7431,14 @@ export class SimulationRuntime {
     const batches: ReadonlyArray<{
       label: string
       eventTypes: readonly string[]
-      apply: (events: readonly Event[]) => void
+      apply: (events: Iterable<Event>) => void
     }> = [
       {
         label: 'mortality-lineage',
         eventTypes: MORTALITY_BOOT_EVENT_TYPES,
         apply: (events) => {
-          this.npcMortalityProjection.rebuildFromEvents(events)
-          this.npcLineageProjection.rebuildFromEvents(events)
+          this.npcMortalityProjection.rebuildFromEvents(events, true)
+          this.npcLineageProjection.rebuildFromEvents(events, true)
         },
       },
       {
@@ -7465,9 +7466,9 @@ export class SimulationRuntime {
         },
       },
       { label: 'combat', eventTypes: COMBAT_BOOT_EVENT_TYPES, apply: (events) => this.hydrateCombatRuntimeFromEvents(events, authorize) },
-      { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events) },
+      { label: 'world-state', eventTypes: WORLD_STATE_BOOT_EVENT_TYPES, apply: (events) => this.worldStateProjection.rebuildFromEvents(events, true) },
       { label: 'world-civilization', eventTypes: WORLD_CIVILIZATION_BOOT_EVENT_TYPES, apply: (events) => this.worldCivilizationProjection.rebuild(events) },
-      { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events) },
+      { label: 'npc-cognitive', eventTypes: NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES, apply: (events) => this.npcCognitiveProjection.rebuildFromEvents(events, true) },
       { label: 'player-npc-relationships', eventTypes: PLAYER_NPC_RELATIONSHIP_BOOT_EVENT_TYPES, apply: (events) => this.playerNpcRelationshipProjection.rebuildFromEvents(events) },
       { label: 'player-relationship-actions', eventTypes: PLAYER_RELATIONSHIP_ACTION_EVENT_TYPES, apply: (events) => this.playerRelationshipActionProjection.rebuildFromEvents(events) },
       { label: 'player-survival', eventTypes: PLAYER_SURVIVAL_BOOT_EVENT_TYPES, apply: (events) => this.playerSurvivalProjection.rebuildFromEvents(events) },
@@ -7484,10 +7485,10 @@ export class SimulationRuntime {
     authorize()
     for (const batch of batches) {
       authorize()
-      const events = this.store.readEventsByTypes(batch.eventTypes)
+      const events = streamEventsByTypes(this.store, batch.eventTypes)
       authorize()
       batch.apply(events)
-      console.log(`[boot] deferred hydration complete: ${batch.label} (${events.length} events)`)
+      console.log(`[boot] deferred hydration complete: ${batch.label}`)
       await this.yieldToEventLoop()
       authorize()
     }

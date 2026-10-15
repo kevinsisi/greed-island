@@ -100,7 +100,7 @@ export class CombatSubTickCoordinator {
     return this.pendingCardPlays.filter((command) => command.payload.combatId === combatId).length
   }
 
-  rebuildFromEvents(events: readonly CombatProjectionEvent[]): void {
+  rebuildFromEvents(events: Iterable<CombatProjectionEvent>): void {
     this.combats.clear()
     this.pendingCardPlays.length = 0
     this.pendingCommandIds.clear()
@@ -160,7 +160,7 @@ export class CombatSubTickCoordinator {
     }
   }
 
-  resumeTickForCombat(combatId: string, events: readonly Pick<Event, 'eventType' | 'payload'>[]): number {
+  resumeTickForCombat(combatId: string, events: Iterable<Pick<Event, 'eventType' | 'payload'>>): number {
     let lastCombatTick = 0
     for (const event of events) {
       if (!COMBAT_PROGRESS_EVENT_TYPES.has(event.eventType)) continue

@@ -7,7 +7,7 @@ import { loadNpcProfiles } from '../npcs/loader.js'
 import { SimulationRuntime } from './runtime.js'
 import { NpcEngine, type NpcRuntimeState } from './npcEngine.js'
 
-const LARGE_LOG_LIMIT = 20_000
+const LARGE_LOG_LIMIT = 200_000
 const LARGE_FIXTURE_EVENTS = LARGE_LOG_LIMIT + 12
 
 type RuntimeInternals = {

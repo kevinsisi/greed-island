@@ -162,8 +162,8 @@ export class CombatStore {
     this.projectCommittedEvent(event)
   }
 
-  rebuildFromEvents(events: readonly Event[]): void {
-    const ordered = [...events].sort((a, b) => a.sequence - b.sequence)
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
+    const ordered = alreadyOrdered ? events : [...events].sort((a, b) => a.sequence - b.sequence)
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM combat_log').run()
       this.db.prepare('DELETE FROM combat_sessions').run()
@@ -179,7 +179,7 @@ export class CombatStore {
     return sessions.count > 0 || logs.count > 0
   }
 
-  canSafelyRebuildFromEvents(events: readonly Event[]): boolean {
+  canSafelyRebuildFromEvents(events: Iterable<Event>): boolean {
     for (const event of events) {
       if (event.eventType !== 'COMBAT_PLAYER_ACTION') continue
       const payload = readCombatPayload(event.payload)
