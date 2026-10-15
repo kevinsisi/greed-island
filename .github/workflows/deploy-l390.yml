@@ -126,7 +126,8 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, greed-island-l390]
-    timeout-minutes: 25
+    # 1.2M events: database checks, backup, and cold startup exceed 25 minutes.
+    timeout-minutes: 90
     env:
       L390_DEPLOY_PATH: ${{ vars.L390_DEPLOY_PATH }}
       DEPLOY_SHA: ${{ needs.package.outputs.sha }}
