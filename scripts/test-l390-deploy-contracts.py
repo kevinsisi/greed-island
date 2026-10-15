@@ -78,8 +78,9 @@ class SourceDeploymentContracts(unittest.TestCase):
         ]
         self.assertEqual(len(inspection_runs), 2, 'both candidate and rollback DB inspection runs must be covered')
         for command in inspection_runs:
-            self.assertIn("'--env','NODE_OPTIONS=' + $ProbeNodeOptions", command)
+            self.assertIn("'--env',\"NODE_OPTIONS=$ProbeNodeOptions\"", command)
             self.assertIn('$DatabaseInspectionTimeoutSeconds)', command)
+            self.assertNotIn("'NODE_OPTIONS=' +", command)
 
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
