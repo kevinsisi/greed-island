@@ -126,6 +126,8 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn('$previousBackendTag -ceq $previousWebTag', self.script)
         self.assertIn('$backendBuildSha = Get-ImageBuildSha $backend', self.script)
         self.assertIn('$webBuildSha = Get-ImageBuildSha $web', self.script)
+        self.assertIn("if ($labelSha -cmatch '^[a-f0-9]{40}$') { return $labelSha }", self.script)
+        self.assertIn("if ($containerSha) { return $containerSha }", self.script)
         self.assertIn("throw 'Unified rollback requires exact-SHA tags or matching rollback-<timestamp>-<sha12>-<id> tags.'", self.script)
         self.assertIn('Cannot determine the build SHA from the running container environment or image revision label.', self.script)
 

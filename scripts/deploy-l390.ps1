@@ -136,10 +136,7 @@ function Get-ImageBuildSha($Container) {
       foreach ($entry in @($environmentProperty.Value)) {
         if ([string]$entry -match '^GREED_ISLAND_BUILD_SHA=(.*)$') {
           $candidateSha = $Matches[1]
-          if ($candidateSha -and $candidateSha -cnotmatch '^[a-f0-9]{40}$') {
-            throw 'Running container has an invalid GREED_ISLAND_BUILD_SHA value.'
-          }
-          if ($candidateSha) {
+          if ($candidateSha -cmatch '^[a-f0-9]{40}$') {
             if ($containerSha -and $containerSha -cne $candidateSha) { throw 'Running container has conflicting GREED_ISLAND_BUILD_SHA values.' }
             $containerSha = $candidateSha
           }
@@ -154,12 +151,11 @@ function Get-ImageBuildSha($Container) {
     $revisionProperty = $labelsProperty.Value.PSObject.Properties['org.opencontainers.image.revision']
     if ($revisionProperty) { $labelSha = [string]$revisionProperty.Value }
   }
-  if ($labelSha -and $labelSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Running image has an invalid OCI revision label.' }
-  if ($containerSha -and $labelSha -and $containerSha -cne $labelSha) {
+  if ($labelSha -cmatch '^[a-f0-9]{40}$' -and $containerSha -and $containerSha -cne $labelSha) {
     throw 'Running container build SHA does not match its image revision label.'
   }
+  if ($labelSha -cmatch '^[a-f0-9]{40}$') { return $labelSha }
   if ($containerSha) { return $containerSha }
-  if ($labelSha) { return $labelSha }
   throw 'Cannot determine the build SHA from the running container environment or image revision label.'
 }
 function Compose-Arguments([string]$Config, [string[]]$Tail) {
