@@ -66,6 +66,22 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn("# startup-replay-heap: event-log replay can exceed V8's default 2GB heap.", multiplayer)
         self.assertRegex(multiplayer, r'(?m)^\s+NODE_OPTIONS:\s*--max-old-space-size=4096\s*$')
 
+    def test_database_inspection_docker_runs_have_heap_and_timeout(self):
+        self.assertRegex(self.script, r"(?m)^\$ProbeNodeOptions\s*=\s*'--max-old-space-size=4096'\s*$")
+        self.assertRegex(self.script, r'(?m)^\$DatabaseInspectionTimeoutSeconds\s*=\s*900\s*$')
+        self.assertIn('Database inspection replays 1.2M+ events and can take 200+ seconds.', self.script)
+        inspection_runs = [
+            line for line in self.script.splitlines()
+            if "'run'" in line
+            and ('$backendImage' in line or '$backend.Image' in line)
+            and ('$probe' in line or 'inspectUnifiedDatabase' in line)
+        ]
+        self.assertEqual(len(inspection_runs), 2, 'both candidate and rollback DB inspection runs must be covered')
+        for command in inspection_runs:
+            self.assertIn("'--env',\"NODE_OPTIONS=$ProbeNodeOptions\"", command)
+            self.assertIn('$DatabaseInspectionTimeoutSeconds)', command)
+            self.assertNotIn("'NODE_OPTIONS=' +", command)
+
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
         stop = self.script.index("'stop','--timeout','30','multiplayer','web'", marker)
