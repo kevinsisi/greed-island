@@ -224,6 +224,14 @@ class SourceDeploymentContracts(unittest.TestCase):
         deploy = current.split('  deploy:\n', 1)[1]
         self.assertNotIn('uses: actions/upload-artifact', deploy)
 
+    def test_deploy_job_timeout_allows_large_event_log_rollout(self):
+        workflow = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
+        deploy_job = workflow.split('  deploy:\n', 1)[1]
+        self.assertIn('name: Deploy and test only NB-L390', deploy_job)
+        match = re.search(r'(?m)^    timeout-minutes:\s*(\d+)\s*$', deploy_job)
+        self.assertIsNotNone(match, 'Deploy job must declare its timeout')
+        self.assertGreaterEqual(int(match.group(1)), 60)
+
     def test_process_scope_execution_policy_bypass_is_only_on_self_hosted_deploy(self):
         current = (ROOT / '.github/workflows/deploy-l390.yml').read_text()
         before_deploy, deploy = current.split('  deploy:\n', 1)
