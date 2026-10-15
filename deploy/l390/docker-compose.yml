@@ -13,6 +13,8 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: "4179"
+      # startup-replay-heap: event-log replay can exceed V8's default 2GB heap.
+      NODE_OPTIONS: --max-old-space-size=4096
       GREED_ISLAND_DB_PATH: /app/unified-data/greed-island.sqlite
       GREED_ISLAND_ALLOWED_ORIGINS: ${GREED_ISLAND_ALLOWED_ORIGINS:?Exact browser HTTPS origin is required}
       GREED_ISLAND_BUILD_SHA: ${GREED_L390_BUILD_SHA:-}

@@ -47,6 +47,25 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertIn('$process.WaitForExit($TimeoutSeconds * 1000)', self.script)
 
+    def test_backup_retention_only_runs_after_success_and_is_contained(self):
+        self.assertRegex(self.script, r'(?m)^\$BackupRetentionCount\s*=\s*2\s*$')
+        success_path = self.script.split("Write-Json @{ sha=$ExpectedSha; version=$health.version; release=$release; backup=$backup; status='verified'; verifiedAt=", 1)[1].split('Write-Host "Verified exact L390 SHA', 1)[0]
+        self.assertIn('Get-ChildItem -LiteralPath $backupRoot -Directory', success_path)
+        self.assertIn("$_.Name -cmatch '^\\d{8}T\\d{6}Z-'", success_path)
+        self.assertIn('Sort-Object -Property Name -Descending', success_path)
+        self.assertIn('Select-Object -Skip $BackupRetentionCount', success_path)
+        self.assertIn('Remove-Item -LiteralPath $resolvedOldBackup -Recurse -Force -ErrorAction Stop', success_path)
+        self.assertIn('StartsWith($resolvedBackupRoot, [StringComparison]::OrdinalIgnoreCase)', success_path)
+        self.assertIn('Write-Warning "Backup retention cleanup failed; deployment remains successful.', success_path)
+        rollback_path = self.script.split('\n} catch {\n  $failure = $_', 1)[1]
+        self.assertNotIn('BackupRetentionCount', rollback_path)
+
+    def test_multiplayer_replay_has_four_gigabyte_v8_heap(self):
+        compose = (ROOT / 'deploy/l390/docker-compose.yml').read_text()
+        multiplayer = compose.split('  multiplayer:\n', 1)[1].split('\n  web:\n', 1)[0]
+        self.assertIn("# startup-replay-heap: event-log replay can exceed V8's default 2GB heap.", multiplayer)
+        self.assertRegex(multiplayer, r'(?m)^\s+NODE_OPTIONS:\s*--max-old-space-size=4096\s*$')
+
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
         stop = self.script.index("'stop','--timeout','30','multiplayer','web'", marker)
