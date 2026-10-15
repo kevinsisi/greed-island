@@ -62,25 +62,48 @@ function Quote-Argument([string]$Value) {
   [void]$builder.Append(('\' * ($slashes * 2))); [void]$builder.Append('"')
   return $builder.ToString()
 }
-function Invoke-Docker([string[]]$Arguments, [int]$TimeoutSeconds = 180) {
-  $start = New-Object Diagnostics.ProcessStartInfo
-  $start.FileName = 'docker.exe'
-  $start.Arguments = (($Arguments | ForEach-Object { Quote-Argument $_ }) -join ' ')
-  $start.UseShellExecute = $false; $start.CreateNoWindow = $true
-  $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
-  $process = New-Object Diagnostics.Process
-  $process.StartInfo = $start
-  [void]$process.Start()
-  $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
-  if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-    $process.Kill(); $process.WaitForExit()
-    throw "Docker $($Arguments[0]) timed out; old data is never restored automatically."
+function Invoke-Docker([string[]]$Arguments, [int]$TimeoutSeconds = 600) {
+  $commandLabel = [string]$Arguments[0]
+  if ($commandLabel -ceq 'compose') {
+    $index = 1
+    while ($index -lt $Arguments.Count) {
+      $argument = [string]$Arguments[$index]
+      if (@('-p','--project-name','-f','--file','--env-file','--project-directory','--profile') -contains $argument) {
+        $index += 2
+        continue
+      }
+      if (-not $argument.StartsWith('-')) { $commandLabel = "compose $argument"; break }
+      $index++
+    }
+  } elseif ($Arguments.Count -gt 1 -and @('image','volume') -contains $commandLabel) {
+    $commandLabel = "$commandLabel $($Arguments[1])"
   }
-  $output = $stdout.Result; $errorText = $stderr.Result; $code = $process.ExitCode
-  $process.Dispose()
-  if ($errorText) { Add-Content -LiteralPath $diagnostic -Value ("operation: " + $Arguments[0] + [Environment]::NewLine + $errorText) }
-  if ($code -ne 0) { throw "Docker $($Arguments[0]) failed ($code). Diagnostics stay only in the private local backup directory." }
-  return $output.Trim()
+  $timer = [Diagnostics.Stopwatch]::StartNew()
+  $process = $null
+  try {
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = 'docker.exe'
+    $start.Arguments = (($Arguments | ForEach-Object { Quote-Argument $_ }) -join ' ')
+    $start.UseShellExecute = $false; $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $start
+    [void]$process.Start()
+    $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+      $process.Kill(); $process.WaitForExit()
+      throw "Docker $($Arguments[0]) timed out; old data is never restored automatically."
+    }
+    $output = $stdout.Result; $errorText = $stderr.Result; $code = $process.ExitCode
+    if ($errorText) { Add-Content -LiteralPath $diagnostic -Value ("operation: " + $Arguments[0] + [Environment]::NewLine + $errorText) }
+    if ($code -ne 0) { throw "Docker $($Arguments[0]) failed ($code). Diagnostics stay only in the private local backup directory." }
+    return $output.Trim()
+  } finally {
+    $timer.Stop()
+    if ($process) { $process.Dispose() }
+    $elapsedSeconds = $timer.Elapsed.TotalSeconds.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture)
+    Write-Host "[docker $commandLabel] ${elapsedSeconds}s"
+  }
 }
 function Write-Json($Value, [string]$Path) {
   [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 100), ([Text.UTF8Encoding]::new($false)))
@@ -89,6 +112,51 @@ function Get-Container([string]$Service) {
   $ids = @( (Invoke-Docker @('ps','-q','--filter',"label=com.docker.compose.project=$project",'--filter',"label=com.docker.compose.service=$Service")) -split "\r?\n" | Where-Object { $_ } )
   if ($ids.Count -ne 1) { throw "Expected exactly one existing L390 $Service container." }
   return (Invoke-Docker @('inspect',$ids[0]) | ConvertFrom-Json)[0]
+}
+function Get-ImageRepository([string]$ImageReference) {
+  if ($ImageReference.Contains('@')) { throw 'Rollback tagging requires a named image reference, not a digest-only reference.' }
+  $lastSlash = $ImageReference.LastIndexOf('/')
+  $lastColon = $ImageReference.LastIndexOf(':')
+  if ($lastColon -gt $lastSlash) { return $ImageReference.Substring(0,$lastColon) }
+  return $ImageReference
+}
+function Get-ImageTag([string]$ImageReference) {
+  if ($ImageReference.Contains('@')) { throw 'Rollback requires a named image tag, not a digest-only reference.' }
+  $lastSlash = $ImageReference.LastIndexOf('/')
+  $lastColon = $ImageReference.LastIndexOf(':')
+  if ($lastColon -le $lastSlash) { throw 'Rollback requires an explicitly tagged running image.' }
+  return $ImageReference.Substring($lastColon + 1)
+}
+function Get-ImageBuildSha($Container) {
+  $containerSha = $null
+  $containerConfigProperty = $Container.PSObject.Properties['Config']
+  if ($containerConfigProperty -and $containerConfigProperty.Value) {
+    $environmentProperty = $containerConfigProperty.Value.PSObject.Properties['Env']
+    if ($environmentProperty) {
+      foreach ($entry in @($environmentProperty.Value)) {
+        if ([string]$entry -match '^GREED_ISLAND_BUILD_SHA=(.*)$') {
+          $candidateSha = $Matches[1]
+          if ($candidateSha -cmatch '^[a-f0-9]{40}$') {
+            if ($containerSha -and $containerSha -cne $candidateSha) { throw 'Running container has conflicting GREED_ISLAND_BUILD_SHA values.' }
+            $containerSha = $candidateSha
+          }
+        }
+      }
+    }
+  }
+  $image = (Invoke-Docker @('image','inspect',[string]$Container.Image) | ConvertFrom-Json)[0]
+  $labelSha = $null
+  $labelsProperty = $image.Config.PSObject.Properties['Labels']
+  if ($labelsProperty -and $labelsProperty.Value) {
+    $revisionProperty = $labelsProperty.Value.PSObject.Properties['org.opencontainers.image.revision']
+    if ($revisionProperty) { $labelSha = [string]$revisionProperty.Value }
+  }
+  if ($labelSha -cmatch '^[a-f0-9]{40}$' -and $containerSha -and $containerSha -cne $labelSha) {
+    throw 'Running container build SHA does not match its image revision label.'
+  }
+  if ($labelSha -cmatch '^[a-f0-9]{40}$') { return $labelSha }
+  if ($containerSha) { return $containerSha }
+  throw 'Cannot determine the build SHA from the running container environment or image revision label.'
 }
 function Compose-Arguments([string]$Config, [string[]]$Tail) {
   return @('compose','-p',$project,'-f',$Config) + $Tail
@@ -102,26 +170,26 @@ if ($manifest.schemaVersion -ne 1 -or $manifest.sha -cne $ExpectedSha -or
     @($manifest.images).Count -ne 2 -or $manifest.images[0] -cne $backendImage -or $manifest.images[1] -cne $webImage -or
     (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifest.archiveSha256) { throw 'Package SHA/images/archive integrity mismatch.' }
 if ((Invoke-Docker @('info','--format','{{.OSType}}')) -ne 'linux') { throw 'Authorized Linux Docker access is required; no elevation fallback.' }
-[void](Invoke-Docker @('load','-i',$archive) 600)
+[void](Invoke-Docker @('load','-i',$archive) 1800)
 foreach ($image in @($backendImage,$webImage)) {
   $metadata = (Invoke-Docker @('image','inspect',$image) | ConvertFrom-Json)[0]
   if ($metadata.Config.Labels.'org.opencontainers.image.revision' -cne $ExpectedSha) { throw 'Loaded image revision does not equal CI SHA.' }
 }
 
 # Probe the exact daemon-visible release path without reading the mounted file.
-$caddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$stagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
+$caddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$stagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 600
 Write-Host "Staged Caddyfile bind preflight: $caddyVersion"
 $caddyContainer = $null; $caddyFailure = $null
 try {
-  $caddyContainer = Invoke-Docker @('create','--network','none','--entrypoint','caddy',$webImage,'validate','--config','/tmp/Caddyfile.l390','--adapter','caddyfile') 120
-  [void](Invoke-Docker @('cp',$stagedCaddyfile,"${caddyContainer}:/tmp/Caddyfile.l390") 120)
-  [void](Invoke-Docker @('start','-a',$caddyContainer) 120)
+  $caddyContainer = Invoke-Docker @('create','--network','none','--entrypoint','caddy',$webImage,'validate','--config','/tmp/Caddyfile.l390','--adapter','caddyfile') 600
+  [void](Invoke-Docker @('cp',$stagedCaddyfile,"${caddyContainer}:/tmp/Caddyfile.l390") 600)
+  [void](Invoke-Docker @('start','-a',$caddyContainer) 600)
 } catch {
   $caddyFailure = $_
   throw
 } finally {
   if ($caddyContainer) {
-    try { [void](Invoke-Docker @('rm','-f',$caddyContainer) 30) }
+    try { [void](Invoke-Docker @('rm','-f',$caddyContainer) 600) }
     catch { if (-not $caddyFailure) { throw } }
   }
 }
@@ -130,16 +198,16 @@ try {
 $copyProbe = Join-Path $backup 'docker-cp-preflight.txt'
 $copyProbeContainer = $null; $copyProbeFailure = $null
 try {
-  $copyProbeContainer = Invoke-Docker @('create','--network','none','--entrypoint','sh',$backendImage,'-c',"printf 'l390-docker-cp-preflight\n' > /tmp/l390-docker-cp-preflight.txt") 120
-  [void](Invoke-Docker @('start','-a',$copyProbeContainer) 120)
-  [void](Invoke-Docker @('cp',"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt",$copyProbe) 120)
+  $copyProbeContainer = Invoke-Docker @('create','--network','none','--entrypoint','sh',$backendImage,'-c',"printf 'l390-docker-cp-preflight\n' > /tmp/l390-docker-cp-preflight.txt") 600
+  [void](Invoke-Docker @('start','-a',$copyProbeContainer) 600)
+  [void](Invoke-Docker @('cp',"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt",$copyProbe) 600)
   if ((Get-Content -Raw -LiteralPath $copyProbe) -cne "l390-docker-cp-preflight`n") { throw 'Private backup docker cp preflight content mismatch.' }
 } catch {
   $copyProbeFailure = $_
   throw
 } finally {
   if ($copyProbeContainer) {
-    try { [void](Invoke-Docker @('rm','-f',$copyProbeContainer) 30) }
+    try { [void](Invoke-Docker @('rm','-f',$copyProbeContainer) 600) }
     catch { if (-not $copyProbeFailure) { throw } }
   }
   Remove-Item -LiteralPath $copyProbe -Force -ErrorAction SilentlyContinue
@@ -147,15 +215,15 @@ try {
 
 $smokeContainer = $null; $smokeFailure = $null
 try {
-  $smokeContainer = Invoke-Docker @('create','--network','none','--entrypoint','node',$backendImage,'/app/l390-smoke.mjs') 120
-  [void](Invoke-Docker @('cp',(Join-Path $SourcePath 'scripts\test-l390-image.mjs'),"${smokeContainer}:/app/l390-smoke.mjs") 120)
-  [void](Invoke-Docker @('start','-a',$smokeContainer) 120)
+  $smokeContainer = Invoke-Docker @('create','--network','none','--entrypoint','node',$backendImage,'/app/l390-smoke.mjs') 600
+  [void](Invoke-Docker @('cp',(Join-Path $SourcePath 'scripts\test-l390-image.mjs'),"${smokeContainer}:/app/l390-smoke.mjs") 600)
+  [void](Invoke-Docker @('start','-a',$smokeContainer) 600)
 } catch {
   $smokeFailure = $_
   throw
 } finally {
   if ($smokeContainer) {
-    try { [void](Invoke-Docker @('rm','-f',$smokeContainer) 30) }
+    try { [void](Invoke-Docker @('rm','-f',$smokeContainer) 600) }
     catch { if (-not $smokeFailure) { throw } }
   }
 }
@@ -186,47 +254,85 @@ if (-not [IO.Path]::IsPathRooted($activeEnvFile) -or -not (Test-Path -LiteralPat
 $activeEnvFile = (Resolve-Path -LiteralPath $activeEnvFile).Path
 
 # The active release Compose file requires this interpolation even for
-# config/stop. Unified rollback also needs its previous exact image tag.
+# config/stop. Unified rollback also preserves the prior build SHA.
 $env:GREED_L390_SOURCE_PATH = $SourcePath
 $previousImageTag = $null
-if (-not $isLegacyRoom) {
-  $backendImageReference = [string]$backend.Config.Image
-  $webImageReference = [string]$web.Config.Image
-  $backendTagSeparator = $backendImageReference.LastIndexOf(':')
-  $webTagSeparator = $webImageReference.LastIndexOf(':')
-  if ($backendTagSeparator -lt 0 -or $webTagSeparator -lt 0) { throw 'Unified rollback requires tagged prior images.' }
-  $previousBackendTag = $backendImageReference.Substring($backendTagSeparator + 1)
-  $previousWebTag = $webImageReference.Substring($webTagSeparator + 1)
-  if ($previousBackendTag -cnotmatch '^[a-f0-9]{40}$' -or $previousWebTag -cne $previousBackendTag) { throw 'Unified rollback requires matching exact-SHA prior image tags.' }
-  $previousImageTag = $previousBackendTag
+$previousBuildSha = $null
+$backendImageReference = [string]$backend.Config.Image
+$webImageReference = [string]$web.Config.Image
+$rollbackBackendRepository = Get-ImageRepository $backendImageReference
+$rollbackWebRepository = Get-ImageRepository $webImageReference
+if ($rollbackBackendRepository -notmatch '(^|/)greed-island-l390-multiplayer$' -or
+    $rollbackWebRepository -notmatch '(^|/)greed-island-l390-web$') { throw 'Running images do not match the reviewed L390 repositories.' }
+$previousBackendTag = Get-ImageTag $backendImageReference
+$previousWebTag = Get-ImageTag $webImageReference
+$rollbackTagPattern = '^rollback-\d{8}T\d{6}Z-[a-f0-9]{12}-[a-f0-9]{32}$'
+if ($previousBackendTag -ceq $previousWebTag) { $previousImageTag = $previousBackendTag }
+if ($previousBackendTag -ceq $previousWebTag -and $previousBackendTag -cmatch '^[a-f0-9]{40}$') {
+  $previousBuildSha = $previousBackendTag
+} elseif ($previousBackendTag -ceq $previousWebTag -and $previousBackendTag -cmatch $rollbackTagPattern) {
+  $backendBuildSha = Get-ImageBuildSha $backend
+  $webBuildSha = Get-ImageBuildSha $web
+  if ($backendBuildSha -cne $webBuildSha) { throw 'Running rollback-tagged backend and web images have different build SHAs.' }
+  $previousBuildSha = $backendBuildSha
+} elseif (-not $isLegacyRoom) {
+  throw 'Unified rollback requires exact-SHA tags or matching rollback-<timestamp>-<sha12>-<id> tags.'
+}
+if (-not $isLegacyRoom -and $null -eq $previousBuildSha) {
+  throw 'Cannot determine the build SHA for the running Unified image tags.'
+}
+if ($null -ne $previousImageTag) {
   $env:GREED_L390_IMAGE_TAG = $previousImageTag
-  $env:GREED_L390_BUILD_SHA = $previousImageTag
-  if ($previousImageTag -ceq $ExpectedSha) {
-    $loadedBackendId = (Invoke-Docker @('image','inspect',$backendImage) | ConvertFrom-Json)[0].Id
-    $loadedWebId = (Invoke-Docker @('image','inspect',$webImage) | ConvertFrom-Json)[0].Id
-    if ($loadedBackendId -cne $backend.Image -or $loadedWebId -cne $web.Image) {
-      try {
-        [void](Invoke-Docker @('tag',$backend.Image,$backend.Config.Image) 30)
-        [void](Invoke-Docker @('tag',$web.Image,$web.Config.Image) 30)
-      } catch { throw 'Same-SHA package differs from the running image and prior tags could not be restored. No old container was stopped.' }
-      throw 'Same-SHA package differs from the running image; prior image tags were restored. Refusing to stop the active stack.'
-    }
+} else {
+  Remove-Item Env:GREED_L390_IMAGE_TAG -ErrorAction SilentlyContinue
+}
+if ($null -ne $previousBuildSha) {
+  $env:GREED_L390_BUILD_SHA = $previousBuildSha
+} else {
+  Remove-Item Env:GREED_L390_BUILD_SHA -ErrorAction SilentlyContinue
+}
+if (-not $isLegacyRoom -and $previousBackendTag -ceq $ExpectedSha) {
+  $loadedBackendId = (Invoke-Docker @('image','inspect',$backendImage) | ConvertFrom-Json)[0].Id
+  $loadedWebId = (Invoke-Docker @('image','inspect',$webImage) | ConvertFrom-Json)[0].Id
+  if ($loadedBackendId -cne $backend.Image -or $loadedWebId -cne $web.Image) {
+    try {
+      [void](Invoke-Docker @('tag',$backend.Image,$backend.Config.Image) 600)
+      [void](Invoke-Docker @('tag',$web.Image,$web.Config.Image) 600)
+    } catch { throw 'Same-SHA package differs from the running image and prior tags could not be restored. No old container was stopped.' }
+    throw 'Same-SHA package differs from the running image; prior image tags were restored. Refusing to stop the active stack.'
   }
 }
 $activeResolved = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')) | ConvertFrom-Json
 if (-not $isLegacyRoom -and (
     $activeResolved.services.multiplayer.image -cne $backend.Config.Image -or
     $activeResolved.services.web.image -cne $web.Config.Image -or
-    $activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousImageTag)) {
+    $activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousBuildSha)) {
   throw 'Active release Compose/env does not resolve to the currently running Unified images and SHA.'
+}
+if ($isLegacyRoom) {
+  $activeEnvironmentProperty = $activeResolved.services.multiplayer.PSObject.Properties['environment']
+  if ($activeEnvironmentProperty -and $activeEnvironmentProperty.Value) {
+    $activeBuildShaProperty = $activeEnvironmentProperty.Value.PSObject.Properties['GREED_ISLAND_BUILD_SHA']
+    if ($activeBuildShaProperty) {
+      $activeBuildSha = [string]$activeBuildShaProperty.Value
+      if ($previousBuildSha -and $activeBuildSha -and $activeBuildSha -cne $previousBuildSha) {
+        throw 'Active legacy Compose build SHA differs from the running image metadata.'
+      }
+      if (-not $previousBuildSha) { $previousBuildSha = $activeBuildSha }
+    }
+  }
 }
 $env:GREED_L390_IMAGE_TAG = $ExpectedSha; $env:GREED_L390_BUILD_SHA = $ExpectedSha
 $newResolved = Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'config','--format','json')) | ConvertFrom-Json
-if (-not $isLegacyRoom) {
-  # Restore active-stack interpolation values for all remaining active-config
-  # preflights and the stop command. Candidate values are set again for rollout.
+if ($null -ne $previousImageTag) {
   $env:GREED_L390_IMAGE_TAG = $previousImageTag
-  $env:GREED_L390_BUILD_SHA = $previousImageTag
+} else {
+  Remove-Item Env:GREED_L390_IMAGE_TAG -ErrorAction SilentlyContinue
+}
+if ($null -ne $previousBuildSha) {
+  $env:GREED_L390_BUILD_SHA = $previousBuildSha
+} else {
+  Remove-Item Env:GREED_L390_BUILD_SHA -ErrorAction SilentlyContinue
 }
 $volume = $newResolved.volumes.'canonical-data'
 if ($volume.external -ne $true -or -not $volume.name) { throw 'An owner-selected existing external canonical volume is required.' }
@@ -266,30 +372,78 @@ if (-not $isLegacyRoom) {
   try { [void](Invoke-Docker @('run','--rm','--network','none','--mount',"type=volume,src=$canonicalVolume,dst=/probe,readonly",'--env',"NODE_OPTIONS=$ProbeNodeOptions",'--entrypoint','node',$backend.Image,'--input-type=module','-e',"import {inspectUnifiedDatabase} from './dist/bootstrap/unifiedServer.js'; inspectUnifiedDatabase('/probe/greed-island.sqlite');") $DatabaseInspectionTimeoutSeconds); $rollbackCompatible = $true }
   catch { $rollbackCompatible = $false }
 }
-$rollbackConfig = Join-Path $backup 'rollback-compose.json'
-$activeResolved.services.multiplayer.image = $backend.Image
-$activeResolved.services.web.image = $web.Image
+$rollbackBackendRepository = Get-ImageRepository ([string]$backend.Config.Image)
+$rollbackWebRepository = Get-ImageRepository ([string]$web.Config.Image)
+if ($rollbackBackendRepository -notmatch '(^|/)greed-island-l390-multiplayer$' -or
+    $rollbackWebRepository -notmatch '(^|/)greed-island-l390-web$') { throw 'Running images do not match the reviewed L390 repositories.' }
+$rollbackBackendTag = "${rollbackBackendRepository}:rollback-$stamp"
+$rollbackWebTag = "${rollbackWebRepository}:rollback-$stamp"
+$rollbackImageTag = "rollback-$stamp"
+$activeComposeText = Get-Content -Raw -LiteralPath $activeConfig
+$backendImageTagPattern = '(?m)^\s*image:\s*[^\r\n]*greed-island-l390-multiplayer:\$\{GREED_L390_IMAGE_TAG[^}]*\}'
+$webImageTagPattern = '(?m)^\s*image:\s*[^\r\n]*greed-island-l390-web:\$\{GREED_L390_IMAGE_TAG[^}]*\}'
+$rollbackUsesImageTagVariable = (
+  ($activeComposeText -match $backendImageTagPattern) -and
+  ($activeComposeText -match $webImageTagPattern) -and
+  ($previousBackendTag -ceq $previousWebTag)
+)
+$rollbackImageOverride = $null
+if (-not $rollbackUsesImageTagVariable) {
+  $rollbackImageOverride = Join-Path $backup 'rollback-images.override.yml'
+  $rollbackOverrideYaml = @(
+    'services:'
+    '  multiplayer:'
+    "    image: $rollbackBackendTag"
+    '  web:'
+    "    image: $rollbackWebTag"
+    ''
+  ) -join "`n"
+  [IO.File]::WriteAllText($rollbackImageOverride, $rollbackOverrideYaml, ([Text.UTF8Encoding]::new($false)))
+}
 $rollbackCaddyfile = Join-Path $backup 'Caddyfile.l390'
-$rollbackStagedCaddyfile = Join-Path $stagingDirectory 'rollback-Caddyfile.l390'
 $caddyMount = @($activeResolved.services.web.volumes | Where-Object { $_.type -eq 'bind' -and $_.target -eq '/etc/caddy/Caddyfile' })
 if ($caddyMount.Count -ne 1) { throw 'Existing Caddy bind mount must be explicit.' }
 $activeCaddySource = [string]$caddyMount[0].source
-$activeCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$activeCaddySource,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
+$activeCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$activeCaddySource,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 600
 Write-Host "Active release Caddy bind preflight: $activeCaddyVersion"
 Copy-Item -LiteralPath $caddyMount[0].source -Destination $rollbackCaddyfile -Force
-Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force
-$rollbackCaddyVersion = Invoke-Docker @('run','--rm','--network','none','--mount',"type=bind,src=$rollbackStagedCaddyfile,dst=/etc/caddy/Caddyfile,readonly",'--entrypoint','caddy',$webImage,'version') 120
-Write-Host "Staged rollback Caddyfile bind preflight: $rollbackCaddyVersion"
-$caddyMount[0].source = $rollbackStagedCaddyfile
-Write-Json $activeResolved $rollbackConfig
 [IO.File]::WriteAllText((Join-Path $backup '.env'),'',([Text.UTF8Encoding]::new($false)))
-$rollbackModel = Invoke-Docker (Compose-Arguments $rollbackConfig @('config','--format','json')) | ConvertFrom-Json
-if ($rollbackModel.services.multiplayer.image -cne $backend.Image -or $rollbackModel.services.web.image -cne $web.Image) { throw 'Captured rollback model must round-trip with the exact prior images.' }
-[void](Invoke-Docker @('save',$backend.Image,$web.Image,'-o',(Join-Path $backup 'prior-images.tar')) 600)
-# Keep the candidate environment for audit. Unified rollback uses the active
-# release Compose file plus activeEnvFile; legacy rollback uses activeResolved.
+$env:GREED_L390_IMAGE_TAG = $rollbackImageTag
+if ($null -ne $previousBuildSha) { $env:GREED_L390_BUILD_SHA = $previousBuildSha }
+else { Remove-Item Env:GREED_L390_BUILD_SHA -ErrorAction SilentlyContinue }
+$env:GREED_L390_SOURCE_PATH = $SourcePath
+if ($rollbackImageOverride) {
+  $rollbackModel = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'config','--format','json')) | ConvertFrom-Json
+} else {
+  $rollbackModel = Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'config','--format','json')) | ConvertFrom-Json
+}
+if ($rollbackModel.services.multiplayer.image -cne $rollbackBackendTag -or $rollbackModel.services.web.image -cne $rollbackWebTag) { throw 'Captured rollback model must use the exact per-deployment rollback tags.' }
+if ($null -ne $previousImageTag) { $env:GREED_L390_IMAGE_TAG = $previousImageTag }
+else { Remove-Item Env:GREED_L390_IMAGE_TAG -ErrorAction SilentlyContinue }
+if ($null -ne $previousBuildSha) { $env:GREED_L390_BUILD_SHA = $previousBuildSha }
+else { Remove-Item Env:GREED_L390_BUILD_SHA -ErrorAction SilentlyContinue }
+$createdRollbackTags = @()
+try {
+  Write-Json @{ sha=$ExpectedSha; deploymentId=$deploymentId; priorBackendImage=$backend.Image; priorWebImage=$web.Image;
+    rollbackBackendRepository=$rollbackBackendRepository; rollbackWebRepository=$rollbackWebRepository;
+    rollbackBackendTag=$rollbackBackendTag; rollbackWebTag=$rollbackWebTag; canonicalVolume=$canonicalVolume;
+    legacyVolumes=$oldVolumes; rollbackDatabaseCompatible=$rollbackCompatible } (Join-Path $backup 'rollout.json')
+  [void](Invoke-Docker @('tag',$backend.Image,$rollbackBackendTag) 600)
+  $createdRollbackTags += $rollbackBackendTag
+  [void](Invoke-Docker @('tag',$web.Image,$rollbackWebTag) 600)
+  $createdRollbackTags += $rollbackWebTag
+  $taggedBackendId = (Invoke-Docker @('image','inspect',$rollbackBackendTag) | ConvertFrom-Json)[0].Id
+  $taggedWebId = (Invoke-Docker @('image','inspect',$rollbackWebTag) | ConvertFrom-Json)[0].Id
+  if ($taggedBackendId -cne $backend.Image -or $taggedWebId -cne $web.Image) {
+    throw 'Rollback tags do not resolve to the exact images that were running before deployment.'
+  }
+} catch {
+  foreach ($tag in $createdRollbackTags) { try { [void](Invoke-Docker @('image','rm',$tag) 600) } catch { } }
+  throw 'Could not preserve exact pre-deployment images under rollback tags. No old container was stopped.'
+}
+# Keep the candidate environment for audit; rollback-config.json uses the
+# pre-deploy resolved model pinned to this run's exact rollback tags.
 Copy-Item -LiteralPath $envFile -Destination (Join-Path $backup 'source.env')
-Write-Json @{ sha=$ExpectedSha; priorBackendImage=$backend.Image; priorWebImage=$web.Image; canonicalVolume=$canonicalVolume; legacyVolumes=$oldVolumes; rollbackDatabaseCompatible=$rollbackCompatible } (Join-Path $backup 'rollout.json')
 
 Add-Type -AssemblyName System.Net.Http
 $handler = New-Object Net.Http.HttpClientHandler
@@ -328,22 +482,22 @@ function Await-Health([bool]$Unified, [int]$Seconds=$StartupWaitSeconds) {
 $stopped = $false; $release = $stagingDirectory
 try {
   $stopped = $true
-  [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'stop','--timeout','30','multiplayer','web')) 120)
+  [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'stop','--timeout','30','multiplayer','web')) 600)
   $index = 0; $volumeBackups = @()
   foreach ($name in $allVolumes) {
     # Entire quiesced volume, including every SQLite WAL/SHM and account file.
     $container = $null; $archiveFailure = $null; $archivePath = Join-Path $backup ("volume-$index.tgz")
     try {
-      $container = Invoke-Docker @('create','--name',"greed-l390-backup-$stamp-$index",'--network','none','--mount',"type=volume,src=$name,dst=/data,readonly",'--entrypoint','sh',$backendImage,'-c',"tar -czf /tmp/volume-$index.tgz -C /data . && gzip -t /tmp/volume-$index.tgz") 120
+      $container = Invoke-Docker @('create','--name',"greed-l390-backup-$stamp-$index",'--network','none','--mount',"type=volume,src=$name,dst=/data,readonly",'--entrypoint','sh',$backendImage,'-c',"tar -czf /tmp/volume-$index.tgz -C /data . && gzip -t /tmp/volume-$index.tgz") 600
       [void](Invoke-Docker @('start','-a',$container) 600)
-      [void](Invoke-Docker @('cp',"${container}:/tmp/volume-$index.tgz",$archivePath) 120)
+      [void](Invoke-Docker @('cp',"${container}:/tmp/volume-$index.tgz",$archivePath) 600)
     } catch {
       $archiveFailure = $_
       Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
       throw
     } finally {
       if ($container) {
-        try { [void](Invoke-Docker @('rm','-f',$container) 30) }
+        try { [void](Invoke-Docker @('rm','-f',$container) 600) }
         catch {
           if (-not $archiveFailure) {
             Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
@@ -384,6 +538,37 @@ try {
       if (-not $resolvedOldBackup.StartsWith($resolvedBackupRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to remove a backup outside the backup root: $($oldBackup.FullName)"
       }
+      $expiredRolloutPath = Join-Path $resolvedOldBackup 'rollout.json'
+      if (Test-Path -LiteralPath $expiredRolloutPath -PathType Leaf) {
+        $expiredRollout = Get-Content -Raw -LiteralPath $expiredRolloutPath | ConvertFrom-Json
+        $backendTagProperty = $expiredRollout.PSObject.Properties['rollbackBackendTag']
+        $webTagProperty = $expiredRollout.PSObject.Properties['rollbackWebTag']
+        if ($backendTagProperty -or $webTagProperty) {
+          $deploymentIdProperty = $expiredRollout.PSObject.Properties['deploymentId']
+          if (-not $deploymentIdProperty) { throw "Rollback tag metadata has no deployment ID: $($oldBackup.FullName)" }
+          $expiredDeploymentId = [string]$deploymentIdProperty.Value
+          $expiredBackendRepository = [string]$expiredRollout.rollbackBackendRepository
+          $expiredWebRepository = [string]$expiredRollout.rollbackWebRepository
+          $backendRepositoryName = $expiredBackendRepository.Substring($expiredBackendRepository.LastIndexOf('/') + 1)
+          $webRepositoryName = $expiredWebRepository.Substring($expiredWebRepository.LastIndexOf('/') + 1)
+          if ($expiredDeploymentId -cnotmatch '^[a-f0-9]{32}$' -or
+              -not $oldBackup.Name.EndsWith("-$expiredDeploymentId", [StringComparison]::OrdinalIgnoreCase) -or
+              $backendRepositoryName -cne 'greed-island-l390-multiplayer' -or
+              $webRepositoryName -cne 'greed-island-l390-web') {
+            throw "Refusing to remove unrecognized rollback image tags from $($oldBackup.FullName)"
+          }
+          $expiredBackendTag = "${expiredBackendRepository}:rollback-$($oldBackup.Name)"
+          $expiredWebTag = "${expiredWebRepository}:rollback-$($oldBackup.Name)"
+          if ([string]$expiredRollout.rollbackBackendTag -cne $expiredBackendTag -or
+              [string]$expiredRollout.rollbackWebTag -cne $expiredWebTag) {
+            throw "Refusing to remove rollback tags that do not match backup metadata in $($oldBackup.FullName)"
+          }
+          foreach ($tag in @($expiredBackendTag,$expiredWebTag)) {
+            $tagMatches = (Invoke-Docker @('image','ls','--format','{{.Repository}}:{{.Tag}}','--filter',"reference=$tag") 600) -split "\r?\n" | Where-Object { $_ }
+            if ($tagMatches -contains $tag) { [void](Invoke-Docker @('image','rm',$tag) 600) }
+          }
+        }
+      }
       Remove-Item -LiteralPath $resolvedOldBackup -Recurse -Force -ErrorAction Stop
     }
   } catch {
@@ -394,18 +579,17 @@ try {
   $failure = $_
   if ($stopped) {
     try {
-      [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'stop','--timeout','30','multiplayer','web')) 120)
+      [void](Invoke-Docker (Compose-Arguments $stagedCompose @('--env-file',$envFile,'stop','--timeout','30','multiplayer','web')) 600)
     } catch { }
     if (-not $rollbackCompatible) { throw 'Rollout failed and old DB/schema compatibility is unproven. Containers remain stopped; owner-reviewed local restore is required. No automatic database restore was attempted.' }
     try {
-      if ($isLegacyRoom) {
-        [void](Invoke-Docker (Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
+      $env:GREED_L390_IMAGE_TAG = $rollbackImageTag
+      if ($null -ne $previousBuildSha) { $env:GREED_L390_BUILD_SHA = $previousBuildSha }
+      else { Remove-Item Env:GREED_L390_BUILD_SHA -ErrorAction SilentlyContinue }
+      $env:GREED_L390_SOURCE_PATH = $SourcePath
+      if ($rollbackImageOverride) {
+        [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
       } else {
-        # Use the still-preserved prior release Compose file and its recorded
-        # environment file. Same-SHA image-ID drift is rejected before stop.
-        $env:GREED_L390_IMAGE_TAG = $previousImageTag
-        $env:GREED_L390_BUILD_SHA = $previousImageTag
-        $env:GREED_L390_SOURCE_PATH = $SourcePath
         [void](Invoke-Docker (Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)
       }
       Await-Health (-not $isLegacyRoom) $StartupWaitSeconds

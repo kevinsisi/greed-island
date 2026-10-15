@@ -42,8 +42,8 @@ class SourceDeploymentContracts(unittest.TestCase):
         )
         self.assertIn('Await-Health $true', self.script)
         self.assertIn("Compose-Arguments $stagedCompose @('--env-file',$envFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
-        self.assertIn("Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
         self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'up','-d','--no-build','--pull','never')) $StartupWaitSeconds)", self.script)
         self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertIn('$process.WaitForExit($TimeoutSeconds * 1000)', self.script)
 
@@ -57,6 +57,13 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn('Remove-Item -LiteralPath $resolvedOldBackup -Recurse -Force -ErrorAction Stop', success_path)
         self.assertIn('StartsWith($resolvedBackupRoot, [StringComparison]::OrdinalIgnoreCase)', success_path)
         self.assertIn('Write-Warning "Backup retention cleanup failed; deployment remains successful.', success_path)
+        self.assertIn("Invoke-Docker @('image','rm',$tag)", success_path)
+        self.assertIn("$backendRepositoryName -cne 'greed-island-l390-multiplayer'", success_path)
+        self.assertIn("$webRepositoryName -cne 'greed-island-l390-web'", success_path)
+        self.assertIn('oldBackup.Name.EndsWith', success_path)
+        self.assertIn('rollback-$($oldBackup.Name)', success_path)
+        self.assertIn('rollbackBackendTag -cne $expiredBackendTag', success_path)
+        self.assertIn('rollbackWebTag -cne $expiredWebTag', success_path)
         rollback_path = self.script.split('\n} catch {\n  $failure = $_', 1)[1]
         self.assertNotIn('BackupRetentionCount', rollback_path)
 
@@ -81,6 +88,60 @@ class SourceDeploymentContracts(unittest.TestCase):
             self.assertIn("'--env',\"NODE_OPTIONS=$ProbeNodeOptions\"", command)
             self.assertIn('$DatabaseInspectionTimeoutSeconds)', command)
             self.assertNotIn("'NODE_OPTIONS=' +", command)
+
+    def test_slow_external_disk_timeouts_and_per_call_timing(self):
+        self.assertRegex(self.script, r'(?m)^function Invoke-Docker\(\[string\[\]\]\$Arguments, \[int\]\$TimeoutSeconds = 600\)')
+        load_timeout = re.search(r"(?m)^\[void\]\(Invoke-Docker @\('load','-i',\$archive\) (\d+)\)$", self.script)
+        self.assertIsNotNone(load_timeout, 'docker load must have an explicit timeout')
+        self.assertGreaterEqual(int(load_timeout.group(1)), 1800)
+        for line in self.script.splitlines():
+            if any(f"@('{verb}'" in line for verb in ('run', 'start', 'create', 'cp')):
+                self.assertNotRegex(line, r'\)\s*(?:30|120)\)?(?:\s|;|$)')
+        self.assertIn('$timer = [Diagnostics.Stopwatch]::StartNew()', self.script)
+        self.assertIn('Write-Host "[docker $commandLabel] ${elapsedSeconds}s"', self.script)
+        self.assertIn("if ($commandLabel -ceq 'compose')", self.script)
+        self.assertIn('$commandLabel = "compose $argument"', self.script)
+
+    def test_rollback_uses_unique_tags_and_never_saves_image_archives(self):
+        self.assertNotIn("'save'", self.script)
+        self.assertNotIn('prior-images.tar', self.script)
+        self.assertIn("$rollbackBackendTag = \"${rollbackBackendRepository}:rollback-$stamp\"", self.script)
+        self.assertIn("$rollbackWebTag = \"${rollbackWebRepository}:rollback-$stamp\"", self.script)
+        self.assertIn("Invoke-Docker @('tag',$backend.Image,$rollbackBackendTag) 600", self.script)
+        self.assertIn("Invoke-Docker @('tag',$web.Image,$rollbackWebTag) 600", self.script)
+        self.assertIn("Invoke-Docker @('image','inspect',$rollbackBackendTag)", self.script)
+        self.assertIn("Invoke-Docker @('image','inspect',$rollbackWebTag)", self.script)
+        self.assertIn('$taggedBackendId -cne $backend.Image -or $taggedWebId -cne $web.Image', self.script)
+        self.assertIn("$rollbackModel.services.multiplayer.image -cne $rollbackBackendTag", self.script)
+        self.assertIn("$rollbackModel.services.web.image -cne $rollbackWebTag", self.script)
+        self.assertIn('rollbackBackendTag=$rollbackBackendTag', self.script)
+        self.assertIn('rollbackWebTag=$rollbackWebTag', self.script)
+        self.assertNotIn("Invoke-Docker @('image','prune'", self.script)
+        self.assertNotIn("Invoke-Docker @('system','prune'", self.script)
+
+    def test_active_rollback_tags_use_image_metadata_and_invalid_tags_fail_closed(self):
+        self.assertRegex(self.script, r"(?m)^\$rollbackTagPattern\s*=\s*'\^rollback-\\d\{8\}T\\d\{6\}Z-\[a-f0-9\]\{12\}-\[a-f0-9\]\{32\}\$'\s*$")
+        self.assertIn("$previousBackendTag -cmatch '^[a-f0-9]{40}$'", self.script)
+        self.assertIn('$previousBackendTag -cmatch $rollbackTagPattern', self.script)
+        self.assertIn('$previousBackendTag -ceq $previousWebTag', self.script)
+        self.assertIn('$backendBuildSha = Get-ImageBuildSha $backend', self.script)
+        self.assertIn('$webBuildSha = Get-ImageBuildSha $web', self.script)
+        self.assertIn("if ($labelSha -cmatch '^[a-f0-9]{40}$') { return $labelSha }", self.script)
+        self.assertIn("if ($containerSha) { return $containerSha }", self.script)
+        self.assertIn("throw 'Unified rollback requires exact-SHA tags or matching rollback-<timestamp>-<sha12>-<id> tags.'", self.script)
+        self.assertIn('Cannot determine the build SHA from the running container environment or image revision label.', self.script)
+
+    def test_rollback_uses_active_compose_and_env_with_image_only_override(self):
+        self.assertIn('$activeComposeText = Get-Content -Raw -LiteralPath $activeConfig', self.script)
+        self.assertIn('$rollbackUsesImageTagVariable', self.script)
+        self.assertIn("$env:GREED_L390_IMAGE_TAG = $rollbackImageTag", self.script)
+        self.assertIn("$rollbackImageOverride = Join-Path $backup 'rollback-images.override.yml'", self.script)
+        self.assertIn('"    image: $rollbackBackendTag"', self.script)
+        self.assertIn('"    image: $rollbackWebTag"', self.script)
+        self.assertNotIn('Write-Json $activeResolved', self.script)
+        self.assertNotIn('$rollbackConfig', self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'up'", self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up'", self.script)
 
     def test_stop_attempt_is_marked_before_native_stop(self):
         marker = self.script.index('$stopped = $true')
@@ -110,9 +171,9 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertLess(before_stop.index('$env:GREED_L390_SOURCE_PATH = $SourcePath'), before_stop.index("$activeResolved = Invoke-Docker"))
         self.assertIn('$activeResolved.services.multiplayer.image -cne $backend.Config.Image', before_stop)
         self.assertIn('$activeResolved.services.web.image -cne $web.Config.Image', before_stop)
-        self.assertIn('$activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousImageTag', before_stop)
+        self.assertIn('$activeResolved.services.multiplayer.environment.GREED_ISLAND_BUILD_SHA -cne $previousBuildSha', before_stop)
         self.assertIn("$env:GREED_L390_IMAGE_TAG = $previousImageTag", before_stop)
-        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousImageTag", before_stop)
+        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousBuildSha", before_stop)
         self.assertIn("$activeEnvFile = (Resolve-Path -LiteralPath $activeEnvFile).Path", before_stop)
         new_config = before_stop.index('$newResolved = Invoke-Docker')
         active_values_restored = before_stop.index('$env:GREED_L390_IMAGE_TAG = $previousImageTag', new_config)
@@ -124,16 +185,19 @@ class SourceDeploymentContracts(unittest.TestCase):
         candidate_tag = self.script.rindex('$env:GREED_L390_IMAGE_TAG = $ExpectedSha', 0, rollout_start)
         self.assertLess(self.script.index('$stopped = $true'), candidate_tag)
         self.assertLess(candidate_tag, rollout_start)
+        self.assertIn("$rollbackBackendTag = \"${rollbackBackendRepository}:rollback-$stamp\"", before_stop)
+        self.assertIn("$rollbackWebTag = \"${rollbackWebRepository}:rollback-$stamp\"", before_stop)
 
     def test_unified_rollback_reuses_the_preserved_prior_release_compose_and_env(self):
         rollback = self.script.split("if ($stopped) {", 1)[1]
         self.assertIn("$activeEnvLabel = [string]$backend.Config.Labels.'com.docker.compose.project.environment_file'", self.script)
-        self.assertIn("$env:GREED_L390_IMAGE_TAG = $previousImageTag", rollback)
-        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousImageTag", rollback)
+        self.assertIn("$env:GREED_L390_IMAGE_TAG = $rollbackImageTag", rollback)
+        self.assertIn("$env:GREED_L390_BUILD_SHA = $previousBuildSha", rollback)
         self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')", rollback)
-        self.assertIn("$activeResolved.services.multiplayer.image = $backend.Image", self.script)
-        self.assertIn("Write-Json $activeResolved $rollbackConfig", self.script)
-        self.assertNotIn('$rollbackImageOverride', self.script)
+        self.assertIn("$env:GREED_L390_IMAGE_TAG = $rollbackImageTag", rollback)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'up','-d','--no-build','--pull','never')", rollback)
+        self.assertNotIn('Write-Json $activeResolved', self.script)
+        self.assertIn('$rollbackImageOverride', self.script)
 
         before_stop = self.script.split('$stopped = $true', 1)[0]
         self.assertIn('$activeCaddySource = [string]$caddyMount[0].source', before_stop)
@@ -148,7 +212,7 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn("$stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $ExpectedSha.Substring(0,12) + '-' + $deploymentId", self.script)
         self.assertNotIn("$stagingDirectory = Join-Path $stagingRoot $ExpectedSha.Substring(0,12)", self.script)
         before_stop = self.script.split('$stopped = $true', 1)[0]
-        self.assertIn('if ($previousImageTag -ceq $ExpectedSha)', before_stop)
+        self.assertIn('if (-not $isLegacyRoom -and $previousBackendTag -ceq $ExpectedSha)', before_stop)
         self.assertIn('$loadedBackendId -cne $backend.Image -or $loadedWebId -cne $web.Image', before_stop)
         self.assertIn("Invoke-Docker @('tag',$backend.Image,$backend.Config.Image)", before_stop)
         self.assertIn("Invoke-Docker @('tag',$web.Image,$web.Config.Image)", before_stop)
@@ -158,12 +222,14 @@ class SourceDeploymentContracts(unittest.TestCase):
         for marker in ["'volume','inspect',$canonicalVolume", 'inspectUnifiedDatabase(c.databasePath)', "'--network','none'"]:
             self.assertLess(self.script.index(marker), self.script.index('$stopped = $true'))
 
-    def test_rollback_uses_captured_resolved_configuration_and_prior_ids(self):
-        self.assertIn('$activeResolved.services.multiplayer.image = $backend.Image', self.script)
-        self.assertIn('$activeResolved.services.web.image = $web.Image', self.script)
-        self.assertIn("Write-Json $activeResolved $rollbackConfig", self.script)
-        self.assertIn("Compose-Arguments $rollbackConfig @('up','-d','--no-build','--pull','never')", self.script)
+    def test_rollback_uses_original_compose_and_verifies_prior_image_ids(self):
+        self.assertIn("$rollbackModel.services.multiplayer.image -cne $rollbackBackendTag", self.script)
+        self.assertIn("$rollbackModel.services.web.image -cne $rollbackWebTag", self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'up','-d','--no-build','--pull','never')", self.script)
+        self.assertIn("Compose-Arguments $activeConfig @('--env-file',$activeEnvFile,'-f',$rollbackImageOverride,'up','-d','--no-build','--pull','never')", self.script)
         self.assertIn('if (-not $rollbackCompatible)', self.script)
+        self.assertIn("(Get-Container 'multiplayer').Image -cne $backend.Image", self.script)
+        self.assertIn("(Get-Container 'web').Image -cne $web.Image", self.script)
         self.assertIn('Await-Health (-not $isLegacyRoom) $StartupWaitSeconds', self.script)
         self.assertNotIn('tar -x', self.script)
 
@@ -187,8 +253,8 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIn("Copy-Item -LiteralPath $sourceConfig -Destination $stagedCompose -Force", self.script)
         self.assertIn('$env:GREED_L390_SOURCE_PATH = $SourcePath', self.script)
         self.assertIn('Compose-Arguments $stagedCompose', self.script)
-        self.assertIn("$caddyMount[0].source = $rollbackStagedCaddyfile", self.script)
-        self.assertIn("Copy-Item -LiteralPath $rollbackCaddyfile -Destination $rollbackStagedCaddyfile -Force", self.script)
+        self.assertIn("Copy-Item -LiteralPath $caddyMount[0].source -Destination $rollbackCaddyfile -Force", self.script)
+        self.assertNotIn('$rollbackStagedCaddyfile', self.script)
         self.assertNotIn("type=bind,src=$(Join-Path $SourcePath", self.script)
         self.assertNotIn('$releaseEnv', self.script)
         self.assertNotIn('$environmentText', self.script)
@@ -201,7 +267,7 @@ class SourceDeploymentContracts(unittest.TestCase):
             "$copyProbeContainer = Invoke-Docker @('create'",
             "Invoke-Docker @('cp',\"${copyProbeContainer}:/tmp/l390-docker-cp-preflight.txt\",$copyProbe)",
             '$activeCaddyVersion = Invoke-Docker',
-            '$rollbackCaddyVersion = Invoke-Docker',
+            'Copy-Item -LiteralPath $caddyMount[0].source -Destination $rollbackCaddyfile -Force',
         ):
             self.assertLess(self.script.index(marker), stop, marker)
         self.assertIn("finally {", self.script)
