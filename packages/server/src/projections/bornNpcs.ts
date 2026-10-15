@@ -128,7 +128,7 @@ export class BornNpcsProjection {
     }
   }
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>): void {
     this.candidates.clear()
     this.matured.clear()
     for (const ev of events) this.project(ev)

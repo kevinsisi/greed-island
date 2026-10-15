@@ -102,6 +102,16 @@ describe('canonical startup and one auth/world boundary', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM accounts').get()).toEqual({ n: 0 })
     db.close()
   })
+  it('detects foreign-key violations with a bounded readiness probe', () => {
+    const existing = path(); seed(existing)
+    const db = new Database(existing)
+    db.pragma('foreign_keys = OFF')
+    db.prepare('INSERT INTO auth_sessions(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)')
+      .run('synthetic-invalid-session', 999, 0, 1)
+    db.prepare("UPDATE sqlite_sequence SET seq=999 WHERE name='accounts'").run()
+    expect(() => assertUnifiedDatabaseReady(db)).toThrow('foreign-key violations')
+    db.close()
+  })
   it('leaves an ownerless unified DB unchanged instead of bootstrapping an admin', () => {
     const existing = path(); seed(existing, false)
     const before = readFileSync(existing)

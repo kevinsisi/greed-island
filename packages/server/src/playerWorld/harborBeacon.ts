@@ -114,10 +114,11 @@ export class HarborBeaconProjection {
     }
     this.tick = data.beaconTick; this.maximumMovementStep = Math.max(this.maximumMovementStep, data.movementStep); this.sequence = event.sequence
   }
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
     this.tick = 0; this.sequence = 0; this.maximumMovementStep = -1; this.config = { ...DEFAULT_ROOM_CONFIG }
     this.players.clear(); this.contributors = []; this.awarded = []; this.completed = false; this.closesAtTick = null
-    for (const event of [...events].sort((a,b) => a.sequence - b.sequence)) this.project(event) }
+    const ordered = alreadyOrdered ? events : [...events].sort((a,b) => a.sequence - b.sequence)
+    for (const event of ordered) this.project(event) }
 }
 /** Explicit offline reviewed association only; this does not activate accounts or a staged volume. */
 export function reviewedHarborRestorationCommand(input: { namespace: string; sourceDigest: string; reviewReference: string; state: PreservedHarborState; worldTick: number; submittedAt: number }): LivingWorldCommand {

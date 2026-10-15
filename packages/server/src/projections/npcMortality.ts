@@ -20,9 +20,10 @@ function readPayload(event: Event): { npcId: string; deceasedAtTick: number } | 
 export class NpcMortalityProjection {
   private rows = new Map<string, NpcMortalityRow>()
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
     this.rows = new Map()
-    for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+    const ordered = alreadyOrdered ? events : [...events].sort((a, b) => a.sequence - b.sequence)
+    for (const event of ordered) {
       this.project(event)
     }
   }

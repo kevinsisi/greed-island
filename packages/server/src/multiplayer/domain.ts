@@ -134,7 +134,7 @@ export function evaluateCommand(state: RoomState, actor: string, command: RoomCo
 
 export function emptyState(): RoomState { return { sequence: 0, tick: 0, config: { ...DEFAULT_ROOM_CONFIG }, players: [], messages: [], contributors: [], completed: false, closesAtTick: null, awardedPlayerIds: [], movedAt: {} } }
 /** Sequence gating makes duplicate delivery safe independently of receipt lookup. */
-export function applyEvents(state: RoomState, events: readonly Event[]): RoomState {
+export function applyEvents(state: RoomState, events: Iterable<Event>): RoomState {
   const next = structuredClone(state)
   for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
     if (event.sequence <= next.sequence) continue
@@ -167,4 +167,4 @@ export function applyEvents(state: RoomState, events: readonly Event[]): RoomSta
   }
   return next
 }
-export function projectEvents(events: readonly Event[]): RoomState { return applyEvents(emptyState(), events) }
+export function projectEvents(events: Iterable<Event>): RoomState { return applyEvents(emptyState(), events) }

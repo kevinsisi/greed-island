@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $project = 'greed-island-l390'
-$StartupWaitSeconds = 900
+$StartupWaitSeconds = 2400
 $BackupRetentionCount = 2
 $ProbeNodeOptions = '--max-old-space-size=4096'
 # Database inspection replays 1.2M+ events and can take 200+ seconds.

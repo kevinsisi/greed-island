@@ -167,8 +167,18 @@ export class SqliteEventStore {
   }
 
   readEvents(): Event[] {
-    const rows = this.db.prepare('SELECT * FROM event_log ORDER BY sequence ASC').all() as EventRow[]
-    return rows.map(rowToEvent)
+    return Array.from(this.iterateEvents())
+  }
+
+  /** Stream the append-only log in sequence order without materializing its rows. */
+  iterateEvents(): Iterable<Event> {
+    const store = this
+    return {
+      *[Symbol.iterator](): IterableIterator<Event> {
+        const rows = store.db.prepare('SELECT * FROM event_log ORDER BY sequence ASC').iterate() as Iterable<EventRow>
+        for (const row of rows) yield rowToEvent(row)
+      },
+    }
   }
 
   readRecentEvents(limit: number): Event[] {
@@ -220,15 +230,41 @@ export class SqliteEventStore {
   }
 
   readEventsByTypes(eventTypes: readonly string[]): Event[] {
+    return Array.from(this.iterateEventsByTypes(eventTypes))
+  }
+
+  /**
+   * Stream selected event types in global sequence order. Each type is read
+   * through its index and only one row per type is held while merging cursors.
+   */
+  iterateEventsByTypes(eventTypes: readonly string[]): Iterable<Event> {
     const types = [...new Set(eventTypes.filter((type) => type.length > 0))]
     if (types.length === 0) return []
-    const rows: EventRow[] = []
-    const statement = this.db.prepare('SELECT * FROM event_log WHERE event_type = ? ORDER BY sequence ASC')
-    for (const type of types) {
-      rows.push(...(statement.all(type) as EventRow[]))
+    const store = this
+    return {
+      *[Symbol.iterator](): IterableIterator<Event> {
+        const cursors = types.map(type =>
+          store.db.prepare('SELECT * FROM event_log WHERE event_type = ? ORDER BY sequence ASC').iterate(type)[Symbol.iterator]() as Iterator<EventRow>,
+        )
+        const heads = cursors.map(cursor => cursor.next())
+        try {
+          while (true) {
+            let nextIndex = -1
+            for (let index = 0; index < heads.length; index += 1) {
+              const head = heads[index]!
+              if (head.done) continue
+              if (nextIndex < 0 || head.value.sequence < heads[nextIndex]!.value.sequence) nextIndex = index
+            }
+            if (nextIndex < 0) return
+            const next = heads[nextIndex]!
+            yield rowToEvent(next.value)
+            heads[nextIndex] = cursors[nextIndex]!.next()
+          }
+        } finally {
+          for (const cursor of cursors) cursor.return?.()
+        }
+      },
     }
-    rows.sort((a, b) => a.sequence - b.sequence)
-    return rows.map(rowToEvent)
   }
 
   readEventsByTickWindow(input: EventTickWindowRead): EventTickWindowResult {
@@ -239,7 +275,7 @@ export class SqliteEventStore {
     if (requestedMergeRows > MAX_TICK_WINDOW_MERGE_ROWS) {
       return this.readEventsByTickWindowSingleQuery(input, eventTypes, safeLimit)
     }
-    const rows: EventRow[] = []
+    const events: Event[] = []
     // Keep this as bounded per-type scans. SQLite can walk the
     // (event_type, tick, sequence) index for each server-selected type without
     // building the large cross-type temp sort that blocked production API reads.
@@ -253,15 +289,15 @@ export class SqliteEventStore {
           LIMIT ?`
       )
     for (const eventType of eventTypes) {
-      rows.push(
-        ...(statement.all(eventType, input.sinceTick, input.untilTick, safeLimit + 1) as EventRow[])
-      )
+      for (const row of statement.iterate(eventType, input.sinceTick, input.untilTick, safeLimit + 1) as Iterable<EventRow>) {
+        events.push(rowToEvent(row))
+      }
     }
-    const limited = rows.length > safeLimit
-    const windowRows = rows
+    const limited = events.length > safeLimit
+    const windowEvents = events
       .sort((a, b) => (a.tick ?? 0) - (b.tick ?? 0) || a.sequence - b.sequence)
       .slice(0, safeLimit)
-    return { events: windowRows.map(rowToEvent), limited }
+    return { events: windowEvents, limited }
   }
 
   private readEventsByTickWindowSingleQuery(
@@ -270,8 +306,8 @@ export class SqliteEventStore {
     safeLimit: number
   ): EventTickWindowResult {
     const placeholders = eventTypes.map(() => '?').join(', ')
-    const rows = this.db
-      .prepare(
+    const events: Event[] = []
+    const statement = this.db.prepare(
         `SELECT * FROM event_log
           WHERE event_type IN (${placeholders})
             AND tick > ?
@@ -279,9 +315,11 @@ export class SqliteEventStore {
           ORDER BY tick ASC, sequence ASC
           LIMIT ?`
       )
-      .all(...eventTypes, input.sinceTick, input.untilTick, safeLimit + 1) as EventRow[]
-    const limited = rows.length > safeLimit
-    return { events: rows.slice(0, safeLimit).map(rowToEvent), limited }
+    for (const row of statement.iterate(...eventTypes, input.sinceTick, input.untilTick, safeLimit + 1) as Iterable<EventRow>) {
+      events.push(rowToEvent(row))
+    }
+    const limited = events.length > safeLimit
+    return { events: events.slice(0, safeLimit), limited }
   }
 
   readLatestFactSnapshot(): {
@@ -417,6 +455,14 @@ export class SqliteEventStore {
       payload: JSON.parse(row.payload_json) as unknown
     }))
   }
+}
+
+/** Use the bounded cursor when available; keep lightweight runtime doubles compatible. */
+export function streamEventsByTypes(
+  store: Pick<SqliteEventStore, 'readEventsByTypes'> & Partial<Pick<SqliteEventStore, 'iterateEventsByTypes'>>,
+  eventTypes: readonly string[],
+): Iterable<Event> {
+  return store.iterateEventsByTypes?.(eventTypes) ?? store.readEventsByTypes(eventTypes)
 }
 
 export function initializeKernelSchema(db: DatabaseConnection): void {

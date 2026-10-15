@@ -66,7 +66,7 @@ export class PlayerNpcRelationshipProjection {
     this.rows.set(key, next)
   }
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>): void {
     this.rows.clear()
     for (const event of events) this.apply(event)
   }

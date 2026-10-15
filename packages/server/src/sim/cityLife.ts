@@ -454,7 +454,7 @@ export function decideCivEvoConstructionInitiate(input: {
   }
 }
 
-export function rebuildLifeExpansionFromEvents(events: readonly Event[]): LifeExpansionState {
+export function rebuildLifeExpansionFromEvents(events: Iterable<Event>): LifeExpansionState {
   let state = createInitialLifeExpansionState()
   // v0.88.0 — NPC_INHERITANCE_GRANTED 必須與同 tick 的 NPC_MATURED 配對；
   // 缺配對代表 EventLog 損壞，replay 必須以 determinism error 中止。

@@ -156,7 +156,7 @@ function defaultErrorHandler(input: {
  * filter is event-type-based.
  */
 export function computeUnresolvedCombats(
-  events: ReadonlyArray<{
+  events: Iterable<{
     eventType: string
     payload?: unknown
   }>

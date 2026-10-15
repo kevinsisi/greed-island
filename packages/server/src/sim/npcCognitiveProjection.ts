@@ -49,8 +49,8 @@ export const NPC_COGNITIVE_PROJECTION_BOOT_EVENT_TYPES = ['NPC_REFLECTION_COMMIT
 export class NpcCognitiveProjectionStore {
   private states = new Map<string, NpcCognitiveProjectionState>()
 
-  rebuildFromEvents(events: readonly Event[]): void {
-    this.states = new Map(rebuildNpcCognitiveProjection(events))
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
+    this.states = new Map(rebuildNpcCognitiveProjection(events, alreadyOrdered))
   }
 
   project(event: Event): void {
@@ -70,10 +70,11 @@ export class NpcCognitiveProjectionStore {
   }
 }
 
-export function rebuildNpcCognitiveProjection(events: readonly Event[]): NpcCognitiveProjection {
+export function rebuildNpcCognitiveProjection(events: Iterable<Event>, alreadyOrdered = false): NpcCognitiveProjection {
   const states = new Map<string, MutableNpcCognitiveProjectionState>()
 
-  for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+  const ordered = alreadyOrdered ? events : [...events].sort((a, b) => a.sequence - b.sequence)
+  for (const event of ordered) {
     if (event.eventType !== 'NPC_REFLECTION_COMMITTED') continue
     if (!isEventPayloadWithData(event.payload)) continue
     const data = event.payload.data as NpcReflectionCommittedEventData

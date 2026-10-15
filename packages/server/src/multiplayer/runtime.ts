@@ -20,14 +20,14 @@ export class MultiplayerRuntime {
     this.store = new SqliteEventStore(db)
     db.exec('CREATE TABLE IF NOT EXISTS mp_command_receipts (player_id TEXT NOT NULL, command_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(player_id, command_id))')
     this.store.runInTransaction(() => {
-      if (this.store.readEvents().length === 0) {
+      if (this.store.countEvents() === 0) {
         if (options.requireExisting) throw new Error('Existing fixture room has no event history; refusing to initialize or refill resources.')
         this.store.appendEvents(evaluateSystemCommand(emptyState(), {
           type: 'initialize', ...(options.roster ? { roster: options.roster } : {}), ...(options.config ? { config: options.config } : {}),
         }))
       }
     })
-    this.state = projectEvents(this.store.readEvents())
+    this.state = projectEvents(this.store.iterateEvents())
     this.presence = new RoomPresence(this.state.config.maxOnlinePlayers, options.now ? { now: options.now } : {})
   }
 

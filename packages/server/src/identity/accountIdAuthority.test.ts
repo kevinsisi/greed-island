@@ -6,6 +6,7 @@ import { AuthService } from './authService.js'
 import { legacyTestHash } from './schema.testSupport.js'
 
 const databases: Database.Database[] = []
+const LARGE_EVENT_LOG_FIXTURE_ROWS = 200_000
 afterEach(() => { for (const db of databases.splice(0)) db.close() })
 function oldDatabase() {
   const db = new Database(':memory:'); databases.push(db); db.pragma('foreign_keys=ON')
@@ -36,6 +37,22 @@ describe('verified historical account-ID authority and allocator readiness', () 
     const auth = new AuthService(db, { allowedOrigins: ['https://greed.example.test'] })
     const grant = await auth.register({ kind: 'username', value: 'new-player' }, 'new-synthetic-password', 'https://greed.example.test')
     expect(grant.principal.accountId).toBe(44)
+  })
+  it('streams account authority from a 200,000-row EventLog without changing the reserved maximum', () => {
+    const db = oldDatabase()
+    migrateIdentitySchema(db)
+    db.exec('CREATE TABLE event_log(actor_id TEXT,payload_json TEXT)')
+    const payload = JSON.stringify({ note: 'x'.repeat(1024) })
+    const insert = db.prepare('INSERT INTO event_log(actor_id,payload_json) VALUES(?,?)')
+    db.transaction(() => {
+      for (let index = 0; index < LARGE_EVENT_LOG_FIXTURE_ROWS; index += 1) {
+        insert.run(index === LARGE_EVENT_LOG_FIXTURE_ROWS - 1 ? '43' : 'system', payload)
+      }
+    })()
+    db.prepare("UPDATE sqlite_sequence SET seq=43 WHERE name='accounts'").run()
+
+    expect(readCanonicalAccountIdAuthority(db)).toBe(43)
+    expect(() => assertAccountAllocatorReady(db)).not.toThrow()
   })
   it('reserves card-action actor/target/proposer references even with no MP identities imported', () => {
     const db = oldDatabase()

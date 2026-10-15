@@ -156,12 +156,15 @@ describe('simulation kernel', () => {
     ])
 
     const events = store.readEventsByTypes(['NPC_INTERACT', 'NPC_MOVE', 'NPC_MOVE'])
+    const streamedEvents = store.iterateEventsByTypes(['NPC_INTERACT', 'NPC_MOVE', 'NPC_MOVE'])
 
     expect(events.map((event) => event.eventId)).toEqual([
       'event-move-1',
       'event-interact-3',
       'event-move-4'
     ])
+    expect(Array.from(streamedEvents).map((event) => event.eventId)).toEqual(events.map((event) => event.eventId))
+    expect(Array.from(streamedEvents).map((event) => event.eventId)).toEqual(events.map((event) => event.eventId))
   })
 
   it('preserves chronological order across interleaved event types', () => {

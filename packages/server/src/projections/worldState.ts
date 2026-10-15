@@ -53,14 +53,15 @@ export class WorldStateProjection {
   private weatherAgent: WeatherAgentState = emptyWeatherAgentState()
   private hydrated = false
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
     this.weather = null
     this.season = null
     this.rareWindow = { open: false, closesAt: null }
     this.activeEventSeeds = new Map()
     this.weatherAgent = emptyWeatherAgentState()
     this.hydrated = false
-    for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+    const ordered = alreadyOrdered ? events : [...events].sort((a, b) => a.sequence - b.sequence)
+    for (const event of ordered) {
       this.project(event)
     }
   }

@@ -39,7 +39,7 @@ export function assertUnifiedDatabaseReady(db: Database.Database): void {
   if (!tables.has('event_log') || !tables.has('rejected_command_log') || EVENT_COLUMNS.some(name => !columns.some(column => column.name === name))) {
     throw new Error('Canonical EventLog is not ready; explicit reviewed initialization or migration is required.')
   }
-  if ((db.pragma('foreign_key_check') as unknown[]).length) throw new Error('Canonical database has foreign-key violations; refusing startup.')
+  if (db.prepare('SELECT 1 FROM pragma_foreign_key_check LIMIT 1').get()) throw new Error('Canonical database has foreign-key violations; refusing startup.')
   if (!db.prepare("SELECT id FROM accounts WHERE role='admin' AND status='active' LIMIT 1").get()) {
     throw new Error('OWNER_BOOTSTRAP_REQUIRED: verify an existing active owner admin before startup. No account will be promoted automatically.')
   }

@@ -55,10 +55,11 @@ export class NpcLineageProjection {
     this.heirRecords.set(p['householdId'], existing)
   }
 
-  rebuildFromEvents(events: readonly Event[]): void {
+  rebuildFromEvents(events: Iterable<Event>, alreadyOrdered = false): void {
     this.resetMembersFromProfiles()
     this.heirRecords = new Map()
-    for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+    const ordered = alreadyOrdered ? events : [...events].sort((a, b) => a.sequence - b.sequence)
+    for (const event of ordered) {
       this.project(event)
     }
   }

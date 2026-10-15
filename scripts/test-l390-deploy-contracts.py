@@ -29,12 +29,12 @@ class SourceDeploymentContracts(unittest.TestCase):
         self.assertIsNotNone(match, 'multiplayer healthcheck must declare start_period')
         amount, unit = int(match.group(1)), match.group(2)
         seconds = amount * {'': 1, 's': 1, 'm': 60, 'h': 3600}[unit]
-        self.assertGreaterEqual(seconds, 600)
+        self.assertGreaterEqual(seconds, 1800)
 
     def test_startup_and_rollback_health_waits_are_at_least_fifteen_minutes(self):
         match = re.search(r'(?m)^\$StartupWaitSeconds\s*=\s*(\d+)\s*$', self.script)
         self.assertIsNotNone(match, '$StartupWaitSeconds must be the centralized named wait bound')
-        self.assertGreaterEqual(int(match.group(1)), 900)
+        self.assertGreaterEqual(int(match.group(1)), 2400)
 
         self.assertRegex(
             self.script,

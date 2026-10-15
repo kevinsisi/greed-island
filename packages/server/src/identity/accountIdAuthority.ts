@@ -22,7 +22,7 @@ export function readCanonicalAccountIdAuthority(db: Connection): number {
   }
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{ name: string }>
   const names = new Set(tables.map(table => table.name))
-  if (names.has('accounts')) for (const row of db.prepare('SELECT id FROM accounts').all() as Array<{ id: unknown }>) reserve(row.id)
+  if (names.has('accounts')) for (const row of db.prepare('SELECT id FROM accounts').iterate() as Iterable<{ id: unknown }>) reserve(row.id)
   if (names.has('sqlite_sequence')) {
     const sequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name='accounts'").get() as { seq: unknown } | undefined
     if (sequence) reserve(sequence.seq)
@@ -36,7 +36,7 @@ export function readCanonicalAccountIdAuthority(db: Connection): number {
     const foreignKeys = db.prepare(`PRAGMA foreign_key_list(${quote(name)})`).all() as Array<{ table: string; from: string; to: string | null }>
     for (const foreign of foreignKeys.filter(key => key.table === 'accounts')) {
       if (foreign.to !== 'id' && foreign.to !== null && foreign.to !== '') throw new Error('Unsupported account-reference foreign key requires manual migration.')
-      for (const row of db.prepare(`SELECT ${quote(foreign.from)} AS referenced_id FROM ${quote(name)}`).all() as Array<{ referenced_id: unknown }>) reserve(row.referenced_id)
+      for (const row of db.prepare(`SELECT ${quote(foreign.from)} AS referenced_id FROM ${quote(name)}`).iterate() as Iterable<{ referenced_id: unknown }>) reserve(row.referenced_id)
     }
     // Canonical held-card ownership predates an accounts FK. Validate its reviewed
     // shape explicitly instead of guessing from a column-name suffix.
@@ -44,7 +44,7 @@ export function readCanonicalAccountIdAuthority(db: Connection): number {
       if (columns.length !== CARD_DROP_COLUMNS.length || CARD_DROP_COLUMNS.some(expected => !columns.some(column => column.name === expected.name && column.type.toUpperCase() === expected.type && column.notnull === expected.notnull && column.pk === expected.pk))) {
         throw new Error('Unsupported world-card ownership schema requires manual migration.')
       }
-      for (const row of db.prepare('SELECT holder_account_id FROM world_card_drops').all() as Array<{ holder_account_id: unknown }>) {
+      for (const row of db.prepare('SELECT holder_account_id FROM world_card_drops').iterate() as Iterable<{ holder_account_id: unknown }>) {
         if (row.holder_account_id !== null) reservePlayerReference(row.holder_account_id, reserve)
       }
     }
@@ -52,7 +52,7 @@ export function readCanonicalAccountIdAuthority(db: Connection): number {
     if (!columns.some(column => column.name === 'actor_id')) throw new Error('Unsupported actor history schema requires manual migration.')
     const payload = columns.some(column => column.name === 'payload_json') ? 'payload_json' : columns.some(column => column.name === 'payload') ? 'payload' : null
     if (name !== 'rejected_command_log' && !payload) throw new Error('Unsupported committed history schema requires manual migration.')
-    const rows = db.prepare(`SELECT actor_id${name !== 'rejected_command_log' && payload ? `,${quote(payload)} AS account_payload` : ''} FROM ${quote(name)}`).all() as Array<{ actor_id: unknown; account_payload?: unknown }>
+    const rows = db.prepare(`SELECT actor_id${name !== 'rejected_command_log' && payload ? `,${quote(payload)} AS account_payload` : ''} FROM ${quote(name)}`).iterate() as Iterable<{ actor_id: unknown; account_payload?: unknown }>
     for (const row of rows) {
       reserve(row.actor_id)
       if (name === 'rejected_command_log') continue // Its payload is rejected intent, not fact.

@@ -3,7 +3,7 @@ import { HarborBeaconProjection, type HarborProgressPolicy } from './harborBeaco
 import { HARBOR_BEACON_EVENT_TYPES } from './harborBeaconData.js'
 import { accountActorId, accountId } from '../identity/principal.js'
 import type { AccountId } from '../identity/principal.js'
-import type { SqliteEventStore } from '../kernel/eventStore.js'
+import { streamEventsByTypes, type SqliteEventStore } from '../kernel/eventStore.js'
 import { LivingWorldRuleEngine } from '../kernel/livingWorldCommands.js'
 import type { Event, EventDraft } from '../kernel/types.js'
 import { PlayerWorldProjection } from '../projections/playerWorld.js'
@@ -44,7 +44,7 @@ export class PlayerWorldService {
     // Mandatory on EVERY boot, independently of SimulationRuntime's small/large-log branches.
     this.projection.rebuildFromEvents(store.readLatestEventsPerActor(PLAYER_WORLD_POSITION_EVENT_TYPES))
     this.chat.rebuildFromEvents(store.readRecentEventsByTypes(WORLD_CHAT_HISTORY_LIMIT, [WORLD_CHAT_EVENT_TYPE]), store.readLatestEventsPerActor([WORLD_CHAT_EVENT_TYPE]))
-    this.harbor.rebuildFromEvents(store.readEventsByTypes(HARBOR_BEACON_EVENT_TYPES))
+    this.harbor.rebuildFromEvents(streamEventsByTypes(store, HARBOR_BEACON_EVENT_TYPES), true)
     this.movementStep = this.projection.list().reduce((step, player) => Math.max(step, player.movementStep), Math.max(this.chat.getMaximumPostedStep(), this.harbor.getMaximumMovementStep())) + 1
   }
 
